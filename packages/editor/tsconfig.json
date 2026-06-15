@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declarationDir": "./dist",
+    "paths": {
+      "@redstone/sim": ["../sim/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../sim" }
+  ]
+}

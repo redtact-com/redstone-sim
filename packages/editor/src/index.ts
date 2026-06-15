@@ -1,0 +1,5 @@
+export { CircuitEditor } from './editor.js'
+export type { PlaceableType, PlaceOptions } from './editor.js'
+export { EditorGrid } from './grid.js'
+export type { Pos2D, EditAction } from './grid.js'
+export { computeWireConnections, computeWireDeletionUpdates } from './wire-connect.js'

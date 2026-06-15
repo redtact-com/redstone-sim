@@ -1,0 +1,23 @@
+{
+  "name": "redstone-sim",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "app"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w app",
+    "build": "npm run build -w app",
+    "preview": "npm run preview -w app",
+    "lint": "npm run lint -w app",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vitest": "^2.0.0"
+  }
+}
