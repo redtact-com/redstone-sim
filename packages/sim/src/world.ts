@@ -6,6 +6,7 @@ import { OPPOSITE, ALL_DIRS } from './types.js'
 import { isBasePowered as isTorchBasePowered } from './blocks/torch.js'
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
+import { NC_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import {
   getSignal, getDirectSignal, getSolidPower,
   isBlockPowered, isFacePowered, isSolidPowered,
@@ -36,6 +37,11 @@ function neighbor(pos: Pos3D, dir: Dir6): Pos3D {
   }
 }
 
+// NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)
+type UpdateEntry =
+  | { kind: 'single'; target: Pos3D }
+  | { kind: 'multi'; around: Pos3D; skip: Dir6 | null; idx: number }
+
 // ============================================================
 // SimWorld 実装
 // ============================================================
@@ -45,6 +51,15 @@ export class SimWorld {
   private scheduledTicks: ScheduledTick[] = []
   private currentTick = 0
   private seqCounter = 0
+
+  // ── NC 更新の DFS 機械 (02 §4.2 CollectingNeighborUpdater [確定]) ──
+  // 実行中に発生した更新は addedThisLayer に積まれ、逆順 push で
+  // 「挿入順に、現在の更新より先に」実行される (プッシュ型 DFS)。
+  // 6 方向一括 (multi) は 1 方向ごとに中断判定される。
+  private updateStack: UpdateEntry[] = []
+  private addedThisLayer: UpdateEntry[] = []
+  private updating = false
+  private updateCount = 0
 
   // ── ブロックアクセス ─────────────────────────────────────
 
@@ -229,7 +244,7 @@ export class SimWorld {
         b?.type === 'repeater' ||
         b?.type === 'comparator'
       ) {
-        this.updateBlock(pos)
+        this.neighborChanged(pos)
       }
     }
 
@@ -388,40 +403,121 @@ export class SimWorld {
   // ── 内部: 信号伝播 ───────────────────────────────────────
 
   /**
-   * 動力源（レバー・ボタン・トーチ・リピーター・コンパレーター）の
-   * 出力変化を周囲へ伝える汎用ルーチン (G4)。
-   * 隣接ブロックの再評価 + 固体越し 2 ホップ目の機構の再評価 +
-   * ワイヤー網の再計算を行う。
+   * 素子の出力変化を vanilla 準拠の順序で周囲へ伝える (I6)。
+   * 1) ワイヤー電力値を先に確定 (案 A: 値は 2 フェーズ BFS、発行順のみ vanilla)
+   * 2) 素子別の送信形状 (02 §4.2 [確定]) で NC を発行
+   * 3) 電力が変化したワイヤーからダスト多段送信 (Java HashSet 順 = locational)
    */
   private propagateChange(pos: Pos3D): void {
-    this.updateNeighborsAndThroughSolids(pos)
-    this.propagateWireBFS(this.collectAdjacentWires(pos))
+    const changedWires = this.propagateWireBFS(this.collectWireStarts(pos))
+    this.emitOutputShape(pos)
+    for (const w of changedWires) {
+      for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
+    }
   }
 
   /**
-   * pos の出力変化を隣接ブロックへ通知し、隣が固体なら充電状態の変化を
-   * 「中継」して 2 ホップ目の機構 (repeater / comparator / lamp / torch)
-   * まで再評価する (G4)。強充電の変化は固体に隣接するワイヤーの電源にも
-   * なるため、ワイヤー網も再計算する。
-   * 通知の方向順は素朴な ALL_DIRS 順（vanilla の方向順対応は I6 の範囲）。
+   * BFS の起点: 自身の隣接ワイヤー + 強充電され得る隣接固体の隣接ワイヤー
+   * (dust→solid→dust は無いが、strong 源→solid→dust の 2 ホップは電源になる)
    */
-  private updateNeighborsAndThroughSolids(pos: Pos3D): void {
-    const originKey = posKey(pos)
+  private collectWireStarts(pos: Pos3D): Pos3D[] {
+    const starts = this.collectAdjacentWires(pos)
     for (const dir of ALL_DIRS) {
       const nPos = neighbor(pos, dir)
-      const nb = this.getBlockAt(nPos)
-      if (!nb) continue
-      this.updateBlock(nPos)
-      if (nb.type === 'solid') {
-        for (const dir2 of ALL_DIRS) {
-          const nnPos = neighbor(nPos, dir2)
-          if (posKey(nnPos) === originKey) continue
-          const nnb = this.getBlockAt(nnPos)
-          if (nnb && nnb.type !== 'wire' && nnb.type !== 'solid') this.updateBlock(nnPos)
-        }
-        this.propagateWireBFS(this.collectAdjacentWires(nPos))
+      if (this.getBlockAt(nPos)?.type === 'solid') {
+        starts.push(...this.collectAdjacentWires(nPos))
       }
     }
+    return starts
+  }
+
+  /**
+   * 素子別の NC 送信形状 (02 §4.2 素子別例外 [確定])。
+   * トレース (I10) はこの発行点と neighborChanged にフックする。
+   */
+  private emitOutputShape(pos: Pos3D): void {
+    const block = this.getBlockAt(pos)
+    if (!block) return
+    switch (block.type) {
+      case 'lever':
+      case 'button_stone':
+      case 'button_wood': {
+        // updateNeighbours: 自身の隣接 6 + 取り付けブロックの隣接 6
+        this.submitMultiNC(pos)
+        this.submitMultiNC(neighbor(pos, OPPOSITE[block.facing]))
+        break
+      }
+      case 'torch':
+      case 'wall_torch': {
+        // onRemove → onPlace の 2 段送信 (各隣接 6 マスを基点にその隣接 6 へ) が
+        // LIT 変化で 2 回走り、その後 flag3 の自身隣接 NC
+        for (let i = 0; i < 2; i++) {
+          for (const d of NC_UPDATE_ORDER) this.submitMultiNC(neighbor(pos, d))
+        }
+        this.submitMultiNC(pos)
+        break
+      }
+      case 'repeater':
+      case 'comparator': {
+        // flag2 (自身隣接 NC なし) + updateNeighborsInFront:
+        // 出力先 1 マス → 出力先の隣接 5 マス (自身方向を除く)
+        const front = neighbor(pos, block.facing)
+        this.submitSingleNC(front)
+        this.submitMultiNC(front, OPPOSITE[block.facing])
+        break
+      }
+      default:
+        // lamp は vanilla では NC を発するが読める素子が無いため発行しない (G15 参照)
+        break
+    }
+  }
+
+  // ── NC 更新の DFS 実行 ───────────────────────────────────
+
+  private submitSingleNC(target: Pos3D): void {
+    this.submitUpdate({ kind: 'single', target })
+  }
+
+  private submitMultiNC(around: Pos3D, skip: Dir6 | null = null): void {
+    this.submitUpdate({ kind: 'multi', around, skip, idx: 0 })
+  }
+
+  private submitUpdate(entry: UpdateEntry): void {
+    if (this.updating) {
+      this.addedThisLayer.push(entry)
+      return
+    }
+    this.updating = true
+    this.updateStack.push(entry)
+    while (this.updateStack.length > 0) {
+      const top = this.updateStack[this.updateStack.length - 1]
+      if (top.kind === 'single') {
+        this.updateStack.pop()
+        this.neighborChanged(top.target)
+      } else {
+        while (top.idx < NC_UPDATE_ORDER.length && NC_UPDATE_ORDER[top.idx] === top.skip) top.idx++
+        if (top.idx >= NC_UPDATE_ORDER.length) {
+          this.updateStack.pop()
+          continue
+        }
+        this.neighborChanged(neighbor(top.around, NC_UPDATE_ORDER[top.idx++]))
+      }
+      if (++this.updateCount > 65_536) {
+        // vanilla の maxChained 溢れ相当 (skip してエラーログのみ、02 §4.2)
+        console.warn('[sim] NC 更新数が上限を超過。以降の更新を破棄します')
+        this.updateStack.length = 0
+        this.addedThisLayer.length = 0
+        break
+      }
+      if (this.addedThisLayer.length > 0) {
+        for (let i = this.addedThisLayer.length - 1; i >= 0; i--) {
+          this.updateStack.push(this.addedThisLayer[i])
+        }
+        this.addedThisLayer.length = 0
+      }
+    }
+    this.updating = false
+    this.updateCount = 0
   }
 
   /**
@@ -437,9 +533,11 @@ export class SimWorld {
    *            増加 BFS を実行し正しい電力値を書き込む。
    *            増加 BFS は単純 BFS で正しく収束する（各ワイヤーは最大値を受け取るため）。
    */
-  private propagateWireBFS(startWires: Pos3D[]): void {
+  private propagateWireBFS(startWires: Pos3D[]): Pos3D[] {
     // ── Phase 1: 連結成分を収集 & ゼロ化 ──────────────────────
     const connected = new Set<string>()
+    const exploreOrder: string[] = []
+    const initialPower = new Map<string, number>()
     const exploreQueue: Pos3D[] = []
 
     for (const p of startWires) {
@@ -454,6 +552,9 @@ export class SimWorld {
       const pos = exploreQueue.shift()!
       const block = this.getBlockAt(pos)
       if (!block || block.type !== 'wire') continue
+
+      exploreOrder.push(posKey(pos))
+      initialPower.set(posKey(pos), (block as WireState).power)
 
       // ゼロ化（接続情報はそのまま）
       if ((block as WireState).power !== 0) {
@@ -512,14 +613,26 @@ export class SimWorld {
       }
     }
 
-    // ── Phase 3: 全ワイヤー電力が確定してから周囲の機構を更新 ──
-    // ランプ・リピーター・コンパレーター・トーチは安定後の値だけを観測する
-    for (const key of connected) {
-      this.updateAroundWire(keyToPos(key))
+    // ── Phase 3: 電力が変化したワイヤーを探索順で返す ──
+    // 周囲機構への通知は呼び出し側 (propagateChange) がダスト多段送信 (NC) で行う。
+    // 値の確定と NC 発行を分離することで、過渡状態の観測 (誤発振) を防ぎつつ
+    // 発行順を vanilla 準拠にできる (案 A)
+    const changed: Pos3D[] = []
+    for (const key of exploreOrder) {
+      const b = this.getBlockAt(keyToPos(key))
+      if (b?.type === 'wire' && (b as WireState).power !== initialPower.get(key)) {
+        changed.push(keyToPos(key))
+      }
     }
+    return changed
   }
 
-  private updateBlock(pos: Pos3D): void {
+  /**
+   * NC (neighborChanged) の受信ハンドラ。素子は tile tick を予約し、
+   * 即時系 (lamp/solid 表示値) はその場で更新する。
+   * ワイヤーは案 A では no-op (電力値は propagateChange 側で確定済み)。
+   */
+  private neighborChanged(pos: Pos3D): void {
     const block = this.getBlockAt(pos)
     if (!block) return
 
@@ -582,33 +695,6 @@ export class SimWorld {
       }
       default:
         break
-    }
-  }
-
-  /**
-   * ワイヤーの電力変化を周囲の機構へ通知する。
-   * 直接隣接する機構 (lamp / repeater / comparator / torch) の再評価に加え、
-   * ワイヤーが弱充電する固体を「中継」して固体越しの機構も再評価する (G4)。
-   * 弱充電は他のワイヤーには給電しないため、ここからワイヤー網の再計算は
-   * 行わない（再帰しない）。
-   */
-  private updateAroundWire(pos: Pos3D): void {
-    for (const dir of ALL_DIRS) {
-      const nPos = neighbor(pos, dir)
-      const b = this.getBlockAt(nPos)
-      if (!b) continue
-      if (b.type === 'solid') {
-        // 表示用 powered の更新
-        this.updateBlock(nPos)
-        // 固体越しの機構を再評価
-        for (const dir2 of ALL_DIRS) {
-          const nnPos = neighbor(nPos, dir2)
-          const nb = this.getBlockAt(nnPos)
-          if (nb && nb.type !== 'wire' && nb.type !== 'solid') this.updateBlock(nnPos)
-        }
-      } else if (b.type !== 'wire') {
-        this.updateBlock(nPos)
-      }
     }
   }
 
