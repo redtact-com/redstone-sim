@@ -14,9 +14,11 @@
     "lint": "npm run lint -w app",
     "test": "vitest run",
     "test:watch": "vitest",
+    "ground-truth": "bash tools/mc-harness/scripts/run-fixture.sh",
     "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json"
   },
   "devDependencies": {
+    "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vitest": "^2.0.0"
   }

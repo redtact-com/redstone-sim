@@ -1,0 +1,256 @@
+{
+  "name": "comparator-subtract",
+  "description": "コンパレーター減算: back=13 - side=11 = 2 を出力 (隣接2列 dust は相互接続)",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      1,
+      1
+    ]
+  },
+  "player": {
+    "spawn": [
+      0.5,
+      1.0,
+      1.5
+    ],
+    "facing": [
+      180,
+      40
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "comparator[facing=west,mode=subtract,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+# 実機 Minecraft ground truth ハーネス用サーバ
+#
+# 重要: このコンテナを起動すると Minecraft EULA (https://aka.ms/MinecraftEULA)
+# に同意したことになる (EULA: "TRUE")。詳細は README.md を参照。
+#
+# - サーバ jar / mod は起動時に itzg イメージがダウンロードする (リポジトリ非同梱)
+# - fabric-carpet は Modrinth から MC バージョンに合う版を自動解決
+# - carpet の挙動変更ルールは全て既定 (false) のまま使う (ground truth 汚染防止)
+# - ポートは一切公開しない。操作は `docker compose exec mc rcon-cli` のみ
+services:
+  mc:
+    image: itzg/minecraft-server:java21
+    container_name: redstone-sim-mc-harness
+    environment:
+      EULA: "TRUE"
+      TYPE: FABRIC
+      VERSION: "1.21.1"
+      MODRINTH_PROJECTS: carpet
+      ONLINE_MODE: "FALSE"
+      MEMORY: 2G
+      # void superflat (層なし・フラット)。回路はハーネスが y=0 に床を敷いて設置する
+      LEVEL_TYPE: minecraft:flat
+      GENERATOR_SETTINGS: '{"layers":[{"block":"minecraft:air","height":1}],"biome":"minecraft:plains"}'
+      MODE: survival
+      DIFFICULTY: peaceful
+      SPAWN_PROTECTION: "0"
+      VIEW_DISTANCE: "6"
+      ENABLE_RCON: "true"
+      # ローカル専用 (ポート非公開) のため固定値で問題ない
+      RCON_PASSWORD: mc-harness-local
+      SNOOPER_ENABLED: "false"
+      # 初期セットアップ (gamerule 等) は runner/generate.ts が rcon で冪等に実行する
+    volumes:
+      - ./data:/data
+      # scarpet アプリと shared JSON の受け渡し場所
+      - ./scripts:/data/world/scripts
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
