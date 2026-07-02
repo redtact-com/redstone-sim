@@ -60,6 +60,18 @@ export interface TorchState {
   /** 床置きトーチは facing='up' */
   facing: Dir6
   lit: boolean
+  /**
+   * 消灯 (LIT true→false) が起きた game tick の履歴 (burnout 用)。
+   * [確定: 02 §6 torch — RedstoneTorchBlock.RECENT_TOGGLES]。
+   * tick 実行時に 60gt (RECENT_TOGGLE_TIMER) より古い記録を破棄し、
+   * 8 件 (MAX_RECENT_TOGGLES) 到達で焼き切れる。省略時は空履歴とみなす。
+   */
+  recentToggles?: number[]
+  /**
+   * 焼き切れ中フラグ。true の間は消灯固定で NC に反応せず、
+   * 160gt (RESTART_DELAY) 後の復帰 tile tick でのみ解除される。
+   */
+  burnedOut?: boolean
 }
 
 export interface WallTorchState {
@@ -67,6 +79,10 @@ export interface WallTorchState {
   /** 取り付いている壁の方向（トーチが向いている方向の逆） */
   facing: HDir
   lit: boolean
+  /** burnout 用の消灯履歴 (TorchState.recentToggles と同義)。 */
+  recentToggles?: number[]
+  /** 焼き切れ中フラグ (TorchState.burnedOut と同義)。 */
+  burnedOut?: boolean
 }
 
 export interface RepeaterState {

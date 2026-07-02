@@ -3,7 +3,10 @@ import type {
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState,
 } from './types.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
-import { isBasePowered as isTorchBasePowered } from './blocks/torch.js'
+import {
+  isBasePowered as isTorchBasePowered,
+  pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
+} from './blocks/torch.js'
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import { NC_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
@@ -194,6 +197,9 @@ export class SimWorld {
         this.blocks.set(key, { ...block, powered: false })
       } else if (block.type === 'comparator') {
         this.blocks.set(key, { ...block, powered: false, outputPower: 0 })
+      } else if (block.type === 'torch' || block.type === 'wall_torch') {
+        // 初期安定状態では burnout 履歴を空にする (決定論のため)
+        this.blocks.set(key, { ...block, recentToggles: [], burnedOut: false })
       }
     }
 
@@ -347,9 +353,53 @@ export class SimWorld {
     }
 
     if (block.type === 'torch' || block.type === 'wall_torch') {
-      // 土台の充電状態を今読む
-      const shouldBeLit = !isTorchBasePowered(pos, this)
-      if (block.lit !== shouldBeLit) apply({ ...block, lit: shouldBeLit })
+      // vanilla RedstoneTorchBlock.tick を忠実に再現 (02 §6 torch [確定])。
+      // tick 冒頭で 60gt (RECENT_TOGGLE_TIMER) より古い消灯記録を刈る。
+      // burnedOut は「窓内 8 件で点灯が抑止される」状態を表す表示用の計算値。
+      // 抑止判定・復帰判定はすべて tick 実行時のトグル件数ゲートで行い、
+      // 復帰用の 160gt (RESTART_DELAY) tile tick は消灯遷移時に予約する
+      // (vanilla の tick() に対応: LIT かつ基給電→消灯+8件で焼き切れ160予約、
+      //  非 LIT かつ基無給電かつ 8 件未満→点灯)。
+      const now = this.currentTick
+      const toggles = pruneToggles(block.recentToggles, now)
+      const basePowered = isTorchBasePowered(pos, this)
+      const prevLen = block.recentToggles?.length ?? 0
+      const wasBurned = block.burnedOut ?? false
+
+      if (block.lit && basePowered) {
+        // 点灯中に基が給電 → 消灯。消灯のたび記録を 1 件追加し、
+        // 同 pos の記録が 8 件 (MAX_RECENT_TOGGLES) に達したら焼き切れ。
+        const next = [...toggles, now]
+        const tooFrequent = next.length >= MAX_RECENT_TOGGLES
+        apply({ ...block, lit: false, recentToggles: next, burnedOut: tooFrequent })
+        if (tooFrequent) {
+          // 焼き切れ復帰用に 160gt の tile tick を予約する。
+          // ただし自励発振では上の apply 伝播中に基が無給電化し、自 NC が 2gt を
+          // 先取り予約するため、重複予約デデュープでこの 160gt は無視される
+          // (= vanilla 同様「自励クロックは焼き切れると復帰しない」)。
+          // 外部駆動 (基が給電され続ける) では自 NC が起きず 160gt が生き、
+          // 基開放後に復帰する。音/パーティクル (levelEvent 1502) は対象外。
+          this.schedule(pos, RESTART_DELAY, 0)
+        }
+      } else if (!block.lit) {
+        // 消灯中: 基が無給電かつ窓内 8 件未満なら点灯 (記録は追加しない)。
+        // 8 件あれば点灯抑止 = 焼き切れの実体 (vanilla の !isToggledTooFrequently)。
+        const tooFrequent = toggles.length >= MAX_RECENT_TOGGLES
+        if (!basePowered && !tooFrequent) {
+          apply({ ...block, lit: true, recentToggles: toggles, burnedOut: false })
+        } else if (toggles.length !== prevLen || wasBurned !== tooFrequent) {
+          // 遷移なし。刈った履歴と burnedOut 表示だけ整える (出力不変なので伝播しない)。
+          this.setBlockAt(pos, { ...block, recentToggles: toggles, burnedOut: tooFrequent })
+        }
+      } else if (toggles.length !== prevLen || wasBurned) {
+        // 点灯中で基無給電 (遷移なし)。刈った履歴と burnedOut 表示を整える。
+        this.setBlockAt(pos, { ...block, recentToggles: toggles, burnedOut: false })
+      }
+    } else if (block.type === 'lamp') {
+      // vanilla RedstoneLampBlock.tick: 消灯 tick は「LIT かつ無入力」なら消灯。
+      // 点灯は neighborChanged で即時なので、ここでは消灯のみ扱う。
+      // tick 時点で再点灯 (再入力) されていれば no-op (vanilla 準拠)。
+      if (block.lit && !isBlockPowered(this, pos)) apply({ ...block, lit: false })
     } else if (block.type === 'repeater') {
       // vanilla DiodeBlock.tick: ロック中は何もしない。ロック判定は保持している
       // LOCKED プロパティではなく実行時に再評価する (isLocked を毎回問い合わせる)
@@ -638,8 +688,15 @@ export class SimWorld {
 
     switch (block.type) {
       case 'lamp': {
-        const lit = isBlockPowered(this, pos)
-        if (block.lit !== lit) this.setBlockAt(pos, { ...block, lit })
+        // vanilla RedstoneLampBlock.neighborChanged (02 §6 lamp [確定]):
+        // LIT != 入力 のとき、点灯中(=消したい)なら 4gt の tile tick を予約し、
+        // 消灯中(=点けたい)なら即時点灯する。消灯は tick 時に入力を再評価する
+        // ため、4gt 未満の入力断では消灯しない。
+        const powered = isBlockPowered(this, pos)
+        if (block.lit !== powered) {
+          if (block.lit) this.schedule(pos, 4, 0)
+          else this.setBlockAt(pos, { ...block, lit: true })
+        }
         break
       }
       case 'solid': {
@@ -654,7 +711,9 @@ export class SimWorld {
       case 'torch':
       case 'wall_torch': {
         // 土台の充電と現在の lit が食い違っていたら遷移を予約 (2gt, priority 0)。
-        // 動作は予約に固定せず実行時に再評価する
+        // 動作は予約に固定せず実行時に再評価する。焼き切れ (burnedOut) の点灯抑止は
+        // ここではなく executeScheduledTick のトグル件数ゲートで行う (vanilla 準拠。
+        // 自励クロックの焼き切れ→非復帰はこの 2gt 予約が 160gt を先取りすることで再現)。
         const basePowered = isTorchBasePowered(pos, this)
         if (block.lit === basePowered) {
           this.schedule(pos, 2, 0)
