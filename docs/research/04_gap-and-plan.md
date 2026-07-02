@@ -25,6 +25,7 @@
 | G14 | 低 | isBasePowered の過剰近似 | solid の 6 隣接いずれかの通電 wire で消灯 (下・非接続方向も) | dust の弱充電は足元+接続先のみ [要検証] | torch.ts:61-72 | G2 解決で吸収 |
 | G15 | 低 | getPowerLevel(lamp)=15 の独自仕様 | lamp は電力源でないのに 15 を返す (外部 API のみ) | — | world.ts:247 | UI/テストの誤解リスク |
 | T1 | — | **失敗テスト 6 件** | 5 件は「tick()=gt なのにテストが rt 前提 (delay N→N tick)」で**実装側が正しい**。1 件は initialize() が意図的に flush しない事後条件未定義 | — | test/world.test.ts:171-214 ほか | テストを gt 基準に書き直し + initialize 事後条件の仕様化 |
+| ↳ | — | **解消済 (I4, #12)** | gt 基準への書き直しは I9 で完了。I4 で残りを解消: (1) initialize() の事後条件 (wire/solid/lamp は安定値・素子の遷移は予約のみで flush しない・tick=0 から手動で進める) を world.ts の JSDoc に明文化。(2) ボタン持続を確定値へ (G12。石 20/木 30 gt)。実機 fixture `stone-button` で押下→20gt OFF を裏取り | — | world.ts:initialize()/activateBlock、test/world.test.ts ボタン節、test/fixtures/stone-button.json | vitest 全 green |
 
 正しくできている点 (維持): 座標系 (y=up, north=-z, east=+x) [確定]、コンパレーター数式 [確定]、repeater delay*2gt / torch 2gt の gt 基準実装、同 priority 内の安定ソート決定性、ワイヤー最終電力の 2 フェーズ収束。
 
