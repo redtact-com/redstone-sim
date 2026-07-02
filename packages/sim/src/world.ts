@@ -1,6 +1,6 @@
 import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
-  WireState, RepeaterState, ComparatorState, LeverState, ButtonState,
+  WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
 } from './types.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
 import { isBasePowered as isTorchBasePowered } from './blocks/torch.js'
@@ -194,6 +194,10 @@ export class SimWorld {
         this.blocks.set(key, { ...block, powered: false })
       } else if (block.type === 'comparator') {
         this.blocks.set(key, { ...block, powered: false, outputPower: 0 })
+      } else if (block.type === 'target') {
+        // vanilla TargetBlock.onPlace: POWER>0 かつ pending tick 無しの設置は
+        // 0 に戻る。初期化時点で pending tick は無いため常に消灯状態から始める
+        if (block.outputPower !== 0) this.blocks.set(key, { ...block, outputPower: 0 })
       }
     }
 
@@ -274,6 +278,16 @@ export class SimWorld {
       const delay = block.type === 'button_stone' ? 20 : 30
       // ボタンは delay gt 後にオフ (実行時再評価: powered なら消す)
       this.schedule(pos, delay, 0)
+    } else if (block.type === 'target') {
+      // ターゲットは投射物系を持たないため activateBlock で命中を手動トリガする。
+      // [確定: 1.21.1 TargetBlock.updateRedstoneOutput] 既存 tick 中の再発火は無視。
+      // 中心命中相当の 15 を出し、矢の持続 20gt (ACTIVATION_TICKS_ARROWS) 後に
+      // tile tick (priority 0) で消灯する。
+      if (this.hasScheduledTick(pos, 'target')) return
+      const next: TargetState = { ...block, outputPower: 15 }
+      this.setBlockAt(pos, next)
+      this.propagateChange(pos)
+      this.schedule(pos, 20, 0)
     }
   }
 
@@ -297,6 +311,8 @@ export class SimWorld {
       case 'button_wood':   return block.powered ? 15 : 0
       case 'lamp':          return block.lit ? 15 : 0
       case 'solid':         return block.powered ? 15 : 0
+      case 'redstone_block': return 15
+      case 'target':        return block.outputPower
       default:              return 0
     }
   }
@@ -376,6 +392,9 @@ export class SimWorld {
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (block.powered) apply({ ...block, powered: false })
+    } else if (block.type === 'target') {
+      // vanilla TargetBlock.tick: OUTPUT_POWER != 0 なら 0 に戻す (消灯)
+      if (block.outputPower !== 0) apply({ ...block, outputPower: 0 })
     }
 
     return changed
@@ -464,6 +483,14 @@ export class SimWorld {
         const front = neighbor(pos, block.facing)
         this.submitSingleNC(front)
         this.submitMultiNC(front, OPPOSITE[block.facing])
+        break
+      }
+      case 'redstone_block':
+      case 'target': {
+        // 信号源の出力変化 → 自身の隣接 6 へ NC (vanilla setBlock flag3 の
+        // updateNeighborsAt)。ダストは propagateChange 側の BFS で更新される。
+        // redstone_block は静的だが、target はトリガ/消灯で変化する
+        this.submitMultiNC(pos)
         break
       }
       default:

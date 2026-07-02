@@ -9,7 +9,10 @@ import { getSignal, getStrongPower, relative } from '../power.js'
  * このブロックがあると切断される。
  */
 export function isWireCutBlock(block: BlockState | null): boolean {
-  return !!block && (block.type === 'solid' || block.type === 'lamp')
+  // target は既定フルキューブ導体 (isRedstoneConductor=true) なので上下斜め接続を切る。
+  // redstone_block は isRedstoneConductor(never) = 非導体なので切らない
+  // [確定: 1.21.1 Blocks.REDSTONE_BLOCK / TargetBlock]。
+  return !!block && (block.type === 'solid' || block.type === 'lamp' || block.type === 'target')
 }
 
 /**

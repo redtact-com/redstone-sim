@@ -6,7 +6,7 @@ export type {
   TorchState, WallTorchState,
   RepeaterState, ComparatorState,
   LeverState, ButtonState,
-  LampState, ContainerState, SolidState, AirState,
+  LampState, ContainerState, RedstoneBlockState, TargetState, SolidState, AirState,
   WorldSnapshot,
   ScheduledTick,
   TickResult,

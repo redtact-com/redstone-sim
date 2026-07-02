@@ -63,6 +63,9 @@ function getAttachFace(facing: Dir6): Dir6 {
  * - レバー/ボタン: 全 6 方向に 15 [要検証: 02 §6 lever/button]
  * - トーチ: 取り付け面以外の 5 方向に 15 (G3) [要検証: I1 確定後に要照合]
  * - リピーター/コンパレーター: facing 方向のみ
+ * - レッドストーンブロック: 全 6 方向に 15 [確定: 1.21.1 PoweredBlock.getSignal]
+ * - ターゲット: 全 6 方向に outputPower [確定: 1.21.1 TargetBlock.getSignal]
+ *   (いずれも getDirectSignal 非 override のため強充電はしない = weak のみ)
  * - ワイヤー: 足元 (down) + 接続方向の水平。上方向へは給電しない (G5)
  *   [要検証: 02 §5.4]
  */
@@ -74,6 +77,10 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
     case 'button_stone':
     case 'button_wood':
       return src.powered ? 15 : 0
+    case 'redstone_block':
+      return 15
+    case 'target':
+      return src.outputPower
     case 'torch':
     case 'wall_torch': {
       if (!src.lit) return 0
