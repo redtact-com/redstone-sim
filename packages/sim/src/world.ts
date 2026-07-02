@@ -133,8 +133,20 @@ export class SimWorld {
    * 1. ワイヤー電力・ランプ・固体充電状態をリセット
    * 2. ワイヤー電力を繰り返し計算（安定するまで最大100パス）
    * 3. ランプ・固体ブロックの状態を更新
-   * 4. トーチの状態チェック（土台が充電されていれば消灯をスケジュール）
-   * 5. flush() でスケジュール済みティックを処理
+   * 4. トーチ・リピーター・コンパレーターの遷移を「予約」（schedule）する
+   *
+   * 事後条件（呼び出し側との契約。docs/research/04 T1 で仕様化） [確定]:
+   * - ワイヤー / 固体 (powered) / ランプ (lit) は安定値に確定している
+   *   （Step 2-3 で収束計算済み。これらは遅延を持たない即時派生値）。
+   * - トーチ / リピーター / コンパレーターなど tile tick を持つ素子は
+   *   遷移を scheduledTicks に「予約」するのみで、状態自体はまだ遷移していない
+   *   （flush() を呼ばないため。Step 4 の updateBlock は schedule だけ行う）。
+   * - currentTick は 0 のまま。呼び出し後は tick() / flush() で手動で進める。
+   *
+   * flush しない理由: torch + repeater のクロック回路のように永久に安定しない
+   * 回路では flush() が maxTicks まで空回りしてしまう。初期の予約だけ整えて
+   * tick=0 の起点を呼び出し側に委ねることで、発振回路も正しく駆動できる
+   * （fixture-runner は initialize() 後に flush(64) を明示的に呼んで settle する）。
    */
   initialize(): void {
     this.scheduledTicks = []
@@ -223,8 +235,11 @@ export class SimWorld {
       const next: ButtonState = { ...block, powered: true }
       this.setBlockAt(pos, next)
       this.propagateChange(pos)
-      const delay = block.type === 'button_stone' ? 5 : 10
-      // ボタンは delay tick 後にオフ
+      // ボタン持続 [確定: 02 §6 lever/button — Blocks.java の ticksToStayPressed を
+      // 1.21.1 デコンパイルで確認]: 石系 20 gt / 木系 30 gt。schedule の delay は
+      // game tick 単位なのでそのまま渡す。
+      const delay = block.type === 'button_stone' ? 20 : 30
+      // ボタンは delay gt 後にオフ
       this.schedule(pos, 'turn_off', delay, 0)
     }
   }
