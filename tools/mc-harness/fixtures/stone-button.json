@@ -1,0 +1,25 @@
+{
+  "name": "stone-button",
+  "description": "石ボタン → ワイヤー3マス。押下で power=15 給電、20 gt (石系 ticksToStayPressed) 後に自動オフ → 全ワイヤー 0 を検証 (G12)。ランプ消灯 4gt 遅延を避けるため負荷はワイヤーのみ",
+  "mcVersion": "1.21.1",
+  "ticks": 24,
+  "region": { "from": [0, 0, 0], "to": [3, 1, 1] },
+  "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 55], "lookAt": [0.5, 1.06, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [2, 0, 1], "block": "stone" },
+    { "pos": [3, 0, 1], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "stone_button[face=floor,facing=north,powered=false]" },
+    { "pos": [1, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [2, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [3, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" }
+  ]
+}

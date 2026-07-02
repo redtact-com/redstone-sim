@@ -25,6 +25,7 @@
 | G14 | 低 | isBasePowered の過剰近似 | solid の 6 隣接いずれかの通電 wire で消灯 (下・非接続方向も) | dust の弱充電は足元+接続先のみ [要検証] | torch.ts:61-72 | G2 解決で吸収 |
 | G15 | 低 | getPowerLevel(lamp)=15 の独自仕様 | lamp は電力源でないのに 15 を返す (外部 API のみ) | — | world.ts:247 | UI/テストの誤解リスク |
 | T1 | — | **失敗テスト 6 件** | 5 件は「tick()=gt なのにテストが rt 前提 (delay N→N tick)」で**実装側が正しい**。1 件は initialize() が意図的に flush しない事後条件未定義 | — | test/world.test.ts:171-214 ほか | テストを gt 基準に書き直し + initialize 事後条件の仕様化 |
+| ↳ | — | **解消済 (I4, #12)** | gt 基準への書き直しは I9 で完了。I4 で残りを解消: (1) initialize() の事後条件 (wire/solid/lamp は安定値・素子の遷移は予約のみで flush しない・tick=0 から手動で進める) を world.ts の JSDoc に明文化。(2) ボタン持続を確定値へ (G12。石 20/木 30 gt)。実機 fixture `stone-button` で押下→20gt OFF を裏取り | — | world.ts:initialize()/activateBlock、test/world.test.ts ボタン節、test/fixtures/stone-button.json | vitest 全 green |
 
 正しくできている点 (維持): 座標系 (y=up, north=-z, east=+x) [確定]、コンパレーター数式 [確定]、repeater delay*2gt / torch 2gt の gt 基準実装、同 priority 内の安定ソート決定性、ワイヤー最終電力の 2 フェーズ収束。
 
@@ -56,7 +57,7 @@
 
 ### 2.3 レイヤ B/C: 順序粒度の ground truth
 - **SubTick (lntricate1 版, LGPL-3.0, MC 1.17.1〜1.20.1)**: `/tick freeze [phase]` + queueStep で tile tick を priority 単位・block event を depth (BED) 単位に 1 件ずつステップし、HUD でキュー内容を確認。**1.20.2+ 非対応**なので対象バージョン判断に直結。
-- **Carpet-TIS-Addition microTiming**: detected/emitted block update・executed_tile_tick・executed_block_event を tick 内順序付きでログ出力。**neighbor update 順の ground truth はこれが唯一の実機手段** (SubTick は対象外)。`/carpet microTiming true`。
+- **Carpet-TIS-Addition microTiming**: detected/emitted block update・executed_tile_tick・executed_block_event を tick 内順序付きでログ出力。**neighbor update 順の ground truth はこれが唯一の実機手段** (SubTick は対象外。RSMM/GameTest との比較評価は 06_tool-eval.md [確定])。`/carpet microTiming true`。**注意 [確定: 06 §6.2 実機実測]: 出力は player chat 限定で rcon-only の自動パイプラインには載らない**。運用は (A) 手動クライアント観察で期待順を固定してスナップショット化 (最小コスト・初手) / (B) MicroTimingLoggerManager フックの補助 mixin で JSON 出力 (完全自動化・スコープ追加) の 2 段構え (06 §6.3)。
 - 補助: MC-ticker の「実 jar オラクル」発想 — 挙動という事実の抽出は著作権対象外なので合法的に応用可 [確定: 03 参照]。
 
 ### 2.4 補助テスト資産
