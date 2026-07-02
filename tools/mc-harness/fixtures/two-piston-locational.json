@@ -1,0 +1,27 @@
+{
+  "name": "two-piston-locational",
+  "description": "#15 microTiming 突合用: 対称 2 ピストン回路 (piston W|dust|lever|dust|piston E)。状態系列の実機一致 + BE 順の locational (sim 予測: 東→西) の記録",
+  "mcVersion": "1.21.1",
+  "ticks": 14,
+  "region": { "from": [0, 0, 0], "to": [6, 1, 1] },
+  "player": { "spawn": [3.5, 1.0, 1.5], "facing": [180, 40], "lookAt": [3.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [4, 0, 0], "block": "stone" },
+    { "pos": [5, 0, 0], "block": "stone" },
+    { "pos": [6, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 1], "block": "stone" },
+    { "pos": [1, 1, 0], "block": "piston[extended=false,facing=west]" },
+    { "pos": [2, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [3, 1, 0], "block": "lever[face=floor,facing=south,powered=false]" },
+    { "pos": [4, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [5, 1, 0], "block": "piston[extended=false,facing=east]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [3, 1, 0], "action": "use" },
+    { "tick": 9, "pos": [3, 1, 0], "action": "use" }
+  ]
+}
