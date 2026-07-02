@@ -169,6 +169,174 @@ describe('target block: 手動トリガ (15) → 20gt 持続 → 消灯', () => 
 })
 
 // ─────────────────────────────────────────────────────────────
+// redstone block: コンパレーター側面入力 (#35 実機バグ報告 1)
+// [確定: 1.21.1 SignalGetter.getControlInputSignal(diodesOnly=false) —
+//  REDSTONE_BLOCK は定数 15。比較・減算どちらのモードにも効く]
+// ─────────────────────────────────────────────────────────────
+
+describe('redstone block: コンパレーター側面入力 = 15', () => {
+  function lever(powered: boolean): BlockState {
+    return { type: 'lever', facing: 'up', powered }
+  }
+  function comparator(mode: 'compare' | 'subtract'): BlockState {
+    return { type: 'comparator', facing: 'east', mode, powered: false, outputPower: 0 }
+  }
+
+  it('compare: back=13 < side=15 → 出力 0 (側面が背面を棄却)', () => {
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, wire())
+    world.setBlock(3, Y, 0, wire())
+    world.setBlock(4, Y, 0, comparator('compare'))   // back = west の wire(13)
+    world.setBlock(4, Y, 1, redstoneBlock())          // side (south)
+    world.setBlock(5, Y, 0, wire())
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ power: 13 })
+    expect(world.getBlock(4, Y, 0)).toMatchObject({ powered: false, outputPower: 0 })
+    expect(world.getBlock(5, Y, 0)).toMatchObject({ power: 0 })
+  })
+
+  it('compare: back=15 >= side=15 → 15 を通す (等号は通過)', () => {
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, comparator('compare'))
+    world.setBlock(2, Y, 1, redstoneBlock())
+    world.setBlock(3, Y, 0, wire())
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(2, Y, 0)).toMatchObject({ powered: true, outputPower: 15 })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ power: 15 })
+  })
+
+  it('subtract: back=15 - side=15 → 出力 0', () => {
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, comparator('subtract'))
+    world.setBlock(2, Y, 1, redstoneBlock())
+    world.setBlock(3, Y, 0, wire())
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(2, Y, 0)).toMatchObject({ powered: false, outputPower: 0 })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ power: 0 })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// target: 導体としての伝導 (#35 実機バグ報告 2)
+// [確定: 1.21.1 Blocks.TARGET は isRedstoneConductor 非 override (導体) /
+//  RedStoneWireBlock.getDirectSignal = shouldSignal ? getSignal : 0 →
+//  ダストが指す target は機構・ダイオード読みには充電として見えるが、
+//  他のダストの強度計算には見えない (shouldSignal=false)]
+// ─────────────────────────────────────────────────────────────
+
+describe('target block: 導体伝導 (dust が指す target 越しの読み)', () => {
+  function lever(powered: boolean): BlockState {
+    return { type: 'lever', facing: 'up', powered }
+  }
+  function torch(lit = true): BlockState {
+    return { type: 'torch', facing: 'up', lit }
+  }
+  function comparator(mode: 'compare' | 'subtract'): BlockState {
+    return { type: 'comparator', facing: 'east', mode, powered: false, outputPower: 0 }
+  }
+
+  it('dust → target で隣接ランプ点灯・直上トーチ消灯・背面コンパレーター出力 (報告回路 B)', () => {
+    // lever(0) → wire(1) → target(2) の東西列。
+    // lamp は target の北 (2,0,-1)、torch は直上 (2,1,0)、comparator は東隣 (3,0,0)
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, target())
+    world.setBlock(2, Y, -1, lamp())
+    world.setBlock(2, 1, 0, torch())
+    world.setBlock(3, Y, 0, comparator('compare')) // back = west = target
+    world.setBlock(4, Y, 0, wire())
+    world.initialize()
+    world.flush(64)
+
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ power: 15 })
+    expect(world.getBlock(2, Y, -1)).toMatchObject({ type: 'lamp', lit: true })
+    expect(world.getBlock(2, 1, 0)).toMatchObject({ type: 'torch', lit: false })
+    // 充電レベル 15 をアナログのまま背面読み (減衰なし)
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ powered: true, outputPower: 15 })
+    expect(world.getBlock(4, Y, 0)).toMatchObject({ power: 15 })
+  })
+
+  it('dust に弱充電された target は他の dust に給電しない (solid と同じ)', () => {
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, target())
+    world.setBlock(3, Y, 0, wire()) // 反対側のプローブ dust
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ power: 15 })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ power: 0 })
+  })
+
+  it('強充電された target (repeater 前方) は隣接 dust にも給電する', () => {
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, {
+      type: 'repeater', facing: 'east', delay: 1, powered: false, locked: false,
+    })
+    world.setBlock(2, Y, 0, target())
+    world.setBlock(3, Y, 0, wire())
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ powered: true })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ power: 15 })
+  })
+
+  it('レバー OFF に戻すと導体越しの機構も消える', () => {
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(false))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, target())
+    world.setBlock(2, Y, -1, lamp())
+    world.setBlock(3, Y, 0, comparator('compare'))
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(2, Y, -1)).toMatchObject({ lit: false })
+
+    world.activateBlock(0, Y, 0) // ON
+    world.flush(64)
+    expect(world.getBlock(2, Y, -1)).toMatchObject({ lit: true })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ powered: true })
+
+    world.activateBlock(0, Y, 0) // OFF
+    world.flush(64)
+    expect(world.getBlock(2, Y, -1)).toMatchObject({ lit: false })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ powered: false, outputPower: 0 })
+  })
+
+  it('発火中の target (outputPower>0) が側面にあってもコンパレーター側面入力にはならない', () => {
+    // [確定: 1.21.1 TargetBlock は getDirectSignal 非 override → 側面 0]
+    // back=14 < 発火 target の 15 なので、もし側面に数えると出力 0 になるはず
+    const world = new SimWorld()
+    world.setBlock(0, Y, 0, lever(true))
+    world.setBlock(1, Y, 0, wire())
+    world.setBlock(2, Y, 0, wire())
+    world.setBlock(3, Y, 0, comparator('compare')) // back = wire(14)
+    world.setBlock(3, Y, 1, target())              // side (south)
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ powered: true, outputPower: 14 })
+
+    world.activateBlock(3, Y, 1) // target 発火 15 (持続 20gt)
+    world.tick()
+    world.tick() // コンパレーター遅延 2gt 分を消化
+    // side=0 扱いなので back=14 がそのまま通り続ける
+    expect(world.getBlock(3, Y, 1)).toMatchObject({ outputPower: 15 })
+    expect(world.getBlock(3, Y, 0)).toMatchObject({ powered: true, outputPower: 14 })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
 // mcstate 変換 (nbtIO / fixture 用)
 // ─────────────────────────────────────────────────────────────
 

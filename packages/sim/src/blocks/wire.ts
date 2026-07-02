@@ -87,6 +87,15 @@ export function computeWirePower(pos: Pos3D, world: SimWorld): number {
       maxPower = Math.max(maxPower, getStrongPower(world, nPos))
       continue
     }
+    if (src.type === 'target') {
+      // target は導体かつ信号源 [確定: 1.21.1 Blocks.TARGET は
+      // isRedstoneConductor 非 override + TargetBlock.isSignalSource=true]。
+      // ダストから見える値は max(自身の outputPower, 強充電)。
+      // ダスト由来の弱充電は他のダストに見えない (shouldSignal=false 相当)
+      // 点は solid と同じ [確定: RedStoneWireBlock.calculateTargetStrength]
+      maxPower = Math.max(maxPower, getStrongPower(world, nPos), getSignal(world, pos, dir))
+      continue
+    }
     maxPower = Math.max(maxPower, getSignal(world, pos, dir))
   }
 

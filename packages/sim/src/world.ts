@@ -9,7 +9,7 @@ import { getRepeaterLockDirs } from './blocks/repeater.js'
 import { NC_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import {
   getSignal, getDirectSignal, getSolidPower,
-  isBlockPowered, isFacePowered, isSolidPowered,
+  isBlockPowered, isFacePowered, isSolidPowered, isConductor,
 } from './power.js'
 
 // ============================================================
@@ -436,14 +436,15 @@ export class SimWorld {
   }
 
   /**
-   * BFS の起点: 自身の隣接ワイヤー + 強充電され得る隣接固体の隣接ワイヤー
-   * (dust→solid→dust は無いが、strong 源→solid→dust の 2 ホップは電源になる)
+   * BFS の起点: 自身の隣接ワイヤー + 強充電され得る隣接導体 (solid / target) の
+   * 隣接ワイヤー (dust→導体→dust は無いが、strong 源→導体→dust の 2 ホップは
+   * 電源になる)
    */
   private collectWireStarts(pos: Pos3D): Pos3D[] {
     const starts = this.collectAdjacentWires(pos)
     for (const dir of ALL_DIRS) {
       const nPos = neighbor(pos, dir)
-      if (this.getBlockAt(nPos)?.type === 'solid') {
+      if (isConductor(this.getBlockAt(nPos))) {
         starts.push(...this.collectAdjacentWires(nPos))
       }
     }
@@ -791,9 +792,11 @@ export class SimWorld {
    *      - 背面からの weak 信号 (getSignal。lever/torch/repeater/comparator を
    *        向き込みで評価)
    *      - 背面がワイヤなら接続形状に関係なく POWER を直読
-   *      - 背面が導体(固体)なら強充電を読む (Level.getSignal の conductor 分岐)
+   *      - 背面が導体 (solid / target) なら充電レベルを読む (Level.getSignal の
+   *        conductor 分岐。target の自身出力は getSignal 側で max 済み)
    *   3. 通常信号 < 15 かつ背面が導体なら、さらに 1 マス先のコンテナを読む
-   *      (固体 1 個越し。額縁は sim 未対応)。
+   *      (導体 1 個越し。target も isRedstoneConductor=true なので対象。
+   *       額縁は sim 未対応)。
    */
   private readComparatorBack(pos: Pos3D, backDir: Dir6): number {
     const backPos = neighbor(pos, backDir)
@@ -805,10 +808,10 @@ export class SimWorld {
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
     if (back?.type === 'wire') i = Math.max(i, back.power)
-    else if (back?.type === 'solid') i = Math.max(i, getSolidPower(this, backPos))
+    else if (isConductor(back)) i = Math.max(i, getSolidPower(this, backPos))
 
-    // 3. 固体 1 個越しのコンテナ読み
-    if (i < 15 && back?.type === 'solid') {
+    // 3. 導体 1 個越しのコンテナ読み
+    if (i < 15 && isConductor(back)) {
       const far = this.getBlockAt(neighbor(backPos, backDir))
       if (far?.type === 'container') i = Math.max(i, far.signal)
     }
@@ -817,17 +820,19 @@ export class SimWorld {
 
   /**
    * コンパレーター側面入力の信号強度 (0-15) (G8)。
-   * [確定: 02 §6 comparator 側面 — SignalGetter.getControlInputSignal(diodesOnly=false)]:
-   *   - ワイヤ → POWER を直読
-   *   - レッドストーンブロック → 15 (sim 未実装。将来対応)
-   *   - その他は direct signal (強出力) がこちらを向くもののみ
-   *     = リピーター / コンパレーター / (将来) オブザーバー
+   * [確定: 02 §6 comparator 側面 — 1.21.1 SignalGetter.getControlInputSignal
+   *  (diodesOnly=false)。判定順もデコンパイルどおり]:
+   *   1. レッドストーンブロック → 定数 15 (比較・減算どちらのモードでも側面 15)
+   *   2. ワイヤ → POWER を直読
+   *   3. その他は isSignalSource のみ direct signal (強出力) がこちらを向くもの
+   *      = リピーター / コンパレーター / (将来) オブザーバー
    *   レバー・ボタン・トーチは水平方向へ direct signal を出さないため無効。
-   *   getDirectSignal がこの弁別を担う (lever/button/torch は通常配置で side を
-   *   向く direct signal を出さず 0 になる)。
+   *   target も getDirectSignal 非 override のため side 入力にならない
+   *   (充電された導体の読み取りは背面限定)。getDirectSignal がこの弁別を担う。
    */
   private readComparatorSide(pos: Pos3D, sideDir: HDir): number {
     const side = this.getBlockAt(neighbor(pos, sideDir))
+    if (side?.type === 'redstone_block') return 15
     if (side?.type === 'wire') return side.power
     return getDirectSignal(this, pos, sideDir)
   }

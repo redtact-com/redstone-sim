@@ -32,7 +32,7 @@ export type { ParsedMcState } from './mcstate.js'
 export {
   getSignal, getDirectSignal, getNeighborSignal,
   getStrongPower, getWireWeakCharge, getSolidPower,
-  isSolidPowered, isFacePowered, isBlockPowered,
+  isSolidPowered, isFacePowered, isBlockPowered, isConductor,
   getTorchAttachFace, relative,
 } from './power.js'
 
