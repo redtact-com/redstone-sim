@@ -156,6 +156,8 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'lamp', lit: false }
     case 'solid':
       return { type: 'solid', powered: false }
+    // 'container' は editor パレット追加が issue #13 のスコープ外のため
+    // default (null) に落として配置不可とする。sim / viewer / nbtIO のみ対応。
     default:
       return null
   }
