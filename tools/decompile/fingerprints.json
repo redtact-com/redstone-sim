@@ -1,0 +1,18 @@
+{
+  "version": "26.2",
+  "normalization": "strip-crlf-trailing-ws-blank-lines/sha256",
+  "classes": {
+    "net/minecraft/world/level/redstone/NeighborUpdater.java": "808d165c78ad64c431351ed82976bad9a6bbff56304269682545f178f678c3e4",
+    "net/minecraft/world/level/redstone/CollectingNeighborUpdater.java": "7812d1269b99cd816ed39ee8f8e2f6666686542d48b57c89d1e6cf685bd39abc",
+    "net/minecraft/world/level/block/RedStoneWireBlock.java": "f3478f8db1d0a2c7f8993b6d8e99301c344d2c00b43ae976bf8d3a4ec7e3a2dd",
+    "net/minecraft/world/level/block/DiodeBlock.java": "b09b6046eece5c26354daafda4586b805f49c0f059f0ff7dd8746c2ef47ce3a2",
+    "net/minecraft/world/level/block/RepeaterBlock.java": "deb4cb31084389bfc722c4e521c3ca4a43b25f7dbc9b1e2a478be0e28a2f305f",
+    "net/minecraft/world/level/block/ComparatorBlock.java": "41a1965f1a8e43e37b8577a10d6ca74bcbaac9f2da64ab4bbd290c3777e7efc8",
+    "net/minecraft/world/level/block/RedstoneTorchBlock.java": "3de92cf3b8d71c1fc55bc095a6c9d176c75a57dbff8ce8aada2807034707866d",
+    "net/minecraft/world/level/block/ButtonBlock.java": "00f31e1ad0795e1603bba08d6eb802bcc95eaa941ab90a2ad90859f5f6fcc6c4",
+    "net/minecraft/world/level/block/LeverBlock.java": "1c7dcf1900ea71badccadfd7bb7b990d4056e7d4cc3014efda2ee06600b9054c",
+    "net/minecraft/world/level/block/ObserverBlock.java": "8752fa1e88866c40252ddfc832b76da9dbcf3a63a6871d26f542c171b03d84ab",
+    "net/minecraft/world/ticks/LevelTicks.java": "42ca0e4079c07d50aee5cb45e2616ef6fa3f9af6d95883eed93bafd87e5468ee",
+    "net/minecraft/world/ticks/LevelChunkTicks.java": "655d3c26998cf1c580d6848167ad75d8f40f5f8ffbd54f71a11a5017d8bad4e0"
+  }
+}

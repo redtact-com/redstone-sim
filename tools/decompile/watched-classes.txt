@@ -1,0 +1,29 @@
+# 仕様ドリフト検知の監視対象クラス (docs/research/02_behavior-spec.md の典拠)
+# 形式: out/<version>/ からの相対パス。# 始まりはコメント。
+# クラスを追加したら spec-drift.sh --update で fingerprints.json を再生成すること。
+
+# 隣接更新 (NC/PP/CU) の方向順・伝播 — 02 §4
+net/minecraft/world/level/redstone/NeighborUpdater.java
+net/minecraft/world/level/redstone/CollectingNeighborUpdater.java
+
+# ワイヤー (伝播・多段送信・Orientation) — 02 §4.2, §6
+net/minecraft/world/level/block/RedStoneWireBlock.java
+
+# ダイオード系 (tile tick 再評価・priority) — 02 §2, §6
+net/minecraft/world/level/block/DiodeBlock.java
+net/minecraft/world/level/block/RepeaterBlock.java
+net/minecraft/world/level/block/ComparatorBlock.java
+
+# トーチ (burnout・給電) — 02 §6
+net/minecraft/world/level/block/RedstoneTorchBlock.java
+
+# 入力デバイス (持続時間・取り付け面) — 02 §6
+net/minecraft/world/level/block/ButtonBlock.java
+net/minecraft/world/level/block/LeverBlock.java
+
+# オブザーバー (PP 起動・パルス) — 02 §4.1, §6
+net/minecraft/world/level/block/ObserverBlock.java
+
+# tile tick キュー (priority 昇順・collect-then-execute) — 02 §2
+net/minecraft/world/ticks/LevelTicks.java
+net/minecraft/world/ticks/LevelChunkTicks.java
