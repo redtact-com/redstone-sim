@@ -183,6 +183,9 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       }]
     case 'lamp':
       return ['minecraft:redstone_lamp', { lit: String((block as any).lit ?? false) }]
+    case 'container':
+      // コンテナは barrel として書き出す (signal は NBT に現れないため破棄)
+      return ['minecraft:barrel', {}]
     case 'lever':
       return ['minecraft:lever', {
         face:    'floor',
@@ -251,6 +254,17 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:redstone_lamp') {
     return { type: 'lamp', lit: props.lit === 'true' } as BlockState
+  }
+
+  // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。
+  // NBT には内容 (充填率) が現れないため signal=0 で取り込む。
+  if (
+    name === 'minecraft:barrel' ||
+    name === 'minecraft:chest' ||
+    name === 'minecraft:trapped_chest' ||
+    name.endsWith('shulker_box')
+  ) {
+    return { type: 'container', signal: 0 } as BlockState
   }
 
   if (name === 'minecraft:lever') {
