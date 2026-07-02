@@ -1,0 +1,48 @@
+# issue チェックボックスの消し込み忘れガード (issue #25)
+#
+# issue が close されたとき body に未チェック項目 (- [ ]) が残っていたら
+# 警告コメントを投稿し、needs-checklist ラベルを付ける。
+# reopen はしない (誤爆時に煩わしいため)。消し込み後にラベルを手で外す。
+
+name: Checkbox Guard
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 未チェック項目の検査
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          BODY_FILE=$(mktemp)
+          gh issue view "$ISSUE" -R "$REPO" --json body -q .body > "$BODY_FILE"
+          UNCHECKED=$(grep -E '^\s*[-*] \[ \]' "$BODY_FILE" || true)
+          if [ -z "$UNCHECKED" ]; then
+            echo "未チェック項目なし"
+            exit 0
+          fi
+          gh label create needs-checklist --color e11d21 \
+            --description "close 時に未チェック項目が残っている" -R "$REPO" 2>/dev/null || true
+          gh issue edit "$ISSUE" -R "$REPO" --add-label needs-checklist
+          {
+            echo "⚠️ **この issue は未チェックの項目が残ったまま close されました。**"
+            echo
+            echo '```'
+            echo "$UNCHECKED"
+            echo '```'
+            echo
+            echo "完了していれば \`- [x]\` に消し込み、未完了なら別 issue 化するか reopen してください。対応後に \`needs-checklist\` ラベルを外してください。"
+            echo
+            echo "（自動投稿: .github/workflows/checkbox-guard.yml）"
+          } > /tmp/guard-comment.md
+          gh issue comment "$ISSUE" -R "$REPO" --body-file /tmp/guard-comment.md
+          echo "::warning::issue #$ISSUE に未チェック項目が残っています"
