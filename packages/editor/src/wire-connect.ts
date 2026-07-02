@@ -18,7 +18,9 @@ export interface BlockGrid3D {
 
 /** ワイヤーの上下斜め接続をカットする不透過ブロックか（sim 側 isWireCutBlock と同義） */
 function isCutBlock(b: BlockState | null): boolean {
-  return !!b && (b.type === 'solid' || b.type === 'lamp')
+  // target は既定フルキューブ導体でカットするが、redstone_block は
+  // isRedstoneConductor(never) = 非導体なのでカットしない [確定: 1.21.1]
+  return !!b && (b.type === 'solid' || b.type === 'lamp' || b.type === 'target')
 }
 
 /**
@@ -54,9 +56,12 @@ export function computeWireConnections(
         nb.type === 'lever' ||
         nb.type === 'button_stone' ||
         nb.type === 'button_wood' ||
-        nb.type === 'torch'
+        nb.type === 'torch' ||
+        nb.type === 'redstone_block' ||
+        nb.type === 'target'
       ) {
-        // 全方向動力源は接続
+        // 全方向動力源 (信号源) は 4 面すべてでダストと接続する
+        // [確定: 1.21.1 RedStoneWireBlock.shouldConnectTo — isSignalSource()]
         v = true
       } else if (nb.type === 'wall_torch') {
         // facing = 壁方向。壁方向以外の3方向でダストと接続する

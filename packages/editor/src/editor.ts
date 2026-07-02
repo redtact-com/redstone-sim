@@ -160,6 +160,12 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
     case 'piston_head':
     case 'moving_piston':
       return null  // head / 移動中ブロックは sim が管理する (直接配置不可)
+    case 'redstone_block':
+      // 定数動力源。石と同列にパレットへ追加 (常時通電)
+      return { type: 'redstone_block' }
+    case 'target':
+      // 手動トリガの折衷モデル。初期は消灯 (outputPower=0)
+      return { type: 'target', outputPower: 0 }
     case 'solid':
       return { type: 'solid', powered: false }
     // 'container' は editor パレット追加が issue #13 のスコープ外のため
