@@ -74,12 +74,15 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return 'minecraft:barrel'
     case 'piston':
     case 'sticky_piston':
-      return `minecraft:${block.type}[extended=${block.extended},facing=${flipDir(block.facing)}]`
+      // facing は反転しない: head の出現位置 (構造座標) は非反転のため、
+      // base モデルだけ flipDir すると逆向きに見える (wire 接続腕と同じ規則。
+      // 実機と逆向きになるユーザ報告 2026-07-03 で確定)
+      return `minecraft:${block.type}[extended=${block.extended},facing=${block.facing}]`
     case 'moving_piston':
       // 移動中は中身 (into) をそのまま描画する近似 (vanilla は BE レンダラ)
       return blockStateToMinecraftStr(block.into)
     case 'piston_head':
-      return `minecraft:piston_head[facing=${flipDir(block.facing)},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
+      return `minecraft:piston_head[facing=${block.facing},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
