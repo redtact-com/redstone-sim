@@ -341,9 +341,37 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   コンテナ読みも isRedstoneConductor 判定のため target 越しに可)。
   → sim は power.ts の導体判定 (isConductor = solid | target) / computeWirePower / readComparatorBack に実装済み。
 
-### piston (未実装・仕様のみ)
+### piston (I7 実装済み)
 - BEC: 動力判定 (NC 受信時) → block event を予約 → ブロックイベントフェーズで実移動。0-tick 系はこのフェーズ差が前提 [確定]。
-- QC 対象 (5.3) [確定]。push limit 12 [要検証: carpet ルールの逆読み、数値は未確認]。block entity は押せない [確定: carpet movableBlockEntities ルールの逆読み]。格納 1 rt = 2 gt [要検証: ArcFrout chap2]。
+- 起動判定 `getNeighborSignal` (PistonBaseBlock, デコンパイル): **facing 面を除く 6 方向の hasSignal** ∪ **自身 down 面** ∪ **1 個上のマスの down 面を除く hasSignal** で true。QC (5.3) はこの「1 個上」判定に由来 [確定]。→ sim `shouldExtend` と一致。
+- QC 対象 (5.3) [確定]。push limit 12 [**確定**: carpet `pushLimit` ルール既定 12 (options 10/12/14/100) = カスタマイズ可能な上限。バニラ値は 12]。block entity は押せない [確定: carpet `movableTileEntities` ルール既定 false の逆読み]。
+- moving BE の progress は 0 → 0.5 → 1.0 の **2 ステップ = 2 gt** で完了 [確定: PistonMovingBlockEntity.tick の `progress += 0.5F` + G4mespeed `gs_numberOfSteps = 2.0f`]。
+
+#### ピストン伸長タイムライン [確定: 1.21.1 デコンパイル + 実機 fixture piston-basic]
+
+レバー ON → ピストン伸長を、実機 fixture `piston-basic` (piston@[2,1,0] facing=east, 石@[3,1,0]、レバー入力 t2) の実測系列に対応づける。tick 表記は fixture 規約 (state[t] = tick t の ST フェーズ完了 + inputs[t] 適用直後)。
+
+| gt | フェーズ (§1.2) | vanilla の出来事 (デコンパイル) | ブロック状態 | sim の対応 |
+|---|---|---|---|---|
+| **t2 境界** | プレイヤー入力適用 (§1.4) | レバー ON → NC → wire=15。piston.`neighborChanged`→`checkIfExtend`→`getNeighborSignal`=true→`PistonStructureResolver.resolve()` OK → `level.blockEvent(pos, EXTEND=0, facing)` を**キュー** (runBlockEvents は当 tick で既に通過済み) | piston `extended=false` のまま。moving なし | `activateBlock`→NC→`scheduleBlockEvent('extend')` をキュー |
+| **t3 phase8** (runBlockEvents) | `triggerEvent(type=0)`: 電源再確認 → `moveBlocks` が MOVING_PISTON + `PistonMovingBlockEntity(progress=0)` を head セル [3,1,0]・押出先 [4,1,0] に生成、base を EXTENDED 化 | piston `extended=true`、[3,1,0]/[4,1,0] = `moving_piston` | BE フェーズ: `executeBlockEvent`→`moving_piston` 化 + `schedule(pos, 2gt)` |
+| **t3 phase10** (tickBlockEntities) | 生成直後の BE も**同 tick に tick する** (作成は phase8 = `tickingBlockEntities`=false なので `blockEntityTickers` に直接追加 → phase10 で走る)。progressO=0<1 → progress 0.5 | `moving_piston` のまま | (tile tick 抽象。個別 progress は保持しない) |
+| **t4 phase10** | progressO=0.5<1 → progress 1.0 (clamp) | `moving_piston` のまま | 変化なし (dueTick=5 未到達) |
+| **t5 phase10** | progressO=1.0≥1 → finalize: `removeBlockEntity` + `setBlock` 最終形 (head セル→`piston_head`、押出先→`石`) + `neighborChanged` | [3,1,0]=`piston_head`, [4,1,0]=`石` | **ST フェーズ**: `executeScheduledTick(dueTick=5)`→`moving_piston`→`into` (最終形) |
+
+- **典拠クラス** (out/1.21.1): `PistonBaseBlock.neighborChanged/checkIfExtend/getNeighborSignal/triggerEvent/moveBlocks`、`PistonMovingBlockEntity.tick/finalTick` (`progressO=progress; progressO>=1.0F なら finalize、さもなくば progress+=0.5F`)、`Level.tickBlockEntities/addBlockEntityTicker` (`tickingBlockEntities` フラグで pending 振り分け → 当 tick 生成 BE は同 tick 実行)。
+- **mod 出典**:
+  - carpet: `pushLimit` (既定 12)、`quasiConnectivity` (既定 true = 「上のマスが受電で反応」)、`movableTileEntities` (既定 false)、`pistonClippingFix` (progress 0/20/40/100% で当たり判定補正) — https://gist.github.com/skyrising/cea2495437afea0cc3af2bb11d6a1856 / https://github.com/gnembon/fabric-carpet
+  - G4mespeed: `GSPistonMovingBlockEntityMixin` (client, 1.21.x) が `progress`/`progressO` を @Shadow し `gs_numberOfSteps = 2.0f` で補間 (`val = (progress*2 + tickDelta)/2`) → **伸長 = 2 ステップ = 2 gt** を裏付け。common mixin は `gs_ticked` フラグで「BE が最低 1 回 tick 済みか」を追跡 — https://github.com/G4me4u/g4mespeed/blob/1.21.x/src/main/java/com/g4mesoft/mixin/client/GSPistonMovingBlockEntityMixin.java
+  - minecraft.wiki: 「extension takes 2 game ticks」「start delay = **0 tick (scheduled/random tick・block event 由来)** / **1 tick (player action・entity・block entity phase 由来)**」「redstone block を押し合うピストン連鎖は 3 tick 間隔」— https://minecraft.wiki/w/Piston
+
+- **「3 gt (= 1.5 rt)」の数え方** [確定]:
+  - **start delay 1 gt** (t2→t3): レバー = player action 由来。入力は tick 境界 (§1.4) で適用され、当 tick の runBlockEvents (phase8) は通過済みのため BE は**翌 tick**の phase8 で発火。⇔ 電源が scheduled tick / block event 由来なら phase4/8 が phase8 より前 or 同フェーズで、start delay は **0 gt** になる (wiki 準拠)。
+  - **extension 2 gt** (t3→t5): moving BE の progress が 0→0.5→1.0 と 2 ステップ進み 3 回目の tick (progressO≥1.0) で最終ブロックが確定。moving_piston ブロックは t3・t4 の 2 tick 在位。
+  - **トリガ→完了 = t2→t5 = 3 gt = 1.5 rt** ← ユーザ指摘の「3 gt かけて伸びる」はこの区間 (player-action 起動時)。BE 発火 (t3) からの計数だと 2 gt (extension のみ)。両者は同一系列の別区間で、食い違いではない。
+  - sim は上記の各 tick を dump 粒度で一致再現 (fixture `piston-basic` t3 moving / t5 確定 が green)。**start delay** はアーキテクチャで自然成立: 入力は tick 境界適用 → 翌 tick の BE フェーズで発火 (1 gt)、scheduled tick 起動なら同 tick の BE フェーズで発火 (0 gt)。
+
+- **既知の抽象化 (v1 制限) [要検証: 将来 fixture]**: sim は moving_piston の確定を **ST フェーズ**の tile tick (`schedule(pos,2gt)`) で行うが、vanilla は **block entity フェーズ** (phase10) の `PistonMovingBlockEntity.tick` で行う。ST (phase4) は runBlockEvents (phase8) の**前**、block entity (phase10) は**後**なので、確定したブロックが下流のピストンを起動する連鎖 (redstone block を押し合う等) では、下流 BE が sim では同 tick・vanilla では翌 tick に発火し **2 tick 間隔 vs 3 tick 間隔**の差が出る。現状 `redstone_block` は `isMovable` 外 (v1 で押せない) のためこの経路は到達不能で、26 fixture は green。可動な動力源ブロック対応時に実機再生成で pin する。
 
 ### observer (未実装・仕様のみ)
 - PP/SU 更新で起動、NC では起動しない [確定: 4.1、ObserverBlock は neighborChanged 非 override]。
