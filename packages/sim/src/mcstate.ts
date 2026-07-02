@@ -131,6 +131,10 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+    case 'note_block':
+      // instrument は sim で保持しない (発音は BE フックで通知するのみ)。
+      // note (0-24) と powered のみ取り込む [確定: 26.2 NoteBlock]
+      return { type: 'note_block', powered: props.powered === 'true', note: Number(props.note ?? '0') }
     case 'piston':
     case 'sticky_piston':
       // vanilla の facing = 伸長方向 = sim と同一 (反転不要)
@@ -207,6 +211,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return 'stone'
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
+      case 'note_block':
+        // instrument は authored に無いため harp 既定で合成する (発音音色は sim 無関係)
+        return formatMcState('note_block',
+          { instrument: 'harp', note: String(sim.note), powered: String(sim.powered) })
       case 'air':
         return 'air'
       default:
@@ -236,6 +244,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'lamp':
       props.lit = String(sim.lit)
+      break
+    case 'note_block':
+      // 動的プロパティは powered のみ (note は tune で変わるが sim は tune しない)。
+      // authored の instrument/note は保持する
+      props.powered = String(sim.powered)
       break
     case 'piston':
     case 'sticky_piston':

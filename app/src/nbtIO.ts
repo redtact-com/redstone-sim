@@ -183,6 +183,12 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       }]
     case 'lamp':
       return ['minecraft:redstone_lamp', { lit: String((block as any).lit ?? false) }]
+    case 'note_block':
+      return ['minecraft:note_block', {
+        instrument: 'harp',
+        note: String((block as any).note ?? 0),
+        powered: String((block as any).powered ?? false),
+      }]
     case 'redstone_block':
       return ['minecraft:redstone_block', {}]
     case 'target':
@@ -293,6 +299,14 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:redstone_lamp') {
     return { type: 'lamp', lit: props.lit === 'true' } as BlockState
+  }
+
+  if (name === 'minecraft:note_block') {
+    return {
+      type: 'note_block',
+      powered: props.powered === 'true',
+      note: Number(props.note ?? 0),
+    } as BlockState
   }
 
   if (name === 'minecraft:redstone_block') {

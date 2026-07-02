@@ -119,6 +119,28 @@ export interface LampState {
 }
 
 /**
+ * 音符ブロック (note block)。回路には信号を出力しない [確定: 26.2 NoteBlock は
+ * isSignalSource 非 override = 非信号源]。ただし full-cube 導体なので solid 同等に
+ * 隣接ワイヤーの上下斜め接続を切り、直接充電されると隣を活性化しうる (10 §C5)。
+ *
+ * 発音は BE (block event) 経由 [確定: 26.2 NoteBlock.neighborChanged / triggerEvent]:
+ *   - neighborChanged で hasNeighborSignal を再評価し、POWERED と食い違えば
+ *     立ち上がり (false→true) のときのみ playNote → level.blockEvent(pos, 0, 0) を
+ *     キューし、POWERED を signal に更新 (setBlock flag3)。
+ *   - BE フェーズの triggerEvent で実発音 (sim は音を鳴らさず発音イベントを
+ *     trace / onNotePlay コールバックへ流す。I7 の BE キューに相乗り)。
+ * instrument (音色) は直下/直上ブロック依存だが sim では省略 (常に BASE_BLOCK 相当)。
+ * 被覆条件は「直上が空気」のみで近似する (10 §C5 注記)。
+ */
+export interface NoteBlockState {
+  type: 'note_block'
+  /** 立ち上がり検出用の受電フラグ (vanilla POWERED) */
+  powered: boolean
+  /** 音程 0-24 (vanilla NOTE)。sim は発音しないが blockstate として保持する */
+  note: number
+}
+
+/**
  * コンテナ (チェスト / バレル等) の簡易モデル。
  *
  * 実際の充填率 (各スロットの item count / maxStackSize) は持たず、
@@ -233,6 +255,7 @@ export type BlockState =
   | LeverState
   | ButtonState
   | LampState
+  | NoteBlockState
   | ContainerState
   | RedstoneBlockState
   | TargetState
@@ -293,7 +316,8 @@ export interface ScheduledTick {
 export interface BlockEvent {
   pos: Pos3D
   blockType: BlockType
-  param: 'extend' | 'retract'
+  /** extend/retract=ピストン (I7)。play=音符ブロック発音 (26.2 blockEvent b0=0) */
+  param: 'extend' | 'retract' | 'play'
 }
 
 export interface TickResult {
