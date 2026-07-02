@@ -32,10 +32,9 @@ function flipFacingForVanillaNbt(facing: string | undefined): string {
 
 // ── エクスポート ─────────────────────────────────────────────────────────────
 
-/** BlockState (2D key "x,z") → Minecraft バニラ構造 NBT バイト列 */
+/** BlockState (3D key "x,y,z") → Minecraft バニラ構造 NBT バイト列 */
 export function exportToNbtBytes(
   blocks: Map<string, BlockState>,
-  layer: number,
   gridW: number,
   gridH: number,
 ): Uint8Array {
@@ -63,12 +62,14 @@ export function exportToNbtBytes(
   getOrAdd('minecraft:air')
 
   const blockEntries: Array<{ x: number; y: number; z: number; state: number }> = []
+  let maxY = 0
 
   for (const [key, block] of blocks) {
-    const [x, z] = key.split(',').map(Number)
+    const [x, y, z] = key.split(',').map(Number)
     const [name, props] = blockStateToMinecraft(block)
     const state = getOrAdd(name, props)
-    blockEntries.push({ x, y: layer, z, state })
+    blockEntries.push({ x, y, z, state })
+    if (y > maxY) maxY = y
   }
 
   // palette リスト
@@ -91,7 +92,7 @@ export function exportToNbtBytes(
   // size
   const sizeList = new NbtList<NbtInt>([
     new NbtInt(gridW),
-    new NbtInt(1),
+    new NbtInt(maxY + 1),
     new NbtInt(gridH),
   ])
 
@@ -108,23 +109,26 @@ export function exportToNbtBytes(
 // ── インポート ─────────────────────────────────────────────────────────────
 
 export interface ImportResult {
-  /** エディタ用ブロックマップ (key: "x,z") */
+  /** エディタ用ブロックマップ (key: "x,y,z") */
   blocks: Map<string, BlockState>
   warnings: string[]
 }
 
-/** バニラ構造 NBT バイト列 → エディタブロックマップ */
-export function importFromNbtBytes(bytes: Uint8Array, targetLayer: number): ImportResult {
+/** バニラ構造 NBT バイト列 → エディタブロックマップ（全レイヤー） */
+export function importFromNbtBytes(bytes: Uint8Array, maxLayers?: number): ImportResult {
   const nbt = NbtFile.read(bytes)
   const structure = Structure.fromNbt(nbt.root)
-  const [, , ] = structure.getSize() as [number, number, number]
 
   const resultBlocks = new Map<string, BlockState>()
   const warnings: string[] = []
+  let skippedAbove = 0
 
   for (const placed of structure.getBlocks()) {
     const [bx, by, bz] = placed.pos as [number, number, number]
-    if (by !== targetLayer) continue  // 単一レイヤーのみ
+    if (maxLayers !== undefined && by >= maxLayers) {
+      skippedAbove++
+      continue
+    }
 
     const name = placed.state.getName().toString()
     const props = placed.state.getProperties() as Record<string, string>
@@ -134,8 +138,10 @@ export function importFromNbtBytes(bytes: Uint8Array, targetLayer: number): Impo
       if (name !== 'minecraft:air') warnings.push(`未対応ブロック: ${name}`)
       continue
     }
-    resultBlocks.set(`${bx},${bz}`, block)
+    resultBlocks.set(`${bx},${by},${bz}`, block)
   }
+
+  if (skippedAbove > 0) warnings.push(`高さ上限超過で ${skippedAbove} ブロックを省略`)
 
   return { blocks: resultBlocks, warnings }
 }
@@ -145,12 +151,13 @@ export function importFromNbtBytes(bytes: Uint8Array, targetLayer: number): Impo
 function blockStateToMinecraft(block: BlockState): [string, Record<string, string>] {
   switch (block.type) {
     case 'wire': {
-      const conn = (block as any).connections as Record<string, boolean>
+      const conn = (block as any).connections as Record<string, boolean | 'up'>
+      const val = (v: boolean | 'up' | undefined) => v === 'up' ? 'up' : v ? 'side' : 'none'
       return ['minecraft:redstone_wire', {
-        north: conn?.north ? 'side' : 'none',
-        south: conn?.south ? 'side' : 'none',
-        east:  conn?.east  ? 'side' : 'none',
-        west:  conn?.west  ? 'side' : 'none',
+        north: val(conn?.north),
+        south: val(conn?.south),
+        east:  val(conn?.east),
+        west:  val(conn?.west),
         power: String((block as any).power ?? 0),
       }]
     }
@@ -196,13 +203,14 @@ function minecraftToBlockState(
   props: Record<string, string>,
 ): BlockState | null {
   if (name === 'minecraft:redstone_wire') {
+    const val = (p: string | undefined) => p === 'up' ? 'up' as const : p === 'side'
     return {
       type: 'wire',
       connections: {
-        north: props.north === 'side' || props.north === 'up',
-        south: props.south === 'side' || props.south === 'up',
-        east:  props.east  === 'side' || props.east  === 'up',
-        west:  props.west  === 'side' || props.west  === 'up',
+        north: val(props.north),
+        south: val(props.south),
+        east:  val(props.east),
+        west:  val(props.west),
       },
       power: Number(props.power ?? 0),
     } as BlockState

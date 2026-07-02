@@ -2,10 +2,10 @@ import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, TorchState, WallTorchState, RepeaterState, ComparatorState, LeverState, ButtonState, SolidState,
 } from './types.js'
-import { OPPOSITE, H_DIRS, ALL_DIRS, H_DIR_VEC } from './types.js'
+import { OPPOSITE, ALL_DIRS } from './types.js'
 import { getRepeaterOutputFacing, isInputFaceOfRepeater } from './blocks/repeater.js'
 import { getTorchOutputFacing, isBasePowered as isTorchBasePowered } from './blocks/torch.js'
-import { computeWirePower } from './blocks/wire.js'
+import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
 
 // ============================================================
 // ユーティリティ
@@ -152,33 +152,38 @@ export class SimWorld {
       }
     }
 
-    // Step 2: ワイヤー電力を収束するまで繰り返し計算
-    // （BFS だと処理順依存になるため、全体パスを繰り返す）
+    // Step 2: ワイヤー電力と固体の強充電を収束するまで繰り返し計算
+    // （BFS だと処理順依存になるため、全体パスを繰り返す。
+    //   強充電された固体はワイヤーの電源になるため同じループで解く）
     let changed = true
     let pass = 0
     while (changed && pass < 100) {
       changed = false
       pass++
       for (const [key, block] of this.blocks) {
-        if (block.type !== 'wire') continue
         const pos = keyToPos(key)
-        const newPower = computeWirePower(pos, this)
-        if (block.power !== newPower) {
-          this.blocks.set(key, { ...block, power: newPower })
-          changed = true
+        if (block.type === 'wire') {
+          const newPower = computeWirePower(pos, this)
+          if (block.power !== newPower) {
+            this.blocks.set(key, { ...block, power: newPower })
+            changed = true
+          }
+        } else if (block.type === 'solid') {
+          const powered = this.isBlockStronglyPowered(pos)
+          if (block.powered !== powered) {
+            this.blocks.set(key, { ...block, powered })
+            changed = true
+          }
         }
       }
     }
 
-    // Step 3: ランプ・固体ブロックの状態を更新
+    // Step 3: ランプの状態を更新
     for (const [key, block] of this.blocks) {
       const pos = keyToPos(key)
       if (block.type === 'lamp') {
         const lit = this.isBlockReceivingPower(pos)
         if (block.lit !== lit) this.blocks.set(key, { ...block, lit })
-      } else if (block.type === 'solid') {
-        const powered = this.isBlockStronglyPowered(pos)
-        if (block.powered !== powered) this.blocks.set(key, { ...block, powered })
       }
     }
 
@@ -392,14 +397,10 @@ export class SimWorld {
         this.setBlockAt(pos, { ...block, power: 0 })
       }
 
-      // 物理接続しているワイヤーを収集
-      const wire = block as WireState
-      for (const dir of H_DIRS) {
-        if (!wire.connections[dir]) continue
-        const [dx, dz] = H_DIR_VEC[dir]
-        const nPos: Pos3D = [pos[0] + dx, pos[1], pos[2] + dz]
+      // 物理接続しているワイヤーを収集（同レイヤー + 上り/下りステップ + 直上直下）
+      for (const nPos of getConnectedWireNeighbors(pos, this)) {
         const nKey = posKey(nPos)
-        if (!connected.has(nKey) && this.getBlockAt(nPos)?.type === 'wire') {
+        if (!connected.has(nKey)) {
           connected.add(nKey)
           exploreQueue.push(nPos)
         }
@@ -430,10 +431,7 @@ export class SimWorld {
       const block = this.getBlockAt(pos) as WireState
       if (!block || block.type !== 'wire') continue
 
-      for (const dir of H_DIRS) {
-        if (!block.connections[dir]) continue
-        const [dx, dz] = H_DIR_VEC[dir]
-        const nPos: Pos3D = [pos[0] + dx, pos[1], pos[2] + dz]
+      for (const nPos of getConnectedWireNeighbors(pos, this)) {
         const nKey = posKey(nPos)
         if (!connected.has(nKey) || visited.has(nKey)) continue
         const nBlock = this.getBlockAt(nPos)
@@ -480,10 +478,14 @@ export class SimWorld {
           for (const d of ALL_DIRS) {
             const nPos = neighbor(pos, d)
             const nb = this.getBlockAt(nPos)
-            if (nb?.type === 'torch' || nb?.type === 'wall_torch') {
+            if (nb?.type === 'torch' || nb?.type === 'wall_torch' || nb?.type === 'lamp') {
               this.updateBlock(nPos)
             }
           }
+          // 強充電された固体は隣接ワイヤーの電源になる（逆に喪失もする）ため
+          // ワイヤー網を再計算する。powered が変化したときのみ呼ぶので
+          // 再帰は状態が収束した時点で止まる。
+          this.propagateWireBFS(this.collectAdjacentWires(pos))
         }
         break
       }
@@ -614,10 +616,10 @@ export class SimWorld {
       case 'wire': {
         const w = src as WireState
         if (w.power === 0) return false
-        // ワイヤーは水平方向にのみ信号を渡す
+        // ワイヤーは水平方向にのみ信号を渡す（'up' 含め接続があれば伝達）
         if (toDir === 'up' || toDir === 'down') return false
         const hDir = toDir as HDir
-        return w.connections[hDir]
+        return !!w.connections[hDir]
       }
       case 'repeater': {
         const r = src as RepeaterState

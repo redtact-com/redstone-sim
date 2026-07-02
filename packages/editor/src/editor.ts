@@ -24,6 +24,14 @@ export class CircuitEditor {
 
   get layer(): number { return this.grid.layer }
 
+  /** 現在編集対象の Y レイヤー */
+  get activeLayer(): number { return this.grid.activeLayer }
+
+  /** 編集対象の Y レイヤーを切り替える（配置・削除・選択の対象になる） */
+  setActiveLayer(y: number): void {
+    this.grid.activeLayer = y
+  }
+
   // ── ブロック操作 ──────────────────────────────────────────
 
   placeBlock(x: number, z: number, type: PlaceableType, opts: PlaceOptions = {}): void {
@@ -35,6 +43,12 @@ export class CircuitEditor {
 
   removeBlock(x: number, z: number): void {
     this.grid.removeBlock(x, z)
+    this.emit()
+  }
+
+  /** レイヤー指定の削除（クリア等、activeLayer 外の操作に使用） */
+  removeBlock3(x: number, y: number, z: number): void {
+    this.grid.removeBlock3(x, y, z)
     this.emit()
   }
 
@@ -55,6 +69,10 @@ export class CircuitEditor {
 
   getBlock(x: number, z: number): BlockState | null {
     return this.grid.getBlock(x, z)
+  }
+
+  getBlock3(x: number, y: number, z: number): BlockState | null {
+    return this.grid.getBlock3(x, y, z)
   }
 
   // ── undo/redo ─────────────────────────────────────────────
@@ -87,10 +105,9 @@ export class CircuitEditor {
   buildSimWorld(): SimWorld {
     const world = new SimWorld()
     const snapshot = this.grid.toSnapshot()
-    const y = this.layer
 
     for (const [key, block] of snapshot.blocks) {
-      const [x, , z] = key.split(',').map(Number)
+      const [x, y, z] = key.split(',').map(Number)
       world.setBlock(x, y, z, block)
     }
 

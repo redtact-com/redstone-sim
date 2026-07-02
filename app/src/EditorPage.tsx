@@ -12,7 +12,12 @@
  * IsometricView の cameraStateRef でカメラ状態を取得し、
  * 透明 canvas オーバーレイに RAF ループでグリッド線を描画する。
  * topDown 座標変換: scale = FOV_F * canvasH / (2 * depth)
- * depth = camDist + 0.5 (structureY=1, placementY=0)
+ * depth = camDist + GRID_LAYERS/2 - activeLayer (structureY=GRID_LAYERS)
+ *
+ * ── 3D 編集 ──
+ * 2D の編集操作はそのままに、右側の高さパネルで編集対象レイヤー (Y) を
+ * 切り替える。既定では activeLayer より上のレイヤーを非表示にして
+ * 下層を編集しやすくする（トグルで全層表示可）。
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
@@ -30,7 +35,8 @@ import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array
 
 const GRID_W = 16
 const GRID_H = 16
-const LAYER  = 0
+/** 編集可能なレイヤー数 (Y = 0 .. GRID_LAYERS-1) */
+const GRID_LAYERS = 8
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -87,12 +93,16 @@ interface EditorPageProps {
 }
 
 export function EditorPage({ onBack }: EditorPageProps) {
-  const editorRef = useRef(new CircuitEditor(LAYER))
+  const editorRef = useRef(new CircuitEditor(0))
   const [, forceUpdate] = useState(0)
   const rerender = useCallback(() => forceUpdate(n => n + 1), [])
 
   // モード
   const [mode, setMode] = useState<'edit' | 'sim'>('edit')
+
+  // 編集レイヤー (Y) と上層カット表示
+  const [activeLayer, setActiveLayer] = useState(0)
+  const [cutUpper, setCutUpper] = useState(true)
 
   // シミュレーション
   const [simWorld, setSimWorld] = useState<SimWorld | null>(null)
@@ -100,8 +110,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const [running, setRunning] = useState(false)
   const runIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // レバー一覧と ON/OFF 状態
-  const [levers, setLevers] = useState<[number, number][]>([])
+  // レバー一覧 [x, y, z] と ON/OFF 状態 (key: "x,y,z")
+  const [levers, setLevers] = useState<[number, number, number][]>([])
   const [leverPowered, setLeverPowered] = useState<Record<string, boolean>>({})
 
   // チェックポイント（Initialize で保存した状態）
@@ -126,18 +136,46 @@ export function EditorPage({ onBack }: EditorPageProps) {
     setLog(prev => [...prev.slice(-49), msg])
   }, [])
 
+  // ── 編集レイヤー切替 ─────────────────────────────────────────────────
+  const changeLayer = useCallback((y: number) => {
+    const clamped = Math.max(0, Math.min(GRID_LAYERS - 1, y))
+    editorRef.current.setActiveLayer(clamped)
+    setActiveLayer(clamped)
+    setSelectedPos(null)
+    addLog(`編集レイヤー Y=${clamped}`)
+  }, [addLog])
+
   // ── カメラ状態 ref（グリッドオーバーレイ用） ─────────────────────────
   const cameraStateRef = useRef<CameraState | null>(null)
   const gridCanvasRef  = useRef<HTMLCanvasElement>(null)
 
   // ── スナップショット（表示用） ──────────────────────────────────────────
 
-  // 実ブロックのスナップショット + bounds を GRID サイズに固定
+  // 実ブロックのスナップショット + bounds を GRID サイズに固定。
+  // 編集モードで上層カットが有効なとき activeLayer より上を非表示にする。
   const rawSnapshot = simWorld?.snapshot() ?? editorRef.current.getSnapshot()
-  const snapshot: WorldSnapshot = {
-    ...rawSnapshot,
-    bounds: { x: [0, GRID_W - 1], y: [LAYER, LAYER], z: [0, GRID_H - 1] },
+  let visibleBlocks = rawSnapshot.blocks
+  if (mode === 'edit' && cutUpper) {
+    const filtered = new Map<`${number},${number},${number}`, BlockState>()
+    for (const [key, b] of rawSnapshot.blocks) {
+      if (Number(key.split(',')[1]) <= activeLayer) filtered.set(key, b)
+    }
+    visibleBlocks = filtered
   }
+  const snapshot: WorldSnapshot = {
+    blocks: visibleBlocks,
+    bounds: { x: [0, GRID_W - 1], y: [0, GRID_LAYERS - 1], z: [0, GRID_H - 1] },
+  }
+
+  // レイヤーごとのブロック数（高さパネルのインジケーター用）
+  const layerCounts = (() => {
+    const counts = new Array<number>(GRID_LAYERS).fill(0)
+    for (const key of editorRef.current.getAllBlocks().keys()) {
+      const y = Number(key.split(',')[1])
+      if (y >= 0 && y < GRID_LAYERS) counts[y]++
+    }
+    return counts
+  })()
 
   // ── グリッドオーバーレイ RAF ─────────────────────────────────────────
 
@@ -157,8 +195,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       }
       const ctx = canvas.getContext('2d')!
       ctx.clearRect(0, 0, w, h)
-      // depth = camDist + sy/2 - placementY  (sy=1, placementY=0 → +0.5)
-      const depth = cam.distance + 0.5
+      // depth = camDist + sy/2 - placementY  (sy=GRID_LAYERS, placementY=activeLayer)
+      const depth = cam.distance + GRID_LAYERS / 2 - activeLayer
       const scale = FOV_F * h / (2 * depth)
       const gridLeft = w / 2 - (GRID_W / 2 + cam.panX) * scale
       const gridTop  = h / 2 - (GRID_H / 2 + cam.panZ) * scale
@@ -180,7 +218,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [mode])
+  }, [mode, activeLayer])
 
   // ── グリッドの選択ブロック情報 ──────────────────────────────────────────
 
@@ -230,8 +268,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (simWorld) {
         const b = simWorld.getBlockAt(pos)
         if (b?.type === 'lever') {
-          simWorld.activateBlock(x, LAYER, z)
-          addLog(`レバートグル (${x}, ${z})`)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`レバートグル (${x}, ${pos[1]}, ${z})`)
           rerender()
         }
       }
@@ -349,11 +387,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
   }, [addLog, rerender])
 
   const handleClear = useCallback(() => {
-    for (let x = 0; x < GRID_W; x++)
-      for (let z = 0; z < GRID_H; z++)
-        editorRef.current.removeBlock(x, z)
+    for (const key of editorRef.current.getAllBlocks().keys()) {
+      const [x, y, z] = key.split(',').map(Number)
+      editorRef.current.removeBlock3(x, y, z)
+    }
     setSelectedPos(null)
-    addLog('クリア')
+    addLog('クリア（全レイヤー）')
     rerender()
   }, [addLog, rerender])
 
@@ -361,7 +400,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   const handleExportNbt = useCallback(() => {
     const blocks = editorRef.current.getAllBlocks()
-    const bytes = exportToNbtBytes(blocks, LAYER, GRID_W, GRID_H)
+    const bytes = exportToNbtBytes(blocks, GRID_W, GRID_H)
     downloadNbt(bytes, 'circuit.nbt')
     addLog('NBT エクスポート完了')
   }, [addLog])
@@ -373,7 +412,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleImportNbt = useCallback(async (file: File) => {
     try {
       const bytes = await readFileAsUint8Array(file)
-      const { blocks, warnings } = importFromNbtBytes(bytes, LAYER)
+      const { blocks, warnings } = importFromNbtBytes(bytes, GRID_LAYERS)
       editorRef.current.resetToBlocks(blocks)
       setSelectedPos(null)
       rerender()
@@ -386,12 +425,14 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   // ── レバー一覧スキャン ────────────────────────────────────────────────
 
-  const scanLevers = useCallback((): [number, number][] => {
-    const found: [number, number][] = []
-    for (let x = 0; x < GRID_W; x++)
-      for (let z = 0; z < GRID_H; z++)
-        if (editorRef.current.getBlock(x, z)?.type === 'lever') found.push([x, z])
-    return found
+  const scanLevers = useCallback((): [number, number, number][] => {
+    const found: [number, number, number][] = []
+    for (const [key, block] of editorRef.current.getAllBlocks()) {
+      if (block.type !== 'lever') continue
+      const [x, y, z] = key.split(',').map(Number)
+      found.push([x, y, z])
+    }
+    return found.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0])
   }, [])
 
   // ── チェックポイント保存ヘルパー ────────────────────────────────────────
@@ -402,10 +443,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     setCheckpointTick(t)
     const leverState: Record<string, boolean> = {}
     for (const [key, block] of snap.blocks) {
-      if (block.type === 'lever') {
-        const [x, , z] = key.split(',').map(Number)
-        leverState[`${x},${z}`] = block.powered
-      }
+      if (block.type === 'lever') leverState[key] = block.powered
     }
     return leverState
   }, [])
@@ -446,7 +484,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     for (const [key, block] of checkpoint) {
       const [x, y, z] = key.split(',').map(Number)
       world.setBlock(x, y, z, block)
-      if (block.type === 'lever') leverState[`${x},${z}`] = block.powered
+      if (block.type === 'lever') leverState[key] = block.powered
     }
     // ブロック状態から wire 電力・スケジュール済み tick を再計算する
     // クロック回路では flush しないため、トーチの ON/OFF 状態に合わせた
@@ -461,13 +499,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   // ── 個別レバートグル ─────────────────────────────────────────────────
 
-  const handleToggleLever = useCallback((x: number, z: number) => {
+  const handleToggleLever = useCallback((x: number, y: number, z: number) => {
     if (!simWorld) return
-    simWorld.activateBlock(x, LAYER, z)
-    const key = `${x},${z}`
+    simWorld.activateBlock(x, y, z)
+    const key = `${x},${y},${z}`
     setLeverPowered(prev => {
       const next = !prev[key]
-      addLog(`レバー (${x}, ${z}): ${next ? 'ON' : 'OFF'}`)
+      addLog(`レバー (${x}, ${y}, ${z}): ${next ? 'ON' : 'OFF'}`)
       return { ...prev, [key]: next }
     })
     rerender()
@@ -523,22 +561,20 @@ export function EditorPage({ onBack }: EditorPageProps) {
     let found = false
     const patch: Record<string, boolean> = {}
     setLeverPowered(prev => {
-      for (let x = 0; x < GRID_W; x++) {
-        for (let z = 0; z < GRID_H; z++) {
-          const b = simWorld.getBlockAt([x, LAYER, z])
-          if (b?.type === 'lever') {
-            simWorld.activateBlock(x, LAYER, z)
-            const key = `${x},${z}`
-            patch[key] = !prev[key]
-            found = true
-          }
+      for (const [x, y, z] of levers) {
+        const b = simWorld.getBlockAt([x, y, z])
+        if (b?.type === 'lever') {
+          simWorld.activateBlock(x, y, z)
+          const key = `${x},${y},${z}`
+          patch[key] = !prev[key]
+          found = true
         }
       }
       return { ...prev, ...patch }
     })
     addLog(found ? '全レバートグル' : 'レバーなし')
     rerender()
-  }, [simWorld, addLog, rerender])
+  }, [simWorld, levers, addLog, rerender])
 
   // ── パレット選択 ─────────────────────────────────────────────────────
 
@@ -631,10 +667,10 @@ export function EditorPage({ onBack }: EditorPageProps) {
           <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 overflow-x-auto"
                style={{ background: '#1a1a1a', borderBottom: '2px solid #2a2a2a', scrollbarWidth: 'none' }}>
             <span className="font-pixel shrink-0 mr-1" style={{ fontSize: 12, color: '#555' }}>LEVER</span>
-            {levers.map(([x, z]) => {
-              const on = leverPowered[`${x},${z}`] ?? false
+            {levers.map(([x, y, z]) => {
+              const on = leverPowered[`${x},${y},${z}`] ?? false
               return (
-                <button key={`${x},${z}`} onClick={() => handleToggleLever(x, z)} disabled={!simWorld}
+                <button key={`${x},${y},${z}`} onClick={() => handleToggleLever(x, y, z)} disabled={!simWorld}
                         className="mc-btn shrink-0 h-10 px-3 flex items-center gap-2"
                         style={{
                           background: on ? '#7a4400' : '#2a2a2a',
@@ -650,7 +686,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
                     transition: 'all 0.15s',
                   }} />
                   <span className="font-mono text-xs" style={{ color: on ? '#ffcc00' : '#666' }}>
-                    {x},{z}
+                    {x},{y},{z}
                   </span>
                 </button>
               )
@@ -672,7 +708,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
           <IsometricView
             snapshot={snapshot}
             topDown={false}
-            placementY={LAYER}
+            placementY={activeLayer}
             onBlockClick={handleBlockClick}
           />
           {running && (
@@ -743,7 +779,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         <IsometricView
           snapshot={snapshot}
           topDown={true}
-          placementY={LAYER}
+          placementY={activeLayer}
           onBlockClick={selectedType === 'move' ? undefined : handleBlockClick}
           cameraStateRef={cameraStateRef}
           panMode={selectedType === 'move'}
@@ -756,6 +792,15 @@ export function EditorPage({ onBack }: EditorPageProps) {
             pointerEvents: 'none',
           }}
         />
+
+        {/* 高さ操作パネル */}
+        <HeightPanel
+          activeLayer={activeLayer}
+          layerCounts={layerCounts}
+          cutUpper={cutUpper}
+          onChangeLayer={changeLayer}
+          onToggleCutUpper={() => setCutUpper(v => !v)}
+        />
       </div>
 
       {/* 向き・遅延・モードバー */}
@@ -765,6 +810,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
           gridBlockHasFacing={gridBlockHasFacing}
           selectedType={selectedType}
           selectedPos={selectedPos}
+          activeLayer={activeLayer}
           barFacing={barFacing}
           barDelay={barDelay}
           barMode={barMode}
@@ -795,6 +841,7 @@ interface FacingBarProps {
   gridBlockHasFacing: boolean
   selectedType:       PaletteType
   selectedPos:        [number, number] | null
+  activeLayer:        number
   barFacing:          HDir
   barDelay:           1 | 2 | 3 | 4
   barMode:            'compare' | 'subtract'
@@ -804,7 +851,7 @@ interface FacingBarProps {
 }
 
 function FacingBar({
-  gridBlock, gridBlockHasFacing, selectedType, selectedPos,
+  gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
   barFacing, barDelay, barMode, onFacingChange, onDelayChange, onModeChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
@@ -813,7 +860,9 @@ function FacingBar({
   const showDelay  = !!(meta?.hasDelay)  || gridBlock?.type === 'repeater'
   const showMode   = !!(meta?.hasMode)   || gridBlock?.type === 'comparator'
 
-  const label = selectedPos ? `(${selectedPos[0]}, ${selectedPos[1]})` : '次の配置'
+  const label = selectedPos
+    ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
+    : `次の配置 Y=${activeLayer}`
 
   const dirLabel: Record<HDir, string> = { north: '北', south: '南', east: '東', west: '西' }
 
@@ -972,6 +1021,110 @@ function EditorPalette({ selected, onSelect }: {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ── HeightPanel ───────────────────────────────────────────────────────────────
+
+interface HeightPanelProps {
+  activeLayer:      number
+  layerCounts:      number[]
+  cutUpper:         boolean
+  onChangeLayer:    (y: number) => void
+  onToggleCutUpper: () => void
+}
+
+/**
+ * 編集レイヤー (Y) の操作パネル。
+ * ▲▼ で1段ずつ移動、レイヤーセル直接クリックでジャンプ、
+ * 👁 で activeLayer より上のレイヤーの表示カットを切り替える。
+ */
+function HeightPanel({
+  activeLayer, layerCounts, cutUpper, onChangeLayer, onToggleCutUpper,
+}: HeightPanelProps) {
+  const layers = Array.from({ length: layerCounts.length }, (_, i) => layerCounts.length - 1 - i)
+
+  return (
+    <div
+      className="flex flex-col items-center"
+      style={{
+        position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+        gap: 4, zIndex: 10, padding: 4,
+        background: 'rgba(29,29,29,0.92)', border: '2px solid #444',
+      }}
+    >
+      <span className="font-pixel" style={{ fontSize: 10, color: '#666', letterSpacing: 1 }}>Y</span>
+
+      {/* 1段上へ */}
+      <button
+        onClick={() => onChangeLayer(activeLayer + 1)}
+        disabled={activeLayer >= layerCounts.length - 1}
+        title="1つ上のレイヤーへ"
+        className="mc-btn w-10 h-8 text-sm font-bold"
+      >▲</button>
+
+      {/* レイヤーセル（上=最上層） */}
+      <div className="flex flex-col" style={{ gap: 2 }}>
+        {layers.map(y => {
+          const active = y === activeLayer
+          const hasBlocks = layerCounts[y] > 0
+          return (
+            <button
+              key={y}
+              onClick={() => onChangeLayer(y)}
+              title={`Y=${y}${hasBlocks ? `（${layerCounts[y]} ブロック）` : ''}`}
+              className="flex items-center justify-between font-mono"
+              style={{
+                width: 40, height: 18, padding: '0 4px', fontSize: 10,
+                background: active ? '#6b0000' : '#242424',
+                border: '1px solid',
+                borderColor: active ? '#ff4444' : '#3a3a3a',
+                color: active ? '#ff9999' : hasBlocks ? '#bbb' : '#555',
+                boxShadow: active ? '0 0 6px #cc2222' : 'none',
+              }}
+            >
+              <span>{y}</span>
+              <span style={{
+                display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                background: hasBlocks ? (active ? '#ffcc00' : '#7a7a2a') : 'transparent',
+                border: hasBlocks ? 'none' : '1px solid #333',
+              }} />
+            </button>
+          )
+        })}
+      </div>
+
+      {/* 1段下へ */}
+      <button
+        onClick={() => onChangeLayer(activeLayer - 1)}
+        disabled={activeLayer <= 0}
+        title="1つ下のレイヤーへ"
+        className="mc-btn w-10 h-8 text-sm font-bold"
+      >▼</button>
+
+      {/* 現在レイヤー表示 */}
+      <div
+        className="w-10 h-8 flex items-center justify-center font-pixel"
+        style={{
+          background: '#111', border: '2px solid',
+          borderColor: '#1c1c1c #5a5a5a #5a5a5a #1c1c1c',
+          fontSize: 13, color: '#ff9900',
+        }}
+      >
+        {activeLayer}
+      </div>
+
+      {/* 上層カットトグル */}
+      <button
+        onClick={onToggleCutUpper}
+        title={cutUpper ? '上層カット中（クリックで全層表示）' : '全層表示中（クリックで上層カット）'}
+        className="mc-btn w-10 h-8 text-sm"
+        style={{
+          background: cutUpper ? '#1a2a4a' : '#3a3a3a',
+          borderColor: cutUpper ? '#3a6aaa #0a1a3a #0a1a3a #3a6aaa' : '#666 #222 #222 #666',
+        }}
+      >👁</button>
     </div>
   )
 }

@@ -32,11 +32,19 @@ export const ALL_DIRS: Dir6[] = ['north', 'south', 'east', 'west', 'up', 'down']
 // ブロック状態型
 // ============================================================
 
+/**
+ * ワイヤーの接続値。
+ * - false: 接続なし
+ * - true:  side 接続（同レイヤー / 下りステップ）
+ * - 'up':  上りステップ接続（隣接ブロックの面を登る。vanilla blockstate の 'up' に対応）
+ */
+export type WireConnectionValue = boolean | 'up'
+
 export interface WireConnections {
-  north: boolean
-  south: boolean
-  east:  boolean
-  west:  boolean
+  north: WireConnectionValue
+  south: WireConnectionValue
+  east:  WireConnectionValue
+  west:  WireConnectionValue
 }
 
 export interface WireState {
