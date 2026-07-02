@@ -153,10 +153,12 @@ describe('SimWorld: トーチ → ランプ（initialize()で初期化）', () =
 
   it('土台が最初からレバーONのトーチは initialize() で消灯する', () => {
     const world = new SimWorld()
-    // solid(0,0,0) の上に torch(0,1,0)。solid を lever(1,0,0) で充電
+    // solid(0,0,0) の上に torch(0,1,0)。solid に取り付けたレバーで強充電する。
+    // (G13/02 §5.2: レバーの strong は取り付け面 OPPOSITE[facing] のブロックのみ。
+    //  床置き facing='up' では横の solid を充電しないため、solid の東面に取り付ける)
     place3d(world, 0, 0, 0, { type: 'solid', powered: false })
     place3d(world, 0, 1, 0, torch(true))   // 土台=solid(0,0,0)
-    place3d(world, 1, 0, 0, lever(true))   // 最初からON
+    place3d(world, 1, 0, 0, { type: 'lever', facing: 'east', powered: true })  // 取り付け先=solid(0,0,0)
 
     world.initialize()
     // initialize() は消灯を予約するだけなので ST 実行まで安定化させる

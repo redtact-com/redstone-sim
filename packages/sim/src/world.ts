@@ -1,11 +1,11 @@
 import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
-  WireState, TorchState, WallTorchState, RepeaterState, ComparatorState, LeverState, ButtonState, SolidState,
+  WireState, RepeaterState, ComparatorState, LeverState, ButtonState,
 } from './types.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
-import { getRepeaterOutputFacing, isInputFaceOfRepeater } from './blocks/repeater.js'
-import { getTorchOutputFacing, isBasePowered as isTorchBasePowered } from './blocks/torch.js'
+import { isBasePowered as isTorchBasePowered } from './blocks/torch.js'
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
+import { getSolidPower, isBlockPowered, isFacePowered, isSolidPowered } from './power.js'
 
 // ============================================================
 // ユーティリティ
@@ -152,9 +152,10 @@ export class SimWorld {
       }
     }
 
-    // Step 2: ワイヤー電力と固体の強充電を収束するまで繰り返し計算
+    // Step 2: ワイヤー電力を収束するまで繰り返し計算
     // （BFS だと処理順依存になるため、全体パスを繰り返す。
-    //   強充電された固体はワイヤーの電源になるため同じループで解く）
+    //   固体の充電状態は power.ts の純クエリで都度計算されるため
+    //   反復対象はワイヤーのみでよい）
     let changed = true
     let pass = 0
     while (changed && pass < 100) {
@@ -168,22 +169,19 @@ export class SimWorld {
             this.blocks.set(key, { ...block, power: newPower })
             changed = true
           }
-        } else if (block.type === 'solid') {
-          const powered = this.isBlockStronglyPowered(pos)
-          if (block.powered !== powered) {
-            this.blocks.set(key, { ...block, powered })
-            changed = true
-          }
         }
       }
     }
 
-    // Step 3: ランプの状態を更新
+    // Step 3: ランプと固体（表示用 powered）の状態を更新
     for (const [key, block] of this.blocks) {
       const pos = keyToPos(key)
       if (block.type === 'lamp') {
-        const lit = this.isBlockReceivingPower(pos)
+        const lit = isBlockPowered(this, pos)
         if (block.lit !== lit) this.blocks.set(key, { ...block, lit })
+      } else if (block.type === 'solid') {
+        const powered = isSolidPowered(this, pos)
+        if (block.powered !== powered) this.blocks.set(key, { ...block, powered })
       }
     }
 
@@ -219,12 +217,12 @@ export class SimWorld {
     if (block.type === 'lever') {
       const next: LeverState = { ...block, powered: !block.powered }
       this.setBlockAt(pos, next)
-      this.propagateFromSource(pos)
+      this.propagateChange(pos)
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (block.powered) return  // 既に押されている
       const next: ButtonState = { ...block, powered: true }
       this.setBlockAt(pos, next)
-      this.propagateFromSource(pos)
+      this.propagateChange(pos)
       const delay = block.type === 'button_stone' ? 5 : 10
       // ボタンは delay tick 後にオフ
       this.schedule(pos, 'turn_off', delay, 0)
@@ -294,25 +292,25 @@ export class SimWorld {
       if (block.lit === shouldBeLit) return []
       this.setBlockAt(pos, { ...block, lit: shouldBeLit })
       changed.push(posKey(pos))
-      this.propagateFromTorch(pos, shouldBeLit)
+      this.propagateChange(pos)
     } else if (block.type === 'repeater') {
       const shouldBePowered = action === 'turn_on'
       if (block.powered === shouldBePowered) return []
       this.setBlockAt(pos, { ...block, powered: shouldBePowered })
       changed.push(posKey(pos))
-      this.propagateFromRepeater(pos)
+      this.propagateChange(pos)
     } else if (block.type === 'comparator') {
       const shouldBePowered = action === 'turn_on'
       const newOutputPower = shouldBePowered ? this.computeComparatorOutput(pos, block) : 0
       if (block.powered === shouldBePowered && block.outputPower === newOutputPower) return []
       this.setBlockAt(pos, { ...block, powered: shouldBePowered, outputPower: newOutputPower })
       changed.push(posKey(pos))
-      this.propagateFromComparator(pos)
+      this.propagateChange(pos)
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (action === 'turn_off') {
         this.setBlockAt(pos, { ...block, powered: false })
         changed.push(posKey(pos))
-        this.propagateFromSource(pos)
+        this.propagateChange(pos)
       }
     }
 
@@ -322,43 +320,40 @@ export class SimWorld {
   // ── 内部: 信号伝播 ───────────────────────────────────────
 
   /**
-   * レバー・ボタン・ターゲット等の全方向動力源からの伝播。
-   * 隣接する全ブロックを更新キューに入れる。
+   * 動力源（レバー・ボタン・トーチ・リピーター・コンパレーター）の
+   * 出力変化を周囲へ伝える汎用ルーチン (G4)。
+   * 隣接ブロックの再評価 + 固体越し 2 ホップ目の機構の再評価 +
+   * ワイヤー網の再計算を行う。
    */
-  private propagateFromSource(pos: Pos3D): void {
-    const powered = this.getPowerLevel(pos[0], pos[1], pos[2]) > 0
-    // 隣接6方向のワイヤー・ランプ・固体ブロックを再計算
+  private propagateChange(pos: Pos3D): void {
+    this.updateNeighborsAndThroughSolids(pos)
+    this.propagateWireBFS(this.collectAdjacentWires(pos))
+  }
+
+  /**
+   * pos の出力変化を隣接ブロックへ通知し、隣が固体なら充電状態の変化を
+   * 「中継」して 2 ホップ目の機構 (repeater / comparator / lamp / torch)
+   * まで再評価する (G4)。強充電の変化は固体に隣接するワイヤーの電源にも
+   * なるため、ワイヤー網も再計算する。
+   * 通知の方向順は素朴な ALL_DIRS 順（vanilla の方向順対応は I6 の範囲）。
+   */
+  private updateNeighborsAndThroughSolids(pos: Pos3D): void {
+    const originKey = posKey(pos)
     for (const dir of ALL_DIRS) {
       const nPos = neighbor(pos, dir)
+      const nb = this.getBlockAt(nPos)
+      if (!nb) continue
       this.updateBlock(nPos)
+      if (nb.type === 'solid') {
+        for (const dir2 of ALL_DIRS) {
+          const nnPos = neighbor(nPos, dir2)
+          if (posKey(nnPos) === originKey) continue
+          const nnb = this.getBlockAt(nnPos)
+          if (nnb && nnb.type !== 'wire' && nnb.type !== 'solid') this.updateBlock(nnPos)
+        }
+        this.propagateWireBFS(this.collectAdjacentWires(nPos))
+      }
     }
-    // ワイヤー経由の伝播
-    this.propagateWireBFS(this.collectAdjacentWires(pos))
-    void powered  // 使用済みフラグ
-  }
-
-  private propagateFromTorch(pos: Pos3D, lit: boolean): void {
-    const block = this.getBlockAt(pos)
-    if (!block || (block.type !== 'torch' && block.type !== 'wall_torch')) return
-    const outFacing = getTorchOutputFacing(block)
-    const outPos = neighbor(pos, outFacing)
-    this.updateBlock(outPos)
-    this.propagateWireBFS(this.collectAdjacentWires(pos))
-    void lit
-  }
-
-  private propagateFromRepeater(pos: Pos3D): void {
-    const block = this.getBlockAt(pos) as RepeaterState
-    const outPos = neighbor(pos, block.facing)
-    this.updateBlock(outPos)
-    this.propagateWireBFS(this.collectAdjacentWires(pos))
-  }
-
-  private propagateFromComparator(pos: Pos3D): void {
-    const block = this.getBlockAt(pos) as ComparatorState
-    const outPos = neighbor(pos, block.facing)
-    this.updateBlock(outPos)
-    this.propagateWireBFS(this.collectAdjacentWires(pos))
   }
 
   /**
@@ -452,7 +447,7 @@ export class SimWorld {
     // ── Phase 3: 全ワイヤー電力が確定してから周囲の機構を更新 ──
     // ランプ・リピーター・コンパレーター・トーチは安定後の値だけを観測する
     for (const key of connected) {
-      this.updateLampsAroundWire(keyToPos(key))
+      this.updateAroundWire(keyToPos(key))
     }
   }
 
@@ -462,31 +457,17 @@ export class SimWorld {
 
     switch (block.type) {
       case 'lamp': {
-        const lit = this.isBlockReceivingPower(pos)
+        const lit = isBlockPowered(this, pos)
         if (block.lit !== lit) this.setBlockAt(pos, { ...block, lit })
         break
       }
       case 'solid': {
-        const powered = this.isBlockStronglyPowered(pos)
-        if (block.powered !== powered) {
-          this.setBlockAt(pos, { ...block, powered })
-          // 固体の powered 変化を取り付いている隣接トーチに伝播する。
-          // これがないとリピーター出力 → stone → torch のチェーンで
-          // 同 tick 内に他の repeater がまだ未処理だった場合に
-          // updateLampsAroundWire 経由のトーチ更新で stone がまだ
-          // powered=false に見えてしまい、片側のトーチしか消えない。
-          for (const d of ALL_DIRS) {
-            const nPos = neighbor(pos, d)
-            const nb = this.getBlockAt(nPos)
-            if (nb?.type === 'torch' || nb?.type === 'wall_torch' || nb?.type === 'lamp') {
-              this.updateBlock(nPos)
-            }
-          }
-          // 強充電された固体は隣接ワイヤーの電源になる（逆に喪失もする）ため
-          // ワイヤー網を再計算する。powered が変化したときのみ呼ぶので
-          // 再帰は状態が収束した時点で止まる。
-          this.propagateWireBFS(this.collectAdjacentWires(pos))
-        }
+        // 充電状態は power.ts の純クエリで都度計算されるため、ここでは
+        // 表示用の派生値 powered を更新するだけでよい。
+        // 隣接機構への「中継」は updateNeighborsAndThroughSolids /
+        // updateAroundWire 側で行う (G4)。
+        const powered = isSolidPowered(this, pos)
+        if (block.powered !== powered) this.setBlockAt(pos, { ...block, powered })
         break
       }
       case 'torch':
@@ -530,31 +511,29 @@ export class SimWorld {
     }
   }
 
-  private updateLampsAroundWire(pos: Pos3D): void {
+  /**
+   * ワイヤーの電力変化を周囲の機構へ通知する。
+   * 直接隣接する機構 (lamp / repeater / comparator / torch) の再評価に加え、
+   * ワイヤーが弱充電する固体を「中継」して固体越しの機構も再評価する (G4)。
+   * 弱充電は他のワイヤーには給電しないため、ここからワイヤー網の再計算は
+   * 行わない（再帰しない）。
+   */
+  private updateAroundWire(pos: Pos3D): void {
     for (const dir of ALL_DIRS) {
       const nPos = neighbor(pos, dir)
       const b = this.getBlockAt(nPos)
-      if (b?.type === 'lamp') {
-        const lit = this.isBlockReceivingPower(nPos)
-        if (b.lit !== lit) this.setBlockAt(nPos, { ...b, lit })
-      } else if (b?.type === 'repeater') {
-        // ワイヤー電力変化でリピーターを再評価（turn_on/turn_off をスケジュール）
+      if (!b) continue
+      if (b.type === 'solid') {
+        // 表示用 powered の更新
         this.updateBlock(nPos)
-      } else if (b?.type === 'comparator') {
-        // ワイヤー電力変化でコンパレーターを再評価（outputPower 更新・クロック発振）
-        this.updateBlock(nPos)
-      } else if (b?.type === 'torch' || b?.type === 'wall_torch') {
-        // ワイヤーに直接隣接するトーチを更新
-        this.updateBlock(nPos)
-      } else if (b?.type === 'solid') {
-        // ワイヤーが固体ブロックを弱充電 → 固体に取り付いているトーチも更新
+        // 固体越しの機構を再評価
         for (const dir2 of ALL_DIRS) {
           const nnPos = neighbor(nPos, dir2)
           const nb = this.getBlockAt(nnPos)
-          if (nb?.type === 'torch' || nb?.type === 'wall_torch') {
-            this.updateBlock(nnPos)
-          }
+          if (nb && nb.type !== 'wire' && nb.type !== 'solid') this.updateBlock(nnPos)
         }
+      } else if (b.type !== 'wire') {
+        this.updateBlock(nPos)
       }
     }
   }
@@ -568,86 +547,12 @@ export class SimWorld {
     return result
   }
 
-  /** ランプ・固体ブロックが隣接ブロックから動力を受けているか */
-  private isBlockReceivingPower(pos: Pos3D): boolean {
-    for (const dir of ALL_DIRS) {
-      const nPos = neighbor(pos, dir)
-      const src = this.getBlockAt(nPos)
-      if (!src) continue
-      if (this.doesBlockOutputToward(nPos, src, OPPOSITE[dir])) return true
-    }
-    return false
-  }
-
-  /** 固体ブロックが強信号で充電されているか（ワイヤーは強充電しない） */
-  private isBlockStronglyPowered(pos: Pos3D): boolean {
-    for (const dir of ALL_DIRS) {
-      const nPos = neighbor(pos, dir)
-      const src = this.getBlockAt(nPos)
-      if (!src) continue
-      // ワイヤーは固体ブロックを強充電しない
-      if (src.type === 'wire') continue
-      if (this.doesBlockOutputToward(nPos, src, OPPOSITE[dir])) return true
-    }
-    return false
-  }
-
   /**
-   * あるブロック(src)が、指定方向(toDir)に信号を出力しているか。
-   * pos: src のある座標、toDir: src から見た出力方向。
+   * リピーターの入力（後面）が動力を受けているか。
+   * weak 信号の直接受信・充電された固体（弱充電含む）のどちらでも入力になる。
    */
-  private doesBlockOutputToward(_srcPos: Pos3D, src: BlockState, toDir: Dir6): boolean {
-    switch (src.type) {
-      case 'lever':
-      case 'button_stone':
-      case 'button_wood':
-        return (src as LeverState | ButtonState).powered
-
-      case 'torch': {
-        const t = src as TorchState
-        if (!t.lit) return false
-        return getTorchOutputFacing(t) === toDir
-      }
-      case 'wall_torch': {
-        const t = src as WallTorchState
-        if (!t.lit) return false
-        return getTorchOutputFacing(t) === toDir
-      }
-      case 'wire': {
-        const w = src as WireState
-        if (w.power === 0) return false
-        // ワイヤーは水平方向にのみ信号を渡す（'up' 含め接続があれば伝達）
-        if (toDir === 'up' || toDir === 'down') return false
-        const hDir = toDir as HDir
-        return !!w.connections[hDir]
-      }
-      case 'repeater': {
-        const r = src as RepeaterState
-        if (!r.powered) return false
-        return getRepeaterOutputFacing(r) === toDir
-      }
-      case 'comparator': {
-        const c = src as ComparatorState
-        if (!c.powered) return false
-        return c.facing === toDir
-      }
-      case 'solid': {
-        const s = src as SolidState
-        return s.powered
-      }
-      default:
-        return false
-    }
-  }
-
   private isRepeaterInputPowered(pos: Pos3D, block: RepeaterState): boolean {
-    const inputDir = OPPOSITE[block.facing] as Dir6
-    const inputPos = neighbor(pos, inputDir)
-    const src = this.getBlockAt(inputPos)
-    if (!src) return false
-    // リピーターの入力面に対して信号を出しているか
-    if (!isInputFaceOfRepeater(block, inputDir as HDir)) return false
-    return this.doesBlockOutputToward(inputPos, src, block.facing)
+    return isFacePowered(this, pos, OPPOSITE[block.facing])
   }
 
   /**
@@ -665,25 +570,29 @@ export class SimWorld {
     const backDir = OPPOSITE[block.facing] as HDir
     const [side1, side2] = SIDES[block.facing]
 
-    const getSignalPower = (srcPos: Pos3D): number => {
+    const getSignalPower = (srcPos: Pos3D, allowSolid: boolean): number => {
       const src = this.getBlockAt(srcPos)
       if (!src) return 0
       if (src.type === 'wire') return (src as WireState).power
       if (src.type === 'lever' || src.type === 'button_stone' || src.type === 'button_wood')
         return (src as LeverState | ButtonState).powered ? 15 : 0
       if (src.type === 'torch' || src.type === 'wall_torch')
-        return (src as TorchState | WallTorchState).lit ? 15 : 0
+        return src.lit ? 15 : 0
       if (src.type === 'repeater')
         return (src as RepeaterState).powered ? 15 : 0
       if (src.type === 'comparator')
         return (src as ComparatorState).outputPower
+      // 背面のみ: 充電された固体（弱/強）から信号強度を読み取れる
+      // [確定: docs/research/02 §6 comparator。側面は固体越し不可]
+      if (src.type === 'solid' && allowSolid)
+        return getSolidPower(this, srcPos)
       return 0
     }
 
-    const backPower = getSignalPower(neighbor(pos, backDir))
+    const backPower = getSignalPower(neighbor(pos, backDir), true)
     const sidePower = Math.max(
-      getSignalPower(neighbor(pos, side1)),
-      getSignalPower(neighbor(pos, side2)),
+      getSignalPower(neighbor(pos, side1), false),
+      getSignalPower(neighbor(pos, side2), false),
     )
 
     if (block.mode === 'subtract') {

@@ -28,6 +28,14 @@ export {
 } from './mcstate.js'
 export type { ParsedMcState } from './mcstate.js'
 
+// 電力クエリ (weak/strong モデル)
+export {
+  getSignal, getDirectSignal, getNeighborSignal,
+  getStrongPower, getWireWeakCharge, getSolidPower,
+  isSolidPowered, isFacePowered, isBlockPowered,
+  getTorchAttachFace, relative,
+} from './power.js'
+
 // ブロックユーティリティ
 export { computeWirePower, getConnectedWireNeighbors, isWireCutBlock } from './blocks/wire.js'
 export { getTorchOutputFacing, getTorchBasePos, isBasePowered } from './blocks/torch.js'

@@ -2,7 +2,6 @@
   "name": "torch-not-floor",
   "description": "床置きトーチ NOT: dust が土台ブロックを弱充電しトーチが 2gt 後に消灯。トーチ→水平隣接 dust への給電 (G3) を現 sim が持たないため初期状態から不一致",
   "mcVersion": "1.21.1",
-  "skipUntil": "I2",
   "skipReason": "G3 トーチ全方向給電: 床置きトーチが水平隣接ワイヤーへ給電できず初期安定状態から不一致 (I2 で解消予定)",
   "ticks": 16,
   "region": {
