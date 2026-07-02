@@ -67,6 +67,10 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'wall_torch', label: 'トーチ(壁)',    texture: 'block/redstone_torch',  hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'repeater',   label: 'リピーター',    texture: 'block/repeater',        hasFacing: true,  hasDelay: true,  hasMode: false },
   { type: 'comparator', label: 'コンパレーター', texture: 'block/comparator',      hasFacing: true,  hasDelay: false, hasMode: true  },
+  { type: 'pressure_plate_wood',  label: '感圧板(木)', texture: 'block/oak_planks',   hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'pressure_plate_stone', label: '感圧板(石)', texture: 'block/stone',        hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'weighted_pressure_plate_light', label: '重量板(金)', texture: 'block/gold_block', hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'weighted_pressure_plate_heavy', label: '重量板(鉄)', texture: 'block/iron_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'lamp',       label: 'ランプ',        texture: 'block/redstone_lamp',   hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'piston',     label: 'ピストン',      texture: 'block/piston_top',      hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'sticky_piston', label: '粘着ピストン', texture: 'block/piston_top_sticky', hasFacing: true, hasDelay: false, hasMode: false },
@@ -280,6 +284,14 @@ export function EditorPage({ onBack }: EditorPageProps) {
           // ターゲットは手動トリガ (中心命中相当の 15、20gt 持続)
           simWorld.activateBlock(x, pos[1], z)
           addLog(`ターゲット発火 (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (
+          b?.type === 'pressure_plate_wood' || b?.type === 'pressure_plate_stone' ||
+          b?.type === 'weighted_pressure_plate_light' || b?.type === 'weighted_pressure_plate_heavy'
+        ) {
+          // 感圧板は手動トリガ (踏まれ ON → 持続 gt で自動 OFF)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`感圧板を踏む (${x}, ${pos[1]}, ${z})`)
           rerender()
         }
       }

@@ -103,6 +103,22 @@
 
 ## 3. C3: 感圧板 wooden / stone
 
+> **実装済み (I13 / #37、手動入力モデル)**: BlockType `pressure_plate_wood` / `pressure_plate_stone`
+> (`{ powered: boolean }`) を追加。エンティティ非実装のため activateBlock で手動 ON にし、
+> **20 gt** の tile tick で自動 OFF する折衷モデル (レバーのトグルではなく、ボタンの自動 OFF に近い)。
+> デコンパイル裏取り [確定: 26.2]: `PressurePlateBlock.getSignalForState = POWERED ? 15 : 0` /
+> `BasePressurePlateBlock.getPressedTime = 20`(PressurePlateBlock は override せず既定を使う) /
+> `getDirectSignal = (direction==UP) ? signal : 0`(直下=取り付け面のみ strong) /
+> `ownSignal = getSignalForState`(全方向 weak) / `updateNeighbours = updateNeighborsAt(pos) +
+> updateNeighborsAt(pos.below())`(NC = 自身隣接 6 + 直下の隣接 6)。給電はレバー/ボタンと同じ
+> 「全方向 weak 15 / 取り付け面 strong 15」パターン (power.ts の getEmittedSignal / getEmittedDirectSignal)。
+> **判定差 (木=全 entity / 石=mob) は手動モデルでは意味を持たない**ため、両者とも 15 出力・20gt 持続で
+> 論理上は同一とし、material の別は viewer 描画 (`minecraft:oak_pressure_plate` / `stone_pressure_plate`) と
+> パレット表示のみに反映する。mcstate / viewer / trace(略号 `Pp`) / editor パレット対応。
+> 実機 fixture `pressure-plate-wood`(二値 15 で手動モデルと完全一致) / `pressure-plate-stone`(直下 strong で
+> 壁トーチ消灯) を authored 済み (入力 action=`step`。fake player を板へ tp する runner 拡張が要る点は
+> #37 の openQuestions 参照)。
+
 - **回路勢重要度: 低〜中**。ドア・農場・トラップの**入力装置**として頻出だが、機能的には
   「エンティティが乗ると ON」の入力にすぎず、論理素子ではない。sim 上では lever/button と同じ
   「手動トグル入力」で完全に代替できる (回路の下流挙動は入力源の種別に依存しない)。
@@ -117,6 +133,25 @@
   2. 出すなら木/石の判定差 (アイテム可否) は手動 sim では意味を持たない点をどう扱うか (見た目だけの別種にするか)。
 
 ## 4. C4: 感圧板 weighted (light=金 / heavy=鉄)
+
+> **実装済み (I13 / #37、手動アナログ値モデル)**: BlockType `weighted_pressure_plate_light` /
+> `weighted_pressure_plate_heavy` (`{ pressedPower: number, powered: boolean }`) を追加。
+> 持続 gt は **10 gt**、出力形状は木/石板と同じ (全方向 weak / 直下 strong / self+below の NC)。
+> デコンパイル裏取り [確定: 26.2 WeightedPressurePlateBlock]:
+> `getPressedTime = 10`(override) / POWER プロパティ 0-15 /
+> `getSignalStrength = count>0 ? ceil(min(count,maxWeight)/maxWeight * 15) : 0`
+> (light `maxWeight=15`=金 / heavy `maxWeight=150`=鉄。Blocks.java の `WeightedPressurePlateBlock(15|150,…)`)。
+>
+> **実装注記 — 「設定値をそのまま出力」を採用**: 上記の計数式はエンティティ数 `count` を入力に取るが、
+> 本 sim はエンティティを持たないため `count` を再現できない。したがって手動モデルでは**計数式を通さず**、
+> editor から与える設定値 `pressedPower` (1-15) を踏まれ時にそのまま出力する。計数式は「実機が何個の
+> エンティティで幾つを出すか」を記録する典拠として `WeightedPressurePlateState` の JSDoc とデコンパイルに
+> 残すのみで、ランタイムでは適用しない。この選択の帰結として、**重量板は実機 fixture と一般には一致しない**
+> (実機はエンティティ数、手動モデルは設定値)。唯一 fake player 1 体で light/heavy を踏むケースは
+> 実機出力 = `ceil(1/15*15)=1`(light) / `ceil(1/150*15)=1`(heavy) = **1** なので、`pressedPower=1` に
+> 設定すれば一致するが、authored blockstate は rest (`power=0`) しか持てず mcToSim の既定 `pressedPower` は
+> 15 になるため、実機 fixture 用の重量板は本 PR では見送った (#37 openQuestions 参照)。
+> mcstate (`light|heavy_weighted_pressure_plate[power=N]`) / viewer / trace(略号 `Wp`) / editor パレット対応。
 
 - **回路勢重要度: 低**。乗っているエンティティ数に比例したアナログ出力 (アイテムエレベータ検知・
   個数計測) が用途だが、これも**エンティティ計数**が本質。

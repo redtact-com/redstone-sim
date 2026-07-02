@@ -7,6 +7,7 @@ export type {
   RepeaterState, ComparatorState,
   LeverState, ButtonState,
   LampState, ContainerState, RedstoneBlockState, TargetState, SolidState,
+  PressurePlateState, WeightedPressurePlateState,
   ObserverState, AirState,
   WorldSnapshot,
   ScheduledTick,

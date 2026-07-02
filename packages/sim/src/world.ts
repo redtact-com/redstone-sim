@@ -1,7 +1,7 @@
 import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
-  ObserverState,
+  ObserverState, PressurePlateState, WeightedPressurePlateState,
 } from './types.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
 import {
@@ -351,6 +351,14 @@ export class SimWorld {
         // vanilla ObserverBlock.onPlace: POWERED で設置された場合は flag 18
         // (更新なし) で消灯する。authored の powered=true は無視して off から始める
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
+      } else if (
+        block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone' ||
+        block.type === 'weighted_pressure_plate_light' || block.type === 'weighted_pressure_plate_heavy'
+      ) {
+        // 感圧板は entity が乗って初めて powered になる。手動モデルでは
+        // authored の powered/POWER>0 (乗った状態) は初期安定状態では entity 不在の
+        // ため OFF から始める (target/observer の onPlace リセットと同趣旨。決定論)
+        if (block.powered) this.blocks.set(key, { ...block, powered: false })
       }
     }
 
@@ -459,6 +467,34 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
+    } else if (block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone') {
+      // 感圧板の「踏まれ」を手動トリガする。既に踏まれていれば no-op
+      // (vanilla entityInside の signal==0 ガード相当)。ON → 20gt (getPressedTime)
+      // 後の tile tick で checkPressed が entity=0 と再評価して自動 OFF する。
+      if (block.powered) return
+      const next: PressurePlateState = { ...block, powered: true }
+      this.setBlockAt(pos, next)
+      this.traceProcess('PI', 'Pp', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
+      this.propagateChange(pos)
+      this.traceCloseUpdate('Pp', 'n', 0, 'PI')
+      this.schedule(pos, 20, 0)  // [確定: 26.2 BasePressurePlateBlock.getPressedTime]
+    } else if (
+      block.type === 'weighted_pressure_plate_light' ||
+      block.type === 'weighted_pressure_plate_heavy'
+    ) {
+      // 重量板: 設定信号 pressedPower を出力。0 以下は vanilla の count==0 相当で no-op。
+      // ON → 10gt (getPressedTime) 後の tile tick で自動 OFF。
+      if (block.powered || block.pressedPower <= 0) return
+      const next: WeightedPressurePlateState = { ...block, powered: true }
+      this.setBlockAt(pos, next)
+      this.traceProcess('PI', 'Wp', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
+      this.propagateChange(pos)
+      this.traceCloseUpdate('Wp', 'n', 0, 'PI')
+      this.schedule(pos, 10, 0)  // [確定: 26.2 WeightedPressurePlateBlock.getPressedTime]
     }
   }
 
@@ -480,6 +516,10 @@ export class SimWorld {
       case 'lever':         return block.powered ? 15 : 0
       case 'button_stone':
       case 'button_wood':   return block.powered ? 15 : 0
+      case 'pressure_plate_wood':
+      case 'pressure_plate_stone': return block.powered ? 15 : 0
+      case 'weighted_pressure_plate_light':
+      case 'weighted_pressure_plate_heavy': return block.powered ? block.pressedPower : 0
       case 'lamp':          return block.lit ? 15 : 0
       case 'solid':         return block.powered ? 15 : 0
       case 'redstone_block': return 15
@@ -615,6 +655,14 @@ export class SimWorld {
         apply({ ...block, powered: newPowered, outputPower: newOutputPower }, 'c')
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
+      if (block.powered) apply({ ...block, powered: false }, 'f')
+    } else if (
+      block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone' ||
+      block.type === 'weighted_pressure_plate_light' || block.type === 'weighted_pressure_plate_heavy'
+    ) {
+      // vanilla BasePressurePlateBlock.tick → checkPressed: signal>0 のとき
+      // getSignalStrength を再評価する。手動モデルは entity を持たないため
+      // 再評価値は常に 0 = OFF (isPressed false → reschedule なし)。ボタンと同型
       if (block.powered) apply({ ...block, powered: false }, 'f')
     } else if (block.type === 'moving_piston') {
       // 2gt の移動完了: into のブロックに確定 (08 §6: moving_piston 確定は [ST] 扱い)
@@ -857,6 +905,17 @@ export class SimWorld {
         // updateNeighbours: 自身の隣接 6 + 取り付けブロックの隣接 6
         this.submitMultiNC(pos)
         this.submitMultiNC(neighbor(pos, OPPOSITE[block.facing]))
+        break
+      }
+      case 'pressure_plate_wood':
+      case 'pressure_plate_stone':
+      case 'weighted_pressure_plate_light':
+      case 'weighted_pressure_plate_heavy': {
+        // updateNeighbours: 自身の隣接 6 + 直下 (取り付け面) の隣接 6
+        // [確定: 26.2 BasePressurePlateBlock.updateNeighbours =
+        //  updateNeighborsAt(pos) + updateNeighborsAt(pos.below())]
+        this.submitMultiNC(pos)
+        this.submitMultiNC(neighbor(pos, 'down'))
         break
       }
       case 'torch':
@@ -1325,6 +1384,13 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'lever':
     case 'button_stone':
     case 'button_wood': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy':
+      // POWER プロパティ (= powered ? pressedPower : 0) の変化が観測対象
+      return (a.type === 'weighted_pressure_plate_light' || a.type === 'weighted_pressure_plate_heavy') &&
+        (a.powered ? a.pressedPower : 0) !== (b.powered ? b.pressedPower : 0)
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
     case 'target':      return a.type === 'target' && a.outputPower !== b.outputPower
     case 'observer':    return a.type === 'observer' && a.powered !== b.powered
