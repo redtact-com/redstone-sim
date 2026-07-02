@@ -53,3 +53,5 @@ redstone block・target・感圧板・note block・コンテナ・トーチ burn
 ## 10. [未調査源] Mojira (bugs.mojang.com) が未カタログ
 
 MC-2340 ほか 7 件を fixture 候補にする計画だが典拠が note 記事経由のみ。再現手順・対象バージョン・修正状況は Mojira 原票が一次資料であり、01 に項目を追加する。
+
+> **解消済み (2026-07-02, R3 / #20)**: 07_mojira-fixtures.md を新設し 7 件 (MC-2340/3703/11193/54711/81098/189954/231071) の原票をカタログ化 (現象・再現手順・影響版・修正状況・fixture 化可否・skipUntil 想定)。01 に #17 Mojira を追加。要点: 1.21.1 で再現しないのは **MC-2340 のみ (Fixed 1.13+)**、MC-3703/54711/189954 は状態系列 fixture 向き、MC-81098/231071 は BU 数/更新順で状態 diff に出ず要トレース、**MC-11193 は `experimental_redstone_fixed` で 1.21.2 experimental 既定化時に消える spec-drift**。原票は SPA 化のため r.jina.ai リーダで取得、MC-189954 の Affected versions は原票未確認。
