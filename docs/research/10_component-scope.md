@@ -71,9 +71,14 @@
 > (priority 0) で消灯。デコンパイル裏取り (1.21.1 `TargetBlock`) 済み: 持続 = 矢 20gt (`ACTIVATION_TICKS_ARROWS`) /
 > 他 8gt / `tick` で POWER=0 / `getSignal`=POWER (全方向 weak, `getDirectSignal`=0 で強充電なし) /
 > `onPlace` が POWER>0 & pending tick 無しを 0 化。ダスト 4 面接続・viewer (`minecraft:target[power=N]`)・
-> nbtIO・editor パレット対応。**実機 fixture は不可**: 発火に投射物エンティティが必須で、setblock /
+> nbtIO・editor パレット対応。**発火の実機 fixture は不可**: 発火に投射物エンティティが必須で、setblock /
 > scarpet の直接 blockstate 変更は onPlace が即 0 に戻す (実機で確認)。消灯系列は手書き単体テスト
 > (`power-blocks.test.ts`) で検証。詳細は 02 §6 target。
+>
+> **追補 (#35 実機バグ報告 2)**: target は導体でもある (isRedstoneConductor=true) ため、ダストが指す
+> target は solid と同じ規則で充電され、隣接 lamp / 直上 torch / 背面 comparator に伝導する。
+> 他のダストへは伝わらない (shouldSignal。「強給電」の俗説はコード上の根拠なしで棄却)。
+> 導体伝導は投射物なしで検証できるため**実機 fixture あり** (`target-conduct`)。詳細は 02 §6 target。
 
 
 - **回路勢重要度: 低**。信号源としての発火は**投射物 (矢/雪玉/トライデント等) の命中**が条件で、

@@ -269,6 +269,13 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - 側面入力 [確定: SignalGetter.getControlInputSignal(diodesOnly=false)]: ワイヤ (POWER 直読)・レッドストーンブロック (15)・
   その他は **direct signal (強出力) がその方向を向くもの** = リピーター/コンパレーター/**オブザーバー**。
   レバー/ボタン/トーチは水平方向へ direct signal を出さないため無効 (従来記述にオブザーバーを追加)。
+  - 判定順序も確定 [1.21.1 SignalGetter.getControlInputSignal / DiodeBlock.getAlternateSignal]:
+    ① `is(REDSTONE_BLOCK)` → **定数 15** (getDirectSignal は 0 なのに特例で 15。**compare / subtract 両モードで効く**。
+    Java Edition 限定、15w47a 追加) → ② `is(REDSTONE_WIRE)` → POWER → ③ `isSignalSource()` のものだけ getDirectSignal。
+    **target は isSignalSource=true だが getDirectSignal 非 override → 側面入力にならない** (発火中でも 0)。
+    出典: https://minecraft.wiki/w/Redstone_Comparator (「Side inputs are accepted only from redstone dust,
+    block of redstone [Java Edition only], redstone repeaters, other comparators, and observers」) + 上記デコンパイル。
+    → #35 実機バグ報告 1 の根拠。sim は readComparatorSide で実装済み。
 - 背面入力 (`getInputSignal` override) [確定]: 背面ブロックが `hasAnalogOutputSignal` なら**その値で上書き** (通常信号より優先)。
   そうでなく信号 <15 かつ背面が導体なら、さらに 1 マス先のコンテナ/額縁 (ItemFrame.getAnalogOutput) を読む (固体 1 個越し)。
 - **コンテナ充填率→強度の変換式** [確定: AbstractContainerMenu.getRedstoneSignalFromContainer、未解明 #5 解消]:
@@ -313,6 +320,26 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   → setblock / scarpet の直接 blockstate 変更では発火不可 (onPlace が即 0 化する。実機で確認済み)。
 - sim 折衷モデル (I11): activateBlock で中心命中を模し **outputPower=15 + 矢の 20 gt 持続** を採用。
   発火に投射物エンティティが必須で実機 fixture が作れないため、消灯系列は手書き単体テストで検証する。
+- **導体としての伝導** [確定: #35 実機バグ報告 2 → 1.21.1 デコンパイルで確定。実機 fixture target-conduct]:
+  target は信号源かつ **導体** (前項のとおり isRedstoneConductor=true) なので、solid と同じ規則で充電される。
+  ダストが指す/上に乗る target の充電の実体は `RedStoneWireBlock.getDirectSignal` = `shouldSignal ? getSignal : 0` —
+  つまり**ダストは自分が給電する対象 (足元 + 接続方向) に direct signal も出す**。導体はこれを
+  `SignalGetter.getSignal` の `isRedstoneConductor` 分岐 (`max(自身の getSignal, getDirectSignalTo)`) で拾うため、
+  ダストが指す target は隣接機構 (lamp)・直上トーチの土台判定・ダイオードの背面読み (`DiodeBlock.getInputSignal` →
+  `Level.getSignal`) すべてに充電値をアナログのまま伝える。
+  一方、**他のダストの強度計算には見えない** (`calculateTargetStrength` が `shouldSignal=false` にしてから
+  `getBestNeighborSignal` を呼ぶため、ワイヤ由来の direct signal が消える) — これは solid と同一で、
+  「dust が指す target は特別に強く給電され隣接 dust にも伝わる」という俗説は**コード上の根拠なし** (棄却)。
+  現行 wiki の記述も「As targets are also conductive, this property can be used to compact redstone circuits」
+  (伝導) と「Unlike most other conductive blocks, it also redirects adjacent redstone dust toward it」(接続形状) のみで、
+  強給電の特例は記載されていない。
+  出典: https://minecraft.wiki/w/Target + https://minecraft.wiki/w/Conductivity (「Target blocks and jukeboxes are
+  unique in that they connect to adjacent redstone dust」) + https://minecraft.wiki/w/Redstone_Dust (「Powered redstone
+  wire on top of, or pointing at, a conductive block provides weak power to the block」)。
+  典拠クラス: TargetBlock / Blocks.java (TARGET 登録) / RedStoneWireBlock (getDirectSignal, calculateTargetStrength,
+  shouldSignal) / SignalGetter (getSignal, getDirectSignalTo) / ComparatorBlock.getInputSignal (導体 1 個越しの
+  コンテナ読みも isRedstoneConductor 判定のため target 越しに可)。
+  → sim は power.ts の導体判定 (isConductor = solid | target) / computeWirePower / readComparatorBack に実装済み。
 
 ### piston (未実装・仕様のみ)
 - BEC: 動力判定 (NC 受信時) → block event を予約 → ブロックイベントフェーズで実移動。0-tick 系はこのフェーズ差が前提 [確定]。
