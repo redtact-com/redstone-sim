@@ -31,10 +31,13 @@ function flipDir(dir: string): string {
 export function blockStateToMinecraftStr(block: BlockState): string {
   switch (block.type) {
     case 'wire': {
-      const e = block.connections.east  ? 'side' : 'none'
-      const n = block.connections.north ? 'side' : 'none'
-      const s = block.connections.south ? 'side' : 'none'
-      const w = block.connections.west  ? 'side' : 'none'
+      // 'up'=上りステップ。接続方向は構造座標基準（隣接ブロックの相対位置と
+      // 同じ座標系で描画されるため flipDir は適用しない）
+      const val = (v: boolean | 'up') => v === 'up' ? 'up' : v ? 'side' : 'none'
+      const e = val(block.connections.east)
+      const n = val(block.connections.north)
+      const s = val(block.connections.south)
+      const w = val(block.connections.west)
       return `minecraft:redstone_wire[east=${e},north=${n},power=${block.power},south=${s},west=${w}]`
     }
     case 'torch':
