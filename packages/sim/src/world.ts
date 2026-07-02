@@ -40,6 +40,7 @@ export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
   private currentTick = 0
+  private seqCounter = 0
 
   // ── ブロックアクセス ─────────────────────────────────────
 
@@ -66,14 +67,29 @@ export class SimWorld {
 
   // ── スケジュール ─────────────────────────────────────────
 
-  schedule(pos: Pos3D, action: 'turn_on' | 'turn_off', delay: number, priority: number): void {
+  /**
+   * tile tick を予約する (02 §2 [確定])。
+   * - 同 pos + 同ブロック種の予約が既にあれば無視 (vanilla LevelChunkTicks.schedule)
+   * - action は持たない。実行時に executeScheduledTick がブロック種別に応じて
+   *   世界状態を再評価して動作を決める
+   */
+  schedule(pos: Pos3D, delay: number, priority: number): void {
+    const block = this.getBlockAt(pos)
+    if (!block) return
+    if (this.hasScheduledTick(pos, block.type)) return
+    this.scheduledTicks.push({
+      pos,
+      blockType: block.type,
+      dueTick: this.currentTick + delay,
+      priority,
+      seq: this.seqCounter++,
+    })
+  }
+
+  /** 同 pos + ブロック種の予約が既にあるか (vanilla hasScheduledTick 相当) */
+  hasScheduledTick(pos: Pos3D, blockType: BlockState['type']): boolean {
     const key = posKey(pos)
-    // 同じpos・actionが既にスケジュール済みなら上書きしない（Minecraft挙動）
-    const existing = this.scheduledTicks.find(
-      t => posKey(t.pos) === key && t.action === action
-    )
-    if (existing) return
-    this.scheduledTicks.push({ pos, remainingTicks: delay, action, priority })
+    return this.scheduledTicks.some(t => posKey(t.pos) === key && t.blockType === blockType)
   }
 
   getScheduledTicks(): readonly ScheduledTick[] {
@@ -91,16 +107,13 @@ export class SimWorld {
     this.currentTick++
     const changed = new Set<string>()
 
-    // 残りティック数を 1 デクリメント
-    for (const t of this.scheduledTicks) {
-      t.remainingTicks--
-    }
-
-    // remainingTicks === 0 のものを priority 昇順で実行
+    // collect-then-execute (02 §2.1 [確定]): 期限が来た予約を先に収集してから
+    // 実行する。実行中に積まれた予約は dueTick > currentTick になるため
+    // 同 tick では走らない (次 tick 送り)。
     const toExecute = this.scheduledTicks
-      .filter(t => t.remainingTicks <= 0)
-      .sort((a, b) => a.priority - b.priority)
-    this.scheduledTicks = this.scheduledTicks.filter(t => t.remainingTicks > 0)
+      .filter(t => t.dueTick <= this.currentTick)
+      .sort((a, b) => a.priority - b.priority || a.seq - b.seq)
+    this.scheduledTicks = this.scheduledTicks.filter(t => t.dueTick > this.currentTick)
 
     for (const tick of toExecute) {
       const affectedKeys = this.executeScheduledTick(tick)
@@ -150,6 +163,7 @@ export class SimWorld {
    */
   initialize(): void {
     this.scheduledTicks = []
+    this.seqCounter = 0
 
     // Step 1: 動的状態をリセット
     for (const [key, block] of this.blocks) {
@@ -239,8 +253,8 @@ export class SimWorld {
       // 1.21.1 デコンパイルで確認]: 石系 20 gt / 木系 30 gt。schedule の delay は
       // game tick 単位なのでそのまま渡す。
       const delay = block.type === 'button_stone' ? 20 : 30
-      // ボタンは delay gt 後にオフ
-      this.schedule(pos, 'turn_off', delay, 0)
+      // ボタンは delay gt 後にオフ (実行時再評価: powered なら消す)
+      this.schedule(pos, delay, 0)
     }
   }
 
@@ -290,46 +304,79 @@ export class SimWorld {
     w.blocks = new Map(this.blocks)
     w.scheduledTicks = this.scheduledTicks.map(t => ({ ...t, pos: [...t.pos] as Pos3D }))
     w.currentTick = this.currentTick
+    w.seqCounter = this.seqCounter
     return w
   }
 
   // ── 内部: ScheduledTick 実行 ─────────────────────────────
 
+  /**
+   * tile tick の実行。action は予約に含まれず、**実行時に世界状態を再評価**して
+   * 動作を決める (02 §2 [確定]。G1 の短パルス永久ラッチはこれで構造的に解消)。
+   */
   private executeScheduledTick(tick: ScheduledTick): string[] {
-    const { pos, action } = tick
+    const { pos } = tick
     const block = this.getBlockAt(pos)
-    if (!block) return []
+    // 実行時検証: ブロック種が予約時と違えば no-op (vanilla 準拠)
+    if (!block || block.type !== tick.blockType) return []
 
     const changed: string[] = []
+    const apply = (next: BlockState) => {
+      this.setBlockAt(pos, next)
+      changed.push(posKey(pos))
+      this.propagateChange(pos)
+    }
 
     if (block.type === 'torch' || block.type === 'wall_torch') {
-      const shouldBeLit = action === 'turn_on'
-      if (block.lit === shouldBeLit) return []
-      this.setBlockAt(pos, { ...block, lit: shouldBeLit })
-      changed.push(posKey(pos))
-      this.propagateChange(pos)
+      // 土台の充電状態を今読む
+      const shouldBeLit = !isTorchBasePowered(pos, this)
+      if (block.lit !== shouldBeLit) apply({ ...block, lit: shouldBeLit })
     } else if (block.type === 'repeater') {
-      const shouldBePowered = action === 'turn_on'
-      if (block.powered === shouldBePowered) return []
-      this.setBlockAt(pos, { ...block, powered: shouldBePowered })
-      changed.push(posKey(pos))
-      this.propagateChange(pos)
-    } else if (block.type === 'comparator') {
-      const shouldBePowered = action === 'turn_on'
-      const newOutputPower = shouldBePowered ? this.computeComparatorOutput(pos, block) : 0
-      if (block.powered === shouldBePowered && block.outputPower === newOutputPower) return []
-      this.setBlockAt(pos, { ...block, powered: shouldBePowered, outputPower: newOutputPower })
-      changed.push(posKey(pos))
-      this.propagateChange(pos)
-    } else if (block.type === 'button_stone' || block.type === 'button_wood') {
-      if (action === 'turn_off') {
-        this.setBlockAt(pos, { ...block, powered: false })
-        changed.push(posKey(pos))
-        this.propagateChange(pos)
+      // vanilla DiodeBlock.tick: ロック中は何もしない。
+      // オン遷移は入力が既に消えていても行い、その場で自身のオフを予約する
+      // (最小パルス幅 = 遅延の根拠。02 §6 repeater [確定])
+      if (!block.locked) {
+        const input = this.isRepeaterInputPowered(pos, block)
+        if (block.powered && !input) {
+          apply({ ...block, powered: false })
+        } else if (!block.powered) {
+          apply({ ...block, powered: true })
+          if (!input) {
+            this.schedule(pos, block.delay * 2, this.diodeTickPriority(pos, block, true))
+          }
+        }
       }
+    } else if (block.type === 'comparator') {
+      // 出力を今再計算して適用 (キャンセル API は廃止済み)
+      const newOutputPower = this.computeComparatorOutput(pos, block)
+      const newPowered = newOutputPower > 0
+      if (block.powered !== newPowered || block.outputPower !== newOutputPower) {
+        apply({ ...block, powered: newPowered, outputPower: newOutputPower })
+      }
+    } else if (block.type === 'button_stone' || block.type === 'button_wood') {
+      if (block.powered) apply({ ...block, powered: false })
     }
 
     return changed
+  }
+
+  /**
+   * ダイオード系の TickPriority (02 §2.2 [確定])。
+   * 前方ブロックが別のダイオードで、その出力面がこちらを向いていない
+   * (= 側面/背面に給電する) とき優先度が上がる。
+   */
+  private diodeTickPriority(
+    pos: Pos3D,
+    block: RepeaterState | ComparatorState,
+    turningOff: boolean,
+  ): number {
+    const front = this.getBlockAt(neighbor(pos, block.facing))
+    const frontIsDiode = front?.type === 'repeater' || front?.type === 'comparator'
+    if (frontIsDiode && (front as RepeaterState | ComparatorState).facing !== OPPOSITE[block.facing]) {
+      return block.type === 'repeater' ? -3 : -1
+    }
+    if (block.type === 'repeater') return turningOff ? -2 : -1
+    return 0
   }
 
   // ── 内部: 信号伝播 ───────────────────────────────────────
@@ -487,37 +534,31 @@ export class SimWorld {
       }
       case 'torch':
       case 'wall_torch': {
-        // トーチの入力（土台ブロック）が変化したか確認してスケジュール
-        // Minecraft: トーチは 1 redstone tick = 2 game tick の遅延
+        // 土台の充電と現在の lit が食い違っていたら遷移を予約 (2gt, priority 0)。
+        // 動作は予約に固定せず実行時に再評価する
         const basePowered = isTorchBasePowered(pos, this)
-        if (basePowered && block.lit) {
-          // 土台が動力あり → 消灯スケジュール
-          this.schedule(pos, 'turn_off', 2, 1)
-        } else if (!basePowered && !block.lit) {
-          // 土台が動力なし → 点灯スケジュール
-          this.schedule(pos, 'turn_on', 2, 1)
+        if (block.lit === basePowered) {
+          this.schedule(pos, 2, 0)
         }
         break
       }
       case 'repeater': {
-        // Minecraft: リピーター delay 1〜4 (redstone tick) = ×2 game tick
+        // vanilla DiodeBlock.checkTickOnNeighbor: ロック中は予約しない。
+        // 入力と出力が食い違っていたら delay×2gt 後の再評価を予約
+        if (block.locked) break
         const inputPowered = this.isRepeaterInputPowered(pos, block)
-        if (inputPowered && !block.powered) {
-          this.schedule(pos, 'turn_on', block.delay * 2, -3)
-        } else if (!inputPowered && block.powered) {
-          this.schedule(pos, 'turn_off', block.delay * 2, -3)
+        if (inputPowered !== block.powered) {
+          this.schedule(pos, block.delay * 2, this.diodeTickPriority(pos, block, block.powered))
         }
         break
       }
       case 'comparator': {
-        // Minecraft: コンパレーターは 1 redstone tick = 2 game tick の遅延
+        // 出力に変化が生じていたら 2gt 後の再評価を予約。
+        // キャンセル・再予約はしない (02 §2 [確定]: 予約は pos+block で常に 1 件)
         const newOutput = this.computeComparatorOutput(pos, block)
         const newPowered = newOutput > 0
         if (newOutput !== block.outputPower || newPowered !== block.powered) {
-          // outputPower が変化する場合は既存スケジュールをキャンセルして再スケジュール
-          const key = posKey(pos)
-          this.scheduledTicks = this.scheduledTicks.filter(t => posKey(t.pos) !== key)
-          this.scheduledTicks.push({ pos, remainingTicks: 2, action: newPowered ? 'turn_on' : 'turn_off', priority: -3 })
+          this.schedule(pos, 2, this.diodeTickPriority(pos, block, false))
         }
         break
       }

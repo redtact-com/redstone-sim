@@ -39,6 +39,7 @@ function rcon(...args: string[]): string {
     ['compose', 'exec', '-T', 'mc', 'rcon-cli', '--', ...args],
     { cwd: harnessDir, env, encoding: 'utf-8' },
   )
+  if (process.env.GT_DEBUG) console.log(`[rcon] ${args.join(' ')} => ${out.trim()}`)
   return out.trim()
 }
 
@@ -125,25 +126,35 @@ async function generateFixture(name: string): Promise<void> {
     JSON.stringify({ region: def.region, blocks: scBlocks }),
   )
 
-  // 2. 設置 → 全ブロック update → settle 8 step
+  // 2. 残骸掃除 → 設置 → settle 8 step
+  // freeze 中は player kill/spawn がその場で処理されない (次の step まで保留され、
+  // 残骸状態によっては以後の入力が全て空振りする)。掃除は必ず unfreeze 区間で行う
+  rcon('tick', 'unfreeze')
   rcon('player', PLAYER_NAME, 'kill') // 前回の残骸 (居なければ失敗するが無視される)
+  await sleep(400)
+  rcon('tick', 'freeze')
   scarpet('fx_setup()')
   scarpet('fx_settle()')
   rcon('tick', 'step', '8')
   await sleep(600)
 
-  // 3. fake player 準備 (入力がある fixture のみ)
+  // 3. fake player 準備 (入力がある fixture のみ)。
+  // spawn も freeze 中は完了しないため、床設置後に一時 unfreeze して行う。
+  // unfreeze 中に ~20tick 走るが、authored は settled 安定状態なので不変
+  // (発振回路 fixture を作る場合はこの前提が崩れる点に注意)
   const hasInputs = def.inputs.length > 0
   if (hasInputs) {
     if (!def.player) throw new Error(`${name}: inputs があるのに player 定義がない`)
     const [sx, sy, sz] = def.player.spawn
     const [yaw, pitch] = def.player.facing
+    rcon('tick', 'unfreeze')
     rcon('player', PLAYER_NAME, 'spawn', 'at', String(sx), String(sy), String(sz),
       'facing', String(yaw), String(pitch), 'in', 'minecraft:overworld', 'in', 'survival')
     await sleep(800)
     const [lx, ly, lz] = def.player.lookAt
     rcon('player', PLAYER_NAME, 'look', 'at', String(lx), String(ly), String(lz))
     await sleep(300)
+    rcon('tick', 'freeze')
   }
 
   // 4. settled 状態を tick -1 として dump (authored 照合用)
@@ -157,6 +168,13 @@ async function generateFixture(name: string): Promise<void> {
     }
     for (const input of def.inputs.filter(i => i.tick === t)) {
       if (input.action !== 'use') throw new Error(`未対応 action: ${input.action}`)
+      // input.pos のブロックへ毎回照準し直す (複数レバー fixture 対応)。
+      // 高さは fixture の player.lookAt の Y オフセットを流用する
+      // (床レバー 1.35 / 床ボタン 1.06 などブロック種で異なるため)
+      const lookY = def.player!.lookAt[1] - Math.floor(def.player!.lookAt[1])
+      rcon('player', PLAYER_NAME, 'look', 'at',
+        String(input.pos[0] + 0.5), String(input.pos[1] + lookY), String(input.pos[2] + 0.5))
+      await sleep(200)
       rcon('player', PLAYER_NAME, 'use', 'once')
       await sleep(200)
     }
