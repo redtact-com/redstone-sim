@@ -192,6 +192,19 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing:  'south',
         powered: String((block as any).powered ?? false),
       }]
+    case 'piston':
+    case 'sticky_piston':
+      return [`minecraft:${(block as any).type}`, {
+        extended: String((block as any).extended ?? false),
+        facing: (block as any).facing ?? 'north',
+      }]
+    case 'moving_piston':
+      return ['minecraft:air', {}]  // 過渡状態は保存しない
+    case 'piston_head':
+      return ['minecraft:piston_head', {
+        facing: (block as any).facing ?? 'north',
+        type: (block as any).sticky ? 'sticky' : 'normal',
+      }]
     case 'solid':
       return ['minecraft:stone', {}]
     default:
@@ -249,6 +262,22 @@ function minecraftToBlockState(
       mode,
       powered: props.powered === 'true',
       outputPower: 0,
+    } as BlockState
+  }
+
+  if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') {
+    return {
+      type: name.replace('minecraft:', '') as 'piston' | 'sticky_piston',
+      facing: (props.facing ?? 'north') as any,
+      extended: props.extended === 'true',
+    } as BlockState
+  }
+
+  if (name === 'minecraft:piston_head') {
+    return {
+      type: 'piston_head',
+      facing: (props.facing ?? 'north') as any,
+      sticky: props.type === 'sticky',
     } as BlockState
   }
 

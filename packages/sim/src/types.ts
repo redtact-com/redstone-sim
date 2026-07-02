@@ -135,6 +135,31 @@ export interface SolidState {
   powered: boolean
 }
 
+/** ピストン本体。extended=true のとき facing 方向に piston_head が存在する */
+export interface PistonState {
+  type: 'piston' | 'sticky_piston'
+  facing: Dir6
+  extended: boolean
+}
+
+/** ピストンヘッド (base とは独立したブロックとして存在する。vanilla 準拠) */
+export interface PistonHeadState {
+  type: 'piston_head'
+  facing: Dir6
+  sticky: boolean
+}
+
+/**
+ * 移動中ブロック (vanilla block 36 / moving_piston)。伸縮の 2gt 間だけ存在し、
+ * tile tick で into のブロックに置き換わる。kind は表示用 (head 側のみ sticky)
+ */
+export interface MovingPistonState {
+  type: 'moving_piston'
+  facing: Dir6
+  kind: 'normal' | 'sticky'
+  into: BlockState
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -150,6 +175,9 @@ export type BlockState =
   | LampState
   | ContainerState
   | SolidState
+  | PistonState
+  | PistonHeadState
+  | MovingPistonState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -194,6 +222,16 @@ export interface ScheduledTick {
 // ============================================================
 // TickResult
 // ============================================================
+
+/**
+ * ブロックイベント (02 §3 [確定])。挿入順 FIFO + (pos, blockType, param) で重複排除。
+ * ST と違いキューが空になるまで同 tick 内で処理される (ピストン連鎖の根拠)。
+ */
+export interface BlockEvent {
+  pos: Pos3D
+  blockType: BlockType
+  param: 'extend' | 'retract'
+}
 
 export interface TickResult {
   changedPositions: Pos3D[]

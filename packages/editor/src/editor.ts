@@ -154,6 +154,12 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'button_wood', facing: 'up', powered: false }
     case 'lamp':
       return { type: 'lamp', lit: false }
+    case 'piston':
+    case 'sticky_piston':
+      return { type, facing, extended: false }
+    case 'piston_head':
+    case 'moving_piston':
+      return null  // head / 移動中ブロックは sim が管理する (直接配置不可)
     case 'solid':
       return { type: 'solid', powered: false }
     // 'container' は editor パレット追加が issue #13 のスコープ外のため

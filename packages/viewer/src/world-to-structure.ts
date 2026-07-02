@@ -68,6 +68,14 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'container':
       // コンテナは barrel として描画する (signal 値は表示に影響しない)
       return 'minecraft:barrel'
+    case 'piston':
+    case 'sticky_piston':
+      return `minecraft:${block.type}[extended=${block.extended},facing=${flipDir(block.facing)}]`
+    case 'moving_piston':
+      // 移動中は中身 (into) をそのまま描画する近似 (vanilla は BE レンダラ)
+      return blockStateToMinecraftStr(block.into)
+    case 'piston_head':
+      return `minecraft:piston_head[facing=${flipDir(block.facing)},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -102,6 +110,9 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:stone_button',
   'minecraft:oak_button',
   'minecraft:redstone_lamp',
+  'minecraft:piston',
+  'minecraft:sticky_piston',
+  'minecraft:piston_head',
   'minecraft:barrel',
   'minecraft:stone',
   'minecraft:cobblestone',
