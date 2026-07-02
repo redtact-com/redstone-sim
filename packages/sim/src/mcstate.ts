@@ -56,7 +56,6 @@ export function canonicalize(state: string): string {
   return formatMcState(name, props)
 }
 
-const WIRE_DIRS: HDir[] = ['north', 'south', 'east', 'west']
 
 function wireConn(v: string): WireConnectionValue {
   if (v === 'none') return false
