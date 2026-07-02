@@ -159,6 +159,9 @@ describe('SimWorld: トーチ → ランプ（initialize()で初期化）', () =
     place3d(world, 1, 0, 0, lever(true))   // 最初からON
 
     world.initialize()
+    // initialize() は消灯を予約するだけなので ST 実行まで安定化させる
+    // (トーチ遅延 = 1rt = 2gt。実機 fixture の game tick 規約に合わせる)
+    world.flush()
 
     // lever → solid 充電 → torch 土台 powered → torch 消灯
     expect(world.getBlock(0, 1, 0)).toMatchObject({ type: 'torch', lit: false })
@@ -167,8 +170,10 @@ describe('SimWorld: トーチ → ランプ（initialize()で初期化）', () =
 
 // ─────────────────────────────────────────────────────────────
 
+// リピーター遅延 = delay (rt) × 2 game tick。
+// docs/research/02 §1.1 (内部単位は gt) と実機 fixture repeater-delay-1〜4 に一致させる。
 describe('SimWorld: リピーター遅延', () => {
-  it('delay=1のリピーターは1tick後に出力する', () => {
+  it('delay=1のリピーターは2gt後に出力する', () => {
     const world = new SimWorld()
     //  lever(0,0) - repeater(1,0 facing=east delay=1) - lamp(2,0)
     place(world, 0, 0, lever(false))
@@ -181,32 +186,34 @@ describe('SimWorld: リピーター遅延', () => {
     expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
 
     world.tick()
-
-    expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
-  })
-
-  it('delay=2のリピーターは2tick後に出力する', () => {
-    const world = new SimWorld()
-    place(world, 0, 0, lever(false))
-    place(world, 1, 0, repeater('east', 2))
-    place(world, 2, 0, lamp(false))
-
-    world.activateBlock(0, Y, 0)
-    world.tick()
     expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
 
     world.tick()
     expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
   })
 
-  it('delay=4のリピーターは4tick後に出力する', () => {
+  it('delay=2のリピーターは4gt後に出力する', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, lever(false))
+    place(world, 1, 0, repeater('east', 2))
+    place(world, 2, 0, lamp(false))
+
+    world.activateBlock(0, Y, 0)
+    for (let i = 0; i < 3; i++) world.tick()
+    expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
+
+    world.tick()
+    expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+  })
+
+  it('delay=4のリピーターは8gt後に出力する', () => {
     const world = new SimWorld()
     place(world, 0, 0, lever(false))
     place(world, 1, 0, repeater('east', 4))
     place(world, 2, 0, lamp(false))
 
     world.activateBlock(0, Y, 0)
-    for (let i = 0; i < 3; i++) world.tick()
+    for (let i = 0; i < 7; i++) world.tick()
     expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
 
     world.tick()
@@ -268,8 +275,7 @@ describe('SimWorld: clone', () => {
     world.activateBlock(0, Y, 0)
 
     const clone = world.clone()
-    clone.tick()
-    clone.tick()  // clone側: 2tick進めてランプ点灯
+    for (let i = 0; i < 4; i++) clone.tick()  // clone側: delay2 = 4gt進めてランプ点灯
 
     world.tick()  // original: 1tickだけ
 

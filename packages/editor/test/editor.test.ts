@@ -85,7 +85,8 @@ describe('CircuitEditor: ワイヤー接続計算', () => {
 
     const world = editor.buildSimWorld()
     world.activateBlock(0, 0, 0)
-    world.tick()  // delay=1のリピーターが出力
+    world.tick()
+    world.tick()  // delay=1 のリピーターは 2gt 後に出力 (1rt = 2gt)
 
     // 出力先（east）のランプは点灯する
     expect(world.getBlock(2, 0, 0)).toMatchObject({ type: 'lamp', lit: true })
