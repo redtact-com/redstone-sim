@@ -56,3 +56,17 @@ piston-meta version_manifest_v2.json
 
 読解結果は「自然言語の挙動仕様 + クラス名/メソッド名の言及 + 数値・順序という事実」のみに変換して
 docs/research/ へ書く。
+
+## 仕様ドリフト検知 (spec-drift.sh)
+
+02_behavior-spec の典拠クラス (`watched-classes.txt`) の正規化ハッシュを
+`fingerprints.json` に保存し、新バージョンとの差分を検知する。
+
+```bash
+./spec-drift.sh --check latest    # 最新 release と比較 (CI: 週次 spec-drift.yml)
+./spec-drift.sh --check 26.2      # ベースライン自己照合 (デコンパイル決定性の確認)
+./spec-drift.sh --update 26.3     # 確認完了後にベースラインを更新してコミット
+```
+
+コミットするのはハッシュ (事実の指紋) のみ。デコンパイル産物は従来どおり
+git 管理外・artifact 化禁止 (03 §6)。

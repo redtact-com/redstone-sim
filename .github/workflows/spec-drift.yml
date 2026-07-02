@@ -1,0 +1,86 @@
+# 仕様ドリフト検知 (issue #25)
+#
+# 週次 + 手動で最新 release をデコンパイルし、docs/research/02 の典拠クラス
+# (tools/decompile/watched-classes.txt) の正規化ハッシュを fingerprints.json の
+# ベースラインと比較する。変化があれば issue を自動起票する (同一バージョンの
+# 重複起票はスキップ)。新 release が無い週はベースラインの自己照合 (smoke +
+# デコンパイル決定性の確認) になる。
+#
+# 法務境界 (docs/research/03): デコンパイル産物は runner 内で使い捨て。
+# artifact アップロード・キャッシュ保存はしない。issue に載せるのはクラス名のみ。
+
+name: Spec Drift
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # 毎週月曜 03:00 UTC = 12:00 JST
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '比較対象の MC バージョン (省略時: latest release)'
+        required: false
+        default: 'latest'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: ドリフトチェック
+        id: check
+        run: |
+          set -o pipefail
+          tools/decompile/spec-drift.sh --check "${{ inputs.target || 'latest' }}" | tee drift.log
+          RESULT=$(sed -n 's/^RESULT: //p' drift.log | tail -1)
+          TARGET=$(sed -n 's/^==> baseline=.* target=//p' drift.log | head -1)
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          {
+            echo 'drift_lines<<DRIFT_EOF'
+            grep '^DRIFT: ' drift.log || true
+            echo 'DRIFT_EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "### Spec Drift: $RESULT (target=$TARGET)" >> "$GITHUB_STEP_SUMMARY"
+          grep '^DRIFT: ' drift.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: drift 時に issue 起票（既起票はスキップ）
+        if: steps.check.outputs.result == 'drift'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ steps.check.outputs.target }}
+          DRIFT_LINES: ${{ steps.check.outputs.drift_lines }}
+        run: |
+          TITLE="仕様ドリフト検知: ${TARGET} で典拠クラスが変化"
+          COUNT=$(gh issue list --search "in:title \"$TITLE\"" --state all --json number --jq length)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::notice::同タイトルの issue が既にあるためスキップ: $TITLE"
+            exit 0
+          fi
+          BASE=$(python3 -c "import json; print(json.load(open('tools/decompile/fingerprints.json'))['version'])")
+          {
+            echo "## 検知内容"
+            echo "ベースライン **${BASE}** → 対象 **${TARGET}** で、docs/research/02 の典拠クラスに変化を検知しました。"
+            echo
+            echo '```'
+            echo "${DRIFT_LINES}"
+            echo '```'
+            echo
+            echo "## 対応手順"
+            echo "1. \`tools/decompile/fetch-and-decompile.sh ${TARGET}\` をローカル実行し、変化したクラスを読解"
+            echo "2. docs/research/02_behavior-spec.md の該当項目を再確認（挙動が変わっていれば更新 + sim への影響を評価）"
+            echo "3. \`tools/decompile/spec-drift.sh --update ${TARGET}\` で fingerprints.json を更新してコミット"
+            echo
+            echo "（自動起票: .github/workflows/spec-drift.yml）"
+          } > /tmp/drift-issue.md
+          gh issue create --title "$TITLE" --label research --body-file /tmp/drift-issue.md
