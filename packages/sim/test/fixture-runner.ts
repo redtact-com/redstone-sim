@@ -87,13 +87,17 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
   world.flush(64)
 
   const inputsAt = (t: number) => fx.inputs.filter(i => i.tick === t)
+  // ピストン移動で authored 外の座標にもブロックが現れるため region 全域を走査する
   const snapshot = (): StateMap => {
     const m: StateMap = new Map()
-    for (const [key, authoredState] of authored) {
-      const [x, y, z] = key.split(',').map(Number)
+    const [x0, y0, z0] = fx.region.from
+    const [x1, y1, z1] = fx.region.to
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) {
+      const key = posKey([x, y, z])
       const sim = world.getBlock(x, y, z)
-      const s = simToMc(sim, authoredState)
-      if (s !== 'air') m.set(key, s)
+      if (!sim) continue
+      const s = simToMc(sim, authored.get(key))
+      if (s !== 'air') m.set(key, canonicalize(s))
     }
     return m
   }

@@ -10,6 +10,7 @@ import {
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import { NC_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
+import type { BlockEvent, PistonState } from './types.js'
 import {
   getSignal, getDirectSignal, getSolidPower,
   isBlockPowered, isFacePowered, isSolidPowered, isConductor,
@@ -64,6 +65,10 @@ export class SimWorld {
   private updating = false
   private updateCount = 0
 
+  // ── ブロックイベントキュー (02 §3 [確定]) ──
+  // 挿入順 FIFO + (pos, blockType, param) 重複排除。BE フェーズで空になるまで処理
+  private blockEvents: BlockEvent[] = []
+
   // ── ブロックアクセス ─────────────────────────────────────
 
   getBlock(x: number, y: number, z: number): BlockState | null {
@@ -114,6 +119,20 @@ export class SimWorld {
     return this.scheduledTicks.some(t => posKey(t.pos) === key && t.blockType === blockType)
   }
 
+  /** ブロックイベントを予約する (同一 (pos, blockType, param) は重複登録しない) */
+  scheduleBlockEvent(pos: Pos3D, param: BlockEvent['param']): void {
+    const block = this.getBlockAt(pos)
+    if (!block) return
+    const key = posKey(pos)
+    if (this.blockEvents.some(e =>
+      posKey(e.pos) === key && e.blockType === block.type && e.param === param)) return
+    this.blockEvents.push({ pos, blockType: block.type, param })
+  }
+
+  getBlockEvents(): readonly BlockEvent[] {
+    return this.blockEvents
+  }
+
   getScheduledTicks(): readonly ScheduledTick[] {
     return this.scheduledTicks
   }
@@ -140,6 +159,19 @@ export class SimWorld {
     for (const tick of toExecute) {
       const affectedKeys = this.executeScheduledTick(tick)
       for (const k of affectedKeys) changed.add(k)
+    }
+
+    // ── BE フェーズ (02 §3 [確定]): キューが空になるまで処理。
+    // 処理中に追加されたイベントも同一 tick 内で実行される (ピストン連鎖)
+    let beGuard = 0
+    while (this.blockEvents.length > 0) {
+      if (++beGuard > 65_536) {
+        console.warn('[sim] BlockEvent 数が上限を超過。以降を破棄します')
+        this.blockEvents.length = 0
+        break
+      }
+      const ev = this.blockEvents.shift()!
+      for (const k of this.executeBlockEvent(ev)) changed.add(k)
     }
 
     return {
@@ -185,6 +217,7 @@ export class SimWorld {
    */
   initialize(): void {
     this.scheduledTicks = []
+    this.blockEvents = []
     this.seqCounter = 0
 
     // Step 1: 動的状態をリセット
@@ -252,7 +285,9 @@ export class SimWorld {
         b?.type === 'torch' ||
         b?.type === 'wall_torch' ||
         b?.type === 'repeater' ||
-        b?.type === 'comparator'
+        b?.type === 'comparator' ||
+        b?.type === 'piston' ||
+        b?.type === 'sticky_piston'
       ) {
         this.neighborChanged(pos)
       }
@@ -344,6 +379,7 @@ export class SimWorld {
     const w = new SimWorld()
     w.blocks = new Map(this.blocks)
     w.scheduledTicks = this.scheduledTicks.map(t => ({ ...t, pos: [...t.pos] as Pos3D }))
+    w.blockEvents = this.blockEvents.map(e => ({ ...e, pos: [...e.pos] as Pos3D }))
     w.currentTick = this.currentTick
     w.seqCounter = this.seqCounter
     return w
@@ -442,6 +478,9 @@ export class SimWorld {
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (block.powered) apply({ ...block, powered: false })
+    } else if (block.type === 'moving_piston') {
+      // 2gt の移動完了: into のブロックに確定
+      apply(block.into)
     } else if (block.type === 'target') {
       // vanilla TargetBlock.tick: OUTPUT_POWER != 0 なら 0 に戻す (消灯)
       if (block.outputPower !== 0) apply({ ...block, outputPower: 0 })
@@ -468,6 +507,136 @@ export class SimWorld {
     if (block.type === 'repeater') return turningOff ? -2 : -1
     return 0
   }
+
+  // ── ピストン (I7) ────────────────────────────────────────
+
+  /** ピストンの起動判定: 通常受電 (facing 面を除く) ∪ QC (1 個上の受電、down 面を除く) */
+  private shouldExtend(pos: Pos3D, piston: PistonState): boolean {
+    for (const dir of ALL_DIRS) {
+      if (dir === piston.facing) continue
+      if (getSignal(this, pos, dir) > 0) return true
+    }
+    if (isBlockPowered(this, pos)) return true
+    // QC (準接続): 1 個上のマスが受電していれば「動力源化」する (02 §4.3 / 10)。
+    // NC を受けるまで活性化しない = BUD は、判定がここでなく neighborChanged /
+    // BE 実行時にしか走らないことで自然に成立する
+    const above: Pos3D = [pos[0], pos[1] + 1, pos[2]]
+    for (const dir of ALL_DIRS) {
+      if (dir === 'down') continue
+      if (getSignal(this, above, dir) > 0) return true
+    }
+    if (isBlockPowered(this, above)) return true
+    return false
+  }
+
+  /**
+   * 押せるブロックか。v1 の簡略化 (PR#39 方針): ワイヤー・トーチ等の壊れ物は
+   * vanilla ではアイテム化するが、アイテムエンティティが無いため「移動不可」扱い。
+   * コンテナ (BE 持ち)・extended ピストン・head は vanilla どおり不動
+   */
+  private isMovable(block: BlockState): boolean {
+    if (block.type === 'solid' || block.type === 'lamp') return true
+    if ((block.type === 'piston' || block.type === 'sticky_piston') && !block.extended) return true
+    return false
+  }
+
+  /** 伸長時の押しリスト (近い順)。押せなければ null。12 個上限 */
+  private collectPushList(pos: Pos3D, facing: Dir6): Pos3D[] | null {
+    const list: Pos3D[] = []
+    let cur = neighbor(pos, facing)
+    for (let i = 0; i < 13; i++) {
+      const b = this.getBlockAt(cur)
+      if (!b) return list          // 空きに到達 → 押せる
+      if (!this.isMovable(b)) return null
+      list.push(cur)
+      if (list.length > 12) return null  // 13 個目 = 押せない
+      cur = neighbor(cur, facing)
+    }
+    return null
+  }
+
+  private executeBlockEvent(ev: BlockEvent): string[] {
+    const block = this.getBlockAt(ev.pos)
+    // 実行時検証 (02 §3 [確定])
+    if (!block || block.type !== ev.blockType) return []
+    if (block.type !== 'piston' && block.type !== 'sticky_piston') return []
+
+    const changed: string[] = []
+    const piston = block as PistonState
+    const sticky = piston.type === 'sticky_piston'
+    const headPos = neighbor(ev.pos, piston.facing)
+
+    // 伸縮中 (moving) セルが絡む再イベントは v1 では無視
+    // (vanilla の短パルス droppings は v2。10 §piston 参照)
+    if (this.getBlockAt(headPos)?.type === 'moving_piston') return []
+
+    const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
+      this.setBlockAt(pos, { type: 'moving_piston', facing: piston.facing, kind, into })
+      this.schedule(pos, 2, 0)  // 2gt 後に into へ確定 (executeScheduledTick)
+      changed.push(posKey(pos))
+    }
+
+    if (ev.param === 'extend') {
+      if (piston.extended) return []
+      // 実行時再判定 (extend 要求だが既に電源なしなら中止 = vanilla triggerEvent)
+      if (!this.shouldExtend(ev.pos, piston)) return []
+      const pushList = this.collectPushList(ev.pos, piston.facing)
+      if (pushList === null) return []  // 押し切れない → 失敗 (状態不変)
+
+      // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
+      const payloads = pushList.map(p => this.getBlockAt(p)!)
+      for (let i = pushList.length - 1; i >= 0; i--) {
+        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i])
+      }
+      // head セル (= 最近接 src と同座標) を head 行きの moving に
+      setMoving(headPos, sticky ? 'sticky' : 'normal', {
+        type: 'piston_head', facing: piston.facing, sticky,
+      })
+      this.setBlockAt(ev.pos, { ...piston, extended: true })
+      changed.push(posKey(ev.pos))
+      this.afterPistonMove([ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing))])
+    } else {
+      // retract
+      if (!piston.extended) return []
+      // head セルは即時消去
+      if (this.getBlockAt(headPos)?.type === 'piston_head') {
+        this.setBlockAt(headPos, { type: 'air' })
+        changed.push(posKey(headPos))
+      }
+      const affected: Pos3D[] = [ev.pos, headPos]
+      if (sticky) {
+        const pullFrom = neighbor(headPos, piston.facing)
+        const target = this.getBlockAt(pullFrom)
+        if (target && this.isMovable(target)) {
+          // 引かれるブロック: src 即時 air、head セルに moving(into=ブロック)
+          this.setBlockAt(pullFrom, { type: 'air' })
+          changed.push(posKey(pullFrom))
+          setMoving(headPos, 'normal', target)
+          affected.push(pullFrom)
+        }
+      }
+      // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
+      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false })
+      this.afterPistonMove(affected)
+    }
+
+    return changed
+  }
+
+  /**
+   * ピストン移動後の後処理: 影響座標の周辺ワイヤー網を再計算し、
+   * 各座標から NC を発行する (移動は回路トポロジーを変える)
+   */
+  private afterPistonMove(positions: Pos3D[]): void {
+    const starts: Pos3D[] = []
+    for (const p of positions) starts.push(...this.collectAdjacentWires(p))
+    const changedWires = this.propagateWireBFS(starts)
+    for (const p of positions) this.submitMultiNC(p)
+    for (const w of changedWires) {
+      for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
+    }
+  }
+
 
   // ── 内部: 信号伝播 ───────────────────────────────────────
 
@@ -777,6 +946,17 @@ export class SimWorld {
         const newPowered = newOutput > 0
         if (newOutput !== block.outputPower || newPowered !== block.powered) {
           this.schedule(pos, 2, this.diodeTickPriority(pos, block, false))
+        }
+        break
+      }
+      case 'piston':
+      case 'sticky_piston': {
+        // NC 受信時のみ再評価 (BUD の根拠)。状態不一致なら BE を予約
+        const should = this.shouldExtend(pos, block)
+        if (should && !block.extended) {
+          this.scheduleBlockEvent(pos, 'extend')
+        } else if (!should && block.extended) {
+          this.scheduleBlockEvent(pos, 'retract')
         }
         break
       }

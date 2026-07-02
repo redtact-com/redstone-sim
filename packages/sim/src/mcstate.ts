@@ -19,7 +19,7 @@
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
 // ============================================================
 
-import type { BlockState, HDir, WireConnectionValue } from './types.js'
+import type { BlockState, HDir, Dir6, WireConnectionValue } from './types.js'
 import { OPPOSITE } from './types.js'
 
 export interface ParsedMcState {
@@ -131,6 +131,19 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+    case 'piston':
+    case 'sticky_piston':
+      // vanilla の facing = 伸長方向 = sim と同一 (反転不要)
+      return { type: name as 'piston' | 'sticky_piston',
+               facing: (props.facing ?? 'north') as Dir6,
+               extended: props.extended === 'true' }
+    case 'piston_head':
+      return { type: 'piston_head', facing: (props.facing ?? 'north') as Dir6,
+               sticky: props.type === 'sticky' }
+    case 'moving_piston':
+      // 実機 dump にのみ現れる過渡状態。payload (into) は BE 内で不可視のため
+      // sim へは復元できない (fixture の authored には使わないこと)
+      throw new Error('moving_piston は authored に使えません (過渡状態)')
     case 'redstone_block':
       return { type: 'redstone_block' }
     case 'target':
@@ -156,9 +169,44 @@ export function mcToSim(state: string): BlockState | null {
  * authoredState (fixture 定義の文字列) をベースに、sim が管理する
  * 動的プロパティ (power/powered/lit/locked) のみ上書きする。
  */
-export function simToMc(sim: BlockState | null, authoredState: string): string {
-  const { name, props } = parseMcState(authoredState)
+/** authored 文字列が sim の型と同種か (ピストン移動で型が変わった座標の検出) */
+function authoredMatchesType(sim: BlockState, authoredState?: string): boolean {
+  if (authoredState === undefined) return false
+  try {
+    const a = mcToSim(authoredState)
+    return a !== null && a.type === sim.type
+  } catch {
+    return false
+  }
+}
+
+export function simToMc(sim: BlockState | null, authoredState?: string): string {
   if (sim === null) return 'air'
+  // ピストン移動などで authored の無い/型の違う座標にブロックが現れた場合は
+  // sim 状態から blockstate を合成する (可動ブロックは stone 前提の規約)
+  if (!authoredMatchesType(sim, authoredState)) {
+    switch (sim.type) {
+      case 'piston':
+      case 'sticky_piston':
+        return formatMcState(sim.type, { extended: String(sim.extended), facing: sim.facing })
+      case 'piston_head':
+        return formatMcState('piston_head', {
+          facing: sim.facing, short: 'false', type: sim.sticky ? 'sticky' : 'normal',
+        })
+      case 'moving_piston':
+        // payload (into) は blockstate に現れない (vanilla も BE 内)
+        return formatMcState('moving_piston', { facing: sim.facing, type: sim.kind })
+      case 'solid':
+        return 'stone'
+      case 'lamp':
+        return formatMcState('redstone_lamp', { lit: String(sim.lit) })
+      case 'air':
+        return 'air'
+      default:
+        throw new Error(`simToMc: authored (${authoredState ?? 'なし'}) と型不一致で合成不能: ${sim.type}`)
+    }
+  }
+  const { name, props } = parseMcState(authoredState!)
   switch (sim.type) {
     case 'wire':
       props.power = String(sim.power)
@@ -182,6 +230,13 @@ export function simToMc(sim: BlockState | null, authoredState: string): string {
     case 'lamp':
       props.lit = String(sim.lit)
       break
+    case 'piston':
+    case 'sticky_piston':
+      props.extended = String(sim.extended)
+      break
+    case 'piston_head':
+    case 'moving_piston':
+      break // 出現/消滅が動的要素 (合成パスで処理)
     case 'redstone_block':
       break // 状態を持たない (常時通電)
     case 'target':

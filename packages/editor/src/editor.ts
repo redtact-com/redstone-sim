@@ -154,6 +154,12 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'button_wood', facing: 'up', powered: false }
     case 'lamp':
       return { type: 'lamp', lit: false }
+    case 'piston':
+    case 'sticky_piston':
+      return { type, facing, extended: false }
+    case 'piston_head':
+    case 'moving_piston':
+      return null  // head / 移動中ブロックは sim が管理する (直接配置不可)
     case 'redstone_block':
       // 定数動力源。石と同列にパレットへ追加 (常時通電)
       return { type: 'redstone_block' }
