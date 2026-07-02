@@ -148,17 +148,24 @@ export interface WorldSnapshot {
 // ScheduledTick
 // ============================================================
 
+/**
+ * tile tick の予約 (02 §2 [確定] の vanilla 意味論)。
+ * action は持たない — 実行時にブロック自身が世界状態を読んで動作を決める。
+ * 同 pos + blockType の予約は常に 1 件 (schedule 側でデデュープ)。
+ */
 export interface ScheduledTick {
   pos: Pos3D
-  /** 残りティック数（0になった次のSTフェーズで実行） */
-  remainingTicks: number
-  action: 'turn_on' | 'turn_off'
+  /** 予約時のブロック種。実行時に不一致なら no-op (vanilla の実行時検証) */
+  blockType: BlockType
+  /** 実行予定の絶対 game tick */
+  dueTick: number
   /**
-   * 優先度（同一ティック内での実行順。小さいほど先）
-   * Minecraft の tile tick priority に相当。
-   * torch: 1, repeater: -3 など
+   * TickPriority (02 §2.2 [確定]。小さいほど先):
+   * repeater -3/-2/-1 (前方ダイオード/オフ化/他)、comparator -1/0、他 0
    */
   priority: number
+  /** 同 priority 内の安定実行順 (挿入順、vanilla の subTickOrder) */
+  seq: number
 }
 
 // ============================================================

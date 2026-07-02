@@ -135,3 +135,15 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 2. `npm run ground-truth -- <name>` — settle 照合に失敗したら実機の教える安定状態に `blocks` を直す
 3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成
 4. `npm test` が通ることを確認してコミット
+
+## fixture 作成の注意 (2026-07-02 追記)
+
+- **fake player の足元 (player.spawn の直下) に必ず床を敷く**。survival spawn のため
+  床がないと void に落下死し、以後の入力が全て `Can only manipulate existing players` で
+  空振りする (回路の床 z 列と player の立つ z 列は別なことに注意)
+- 複数レバー fixture は input ごとに `player look at` で再照準される (generate.ts)。
+  照準高さは player.lookAt の Y 小数部を流用 (床レバー .35 / 床ボタン .06)
+- player の spawn/kill は freeze 中に完了しないため、generate.ts が一時 unfreeze
+  区間で処理する。unfreeze 中に ~20tick 走るので **authored は必ず settled 安定状態**
+  で書くこと (発振回路はこの方式では扱えない)
+- `GT_DEBUG=1 npm run ground-truth -- <name>` で rcon 応答を全て表示できる
