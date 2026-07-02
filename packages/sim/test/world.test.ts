@@ -42,6 +42,18 @@ function repeater(
 ): BlockState {
   return { type: 'repeater', facing, delay, powered, locked: false }
 }
+function comparator(
+  facing: 'north'|'south'|'east'|'west',
+  mode: 'compare'|'subtract' = 'compare',
+): BlockState {
+  return { type: 'comparator', facing, mode, powered: false, outputPower: 0 }
+}
+function container(signal: number): BlockState {
+  return { type: 'container', signal }
+}
+function button(powered = false): BlockState {
+  return { type: 'button_stone', facing: 'up', powered }
+}
 
 // ─────────────────────────────────────────────────────────────
 
@@ -289,5 +301,182 @@ describe('SimWorld: clone', () => {
 
     expect(clone.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
     expect(world.getBlock(2, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// コンパレーター側面入力の受理範囲 (G8, 02 §6 [確定])
+// 側面はワイヤ/レッドストーンブロック/diode(の direct 出力)のみ受理。
+// レバー・ボタン・トーチは水平方向へ direct signal を出さないため無効。
+// ─────────────────────────────────────────────────────────────
+
+describe('SimWorld: コンパレーター側面入力 (G8)', () => {
+  // 配置: 背面(西)にレバー15、東出力。subtract で out = back(15) - side。
+  // side が無効なら 15、有効なら 15 - side が出る。
+  function build(sideBlock: BlockState | null): SimWorld {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'subtract'))
+    place(world, -1, 0, lever(true))        // 背面(西) = 15
+    if (sideBlock) place3d(world, 0, Y, -1, sideBlock)  // 北側面
+    world.initialize()
+    world.flush(64)
+    return world
+  }
+
+  it('側面のレバーは無効 (out = 15 のまま)', () => {
+    const world = build(lever(true))
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 15, powered: true })
+  })
+
+  it('側面のボタンは無効', () => {
+    const world = build(button(true))
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 15 })
+  })
+
+  it('側面の床トーチは無効', () => {
+    const world = build(torch(true))
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 15 })
+  })
+
+  it('側面のワイヤは有効 (side 信号で減算される)', () => {
+    // 北に lever→wire を作り side=15 にする
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'subtract'))
+    place(world, -1, 0, lever(true))          // 背面(西) = 15
+    place3d(world, 0, Y, -1, wire(0))          // 北側面 = ワイヤ
+    place3d(world, 0, Y, -2, lever(true))      // ワイヤの電源
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(0, Y, -1)).toMatchObject({ type: 'wire', power: 15 })
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0 })  // 15 - 15
+  })
+
+  it('側面の diode(出力を向けたリピーター)は有効', () => {
+    // 北に repeater(south 出力=コンパレーター向き) を powered で駆動する
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'subtract'))
+    place(world, -1, 0, lever(true))          // 背面(西) = 15
+    place3d(world, 0, Y, -1, repeater('south')) // 北側面 → 南出力(コンパレーター向き)
+    place3d(world, 0, Y, -2, lever(true))      // リピーターの入力
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(0, Y, -1)).toMatchObject({ type: 'repeater', powered: true })
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0 })  // 15 - 15
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// コンパレーター背面のコンテナ読み (02 §6 [確定])
+// ─────────────────────────────────────────────────────────────
+
+describe('SimWorld: コンパレーター背面コンテナ', () => {
+  it('背面直後のコンテナ signal を読む (compare)', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'compare'))
+    place(world, -1, 0, container(7))   // 背面(西)
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 7, powered: true })
+  })
+
+  it('コンテナ(back) − side(wire) が subtract で出る', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'subtract'))
+    place(world, -1, 0, container(10))       // 背面 = 10
+    place3d(world, 0, Y, -1, wire(0))         // 北側面
+    place3d(world, 0, Y, -5, lever(true))     // 側面ワイヤの電源(減衰させる)
+    // 側面ワイヤ列を伸ばす: (0,-2)(0,-3)(0,-4)
+    place3d(world, 0, Y, -2, wire(0))
+    place3d(world, 0, Y, -3, wire(0))
+    place3d(world, 0, Y, -4, wire(0))
+    world.initialize()
+    world.flush(64)
+    const side = world.getBlock(0, Y, -1) as { power: number }
+    const out = world.getBlock(0, Y, 0) as { outputPower: number }
+    expect(out.outputPower).toBe(Math.max(0, 10 - side.power))
+  })
+
+  it('固体 1 個越しのコンテナを読む', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'compare'))
+    place(world, -1, 0, { type: 'solid', powered: false }) // 背面 = 導体
+    place(world, -2, 0, container(5))                        // 1 マス先 = コンテナ
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 5, powered: true })
+  })
+
+  it('空コンテナ(signal 0)は出力 0', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'compare'))
+    place(world, -1, 0, container(0))
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0, powered: false })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// リピーターロック (G9, 02 §6 [確定])
+// ─────────────────────────────────────────────────────────────
+
+describe('SimWorld: リピーターロック', () => {
+  /**
+   * 配置 (XZ平面):
+   *   MI(lever,-1,0) → M(repeater east,0,0) → lamp(1,0)
+   *   LL(lever,0,-2) → L(repeater south,0,-1) が M の北側面に出力しロックする
+   */
+  function buildLockRig(): SimWorld {
+    const world = new SimWorld()
+    place(world, 0, 0, repeater('east', 1))     // M: 本体
+    place(world, 1, 0, lamp(false))             // M の出力先
+    place(world, -1, 0, lever(false))           // MI: M の入力(西)
+    place3d(world, 0, Y, -1, repeater('south')) // L: M の北側面 → 南出力(M向き)
+    place3d(world, 0, Y, -2, lever(true))        // LL: L の入力(北) → L を ON にする
+    world.initialize()
+    world.flush(64)
+    return world
+  }
+
+  it('側面リピーターの出力で locked=true になり入力を凍結する', () => {
+    const world = buildLockRig()
+    // L は ON、M はロックされ OFF
+    expect(world.getBlock(0, Y, -1)).toMatchObject({ type: 'repeater', powered: true })
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ type: 'repeater', locked: true, powered: false })
+
+    // M の入力をオンにしてもロック中は反応しない
+    world.activateBlock(-1, Y, 0)
+    for (let i = 0; i < 8; i++) world.tick()
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ locked: true, powered: false })
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
+  })
+
+  it('ロック解除時に入力と出力が食い違っていれば出力する', () => {
+    const world = buildLockRig()
+    world.activateBlock(-1, Y, 0)               // M 入力 ON (ロック中は無視される)
+    for (let i = 0; i < 8; i++) world.tick()
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ locked: true, powered: false })
+
+    // L の電源を切ってロック解除
+    world.activateBlock(0, Y, -2)               // LL OFF
+    for (let i = 0; i < 12; i++) world.tick()
+    expect(world.getBlock(0, Y, -1)).toMatchObject({ powered: false })      // L OFF
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ locked: false, powered: true })  // M 解除→ON
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+  })
+
+  it('側面のワイヤ・レッドストーンではロックされない (diodesOnly)', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, repeater('east', 1))     // M
+    place(world, 1, 0, lamp(false))
+    place(world, -1, 0, lever(true))            // M 入力 ON
+    place3d(world, 0, Y, -1, wire(0))            // 北側面 = ワイヤ(diode でない)
+    place3d(world, 0, Y, -2, lever(true))        // 側面ワイヤに給電
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(0, Y, -1)).toMatchObject({ type: 'wire', power: 15 })
+    // ワイヤはロックしないので M は通常どおり ON
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ locked: false, powered: true })
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
   })
 })
