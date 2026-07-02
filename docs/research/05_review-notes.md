@@ -7,9 +7,13 @@
 
 04 §4.1(a) は「1.20.4 なら lntricate-SubTick / MCHPRS が使える」とするが、01 #8 と 04 §2.3 自身が「lntricate 版 SubTick は 1.20.1 まで / 1.20.2+ 非対応」と明記しており、1.20.4 ではレイヤ B が使えない。比較表の修正と、「仕様典拠 1.21.1 + レイヤ B は 1.20.1」案における 1.20.1↔1.21.1 間の tile tick / block event 挙動差分の確認手段の提示が必要。
 
+> **解消済み (2026-07-02, I1 / #9)**: 04 §4.1 を修正し (a) 1.20.1 と (a') 1.20.4 を分離、1.20.4 でレイヤ B 不可を明記。1.20.1↔1.21.1 差分の確認手段 (microTiming 並走による fixture 単位確認) も同節に追記。対象バージョンは「典拠 1.21.1 + 26.x 併読」で確定し CONTRIBUTING.md に明文化。
+
 ## 2. [未調査源] 1.21.2 ワイヤ刷新の一次資料が欠落
 
 02 §6 で WireOrientation 刷新は [要検証] のまま、04 §4.1 が「将来バージョンフラグで吸収」と判断済み。1.21.2 公式チェンジログ（Redstone Experiments / ExperimentalRedstoneWireEvaluator）と源流の **Alternate Current**（Space Walker、MIT、バニラワイヤ更新順の最詳ドキュメント）を 01 に追加調査すべき。
+
+> **解消済み (2026-07-02, I1 / #9)**: 01 に #15 (24w33a/24w34a 公式チェンジログ) と #16 (Alternate Current) を追加。さらに 26.2 デコンパイルで「刷新は REDSTONE_EXPERIMENTS フラグ付き・既定挙動は 1.21.1 と同一 (DefaultRedstoneWireEvaluator)」を確定し 02 §6 wire に反映。「将来バージョンフラグで吸収」の判断はリスク小と裏付けられた。
 
 ## 3. [未調査源+計画リスク] レイヤ C の中核ツールが未検証・対抗馬未調査
 
@@ -34,6 +38,8 @@ I2/I3/I5/I7/I8 の受け入れ基準は全て「fixture 通過」だが、fixtur
 
 ArcFrout は wiki 由来知識の可能性が高く（01 #4 自身が整合性を根拠にしている）、独立 2 源の要件を満たさない。特に「オブザーバーは NC で起動しない」（02 §4.1）は回路互換性の根幹のため、デコンパイル確認へ格下げし未解明表に載せる。
 
+> **解消済み (2026-07-02, I1 / #9)**: 1.21.1/26.2 デコンパイルで確定。ObserverBlock は `neighborChanged` を override せず（NC は BlockBehaviour 既定の no-op）、`updateShape` の観測面方向のみで tile tick を予約する。02 §4.1 と §6 observer に反映済み。
+
 ## 8. [計画の欠落] G11 の大半に対応 issue がない
 
 redstone block・target・感圧板・note block・コンテナ・トーチ burnout・dot 形状は G11 に列挙されながら I1〜I10 に割当がない。「実装する / スコープ外と明示する」の判断を issue 分解時に行う。burnout は I1 で閾値確定する計画なのに実装先が無い点も要修正。
@@ -41,6 +47,8 @@ redstone block・target・感圧板・note block・コンテナ・トーチ burn
 ## 9. [仕様の欠落] プレイヤー入力の適用タイミングが未定義
 
 02 §1.2 は「ScheduledTasks（プレイヤーアクション）は tick 後の nextTickWait で消化 [確定]」とするが、シミュレータ側で入力をどの tick 境界・フェーズ相当で適用するかが未定義。ハーネスとの diff が恒常的に 1 tick ずれる典型要因のため、レイヤ A 構築前に確定する。
+
+> **解消済み (2026-07-02, I1 / #9)**: 02 §1.4 を新設。パケット由来入力は PacketUtils → メインスレッドタスクキュー → nextTickWait (waitUntilNextTick) で消化されることをデコンパイル確定し、「シミュレータでは tick N 終了後〜tick N+1 の blockTicks 前の境界で入力を適用する」を設計指針として明記。過負荷時の最大 3 tick 遅延 (MinecraftServer.shouldRun) も注記。
 
 ## 10. [未調査源] Mojira (bugs.mojang.com) が未カタログ
 
