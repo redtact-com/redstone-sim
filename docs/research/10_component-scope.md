@@ -38,6 +38,13 @@
 
 ## 1. C1: redstone block (レッドストーンブロック)
 
+> **実装済み (I11 / #35)**: BlockType `redstone_block` を追加。全 6 方向に weak 15、固体は強充電しない。
+> デコンパイル裏取り (1.21.1 `PoweredBlock`) 済み: `getSignal`=15 / `getDirectSignal` 非 override (=0) /
+> `isRedstoneConductor(never)` = 非導体 (ダストの上下斜め接続を切らない)。ダスト 4 面接続・viewer
+> (`minecraft:redstone_block`)・nbtIO・editor パレット対応。実機 fixture `redstone-block-static` で
+> 静的通電を検証。詳細は 02 §6 redstone block。
+
+
 - **回路勢重要度: 中**。切れない定数動力源。テクニカル勢では「フライングマシン / スライムブロック建築で
   ピストンに押される可動動力源」として必須級だが、**その用途はピストン (I7) が前提**。ピストン抜きの
   静的回路では「常時 ON のレバー / 灯った torch」と等価の定数源にすぎず、代替が効く。コンパレーター側面入力の
@@ -57,6 +64,17 @@
   2. ピストン (I7) 未実装の間は「押せない定数源」に留まる点を許容するか (可動動力源としての本領は I7 後)。
 
 ## 2. C2: target block (ターゲットブロック)
+
+> **実装済み (I11 / #35、折衷モデル)**: 当初「スコープ外」推奨だったが、ユーザ判断で「手動トリガ +
+> 持続 gt + 全方向 weak」の折衷モデルとして実装した。BlockType `target { outputPower: 0-15 }`。
+> activateBlock で命中を模し outputPower=15 (中心命中相当) を出し、**矢の 20 gt 持続** 後に tile tick
+> (priority 0) で消灯。デコンパイル裏取り (1.21.1 `TargetBlock`) 済み: 持続 = 矢 20gt (`ACTIVATION_TICKS_ARROWS`) /
+> 他 8gt / `tick` で POWER=0 / `getSignal`=POWER (全方向 weak, `getDirectSignal`=0 で強充電なし) /
+> `onPlace` が POWER>0 & pending tick 無しを 0 化。ダスト 4 面接続・viewer (`minecraft:target[power=N]`)・
+> nbtIO・editor パレット対応。**実機 fixture は不可**: 発火に投射物エンティティが必須で、setblock /
+> scarpet の直接 blockstate 変更は onPlace が即 0 に戻す (実機で確認)。消灯系列は手書き単体テスト
+> (`power-blocks.test.ts`) で検証。詳細は 02 §6 target。
+
 
 - **回路勢重要度: 低**。信号源としての発火は**投射物 (矢/雪玉/トライデント等) の命中**が条件で、
   ミニゲーム / 的当て用途が主。純粋な回路論理では決定的な信号源にならない。導体として

@@ -289,6 +289,31 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - 点灯: NC 受信時に即時 setBlock (遅延なし)。消灯: NC 受信時に **4 gt の tile tick を予約し、tick 時に入力を再評価**して
   まだ無入力なら消灯 → 4 gt 未満の入力断では消灯しない [確定: RedstoneLampBlock、未解明 #4 解消]。
 
+### redstone block (レッドストーンブロック) — I11 (#35) 実装済み
+
+- 定数の弱動力源 [確定: 1.21.1 Blocks.REDSTONE_BLOCK = `PoweredBlock`]: `getSignal`=**15** (全方向)・
+  `isSignalSource`=true・`getDirectSignal` 非 override (=**0** → 固体を強充電しない = weak のみ)。状態も tile tick も持たない。
+- `.isRedstoneConductor(Blocks::never)` = **非導体** [確定]: 自身は被充電されず、ダストの上下斜め接続も**切らない**
+  (石・ランプ・target とは対照的)。
+- ダストは 4 面すべてで接続 [確定: RedStoneWireBlock.shouldConnectTo が `isSignalSource()` を受理]。
+
+### target (ターゲットブロック) — I11 (#35) 折衷モデルで実装済み
+
+- 投射物命中で発火する信号源 [確定: 1.21.1 TargetBlock]。本 sim は投射物 (エンティティ) 系を持たないため
+  「手動トリガ + 持続 gt + 全方向 weak」の折衷モデルで扱う (10 §6)。
+- 給電 [確定]: `getSignal`=`OUTPUT_POWER` (=`BlockStateProperties.POWER`, 0-15、全方向 weak)・
+  `isSignalSource`=true・`getDirectSignal` 非 override (=0 → 強充電しない)。既定フルキューブのため
+  `isRedstoneConductor`=true (被充電され得る・ダストの斜め接続を切る)。ダストは 4 面接続。
+- 発火 (`onProjectileHit`→`updateRedstoneOutput`) [確定]: 命中強度 = 中心からの距離で **1..15** (`getRedstoneStrength`)、
+  持続 = 矢/トライデント (`AbstractArrow`) **20 gt** (`ACTIVATION_TICKS_ARROWS`) / その他 **8 gt** (`ACTIVATION_TICKS_OTHER`)。
+  `setOutputPower` が POWER を setBlock (flag 3) し `scheduleTick(pos, block, 持続)` を予約 (priority NORMAL=0)。
+  `hasScheduledTick` が真の間は**再発火を無視** (持続の延長なし)。
+- `tick` [確定]: OUTPUT_POWER != 0 なら 0 に戻す (消灯)。
+- `onPlace` [確定]: OUTPUT_POWER>0 かつ pending tick 無しで設置されたら **0 に戻す** (flag 18)。
+  → setblock / scarpet の直接 blockstate 変更では発火不可 (onPlace が即 0 化する。実機で確認済み)。
+- sim 折衷モデル (I11): activateBlock で中心命中を模し **outputPower=15 + 矢の 20 gt 持続** を採用。
+  発火に投射物エンティティが必須で実機 fixture が作れないため、消灯系列は手書き単体テストで検証する。
+
 ### piston (未実装・仕様のみ)
 - BEC: 動力判定 (NC 受信時) → block event を予約 → ブロックイベントフェーズで実移動。0-tick 系はこのフェーズ差が前提 [確定]。
 - QC 対象 (5.3) [確定]。push limit 12 [要検証: carpet ルールの逆読み、数値は未確認]。block entity は押せない [確定: carpet movableBlockEntities ルールの逆読み]。格納 1 rt = 2 gt [要検証: ArcFrout chap2]。
