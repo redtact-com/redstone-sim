@@ -1,6 +1,6 @@
 {
   "name": "lever-wire-lamp",
-  "description": "レバー → ワイヤー3マス → ランプ。点灯のみ (ランプ消灯は 4gt 遅延があり sim 未実装のため ON だけを見る)",
+  "description": "レバー → ワイヤー3マス → ランプ。点灯のみを見る (この fixture は ON 遷移の受け入れ基準)。ランプ消灯の 4gt 遅延は #36 (I12) で実装し、OFF 系列は lamp-off-delay fixture で検証する",
   "mcVersion": "1.21.1",
   "ticks": 8,
   "region": {

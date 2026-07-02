@@ -1,6 +1,6 @@
 {
   "name": "stone-button",
-  "description": "石ボタン → ワイヤー3マス。押下で power=15 給電、20 gt (石系 ticksToStayPressed) 後に自動オフ → 全ワイヤー 0 を検証 (G12)。ランプ消灯 4gt 遅延を避けるため負荷はワイヤーのみ",
+  "description": "石ボタン → ワイヤー3マス。押下で power=15 給電、20 gt (石系 ticksToStayPressed) 後に自動オフ → 全ワイヤー 0 を検証 (G12)。負荷はワイヤーのみ (ボタン持続の検証に集中)。PR#28 当時ランプ消灯 4gt 遅延が sim 未実装だったためランプを避けていたが、#36 (I12) で 4gt 遅延を実装し lamp-off-delay fixture で制約解消を実証済み",
   "mcVersion": "1.21.1",
   "ticks": 24,
   "region": { "from": [0, 0, 0], "to": [3, 1, 1] },
