@@ -131,6 +131,11 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+    case 'redstone_block':
+      return { type: 'redstone_block' }
+    case 'target':
+      // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
+      return { type: 'target', outputPower: Number(props.power ?? '0') }
     case 'barrel':
     case 'chest':
     case 'trapped_chest':
@@ -176,6 +181,11 @@ export function simToMc(sim: BlockState | null, authoredState: string): string {
       break
     case 'lamp':
       props.lit = String(sim.lit)
+      break
+    case 'redstone_block':
+      break // 状態を持たない (常時通電)
+    case 'target':
+      props.power = String(sim.outputPower)
       break
     case 'container':
       break // signal は blockstate に現れない (authored 名 barrel/chest を保持)

@@ -1,5 +1,5 @@
 import type {
-  Pos3D, Dir6, HDir, TorchState, WallTorchState,
+  Pos3D, Dir6, HDir, TorchState, WallTorchState, BlockState,
 } from './types.js'
 import type { SimWorld } from './world.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
@@ -19,6 +19,18 @@ import { OPPOSITE, ALL_DIRS } from './types.js'
 //   - 弱充電された固体は隣接機構を作動させるが、ダストには給電しない
 //   - 強充電された固体はダストにも給電する
 // ============================================================
+
+/**
+ * 導体 (被充電され得るブロック) か。
+ * [確定: 1.21.1 Blocks.java] target は isRedstoneConductor 非 override
+ * (既定フルキューブ = 導体)。redstone_block は isRedstoneConductor(never) で
+ * 非導体。sim では solid / target の 2 種が導体。
+ * 導体は strong 源 (getStrongPower) とダスト (getWireWeakCharge) で充電され、
+ * 充電状態は隣接機構・ダイオード入力に伝わる (getSolidPower / isFacePowered)。
+ */
+export function isConductor(block: BlockState | null): boolean {
+  return !!block && (block.type === 'solid' || block.type === 'target')
+}
 
 /** pos から dir 方向に 1 進んだ座標 */
 export function relative(pos: Pos3D, dir: Dir6): Pos3D {
@@ -63,6 +75,9 @@ function getAttachFace(facing: Dir6): Dir6 {
  * - レバー/ボタン: 全 6 方向に 15 [要検証: 02 §6 lever/button]
  * - トーチ: 取り付け面以外の 5 方向に 15 (G3) [要検証: I1 確定後に要照合]
  * - リピーター/コンパレーター: facing 方向のみ
+ * - レッドストーンブロック: 全 6 方向に 15 [確定: 1.21.1 PoweredBlock.getSignal]
+ * - ターゲット: 全 6 方向に outputPower [確定: 1.21.1 TargetBlock.getSignal]
+ *   (いずれも getDirectSignal 非 override のため強充電はしない = weak のみ)
  * - ワイヤー: 足元 (down) + 接続方向の水平。上方向へは給電しない (G5)
  *   [要検証: 02 §5.4]
  */
@@ -74,6 +89,10 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
     case 'button_stone':
     case 'button_wood':
       return src.powered ? 15 : 0
+    case 'redstone_block':
+      return 15
+    case 'target':
+      return src.outputPower
     case 'torch':
     case 'wall_torch': {
       if (!src.lit) return 0
@@ -144,8 +163,8 @@ export function getNeighborSignal(world: SimWorld, pos: Pos3D): number {
 }
 
 /**
- * 固体ブロック pos の強充電レベル (0-15)。
- * 強充電された固体はダストにも隣接機構にも給電する。
+ * 導体ブロック (solid / target) pos の強充電レベル (0-15)。
+ * 強充電された導体はダストにも隣接機構にも給電する。
  */
 export function getStrongPower(world: SimWorld, pos: Pos3D): number {
   let max = 0
@@ -157,9 +176,11 @@ export function getStrongPower(world: SimWorld, pos: Pos3D): number {
 }
 
 /**
- * 固体ブロック pos がダストから受ける弱充電レベル (0-15)。
+ * 導体ブロック (solid / target) pos がダストから受ける弱充電レベル (0-15)。
  * ダストは「足元のブロック + 接続方向のブロック」を弱充電する (G5, G14)
- * [要検証: 02 §5.4]。弱充電は他のダストには見えない。
+ * [確定: 02 §5.4 — RedStoneWireBlock.getDirectSignal は shouldSignal 中のみ
+ * getSignal と同値。target も導体として同じ規則で充電される]。
+ * 弱充電は他のダストには見えない (shouldSignal=false 相当は computeWirePower 側)。
  */
 export function getWireWeakCharge(world: SimWorld, pos: Pos3D): number {
   let max = 0
@@ -173,26 +194,32 @@ export function getWireWeakCharge(world: SimWorld, pos: Pos3D): number {
 }
 
 /**
- * 固体ブロックの充電レベル (強充電とダスト弱充電の最大)。
+ * 導体ブロック (solid / target) の充電レベル (強充電とダスト弱充電の最大)。
  * コンパレーターの背面読み取りや隣接機構の作動判定に使う。
+ * [確定: 1.21.1 SignalGetter.getSignal — isRedstoneConductor なら
+ * max(自身の getSignal, getDirectSignalTo)。target は自身も信号源のため
+ * 呼び出し側で outputPower (getSignal 経由) と max を取ること]
  */
 export function getSolidPower(world: SimWorld, pos: Pos3D): number {
   return Math.max(getStrongPower(world, pos), getWireWeakCharge(world, pos))
 }
 
-/** 固体ブロックが充電されているか (weak / strong を問わない) */
+/** 導体ブロックが充電されているか (weak / strong を問わない) */
 export function isSolidPowered(world: SimWorld, pos: Pos3D): boolean {
   return getSolidPower(world, pos) > 0
 }
 
 /**
  * pos の dir 面が動力を受けているか。
- * 隣が充電された固体 (weak/strong 問わず) か、weak 信号が入っていれば true。
+ * 隣が充電された導体 (solid / target。weak/strong 問わず) か、
+ * weak 信号が入っていれば true。target は導体かつ信号源なので、
+ * 充電と自身の outputPower (getSignal 経由) の両方を見る
+ * [確定: 1.21.1 SignalGetter.getSignal の isRedstoneConductor 分岐]。
  */
 export function isFacePowered(world: SimWorld, pos: Pos3D, dir: Dir6): boolean {
   const nPos = relative(pos, dir)
   const nb = world.getBlockAt(nPos)
-  if (nb?.type === 'solid' && isSolidPowered(world, nPos)) return true
+  if (isConductor(nb) && isSolidPowered(world, nPos)) return true
   return getSignal(world, pos, dir) > 0
 }
 

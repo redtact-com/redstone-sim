@@ -6,7 +6,7 @@ export type {
   TorchState, WallTorchState,
   RepeaterState, ComparatorState,
   LeverState, ButtonState,
-  LampState, ContainerState, SolidState, AirState,
+  LampState, ContainerState, RedstoneBlockState, TargetState, SolidState, AirState,
   WorldSnapshot,
   ScheduledTick,
   TickResult,
@@ -32,7 +32,7 @@ export type { ParsedMcState } from './mcstate.js'
 export {
   getSignal, getDirectSignal, getNeighborSignal,
   getStrongPower, getWireWeakCharge, getSolidPower,
-  isSolidPowered, isFacePowered, isBlockPowered,
+  isSolidPowered, isFacePowered, isBlockPowered, isConductor,
   getTorchAttachFace, relative,
 } from './power.js'
 

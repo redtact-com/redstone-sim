@@ -65,6 +65,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
+    case 'redstone_block':
+      return 'minecraft:redstone_block'
+    case 'target':
+      return `minecraft:target[power=${block.outputPower}]`
     case 'container':
       // コンテナは barrel として描画する (signal 値は表示に影響しない)
       return 'minecraft:barrel'
@@ -102,6 +106,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:stone_button',
   'minecraft:oak_button',
   'minecraft:redstone_lamp',
+  'minecraft:redstone_block',
   'minecraft:barrel',
   'minecraft:stone',
   'minecraft:cobblestone',
