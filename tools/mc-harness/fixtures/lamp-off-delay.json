@@ -1,8 +1,8 @@
 {
-  "name": "lever-wire-lamp",
-  "description": "レバー → ワイヤー3マス → ランプ。点灯のみを見る (この fixture は ON 遷移の受け入れ基準)。ランプ消灯の 4gt 遅延は #36 (I12) で実装し、OFF 系列は lamp-off-delay fixture で検証する",
+  "name": "lamp-off-delay",
+  "description": "レバー → ワイヤー3マス → ランプ。点灯は即時、消灯は 4gt の tile tick 遅延 (02 §6 lamp [確定])。tick2 で ON→即点灯、tick10 で OFF→4gt 後の tick14 で消灯を検証。PR#28 で lamp を避けた stone-button の制約 (消灯遅延未実装) を解消する fixture",
   "mcVersion": "1.21.1",
-  "ticks": 8,
+  "ticks": 18,
   "region": { "from": [0, 0, 0], "to": [4, 1, 1] },
   "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 40], "lookAt": [0.5, 1.35, 0.5] },
   "blocks": [
@@ -23,6 +23,7 @@
     { "pos": [4, 1, 0], "block": "redstone_lamp[lit=false]" }
   ],
   "inputs": [
-    { "tick": 2, "pos": [0, 1, 0], "action": "use" }
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 10, "pos": [0, 1, 0], "action": "use" }
   ]
 }

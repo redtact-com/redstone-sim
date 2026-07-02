@@ -4,6 +4,25 @@ import type { Pos3D } from '../types.js'
 import { OPPOSITE } from '../types.js'
 import { getTorchAttachFace, isFacePowered } from '../power.js'
 
+// ── burnout 定数 [確定: 02 §6 torch — RedstoneTorchBlock] ──────────────
+/** この gt より古い消灯記録は tick 実行時に破棄する (RECENT_TOGGLE_TIMER) */
+export const RECENT_TOGGLE_TIMER = 60
+/** 窓内の消灯記録がこの件数に達すると焼き切れる (MAX_RECENT_TOGGLES) */
+export const MAX_RECENT_TOGGLES = 8
+/** 焼き切れから復帰を試みるまでの遅延 gt (RESTART_DELAY) */
+export const RESTART_DELAY = 160
+
+/**
+ * 消灯履歴から 60gt (RECENT_TOGGLE_TIMER) より古い記録を落とす。
+ * vanilla は tick 冒頭で `while (now - list[0].when > 60) remove(0)` と
+ * ワールド単位の共有リストを先頭から刈るが、burnout 判定は pos 単位の件数で
+ * 決まるため、本 sim ではトーチ単位の履歴を同じ時間窓で刈れば等価。
+ */
+export function pruneToggles(toggles: readonly number[] | undefined, now: number): number[] {
+  if (!toggles || toggles.length === 0) return []
+  return toggles.filter(t => now - t <= RECENT_TOGGLE_TIMER)
+}
+
 /**
  * トーチが信号を出力する方向を返す。
  * - 床置きトーチ (facing=up): 上方向 'up' に出力

@@ -122,10 +122,15 @@ describe('target block: 手動トリガ (15) → 20gt 持続 → 消灯', () => 
     expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 15 })
     expect(world.getBlock(2, Y, 0)).toMatchObject({ lit: true })
 
-    // 20gt 目 (ACTIVATION_TICKS_ARROWS) で消灯
+    // 20gt 目 (ACTIVATION_TICKS_ARROWS) で target 消灯・ワイヤー 0。
+    // ランプは I12 の消灯 4gt 遅延 (02 §6 [確定]) によりまだ点灯している
     world.tick()
     expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0 })
     expect(world.getBlock(1, Y, 0)).toMatchObject({ power: 0 })
+    expect(world.getBlock(2, Y, 0)).toMatchObject({ lit: true })
+
+    // +4gt でランプ消灯
+    for (let i = 0; i < 4; i++) world.tick()
     expect(world.getBlock(2, Y, 0)).toMatchObject({ lit: false })
   })
 

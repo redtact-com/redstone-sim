@@ -38,5 +38,8 @@ export {
 
 // ブロックユーティリティ
 export { computeWirePower, getConnectedWireNeighbors, isWireCutBlock } from './blocks/wire.js'
-export { getTorchOutputFacing, getTorchBasePos, isBasePowered } from './blocks/torch.js'
+export {
+  getTorchOutputFacing, getTorchBasePos, isBasePowered,
+  pruneToggles, RECENT_TOGGLE_TIMER, MAX_RECENT_TOGGLES, RESTART_DELAY,
+} from './blocks/torch.js'
 export { getRepeaterOutputFacing, isInputFaceOfRepeater, getRepeaterLockDirs } from './blocks/repeater.js'

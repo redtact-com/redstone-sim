@@ -75,6 +75,9 @@ describe('SimWorld: レバー → ランプ（直接隣接）', () => {
 
     world.activateBlock(0, Y, 0)
 
+    // ランプ消灯は 4gt の tile tick 遅延 (02 §6 lamp [確定])。直後はまだ点灯。
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+    world.flush()
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
   })
 })
@@ -184,6 +187,127 @@ describe('SimWorld: トーチ → ランプ（initialize()で初期化）', () =
 
 // ─────────────────────────────────────────────────────────────
 
+// トーチ焼き切れ (burnout) — 02 §6 torch [確定: RedstoneTorchBlock]。
+// 60gt 窓で 8 回の消灯 (MAX_RECENT_TOGGLES) に達すると焼き切れて消灯固定になり、
+// 160gt (RESTART_DELAY) 後の tile tick で復帰を試みる。
+describe('SimWorld: トーチ焼き切れ (burnout)', () => {
+  // 土台 solid(0,0,0) + 床トーチ(0,1,0) + 土台東面のレバー(1,0,0)。
+  // レバー ON→OFF を高速に繰り返して土台を給電/開放し、トーチを高速トグルさせる。
+  function makeTorchOnLever() {
+    const world = new SimWorld()
+    world.setBlock(0, 0, 0, { type: 'solid', powered: false })
+    world.setBlock(0, 1, 0, { type: 'torch', facing: 'up', lit: true })
+    world.setBlock(1, 0, 0, { type: 'lever', facing: 'east', powered: false })
+    world.initialize()
+    world.flush(64)
+    return world
+  }
+  const torchAt = (w: SimWorld) => w.getBlock(0, 1, 0) as Extract<BlockState, { type: 'torch' }>
+
+  it('8 回目の消灯で焼き切れ、消灯固定になる', () => {
+    const world = makeTorchOnLever()
+    // 1 サイクル = レバー ON (土台給電→2gt でトーチ消灯・記録+1) + レバー OFF (2gt で点灯)
+    for (let i = 0; i < 7; i++) {
+      world.activateBlock(1, 0, 0)          // ON
+      world.tick(); world.tick()            // 消灯 (記録 i+1)
+      expect(torchAt(world).burnedOut ?? false).toBe(false)
+      world.activateBlock(1, 0, 0)          // OFF
+      world.tick(); world.tick()            // 点灯
+      expect(torchAt(world).lit).toBe(true)
+    }
+    // 8 回目の消灯 → 焼き切れ
+    world.activateBlock(1, 0, 0)            // ON (8 回目)
+    world.tick(); world.tick()
+    expect(torchAt(world)).toMatchObject({ lit: false, burnedOut: true })
+    expect(torchAt(world).recentToggles).toHaveLength(8)
+  })
+
+  it('焼き切れ中は土台開放しても点灯せず、160gt 後に復帰する', () => {
+    const world = makeTorchOnLever()
+    for (let i = 0; i < 8; i++) {
+      world.activateBlock(1, 0, 0)          // ON
+      world.tick(); world.tick()            // 消灯
+      if (torchAt(world).burnedOut) break
+      world.activateBlock(1, 0, 0)          // OFF
+      world.tick(); world.tick()            // 点灯
+    }
+    expect(torchAt(world).burnedOut).toBe(true)
+    // レバーを OFF (土台開放) にしても焼き切れ中は点灯しない
+    if ((world.getBlock(1, 0, 0) as { powered: boolean }).powered) world.activateBlock(1, 0, 0)
+    for (let i = 0; i < 100; i++) world.tick()   // 100gt 経過してもまだ復帰しない
+    expect(torchAt(world)).toMatchObject({ lit: false, burnedOut: true })
+    // 残りを進めると 160gt (RESTART_DELAY) の tile tick で復帰
+    world.flush(200)
+    expect(torchAt(world)).toMatchObject({ lit: true, burnedOut: false })
+  })
+
+  it('閾値未満 (7 回) の消灯では焼き切れない', () => {
+    const world = makeTorchOnLever()
+    for (let i = 0; i < 7; i++) {
+      world.activateBlock(1, 0, 0)
+      world.tick(); world.tick()
+      world.activateBlock(1, 0, 0)
+      world.tick(); world.tick()
+    }
+    expect(torchAt(world).burnedOut ?? false).toBe(false)
+    expect(torchAt(world).lit).toBe(true)
+  })
+
+  it('60gt 窓を外れた古い記録は破棄され焼き切れない', () => {
+    const world = makeTorchOnLever()
+    // 4 回消灯 → 十分な間隔 (窓 60gt 超) を空けて → さらに 4 回消灯。
+    // 古い 4 件が破棄されるので合計 8 回でも焼き切れない。
+    const burst = () => {
+      for (let i = 0; i < 4; i++) {
+        world.activateBlock(1, 0, 0); world.tick(); world.tick()
+        world.activateBlock(1, 0, 0); world.tick(); world.tick()
+      }
+    }
+    burst()
+    for (let i = 0; i < 70; i++) world.tick()   // 窓 (60gt) を超えて待つ
+    burst()
+    expect(torchAt(world).burnedOut ?? false).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+
+// ランプ消灯 4gt 遅延 — 02 §6 lamp [確定: RedstoneLampBlock]。
+// 点灯は NC 即時、消灯は 4gt の tile tick + 実行時再評価。
+describe('SimWorld: ランプ消灯 4gt 遅延', () => {
+  it('点灯は即時・消灯は 4gt 後', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, lever(false))
+    place(world, 1, 0, lamp(false))
+    world.initialize()
+
+    world.activateBlock(0, Y, 0)            // ON
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })   // 即時点灯
+
+    world.activateBlock(0, Y, 0)            // OFF → 4gt の消灯予約
+    world.tick(); world.tick(); world.tick()  // 3gt: まだ点灯
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+    world.tick()                            // 4gt 目で消灯
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
+  })
+
+  it('4gt 未満の入力断では消灯しない (tick 時再評価)', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, lever(false))
+    place(world, 1, 0, lamp(false))
+    world.initialize()
+
+    world.activateBlock(0, Y, 0)            // ON → lit
+    world.activateBlock(0, Y, 0)            // OFF → 消灯予約 (due +4)
+    world.tick(); world.tick()              // 2gt 経過 (まだ消灯予約は未実行)
+    world.activateBlock(0, Y, 0)            // 再 ON (4gt 未満で再点灯)
+    world.tick(); world.tick(); world.tick()  // 予約 tick が到来しても再評価で no-op
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+
 // リピーター遅延 = delay (rt) × 2 game tick。
 // docs/research/02 §1.1 (内部単位は gt) と実機 fixture repeater-delay-1〜4 に一致させる。
 describe('SimWorld: リピーター遅延', () => {
@@ -254,6 +378,9 @@ describe('SimWorld: ボタン（自動オフ）', () => {
 
     world.tick()  // 20gt目でオフ
     expect(world.getBlock(0, Y, 0)).toMatchObject({ type: 'button_stone', powered: false })
+    // ランプ消灯は 4gt 遅延 (02 §6 lamp [確定])。ボタン off の直後はまだ点灯。
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+    for (let i = 0; i < 4; i++) world.tick()
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
   })
 
@@ -268,6 +395,9 @@ describe('SimWorld: ボタン（自動オフ）', () => {
 
     world.tick()  // 30gt目でオフ
     expect(world.getBlock(0, Y, 0)).toMatchObject({ type: 'button_wood', powered: false })
+    // ランプ消灯は 4gt 遅延 (02 §6 lamp [確定])。ボタン off の直後はまだ点灯。
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
+    for (let i = 0; i < 4; i++) world.tick()
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
   })
 })
