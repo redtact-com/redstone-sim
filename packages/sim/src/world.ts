@@ -16,6 +16,10 @@ import {
   getSignal, getDirectSignal, getSolidPower,
   isBlockPowered, isFacePowered, isSolidPowered, isConductor,
 } from './power.js'
+import {
+  Tracer, abbrOf, pendingAction, elemDelay,
+} from './trace.js'
+import type { TraceOptions, TracePhase, TraceAction } from './trace.js'
 
 // ============================================================
 // ユーティリティ
@@ -70,6 +74,100 @@ export class SimWorld {
   // 挿入順 FIFO + (pos, blockType, param) 重複排除。BE フェーズで空になるまで処理
   private blockEvents: BlockEvent[] = []
 
+  // ── トレース (I10 #18)。docs/research/08 記法 ──
+  // tracer が null の間はフックはすべて no-op (副作用なし)。
+  // traceBuf は verbose の updateFormula 収集用 (非 null の間 bu トークンを溜める)。
+  private tracer: Tracer | null = null
+  private traceBuf: string[] | null = null
+  private traceSrc: Pos3D | null = null
+
+  // ── トレース公開 API (I10 #18) ───────────────────────────
+
+  /** トレース収集を有効化する。opts.verbose で updateFormula 行も出す */
+  enableTrace(opts?: TraceOptions): void {
+    this.tracer = new Tracer(opts)
+  }
+
+  /** トレース収集を無効化する (以降フックは no-op) */
+  disableTrace(): void {
+    this.tracer = null
+    this.traceBuf = null
+    this.traceSrc = null
+  }
+
+  /** 収集済みトレースを 08 記法の 1 行 1 イベント文字列配列で返す */
+  getTrace(): string[] {
+    return this.tracer?.getLines() ?? []
+  }
+
+  /** 収集済みトレースイベント (構造化) を返す */
+  getTraceEvents() {
+    return this.tracer?.getEvents() ?? []
+  }
+
+  /** 収集済みトレースを消去する (初期 settle 後の起点合わせに使う) */
+  clearTrace(): void {
+    this.tracer?.clear()
+  }
+
+  // ── トレース内部フック ───────────────────────────────────
+
+  /** processFormula 行 (実行) を発行する */
+  private traceProcess(
+    phase: TracePhase, abbr: string, action: TraceAction, delay: number | 's',
+    opts?: { failed?: boolean; abnormal?: boolean },
+  ): void {
+    if (!this.tracer) return
+    this.tracer.push({
+      kind: 'process', gt: this.currentTick, phase, abbr, action, delay,
+      reserve: false, failed: opts?.failed, abnormal: opts?.abnormal,
+    })
+  }
+
+  /** processFormula 行 (予約) を発行する */
+  private traceReserve(
+    phase: TracePhase, abbr: string, action: TraceAction, delay: number | 's',
+    priority?: number,
+  ): void {
+    if (!this.tracer) return
+    this.tracer.push({
+      kind: 'process', gt: this.currentTick, phase, abbr, action, delay,
+      reserve: true, priority,
+    })
+  }
+
+  /** verbose 時、これ以降の NC 発行を updateFormula 用に収集し始める */
+  private traceOpenUpdate(src: Pos3D): void {
+    if (this.tracer?.verbose) {
+      this.traceBuf = []
+      this.traceSrc = src
+    }
+  }
+
+  /** 収集した bu トークンで updateFormula 行を発行し、収集を閉じる */
+  private traceCloseUpdate(
+    abbr: string, action: TraceAction, delay: number | 's', phase: TracePhase,
+  ): void {
+    if (this.tracer?.verbose && this.traceBuf) {
+      this.tracer.push({
+        kind: 'update', gt: this.currentTick, phase, abbr, action, delay,
+        reserve: false, updates: this.traceBuf,
+      })
+    }
+    this.traceBuf = null
+    this.traceSrc = null
+  }
+
+  /** bu 発行対象を発行元 (traceSrc) からの相対座標トークンにする */
+  private relToken(pos: Pos3D): string {
+    const s = this.traceSrc
+    if (!s) return 'o'
+    const dx = pos[0] - s[0], dy = pos[1] - s[1], dz = pos[2] - s[2]
+    if (dx === 0 && dy === 0 && dz === 0) return 'o'
+    const ax = (v: number, c: string) =>
+      v === 0 ? '' : `${v > 0 ? '+' : '-'}${Math.abs(v) > 1 ? Math.abs(v) : ''}${c}`
+    return `${ax(dx, 'x')}${ax(dy, 'y')}${ax(dz, 'z')}`
+  }
   // ── PP (updateShape / SU) 発行の抑止フラグ ──
   // initialize() の初期組み立て中は PP を発行しない (シミュレーション中の状態変化
   // のみがオブザーバーを起動する。初期安定状態は authored 相当で発火させない)。
@@ -117,6 +215,8 @@ export class SimWorld {
       priority,
       seq: this.seqCounter++,
     })
+    // トレース: ST 予約 (08 §1 の "()")。action は予約意図を状態から推定。
+    this.traceReserve('ST', abbrOf(block), pendingAction(block), delay, priority)
   }
 
   /** 同 pos + ブロック種の予約が既にあるか (vanilla hasScheduledTick 相当) */
@@ -133,6 +233,8 @@ export class SimWorld {
     if (this.blockEvents.some(e =>
       posKey(e.pos) === key && e.blockType === block.type && e.param === param)) return
     this.blockEvents.push({ pos, blockType: block.type, param })
+    // トレース: BE 予約 (08 §1 の delay='s')。extend=push / retract=retract。
+    this.traceReserve('BE', abbrOf(block), param === 'extend' ? 'p' : 'r', 's')
   }
 
   getBlockEvents(): readonly BlockEvent[] {
@@ -322,14 +424,21 @@ export class SimWorld {
     if (block.type === 'lever') {
       const next: LeverState = { ...block, powered: !block.powered }
       this.setBlockAt(pos, next)
+      const action: TraceAction = next.powered ? 'n' : 'f'
+      this.traceProcess('PI', 'Le', action, 0)
+      this.traceOpenUpdate(pos)
       this.emitShapeUpdate(pos)
       this.propagateChange(pos)
+      this.traceCloseUpdate('Le', action, 0, 'PI')
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (block.powered) return  // 既に押されている
       const next: ButtonState = { ...block, powered: true }
       this.setBlockAt(pos, next)
+      this.traceProcess('PI', 'Bu', 'n', 0)
+      this.traceOpenUpdate(pos)
       this.emitShapeUpdate(pos)
       this.propagateChange(pos)
+      this.traceCloseUpdate('Bu', 'n', 0, 'PI')
       // ボタン持続 [確定: 02 §6 lever/button — Blocks.java の ticksToStayPressed を
       // 1.21.1 デコンパイルで確認]: 石系 20 gt / 木系 30 gt。schedule の delay は
       // game tick 単位なのでそのまま渡す。
@@ -344,8 +453,11 @@ export class SimWorld {
       if (this.hasScheduledTick(pos, 'target')) return
       const next: TargetState = { ...block, outputPower: 15 }
       this.setBlockAt(pos, next)
+      this.traceProcess('PI', 'Tg', 'n', 0)
+      this.traceOpenUpdate(pos)
       this.emitShapeUpdate(pos)
       this.propagateChange(pos)
+      this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
     }
   }
@@ -417,13 +529,17 @@ export class SimWorld {
     if (!block || block.type !== tick.blockType) return []
 
     const changed: string[] = []
-    const apply = (next: BlockState) => {
+    const apply = (next: BlockState, action: TraceAction) => {
       this.setBlockAt(pos, next)
       changed.push(posKey(pos))
+      // トレース: ST 実行 (08 §1 の "{}")。abbr は確定先 (moving_piston は into)。
+      this.traceProcess('ST', abbrOf(next), action, elemDelay(block))
+      this.traceOpenUpdate(pos)
       // vanilla の setBlock 相当: 観測可能な blockstate 変化があれば PP を発行し
       // (オブザーバー起動)、続いて NC を伝播する
       if (observableChanged(block, next)) this.emitShapeUpdate(pos)
       this.propagateChange(pos)
+      this.traceCloseUpdate(abbrOf(next), action, elemDelay(block), 'ST')
     }
 
     if (block.type === 'torch' || block.type === 'wall_torch') {
@@ -445,7 +561,7 @@ export class SimWorld {
         // 同 pos の記録が 8 件 (MAX_RECENT_TOGGLES) に達したら焼き切れ。
         const next = [...toggles, now]
         const tooFrequent = next.length >= MAX_RECENT_TOGGLES
-        apply({ ...block, lit: false, recentToggles: next, burnedOut: tooFrequent })
+        apply({ ...block, lit: false, recentToggles: next, burnedOut: tooFrequent }, 'f')
         if (tooFrequent) {
           // 焼き切れ復帰用に 160gt の tile tick を予約する。
           // ただし自励発振では上の apply 伝播中に基が無給電化し、自 NC が 2gt を
@@ -460,7 +576,7 @@ export class SimWorld {
         // 8 件あれば点灯抑止 = 焼き切れの実体 (vanilla の !isToggledTooFrequently)。
         const tooFrequent = toggles.length >= MAX_RECENT_TOGGLES
         if (!basePowered && !tooFrequent) {
-          apply({ ...block, lit: true, recentToggles: toggles, burnedOut: false })
+          apply({ ...block, lit: true, recentToggles: toggles, burnedOut: false }, 'n')
         } else if (toggles.length !== prevLen || wasBurned !== tooFrequent) {
           // 遷移なし。刈った履歴と burnedOut 表示だけ整える (出力不変なので伝播しない)。
           this.setBlockAt(pos, { ...block, recentToggles: toggles, burnedOut: tooFrequent })
@@ -473,7 +589,7 @@ export class SimWorld {
       // vanilla RedstoneLampBlock.tick: 消灯 tick は「LIT かつ無入力」なら消灯。
       // 点灯は neighborChanged で即時なので、ここでは消灯のみ扱う。
       // tick 時点で再点灯 (再入力) されていれば no-op (vanilla 準拠)。
-      if (block.lit && !isBlockPowered(this, pos)) apply({ ...block, lit: false })
+      if (block.lit && !isBlockPowered(this, pos)) apply({ ...block, lit: false }, 'f')
     } else if (block.type === 'repeater') {
       // vanilla DiodeBlock.tick: ロック中は何もしない。ロック判定は保持している
       // LOCKED プロパティではなく実行時に再評価する (isLocked を毎回問い合わせる)
@@ -483,9 +599,9 @@ export class SimWorld {
       if (!this.isRepeaterLocked(pos, block)) {
         const input = this.isRepeaterInputPowered(pos, block)
         if (block.powered && !input) {
-          apply({ ...block, powered: false })
+          apply({ ...block, powered: false }, 'f')
         } else if (!block.powered) {
-          apply({ ...block, powered: true })
+          apply({ ...block, powered: true }, 'n')
           if (!input) {
             this.schedule(pos, block.delay * 2, this.diodeTickPriority(pos, block, true))
           }
@@ -496,16 +612,16 @@ export class SimWorld {
       const newOutputPower = this.computeComparatorOutput(pos, block)
       const newPowered = newOutputPower > 0
       if (block.powered !== newPowered || block.outputPower !== newOutputPower) {
-        apply({ ...block, powered: newPowered, outputPower: newOutputPower })
+        apply({ ...block, powered: newPowered, outputPower: newOutputPower }, 'c')
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
-      if (block.powered) apply({ ...block, powered: false })
+      if (block.powered) apply({ ...block, powered: false }, 'f')
     } else if (block.type === 'moving_piston') {
-      // 2gt の移動完了: into のブロックに確定
-      apply(block.into)
+      // 2gt の移動完了: into のブロックに確定 (08 §6: moving_piston 確定は [ST] 扱い)
+      apply(block.into, 'c')
     } else if (block.type === 'target') {
       // vanilla TargetBlock.tick: OUTPUT_POWER != 0 なら 0 に戻す (消灯)
-      if (block.outputPower !== 0) apply({ ...block, outputPower: 0 })
+      if (block.outputPower !== 0) apply({ ...block, outputPower: 0 }, 'f')
     } else if (block.type === 'observer') {
       // vanilla ObserverBlock.tick [確定: 02 §2.4/§6 observer]。
       // apply を使わず順序を明示制御する:
@@ -618,8 +734,14 @@ export class SimWorld {
       // 実行時再判定 (extend 要求だが既に電源なしなら中止 = vanilla triggerEvent)
       if (!this.shouldExtend(ev.pos, piston)) return []
       const pushList = this.collectPushList(ev.pos, piston.facing)
-      if (pushList === null) return []  // 押し切れない → 失敗 (状態不変)
+      if (pushList === null) {
+        // 押し切れない → 失敗 (状態不変)。トレース: BE 失敗 (08 §1 の "-")
+        this.traceProcess('BE', 'Pi', 'p', 0, { failed: true })
+        return []
+      }
 
+      // トレース: BE 実行 (伸長)。afterPistonMove の bu を updateFormula に収集
+      this.traceProcess('BE', 'Pi', 'p', 0)
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
       for (let i = pushList.length - 1; i >= 0; i--) {
@@ -631,10 +753,14 @@ export class SimWorld {
       })
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
+      this.traceOpenUpdate(ev.pos)
       this.afterPistonMove([ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing))])
+      this.traceCloseUpdate('Pi', 'p', 0, 'BE')
     } else {
       // retract
       if (!piston.extended) return []
+      // トレース: BE 実行 (収縮)
+      this.traceProcess('BE', 'Pi', 'r', 0)
       // head セルは即時消去
       if (this.getBlockAt(headPos)?.type === 'piston_head') {
         this.setBlockAt(headPos, { type: 'air' })
@@ -654,7 +780,9 @@ export class SimWorld {
       }
       // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
       setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false })
+      this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(affected)
+      this.traceCloseUpdate('Pi', 'r', 0, 'BE')
     }
 
     return changed
@@ -804,10 +932,14 @@ export class SimWorld {
   // ── NC 更新の DFS 実行 ───────────────────────────────────
 
   private submitSingleNC(target: Pos3D): void {
+    if (this.traceBuf) this.traceBuf.push(`bu(${this.relToken(target)})`)
     this.submitUpdate({ kind: 'single', target })
   }
 
   private submitMultiNC(around: Pos3D, skip: Dir6 | null = null): void {
+    if (this.traceBuf) {
+      this.traceBuf.push(`bu(${this.relToken(around)}${skip ? `\\${skip}` : ''})`)
+    }
     this.submitUpdate({ kind: 'multi', around, skip, idx: 0 })
   }
 

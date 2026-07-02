@@ -1,0 +1,10 @@
+# trace snapshot: short-pulse-repeater
+# 1gt パルスを delay=1 リピーターが 2gt パルスに整形 (0-tick latch)
+# 記法: docs/research/08_trace-notation.md / 生成: traceFixtureOnSim (verbose=false)
+# '#' 始まりと空行は比較時に無視される
+2gt[PI]: Le{n.0}
+2gt[ST]: Re(n.2) p-1
+3gt[PI]: Le{f.0}
+4gt[ST]: Re{n.2}
+4gt[ST]: Re(f.2) p-2
+6gt[ST]: Re{f.2}

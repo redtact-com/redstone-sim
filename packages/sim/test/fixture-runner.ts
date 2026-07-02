@@ -115,6 +115,37 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
   return states
 }
 
+/**
+ * fixture を sim で実行し、トレース (docs/research/08 記法) を 1 行 1 イベントの
+ * 文字列配列で返す。初期 settle は clearTrace で捨て、入力起点 (tick 0..) からの
+ * トレースだけを集める。verbose で updateFormula (bu 発行内訳) 行も出力する。
+ * トレース発行はイベント発行点に副作用を入れないため、状態系列は
+ * runFixtureOnSim と完全に一致する (回帰は fixtures.test.ts が担保)。
+ */
+export function traceFixtureOnSim(fx: Fixture, opts: { verbose?: boolean } = {}): string[] {
+  const world = new SimWorld()
+  for (const b of fx.blocks) {
+    const sim = mcToSim(b.block)
+    if (sim) world.setBlockAt(b.pos, sim)
+  }
+  world.initialize()
+  world.flush(64)
+  // settle 由来のイベントを捨て、入力駆動分だけを起点 0 から集める
+  world.enableTrace({ verbose: opts.verbose })
+  world.clearTrace()
+
+  const inputsAt = (t: number) => fx.inputs.filter(i => i.tick === t)
+  for (let t = 0; t <= fx.ticks; t++) {
+    if (t > 0) world.tick()
+    for (const input of inputsAt(t)) {
+      if (input.action === 'use') {
+        world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
+      }
+    }
+  }
+  return world.getTrace()
+}
+
 export interface TickDiff {
   tick: number
   diffs: { pos: string; expected: string; actual: string }[]
