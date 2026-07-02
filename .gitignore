@@ -10,3 +10,4 @@ dist
 tools/decompile/jars/
 tools/decompile/work/
 tools/decompile/out/
+.claude/
