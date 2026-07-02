@@ -21,7 +21,7 @@ redstone-sim (Java Edition 準拠レッドストーンシミュレータ) の仕
 | 由来 | Mojang 公式配信。一次資料そのもの |
 | 信頼度 | 最高 [確定]。本調査の verdicts でも 1.21.1 / 1.21.11 / 26.2 の実 jar デコンパイルにより複数クレームを直接検証済み |
 | ライセンス | Minecraft EULA + Microsoft サービス規約 (詳細は 03_legal-decompile.md)。mappings ヘッダは「開発目的での複製・使用可、完全無改変の再配布不可」。**デコンパイル産物・jar・mappings のリポジトリ同梱は不可** |
-| 使い方 | P1 の最終典拠。2025-10 以降のバージョン (26.x) は難読化廃止済みで、`net/minecraft/world/level/redstone/CollectingNeighborUpdater` 等が可読名のまま公式配布される (https://www.minecraft.net/en-us/article/removing-obfuscation-in-java-edition) [確定]。ローカルで Vineflower 等によりデコンパイルして参照し、成果は自然言語仕様+テストケースに変換してからコミットする |
+| 使い方 | P1 の最終典拠。2025-10 以降のバージョン (26.x) は難読化廃止済みで、`net/minecraft/world/level/redstone/CollectingNeighborUpdater` 等が可読名のまま公式配布される (https://www.minecraft.net/en-us/article/removing-obfuscation-in-java-edition) [確定]。ローカルで Vineflower 等によりデコンパイルして参照し、成果は自然言語仕様+テストケースに変換してからコミットする。手順は `tools/decompile/fetch-and-decompile.sh` で自動化済み (CONTRIBUTING.md 参照) |
 
 ## 2. Minecraft Wiki (ja/en, minecraft.wiki)
 
@@ -149,10 +149,32 @@ redstone-sim (Java Edition 準拠レッドストーンシミュレータ) の仕
 
 Minecraft EULA (https://www.minecraft.net/en-us/eula, /ja-jp/eula)、Microsoft サービス規約 (https://www.microsoft.com/en-us/servicesagreement)、Mojang mappings ヘッダ実物、公式記事「Removing obfuscation in Java Edition」、github/dmca 通知原文、e-Gov 著作権法条文。いずれも一次資料直接取得で信頼度最高 [確定]。使い方: P4。
 
+## 15. 1.21.2 Redstone Experiments 公式チェンジログ (24w33a/24w34a)
+
+| 項目 | 内容 |
+|---|---|
+| URL | https://www.minecraft.net/en-us/article/minecraft-snapshot-24w33a、https://www.minecraft.net/en-us/article/minecraft-snapshot-24w34a、https://www.minecraft.net/en-us/article/minecraft-java-edition-1-21-2、https://minecraft.wiki/w/Redstone_Experiments |
+| カバー範囲 | 1.21.2 で導入されたワイヤ更新順刷新 (WireOrientation、公式クラス名は `Orientation`) の公式説明。「接続ワイヤ全体の新強度を先に確定してから block update」「電力を受けうるブロックのみ更新」「更新順は受信方向基準で back→front→left→right→down→up」「24w34a で left-first 化されランダム性をほぼ除去 (残る random は上下給電など文脈不足時のみ)」 |
+| 由来 | Mojang 公式チェンジログ (一次資料) |
+| 信頼度 | 最高 [確定]。**26.2 デコンパイルで実装を裏取り済み**: 刷新は `FeatureFlags.REDSTONE_EXPERIMENTS` (experimental datapack) を有効にした世界のみ適用され、**既定は `DefaultRedstoneWireEvaluator` = 1.21.1 と同一アルゴリズム** (02 §6 wire)。差分規模 = 新規クラス `Orientation` (48 状態) / `RedstoneWireEvaluator` 2 実装 / `ExperimentalRedstoneUtils` + NeighborUpdater 系シグネチャへの `@Nullable Orientation` 追加 + setBlock flag 128 (ワイヤ PP 抑止) |
+| ライセンス | 公式記事の転載不可、事実参照のみ |
+| 使い方 | P1 (1.21.2+ 差分の一次典拠) + P5 (experimental が既定化されたら対象バージョン方針の再判断トリガー) |
+
+## 16. Alternate Current (Space Walker / SpaceWalkerRS)
+
+| 項目 | 内容 |
+|---|---|
+| URL | https://github.com/SpaceWalkerRS/alternate-current |
+| カバー範囲 | ワイヤ更新の高速化 mod (最新リリース 1.9, 2024-08)。ワイヤネットワークを一括構築し電力源から決定的に伝播させる方式で、locational 挙動を除去。README/docs にバニラワイヤ更新の非効率性 (locational・冗長更新) の分析あり |
+| 由来 | Space Walker のソース直読 (一次資料)。1.21.2 の Experimental 実装 (turnOff/turnOn の 2 deque + 強度先確定 + 受信方向基準の更新順) は本 mod と同系のアプローチであり、公式チェンジログの内容と整合 [確定: 系譜の公式言及は未発見のため設計類似の指摘に留める] |
+| 信頼度 | 高。バニラ更新順の「規則」文書としては RedstoneWireTurbo 原典 (01 §9 参照) と並ぶ参考資料だが、mod 自体はバニラ挙動を意図的に変更するため**バニラ更新順の典拠には使わない** (MCHPRS と同じ扱い) |
+| ライセンス | **MIT** → コード・文書の参照/流用可 (帰属表示) |
+| 使い方 | P2 (1.21.2+ experimental 相当を将来実装する際のアルゴリズム参考) + P1 補助 (バニラワイヤ更新の問題点の整理) |
+
 ---
 
 ## 情報源運用の要点
 
 1. **仕様の最終典拠は常に公式 jar のローカルデコンパイル** (26.x なら非難読化 jar 直読)。Wiki/techmcdocs は入口と突合用。
 2. **転載可否**: MIT (carpet, MCHPRS, rubix_mod, chiraag-SubTick) のみコード/テキスト流用可。CC BY-NC-SA (wiki) は条件付き。GPL (Pumpkin, HLPtool, lntricate-subtick) は読解のみ。無ライセンス (ArcFrout, note, techmcdocs, MC-ticker, Mordritch) は事実参照のみ。
-3. **バージョン軸**: 検証 mod は 1.20.1 (lntricate-subtick) / 1.20.4 (MCHPRS) まで、ワイヤ更新順刷新 (WireOrientation) は 1.21.2+、非難読化 jar は 26.x〜。**対象バージョン決定が全フェーズに波及する** (04 参照)。
+3. **バージョン軸**: 検証 mod は 1.20.1 (lntricate-subtick) / 1.20.4 (MCHPRS) まで、ワイヤ更新順刷新 (Orientation) は 1.21.2+ だが **experimental flag 付きで既定挙動は 26.2 現在も 1.21.1 と同一** (#15)、非難読化 jar は 26.x〜。対象バージョンは**典拠 1.21.1 + 26.x 併読**で確定 (CONTRIBUTING.md / 04 §4.1)。
