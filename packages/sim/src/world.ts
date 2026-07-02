@@ -832,8 +832,9 @@ export class SimWorld {
    * 電源になる)
    */
   private collectWireStarts(pos: Pos3D): Pos3D[] {
+    // 導体経由の 2 ホップ起点も NC_UPDATE_ORDER で集める (collectAdjacentWires と同規則)
     const starts = this.collectAdjacentWires(pos)
-    for (const dir of ALL_DIRS) {
+    for (const dir of NC_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       if (isConductor(this.getBlockAt(nPos))) {
         starts.push(...this.collectAdjacentWires(nPos))
@@ -1182,8 +1183,12 @@ export class SimWorld {
   }
 
   private collectAdjacentWires(pos: Pos3D): Pos3D[] {
+    // NC_UPDATE_ORDER (W,E,D,U,N,S) で走査する。この順序が propagateWireBFS の
+    // 探索順 = changedWires の順 = ダスト多段送信 (BE 投入) の順を決める。
+    // vanilla では更新元の updateNeighborsAt が同順で隣接ダストをカスケードさせる
+    // (実機 microTiming で BE 順 西→東 を確認、09_snapshots/two-piston-locational.md)
     const result: Pos3D[] = []
-    for (const dir of ALL_DIRS) {
+    for (const dir of NC_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       if (this.getBlockAt(nPos)?.type === 'wire') result.push(nPos)
     }

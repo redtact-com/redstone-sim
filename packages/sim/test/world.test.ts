@@ -610,3 +610,56 @@ describe('SimWorld: リピーターロック', () => {
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
   })
 })
+
+describe('SimWorld: BE 投入順 locational (#46)', () => {
+  // 対称 2 ピストン回路 (piston W|dust|lever|dust|piston E)。
+  // 実機 microTiming 観測 (2026-07-03) で BE 投入順 = 西(1,1,0)→東(5,1,0) を確認
+  // (docs/research/09_snapshots/two-piston-locational.md)。更新元の NC 送信順
+  // (W,E,D,U,N,S) 由来で、collectAdjacentWires の走査順がこれを再現する。
+  function buildTwoPistonRig(): SimWorld {
+    const world = new SimWorld()
+    for (let x = 0; x <= 6; x++) {
+      place3d(world, x, 0, 0, { type: 'solid' })
+    }
+    place3d(world, 1, 1, 0, { type: 'piston', facing: 'west', extended: false })
+    place3d(world, 2, 1, 0, {
+      type: 'wire',
+      connections: { north: false, south: false, east: true, west: true },
+      power: 0,
+    })
+    place3d(world, 3, 1, 0, lever(false))
+    place3d(world, 4, 1, 0, {
+      type: 'wire',
+      connections: { north: false, south: false, east: true, west: true },
+      power: 0,
+    })
+    place3d(world, 5, 1, 0, { type: 'piston', facing: 'east', extended: false })
+    world.initialize()
+    world.flush(64)
+    return world
+  }
+
+  it('レバー ON 直後の BE キューが 西→東 (実機順)', () => {
+    const world = buildTwoPistonRig()
+    world.activateBlock(3, 1, 0)
+    const events = world.getBlockEvents()
+    expect(events.map(e => ({ pos: e.pos, param: e.param }))).toEqual([
+      { pos: [1, 1, 0], param: 'extend' },
+      { pos: [5, 1, 0], param: 'extend' },
+    ])
+  })
+
+  it('レバー OFF (retract) も同順で 西→東', () => {
+    const world = buildTwoPistonRig()
+    world.activateBlock(3, 1, 0)
+    // flush() は BE キューを見ない (scheduledTicks のみ) ため、
+    // 手動 tick で伸長完了 (BE 実行 + 2gt 確定) まで進める
+    for (let i = 0; i < 8; i++) world.tick()
+    world.activateBlock(3, 1, 0)
+    const events = world.getBlockEvents()
+    expect(events.map(e => ({ pos: e.pos, param: e.param }))).toEqual([
+      { pos: [1, 1, 0], param: 'retract' },
+      { pos: [5, 1, 0], param: 'retract' },
+    ])
+  })
+})

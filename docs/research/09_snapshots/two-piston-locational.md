@@ -66,7 +66,7 @@ neighborChanged を受け、そのカスケード (updatePowerStrength → HashS
 sim 側の原因: `collectAdjacentWires` が `ALL_DIRS` (N,S,**E,W**,U,D) 順で
 BFS 起点を集める → `changedWires` の探索順が東ダスト先行 → ダスト多段送信
 (BE 投入) が東から始まる。**起点収集を NC 順 (W,E,D,U,N,S) に合わせるのが修正方針**
-(修正は別 issue で追跡)。
+→ **#46 / PR #47 で修正済み** (`collectAdjacentWires` / `collectWireStarts` を NC 順化、BE 順の単体テストを world.test.ts に追加)。
 
 なお状態系列 (レイヤ A) は両ピストンが同 tick 内に伸びるため、この順序ズレを
 検出できない — within-tick 順の実機突合が必要だった理由そのもの。
