@@ -187,6 +187,12 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:redstone_block', {}]
     case 'target':
       return ['minecraft:target', { power: String(block.outputPower) }]
+    case 'observer':
+      // facing = 観測方向 = vanilla FACING (反転不要。repeater と同じ方針)
+      return ['minecraft:observer', {
+        facing: (block as any).facing ?? 'south',
+        powered: String((block as any).powered ?? false),
+      }]
     case 'container':
       // コンテナは barrel として書き出す (signal は NBT に現れないため破棄)
       return ['minecraft:barrel', {}]
@@ -295,6 +301,14 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:target') {
     return { type: 'target', outputPower: Number(props.power ?? 0) } as BlockState
+  }
+
+  if (name === 'minecraft:observer') {
+    return {
+      type: 'observer',
+      facing: (props.facing ?? 'south') as any,
+      powered: props.powered === 'true',
+    } as BlockState
   }
 
   // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。

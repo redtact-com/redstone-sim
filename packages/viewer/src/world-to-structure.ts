@@ -69,6 +69,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return 'minecraft:redstone_block'
     case 'target':
       return `minecraft:target[power=${block.outputPower}]`
+    case 'observer':
+      // facing は反転しない (piston と同じ規則: 観測面/背面の相手は構造座標基準で
+      // 描画されるため。sim.facing = vanilla FACING = 観測方向)
+      return `minecraft:observer[facing=${block.facing},powered=${block.powered}]`
     case 'container':
       // コンテナは barrel として描画する (signal 値は表示に影響しない)
       return 'minecraft:barrel'
@@ -133,6 +137,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:sticky_piston',
   'minecraft:piston_head',
   'minecraft:redstone_block',
+  'minecraft:observer',
   'minecraft:barrel',
   'minecraft:stone',
   'minecraft:cobblestone',

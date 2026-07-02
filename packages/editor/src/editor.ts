@@ -166,6 +166,9 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
     case 'target':
       // 手動トリガの折衷モデル。初期は消灯 (outputPower=0)
       return { type: 'target', outputPower: 0 }
+    case 'observer':
+      // facing = 観測方向 (顔のある面)。出力は背面。初期は消灯
+      return { type: 'observer', facing, powered: false }
     case 'solid':
       return { type: 'solid', powered: false }
     // 'container' は editor パレット追加が issue #13 のスコープ外のため
