@@ -131,6 +131,12 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+    case 'barrel':
+    case 'chest':
+    case 'trapped_chest':
+      // コンテナ: 充填率 (signal) は blockstate に現れないため 0 で取り込む
+      // [02 §6 comparator。実効 signal は BE の中身に依存する]
+      return { type: 'container', signal: 0 }
     case 'stone':
     case 'smooth_stone':
     case 'cobblestone':
@@ -171,6 +177,8 @@ export function simToMc(sim: BlockState | null, authoredState: string): string {
     case 'lamp':
       props.lit = String(sim.lit)
       break
+    case 'container':
+      break // signal は blockstate に現れない (authored 名 barrel/chest を保持)
     case 'solid':
       break // powered は blockstate に現れない
     case 'air':

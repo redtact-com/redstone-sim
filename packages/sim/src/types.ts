@@ -102,6 +102,28 @@ export interface LampState {
   lit: boolean
 }
 
+/**
+ * コンテナ (チェスト / バレル等) の簡易モデル。
+ *
+ * 実際の充填率 (各スロットの item count / maxStackSize) は持たず、
+ * コンパレーターが背面から読み取る「実効 signal」(0-15) を直接保持する。
+ *
+ * 充填率 → 強度の変換式 [確定: 02 §6 comparator —
+ *   AbstractContainerMenu.getRedstoneSignalFromContainer]:
+ *     f = (Σ 各スロットの count / maxStackSize) / スロット数
+ *     signal = Mth.lerpDiscrete(f, 0, 15) = floor(f * 14) + (f > 0 ? 1 : 0)
+ *   (空 = 0、非空は最低 1)。本 sim はスロット内容を持たないため、この式で
+ *   求めた値を signal に直接与える運用とする。
+ *
+ * editor パレットへの追加は本 issue (#13) のスコープ外。nbtIO は barrel/chest
+ * 系を signal=0 で import し、viewer は minecraft:barrel として描画する。
+ */
+export interface ContainerState {
+  type: 'container'
+  /** コンパレーター背面から読まれる実効出力 (0-15) */
+  signal: number
+}
+
 /** 信号を充電・遮断する不透過ブロック（石・丸石など） */
 export interface SolidState {
   type: 'solid'
@@ -126,6 +148,7 @@ export type BlockState =
   | LeverState
   | ButtonState
   | LampState
+  | ContainerState
   | SolidState
   | AirState
 

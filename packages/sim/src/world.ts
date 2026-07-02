@@ -5,7 +5,11 @@ import type {
 import { OPPOSITE, ALL_DIRS } from './types.js'
 import { isBasePowered as isTorchBasePowered } from './blocks/torch.js'
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
-import { getSolidPower, isBlockPowered, isFacePowered, isSolidPowered } from './power.js'
+import { getRepeaterLockDirs } from './blocks/repeater.js'
+import {
+  getSignal, getDirectSignal, getSolidPower,
+  isBlockPowered, isFacePowered, isSolidPowered,
+} from './power.js'
 
 // ============================================================
 // ユーティリティ
@@ -332,10 +336,12 @@ export class SimWorld {
       const shouldBeLit = !isTorchBasePowered(pos, this)
       if (block.lit !== shouldBeLit) apply({ ...block, lit: shouldBeLit })
     } else if (block.type === 'repeater') {
-      // vanilla DiodeBlock.tick: ロック中は何もしない。
+      // vanilla DiodeBlock.tick: ロック中は何もしない。ロック判定は保持している
+      // LOCKED プロパティではなく実行時に再評価する (isLocked を毎回問い合わせる)
+      // [確定: 02 §6 repeater / G9]。
       // オン遷移は入力が既に消えていても行い、その場で自身のオフを予約する
       // (最小パルス幅 = 遅延の根拠。02 §6 repeater [確定])
-      if (!block.locked) {
+      if (!this.isRepeaterLocked(pos, block)) {
         const input = this.isRepeaterInputPowered(pos, block)
         if (block.powered && !input) {
           apply({ ...block, powered: false })
@@ -543,12 +549,24 @@ export class SimWorld {
         break
       }
       case 'repeater': {
+        // ロック状態を再評価して LOCKED を更新する (G9)。
+        // vanilla では LOCKED は updateShape (PP) 経由で更新されるが、本 sim は
+        // update 発行の仕組みを持たないため neighbor 更新でまとめて再評価する。
+        // [確定: 02 §6 repeater — RepeaterBlock.isLocked]
+        const nowLocked = this.isRepeaterLocked(pos, block)
+        let cur: RepeaterState = block
+        if (nowLocked !== block.locked) {
+          cur = { ...block, locked: nowLocked }
+          this.setBlockAt(pos, cur)
+          // LOCKED の変化自体は出力を変えないため周囲へ再伝播しない
+        }
         // vanilla DiodeBlock.checkTickOnNeighbor: ロック中は予約しない。
-        // 入力と出力が食い違っていたら delay×2gt 後の再評価を予約
-        if (block.locked) break
-        const inputPowered = this.isRepeaterInputPowered(pos, block)
-        if (inputPowered !== block.powered) {
-          this.schedule(pos, block.delay * 2, this.diodeTickPriority(pos, block, block.powered))
+        // ロック解除も含め、入力と出力が食い違っていたら delay×2gt 後の再評価を予約
+        // (ロック解除時の入出力不整合はここで拾われる)
+        if (nowLocked) break
+        const inputPowered = this.isRepeaterInputPowered(pos, cur)
+        if (inputPowered !== cur.powered) {
+          this.schedule(pos, cur.delay * 2, this.diodeTickPriority(pos, cur, cur.powered))
         }
         break
       }
@@ -612,43 +630,37 @@ export class SimWorld {
   }
 
   /**
+   * リピーターがロックされているか (G9)。
+   * [確定: 02 §6 repeater — RepeaterBlock.isLocked +
+   *   SignalGetter.getControlInputSignal(diodesOnly=true)]:
+   *   側面 (facing に対し 90°) の repeater / comparator が direct signal を
+   *   こちら向きに出しているとき true。ワイヤ・レッドストーンブロック・
+   *   オブザーバーではロックされない (diodesOnly=true フィルタで diode のみ受理)。
+   */
+  private isRepeaterLocked(pos: Pos3D, block: RepeaterState): boolean {
+    for (const sideDir of getRepeaterLockDirs(block)) {
+      const side = this.getBlockAt(neighbor(pos, sideDir))
+      // diodesOnly: 側面がリピーター/コンパレーターのときだけ direct signal を見る
+      if (side?.type !== 'repeater' && side?.type !== 'comparator') continue
+      if (getDirectSignal(this, pos, sideDir) > 0) return true
+    }
+    return false
+  }
+
+  /**
    * コンパレーターの実際の出力信号強度 (0-15) を計算する。
    * - compare モード: back >= side かつ back > 0 → back の強度を返す
    * - subtract モード: max(0, back - side)
+   * side = max(side_L, side_R) [確定: 02 §6 comparator — calculateOutputSignal]
    */
   private computeComparatorOutput(pos: Pos3D, block: ComparatorState): number {
-    const SIDES: Record<HDir, [HDir, HDir]> = {
-      north: ['east', 'west'],
-      south: ['west', 'east'],
-      east:  ['north', 'south'],
-      west:  ['south', 'north'],
-    }
-    const backDir = OPPOSITE[block.facing] as HDir
-    const [side1, side2] = SIDES[block.facing]
+    const backDir = OPPOSITE[block.facing]
+    const [sideA, sideB] = perpendicularHDirs(block.facing)
 
-    const getSignalPower = (srcPos: Pos3D, allowSolid: boolean): number => {
-      const src = this.getBlockAt(srcPos)
-      if (!src) return 0
-      if (src.type === 'wire') return (src as WireState).power
-      if (src.type === 'lever' || src.type === 'button_stone' || src.type === 'button_wood')
-        return (src as LeverState | ButtonState).powered ? 15 : 0
-      if (src.type === 'torch' || src.type === 'wall_torch')
-        return src.lit ? 15 : 0
-      if (src.type === 'repeater')
-        return (src as RepeaterState).powered ? 15 : 0
-      if (src.type === 'comparator')
-        return (src as ComparatorState).outputPower
-      // 背面のみ: 充電された固体（弱/強）から信号強度を読み取れる
-      // [確定: docs/research/02 §6 comparator。側面は固体越し不可]
-      if (src.type === 'solid' && allowSolid)
-        return getSolidPower(this, srcPos)
-      return 0
-    }
-
-    const backPower = getSignalPower(neighbor(pos, backDir), true)
+    const backPower = this.readComparatorBack(pos, backDir)
     const sidePower = Math.max(
-      getSignalPower(neighbor(pos, side1), false),
-      getSignalPower(neighbor(pos, side2), false),
+      this.readComparatorSide(pos, sideA),
+      this.readComparatorSide(pos, sideB),
     )
 
     if (block.mode === 'subtract') {
@@ -657,4 +669,59 @@ export class SimWorld {
     return (backPower > 0 && backPower >= sidePower) ? backPower : 0
   }
 
+  /**
+   * コンパレーター背面入力の信号強度 (0-15)。
+   * [確定: 02 §6 comparator — ComparatorBlock.getInputSignal override]:
+   *   1. 背面ブロックが hasAnalogOutputSignal (= コンテナ) なら**その signal で上書き**
+   *      (通常信号より優先)。
+   *   2. そうでなければ通常信号 = DiodeBlock.getInputSignal:
+   *      - 背面からの weak 信号 (getSignal。lever/torch/repeater/comparator を
+   *        向き込みで評価)
+   *      - 背面がワイヤなら接続形状に関係なく POWER を直読
+   *      - 背面が導体(固体)なら強充電を読む (Level.getSignal の conductor 分岐)
+   *   3. 通常信号 < 15 かつ背面が導体なら、さらに 1 マス先のコンテナを読む
+   *      (固体 1 個越し。額縁は sim 未対応)。
+   */
+  private readComparatorBack(pos: Pos3D, backDir: Dir6): number {
+    const backPos = neighbor(pos, backDir)
+    const back = this.getBlockAt(backPos)
+
+    // 1. 背面直後のコンテナは通常信号を上書きする
+    if (back?.type === 'container') return back.signal
+
+    // 2. 通常信号
+    let i = getSignal(this, pos, backDir)
+    if (back?.type === 'wire') i = Math.max(i, back.power)
+    else if (back?.type === 'solid') i = Math.max(i, getSolidPower(this, backPos))
+
+    // 3. 固体 1 個越しのコンテナ読み
+    if (i < 15 && back?.type === 'solid') {
+      const far = this.getBlockAt(neighbor(backPos, backDir))
+      if (far?.type === 'container') i = Math.max(i, far.signal)
+    }
+    return i
+  }
+
+  /**
+   * コンパレーター側面入力の信号強度 (0-15) (G8)。
+   * [確定: 02 §6 comparator 側面 — SignalGetter.getControlInputSignal(diodesOnly=false)]:
+   *   - ワイヤ → POWER を直読
+   *   - レッドストーンブロック → 15 (sim 未実装。将来対応)
+   *   - その他は direct signal (強出力) がこちらを向くもののみ
+   *     = リピーター / コンパレーター / (将来) オブザーバー
+   *   レバー・ボタン・トーチは水平方向へ direct signal を出さないため無効。
+   *   getDirectSignal がこの弁別を担う (lever/button/torch は通常配置で side を
+   *   向く direct signal を出さず 0 になる)。
+   */
+  private readComparatorSide(pos: Pos3D, sideDir: HDir): number {
+    const side = this.getBlockAt(neighbor(pos, sideDir))
+    if (side?.type === 'wire') return side.power
+    return getDirectSignal(this, pos, sideDir)
+  }
+
+}
+
+/** HDir facing に対して直交する水平 2 方向 (コンパレーター側面 / 素子の左右) */
+function perpendicularHDirs(facing: HDir): [HDir, HDir] {
+  return (facing === 'north' || facing === 'south') ? ['east', 'west'] : ['north', 'south']
 }
