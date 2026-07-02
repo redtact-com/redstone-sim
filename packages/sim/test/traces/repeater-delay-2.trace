@@ -1,0 +1,10 @@
+# trace snapshot: repeater-delay-2
+# リピーター delay=2 の ON/OFF。予約(n.4/f.4)→4gt後 実行。OFF は priority -2
+# 記法: docs/research/08_trace-notation.md / 生成: traceFixtureOnSim (verbose=false)
+# '#' 始まりと空行は比較時に無視される
+2gt[PI]: Le{n.0}
+2gt[ST]: Re(n.4) p-1
+6gt[ST]: Re{n.4}
+10gt[PI]: Le{f.0}
+10gt[ST]: Re(f.4) p-2
+14gt[ST]: Re{f.4}

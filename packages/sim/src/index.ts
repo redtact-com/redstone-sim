@@ -22,6 +22,12 @@ export {
 // World
 export { SimWorld, posKey, keyToPos } from './world.js'
 
+// トレース (I10 #18。記法は docs/research/08)
+export {
+  Tracer, formatTraceEvent, abbrOf, pendingAction, elemDelay,
+} from './trace.js'
+export type { TraceEvent, TraceOptions, TracePhase, TraceAction } from './trace.js'
+
 // MC blockstate 文字列変換 (実機 ground truth ハーネス用)
 export {
   parseMcState, formatMcState, canonicalize, mcToSim, simToMc,

@@ -1,0 +1,5 @@
+# trace snapshot: lever-wire-lamp
+# レバーON→dust→ランプ点灯。全て即時派生 (schedule 無し) のため [PI] 1 行のみ
+# 記法: docs/research/08_trace-notation.md / 生成: traceFixtureOnSim (verbose=false)
+# '#' 始まりと空行は比較時に無視される
+2gt[PI]: Le{n.0}
