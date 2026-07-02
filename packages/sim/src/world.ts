@@ -1,6 +1,7 @@
 import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
+  ObserverState,
 } from './types.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
 import {
@@ -9,7 +10,7 @@ import {
 } from './blocks/torch.js'
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
-import { NC_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
+import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type { BlockEvent, PistonState } from './types.js'
 import {
   getSignal, getDirectSignal, getSolidPower,
@@ -167,6 +168,10 @@ export class SimWorld {
       v === 0 ? '' : `${v > 0 ? '+' : '-'}${Math.abs(v) > 1 ? Math.abs(v) : ''}${c}`
     return `${ax(dx, 'x')}${ax(dy, 'y')}${ax(dz, 'z')}`
   }
+  // ── PP (updateShape / SU) 発行の抑止フラグ ──
+  // initialize() の初期組み立て中は PP を発行しない (シミュレーション中の状態変化
+  // のみがオブザーバーを起動する。初期安定状態は authored 相当で発火させない)。
+  private suppressPP = false
 
   // ── ブロックアクセス ─────────────────────────────────────
 
@@ -322,6 +327,8 @@ export class SimWorld {
     this.scheduledTicks = []
     this.blockEvents = []
     this.seqCounter = 0
+    // 初期組み立て中は PP を抑止 (オブザーバーは authored 安定状態のまま発火しない)
+    this.suppressPP = true
 
     // Step 1: 動的状態をリセット
     for (const [key, block] of this.blocks) {
@@ -340,6 +347,10 @@ export class SimWorld {
         // vanilla TargetBlock.onPlace: POWER>0 かつ pending tick 無しの設置は
         // 0 に戻る。初期化時点で pending tick は無いため常に消灯状態から始める
         if (block.outputPower !== 0) this.blocks.set(key, { ...block, outputPower: 0 })
+      } else if (block.type === 'observer') {
+        // vanilla ObserverBlock.onPlace: POWERED で設置された場合は flag 18
+        // (更新なし) で消灯する。authored の powered=true は無視して off から始める
+        if (block.powered) this.blocks.set(key, { ...block, powered: false })
       }
     }
 
@@ -398,6 +409,9 @@ export class SimWorld {
 
     // Step 5: スケジュール済みティックを処理して安定化（クロック回路では呼ばない）
     // initialize() 後は tick=0 の初期状態から手動で進める想定のため flush は行わない
+
+    // 初期組み立て完了。以降 (tick / flush / activateBlock) の状態変化は PP を発行する
+    this.suppressPP = false
   }
 
   // ── プレイヤー操作（PIフェーズ相当） ────────────────────
@@ -413,6 +427,7 @@ export class SimWorld {
       const action: TraceAction = next.powered ? 'n' : 'f'
       this.traceProcess('PI', 'Le', action, 0)
       this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
       this.propagateChange(pos)
       this.traceCloseUpdate('Le', action, 0, 'PI')
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
@@ -421,6 +436,7 @@ export class SimWorld {
       this.setBlockAt(pos, next)
       this.traceProcess('PI', 'Bu', 'n', 0)
       this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
       this.propagateChange(pos)
       this.traceCloseUpdate('Bu', 'n', 0, 'PI')
       // ボタン持続 [確定: 02 §6 lever/button — Blocks.java の ticksToStayPressed を
@@ -439,6 +455,7 @@ export class SimWorld {
       this.setBlockAt(pos, next)
       this.traceProcess('PI', 'Tg', 'n', 0)
       this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
@@ -467,6 +484,7 @@ export class SimWorld {
       case 'solid':         return block.powered ? 15 : 0
       case 'redstone_block': return 15
       case 'target':        return block.outputPower
+      case 'observer':      return block.powered ? 15 : 0
       default:              return 0
     }
   }
@@ -517,6 +535,9 @@ export class SimWorld {
       // トレース: ST 実行 (08 §1 の "{}")。abbr は確定先 (moving_piston は into)。
       this.traceProcess('ST', abbrOf(next), action, elemDelay(block))
       this.traceOpenUpdate(pos)
+      // vanilla の setBlock 相当: 観測可能な blockstate 変化があれば PP を発行し
+      // (オブザーバー起動)、続いて NC を伝播する
+      if (observableChanged(block, next)) this.emitShapeUpdate(pos)
       this.propagateChange(pos)
       this.traceCloseUpdate(abbrOf(next), action, elemDelay(block), 'ST')
     }
@@ -601,6 +622,21 @@ export class SimWorld {
     } else if (block.type === 'target') {
       // vanilla TargetBlock.tick: OUTPUT_POWER != 0 なら 0 に戻す (消灯)
       if (block.outputPower !== 0) apply({ ...block, outputPower: 0 }, 'f')
+    } else if (block.type === 'observer') {
+      // vanilla ObserverBlock.tick [確定: 02 §2.4/§6 observer]。
+      // apply を使わず順序を明示制御する:
+      //   OFF→ON: powered=true → 自身の OFF tick(2gt) を「近傍更新より先に」予約
+      //           → 背面へ NC (updateNeighborsInFront)
+      //   ON→OFF: powered=false → 背面へ NC
+      //   いずれも setBlock (flag2) 相当の PP を先に発行 (オブザーバー連鎖の根拠)。
+      // OFF 予約を propagateChange (背面 NC) より前に置くことが §2.4 の
+      // 「コンパレーターがオブザーバー単体のパルスを飲み込む」順序の要。
+      const next: ObserverState = { ...block, powered: !block.powered }
+      this.setBlockAt(pos, next)
+      changed.push(posKey(pos))
+      this.emitShapeUpdate(pos)          // setBlock flag2 → PP (連鎖先オブザーバーを起動)
+      if (next.powered) this.schedule(pos, 2, 0)  // OFF tick を背面 NC より先に予約
+      this.propagateChange(pos)          // 背面 1 マスへ strong 15 の NC
     }
 
     return changed
@@ -760,6 +796,10 @@ export class SimWorld {
     const starts: Pos3D[] = []
     for (const p of positions) starts.push(...this.collectAdjacentWires(p))
     const changedWires = this.propagateWireBFS(starts)
+    // ピストン移動で blockstate が変わった各座標 + power が変わったワイヤーの PP を発行
+    // (押される/引かれるブロックの変化はオブザーバーの検知対象。02 §6 observer / wiki)。
+    for (const p of positions) this.emitShapeUpdate(p)
+    for (const w of changedWires) this.emitShapeUpdate(w)
     for (const p of positions) this.submitMultiNC(p)
     for (const w of changedWires) {
       for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
@@ -777,6 +817,9 @@ export class SimWorld {
    */
   private propagateChange(pos: Pos3D): void {
     const changedWires = this.propagateWireBFS(this.collectWireStarts(pos))
+    // ワイヤーの power 変化は blockstate 変化 = PP を発行 (観測面の隣接オブザーバー起動)。
+    // vanilla のダスト setBlock (flag2 → updateNeighbourShapes) に相当し、多段 NC より先。
+    for (const w of changedWires) this.emitShapeUpdate(w)
     this.emitOutputShape(pos)
     for (const w of changedWires) {
       for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
@@ -834,6 +877,15 @@ export class SimWorld {
         this.submitMultiNC(front, OPPOSITE[block.facing])
         break
       }
+      case 'observer': {
+        // flag2 (自身隣接 NC なし) + updateNeighborsInFront: 出力は背面
+        // (観測面 facing の反対) の 1 マス → その隣接 5 マス (自身方向を除く)。
+        // skip = 背面ブロックから自身へ向かう方向 = facing [確定: §6 observer]。
+        const back = neighbor(pos, OPPOSITE[block.facing])
+        this.submitSingleNC(back)
+        this.submitMultiNC(back, block.facing)
+        break
+      }
       case 'redstone_block':
       case 'target': {
         // 信号源の出力変化 → 自身の隣接 6 へ NC (vanilla setBlock flag3 の
@@ -845,6 +897,35 @@ export class SimWorld {
       default:
         // lamp は vanilla では NC を発するが読める素子が無いため発行しない (G15 参照)
         break
+    }
+  }
+
+  /**
+   * PP (updateShape / SU) の発行 (02 §4.1/§4.2 [確定])。
+   * シミュレーション中に blockstate が変化した座標 pos から、隣接 6 マスへ
+   * PP_UPDATE_ORDER (西東北南下上) 順に shape update を送る。
+   *
+   * 受信者はオブザーバーのみ (他ブロックの updateShape は結線形状の維持のみで、
+   * 本 sim では接続形状を配置時固定にしているため no-op)。
+   * オブザーバーは「観測面 (facing 方向) から PP を受け」かつ非 powered のとき
+   * 2gt (priority 0) の tile tick を予約する (startSignal + hasScheduledTick ガード)。
+   *
+   * vanilla では flag16 が無い限り every setBlock で PP が飛ぶ (02 §4.2) が、
+   * 本 sim では「観測可能な状態変化」の座標を呼び出し側が特定して発行する
+   * (ワイヤーの 2 フェーズ BFS 過渡値などで過剰発火しないよう net 変化に限定)。
+   */
+  private emitShapeUpdate(pos: Pos3D): void {
+    if (this.suppressPP) return
+    for (const dir of PP_UPDATE_ORDER) {
+      const nPos = neighbor(pos, dir)
+      const nb = this.getBlockAt(nPos)
+      if (nb?.type !== 'observer') continue
+      // 変化した pos は nPos から見て OPPOSITE[dir] 方向にある。
+      // オブザーバーは自身の facing (観測方向) から来た PP でのみ起動する。
+      if (nb.facing !== OPPOSITE[dir]) continue
+      if (nb.powered) continue                       // powered 中は updateShape 無反応
+      if (this.hasScheduledTick(nPos, 'observer')) continue
+      this.schedule(nPos, 2, 0)                      // startSignal: 2gt / priority 0
     }
   }
 
@@ -1025,7 +1106,7 @@ export class SimWorld {
         const powered = isBlockPowered(this, pos)
         if (block.lit !== powered) {
           if (block.lit) this.schedule(pos, 4, 0)
-          else this.setBlockAt(pos, { ...block, lit: true })
+          else { this.setBlockAt(pos, { ...block, lit: true }); this.emitShapeUpdate(pos) }
         }
         break
       }
@@ -1060,7 +1141,9 @@ export class SimWorld {
         if (nowLocked !== block.locked) {
           cur = { ...block, locked: nowLocked }
           this.setBlockAt(pos, cur)
-          // LOCKED の変化自体は出力を変えないため周囲へ再伝播しない
+          // LOCKED の変化自体は出力を変えないため周囲へ再伝播しないが、
+          // blockstate 変化なので PP は発行する (観測面のオブザーバー起動)
+          this.emitShapeUpdate(pos)
         }
         // vanilla DiodeBlock.checkTickOnNeighbor: ロック中は予約しない。
         // ロック解除も含め、入力と出力が食い違っていたら delay×2gt 後の再評価を予約
@@ -1214,4 +1297,36 @@ export class SimWorld {
 /** HDir facing に対して直交する水平 2 方向 (コンパレーター側面 / 素子の左右) */
 function perpendicularHDirs(facing: HDir): [HDir, HDir] {
   return (facing === 'north' || facing === 'south') ? ['east', 'west'] : ['north', 'south']
+}
+
+/**
+ * オブザーバーが検知する「観測可能な blockstate 変化」があったか (PP 発行の要否)。
+ * vanilla では実 blockstate プロパティの変化のみが PP を飛ばすため、blockstate に
+ * 現れない派生値は除外する:
+ *   - solid.powered … 石等に powered プロパティは無い (充電は sim の表示用派生値)
+ *   - comparator.outputPower … BE の OutputSignal (blockstate は powered のみ)
+ *   - container.signal … BE の中身
+ * それ以外 (wire.power / lit / powered / locked / extended / target.power / 型変化) は
+ * blockstate 変化 = 観測対象。
+ */
+function observableChanged(a: BlockState, b: BlockState): boolean {
+  if (a.type !== b.type) return true
+  switch (b.type) {
+    case 'wire':        return a.type === 'wire' && a.power !== b.power
+    case 'torch':
+    case 'wall_torch':  return (a.type === 'torch' || a.type === 'wall_torch') && a.lit !== b.lit
+    case 'repeater':    return a.type === 'repeater' && (a.powered !== b.powered || a.locked !== b.locked)
+    case 'comparator':  return a.type === 'comparator' && a.powered !== b.powered
+    case 'lever':
+    case 'button_stone':
+    case 'button_wood': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
+    case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
+    case 'target':      return a.type === 'target' && a.outputPower !== b.outputPower
+    case 'observer':    return a.type === 'observer' && a.powered !== b.powered
+    case 'piston':
+    case 'sticky_piston': return (a.type === 'piston' || a.type === 'sticky_piston') &&
+                                 (a.extended !== b.extended || a.facing !== b.facing)
+    // solid.powered / container.signal は blockstate ではない → 非観測
+    default:            return false
+  }
 }

@@ -87,6 +87,7 @@ export function abbrOf(b: BlockState): string {
     case 'piston':
     case 'sticky_piston':  return 'Pi'
     case 'piston_head':    return 'Ph'
+    case 'observer':       return 'Ob'
     case 'moving_piston':  return abbrOf(b.into)
     case 'air':            return 'Ai'
   }
@@ -106,6 +107,7 @@ export function pendingAction(b: BlockState): TraceAction {
     case 'button_stone':
     case 'button_wood':    return b.powered ? 'f' : 'n'
     case 'target':         return b.outputPower > 0 ? 'f' : 'n'
+    case 'observer':       return b.powered ? 'f' : 'n'
     case 'comparator':     return 'c'
     case 'moving_piston':  return 'c'
     default:               return 'c'

@@ -1,0 +1,199 @@
+{
+  "name": "observer-chain",
+  "description": "レバー→オブザーバー1→オブザーバー2→ランプ (I8 ④)。obs1 (facing=west) がレバー変化を検知して 2gt パルスを出し、その powered 変化 (shape update) を背面側で観測する obs2 (facing=west) がさらに 2gt 後にパルスを出して末端ランプを点灯させる。オブザーバー同士が自身の状態変化を PP で伝播して連鎖することの回帰 (発振しない単発チェーン)。",
+  "mcVersion": "1.21.1",
+  "ticks": 14,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      3,
+      1,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "observer[facing=west,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "observer[facing=west,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "observer[facing=west,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-07-02T16:22:42.789Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
