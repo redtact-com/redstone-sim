@@ -403,7 +403,11 @@ export class SimWorld {
     }
 
     // ── Phase 2: 動力源に隣接するワイヤーから増加 BFS ──────────
-    // 動力源に隣接して power > 0 になるワイヤーを起点にする
+    // 動力源に隣接して power > 0 になるワイヤーを起点にする。
+    // ※ このフェーズでは近傍機構 (リピーター・トーチ等) の更新は行わない。
+    //   連結成分の一部がまだゼロ化されたままの過渡状態で updateBlock を呼ぶと、
+    //   リピーターが「入力が消えた」と誤認して偽の turn_off を予約し
+    //   発振する (実機 fixture repeater-delay-1/2/3 で検出したバグ)。
     const increaseQueue: Pos3D[] = []
     const visited = new Set<string>()
 
@@ -413,7 +417,6 @@ export class SimWorld {
       if (power > 0) {
         const block = this.getBlockAt(pos) as WireState
         this.setBlockAt(pos, { ...block, power })
-        this.updateAroundWire(pos)
         if (!visited.has(key)) {
           visited.add(key)
           increaseQueue.push(pos)
@@ -435,19 +438,16 @@ export class SimWorld {
         const newPower = computeWirePower(nPos, this)
         if (newPower > (nBlock as WireState).power) {
           this.setBlockAt(nPos, { ...nBlock, power: newPower })
-          this.updateAroundWire(nPos)
           visited.add(nKey)
           increaseQueue.push(nPos)
         }
       }
     }
 
-    // Phase 2 で電力が残らなかったワイヤー（消灯したワイヤー）の周囲を更新
-    // ※ Phase 1 直後ではなく Phase 2 完了後に呼ぶことで、ゼロ化状態での誤トーチ評価を防ぐ
+    // ── Phase 3: 全ワイヤー電力が確定してから周囲の機構を更新 ──
+    // ランプ・リピーター・コンパレーター・トーチは安定後の値だけを観測する
     for (const key of connected) {
-      if (!visited.has(key)) {
-        this.updateAroundWire(keyToPos(key))
-      }
+      this.updateAroundWire(keyToPos(key))
     }
   }
 

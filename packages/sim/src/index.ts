@@ -22,6 +22,12 @@ export {
 // World
 export { SimWorld, posKey, keyToPos } from './world.js'
 
+// MC blockstate 文字列変換 (実機 ground truth ハーネス用)
+export {
+  parseMcState, formatMcState, canonicalize, mcToSim, simToMc,
+} from './mcstate.js'
+export type { ParsedMcState } from './mcstate.js'
+
 // 電力クエリ (weak/strong モデル)
 export {
   getSignal, getDirectSignal, getNeighborSignal,
