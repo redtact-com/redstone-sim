@@ -226,7 +226,9 @@ describe('SimWorld: リピーター遅延', () => {
 // ─────────────────────────────────────────────────────────────
 
 describe('SimWorld: ボタン（自動オフ）', () => {
-  it('石ボタンは5tick後に自動でオフになる', () => {
+  // 持続時間は game tick 基準の確定値: 石系 20 gt / 木系 30 gt
+  // [確定: docs/research/02 §6 lever/button — 1.21.1 の Blocks.java ticksToStayPressed]
+  it('石ボタンは20gt後に自動でオフになる', () => {
     const world = new SimWorld()
     place(world, 0, 0, { type: 'button_stone', facing: 'up', powered: false })
     place(world, 1, 0, lamp(false))
@@ -234,22 +236,26 @@ describe('SimWorld: ボタン（自動オフ）', () => {
     world.activateBlock(0, Y, 0)
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
 
-    for (let i = 0; i < 5; i++) world.tick()
+    for (let i = 0; i < 19; i++) world.tick()  // 19gt までは押されたまま
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ type: 'button_stone', powered: true })
+    expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
 
+    world.tick()  // 20gt目でオフ
     expect(world.getBlock(0, Y, 0)).toMatchObject({ type: 'button_stone', powered: false })
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
   })
 
-  it('木ボタンは10tick後に自動でオフになる', () => {
+  it('木ボタンは30gt後に自動でオフになる', () => {
     const world = new SimWorld()
     place(world, 0, 0, { type: 'button_wood', facing: 'up', powered: false })
     place(world, 1, 0, lamp(false))
 
     world.activateBlock(0, Y, 0)
-    for (let i = 0; i < 9; i++) world.tick()
+    for (let i = 0; i < 29; i++) world.tick()  // 29gt までは押されたまま
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: true })
 
-    world.tick()  // 10tick目でオフ
+    world.tick()  // 30gt目でオフ
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ type: 'button_wood', powered: false })
     expect(world.getBlock(1, Y, 0)).toMatchObject({ type: 'lamp', lit: false })
   })
 })
