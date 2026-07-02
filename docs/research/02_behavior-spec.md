@@ -371,7 +371,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   - **トリガ→完了 = t2→t5 = 3 gt = 1.5 rt** ← ユーザ指摘の「3 gt かけて伸びる」はこの区間 (player-action 起動時)。BE 発火 (t3) からの計数だと 2 gt (extension のみ)。両者は同一系列の別区間で、食い違いではない。
   - sim は上記の各 tick を dump 粒度で一致再現 (fixture `piston-basic` t3 moving / t5 確定 が green)。**start delay** はアーキテクチャで自然成立: 入力は tick 境界適用 → 翌 tick の BE フェーズで発火 (1 gt)、scheduled tick 起動なら同 tick の BE フェーズで発火 (0 gt)。
 
-- **既知の抽象化 (v1 制限) [要検証: 将来 fixture]**: sim は moving_piston の確定を **ST フェーズ**の tile tick (`schedule(pos,2gt)`) で行うが、vanilla は **block entity フェーズ** (phase10) の `PistonMovingBlockEntity.tick` で行う。ST (phase4) は runBlockEvents (phase8) の**前**、block entity (phase10) は**後**なので、確定したブロックが下流のピストンを起動する連鎖 (redstone block を押し合う等) では、下流 BE が sim では同 tick・vanilla では翌 tick に発火し **2 tick 間隔 vs 3 tick 間隔**の差が出る。現状 `redstone_block` は `isMovable` 外 (v1 で押せない) のためこの経路は到達不能で、26 fixture は green。可動な動力源ブロック対応時に実機再生成で pin する。
+- **既知の抽象化 (v1 制限) [確定: microTiming 実機観測 2026-07-03]**: sim は moving_piston の確定を **ST フェーズ**の tile tick (`schedule(pos,2gt)`) で行うが、vanilla は **block entity フェーズ** (phase10) の `PistonMovingBlockEntity.tick` で行う (microTiming で `Moving Piston→Piston Head` が **@ TileEntity**、実行 +2gt で発火するのを観測。retract 側 `Moving Piston→Piston` も同相。docs/research/09_snapshots/two-piston-locational.md)。ST (phase4) は runBlockEvents (phase8) の**前**、block entity (phase10) は**後**なので、確定したブロックが下流のピストンを起動する連鎖 (redstone block を押し合う等) では、下流 BE が sim では同 tick・vanilla では翌 tick に発火し **2 tick 間隔 vs 3 tick 間隔**の差が出る。現状 `redstone_block` は `isMovable` 外 (v1 で押せない) のためこの経路は到達不能で、26 fixture は green。可動な動力源ブロック対応時に実機再生成で pin する。
 
 ### observer (実装済み: I8 / issue #16)
 - PP/SU 更新で起動、NC では起動しない [確定: 4.1、ObserverBlock は neighborChanged 非 override]。

@@ -1,6 +1,6 @@
 {
   "name": "two-piston-locational",
-  "description": "#15 microTiming 突合用: 対称 2 ピストン回路 (piston W|dust|lever|dust|piston E)。状態系列の実機一致 + BE 順の locational (sim 予測: 東→西) の記録",
+  "description": "#15 microTiming 突合用: 対称 2 ピストン回路 (piston W|dust|lever|dust|piston E)。状態系列は実機一致。within-tick BE 順は実機=西→東 (microTiming 観測 2026-07-03、09_snapshots)、sim=東→西で不一致 → 修正は別 issue 追跡",
   "mcVersion": "1.21.1",
   "ticks": 14,
   "region": {
