@@ -1,0 +1,144 @@
+# PR ごとのプレビューデモ環境 (issue #4)
+#
+# - PR open/push: build → Cloudflare Pages プロジェクト redstone-sim へ
+#   ブランチ pr-<N> としてデプロイ → https://pr-<N>.redstone-sim.pages.dev を PR にコメント
+# - PR close: pr-<N> ブランチの全デプロイメントを Cloudflare API で削除（URL も消える）
+#
+# 必要な secrets:
+#   CLOUDFLARE_ACCOUNT_ID — Cloudflare アカウント ID
+#   CLOUDFLARE_API_TOKEN  — 権限「アカウント / Cloudflare Pages / 編集」のカスタムトークン
+# 未設定（fork PR 含む）の場合は失敗させず notice を出してスキップする。
+
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_NAME: redstone-sim
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: secrets 確認
+        id: secrets
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためプレビューデプロイをスキップしました (発行手順は issue #4)"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: ビルド
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          npm ci
+          npm run build
+
+      - name: プレビューデプロイ (pr-${{ github.event.pull_request.number }})
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          npx wrangler pages deploy app/dist \
+            --project-name "$PROJECT_NAME" \
+            --branch "pr-${{ github.event.pull_request.number }}"
+
+      - name: プレビュー URL を PR にコメント
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          MARKER="<!-- pr-preview -->"
+          URL="https://pr-${PR}.${PROJECT_NAME}.pages.dev"
+          BODY="$MARKER
+          🚀 **プレビュー:** $URL
+
+          - commit: $SHA
+          - PR クローズ時に自動削除されます"
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"$MARKER\"))][0].id // empty")
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$BODY" > /dev/null
+          else
+            gh api "repos/${{ github.repository }}/issues/$PR/comments" -f body="$BODY" > /dev/null
+          fi
+
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: プレビューデプロイメントを削除
+        id: delete
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::secrets 未設定のため削除をスキップしました"
+            echo "deleted=skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BRANCH="pr-${{ github.event.pull_request.number }}"
+          API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT_NAME/deployments"
+
+          # 全ページ走査して対象ブランチのデプロイメント ID を集めてから削除する
+          # （削除しながらだとページングがずれるため）
+          PAGE=1
+          ALL_IDS=""
+          while [ "$PAGE" -le 40 ]; do
+            RESP=$(curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$API?page=$PAGE&per_page=25")
+            COUNT=$(echo "$RESP" | jq '.result | length')
+            [ "$COUNT" -eq 0 ] && break
+            IDS=$(echo "$RESP" | jq -r --arg b "$BRANCH" \
+              '.result[] | select(.deployment_trigger.metadata.branch == $b) | .id')
+            ALL_IDS="$ALL_IDS $IDS"
+            PAGE=$((PAGE + 1))
+          done
+
+          DELETED=0
+          for id in $ALL_IDS; do
+            curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "$API/$id?force=true" > /dev/null && DELETED=$((DELETED + 1))
+          done
+          echo "::notice::$BRANCH のデプロイメントを $DELETED 件削除しました"
+          echo "deleted=$DELETED" >> "$GITHUB_OUTPUT"
+
+      - name: PR コメントを更新
+        if: steps.delete.outputs.deleted != 'skip'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          MARKER="<!-- pr-preview -->"
+          BODY="$MARKER
+          🧹 プレビューは PR クローズに伴い削除されました (${{ steps.delete.outputs.deleted }} デプロイメント)"
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"$MARKER\"))][0].id // empty")
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$BODY" > /dev/null
+          fi

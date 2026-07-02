@@ -44,6 +44,14 @@ npm test             # sim / editor のユニットテスト（vitest）
 npm run typecheck    # packages の型チェック
 ```
 
+## デプロイ / PR プレビュー
+
+- 本番: Cloudflare Pages プロジェクト `redstone-sim`（https://redstone-sim.pages.dev 、本番ブランチ = `deploy`、`app` で `npm run deploy`）
+- PR プレビュー: PR を作成/更新すると GitHub Actions（`.github/workflows/pr-preview.yml`）が
+  `https://pr-<N>.redstone-sim.pages.dev` にデプロイして PR にコメントする。PR クローズで自動削除。
+- 必要な secrets（未設定の間はスキップされる）: `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`
+  （権限「アカウント / Cloudflare Pages / 編集」。発行手順は issue #4 参照）
+
 ## クレジット
 
 `app/public/resourcepack/` のテクスチャは **MK.2 Redstone**（by Kyouju and Nisai）を
