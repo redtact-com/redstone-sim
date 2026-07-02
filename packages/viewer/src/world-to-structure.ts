@@ -78,9 +78,21 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // base モデルだけ flipDir すると逆向きに見える (wire 接続腕と同じ規則。
       // 実機と逆向きになるユーザ報告 2026-07-03 で確定)
       return `minecraft:${block.type}[extended=${block.extended},facing=${block.facing}]`
-    case 'moving_piston':
-      // 移動中は中身 (into) をそのまま描画する近似 (vanilla は BE レンダラ)
-      return blockStateToMinecraftStr(block.into)
+    case 'moving_piston': {
+      // 途中伸び状態の近似表示 (vanilla は BE レンダラで補間するが、
+      // グリッド描画では中間 1 コマを静的に表す):
+      // - 伸長中の head セル → short ヘッド (vanilla の中間状態用モデル)
+      // - 収縮中の base セル → extended base (アーム収納中の見え方)
+      // - 押される payload → 中身をそのまま
+      const into = block.into
+      if (into.type === 'piston_head') {
+        return `minecraft:piston_head[facing=${into.facing},short=true,type=${into.sticky ? 'sticky' : 'normal'}]`
+      }
+      if (into.type === 'piston' || into.type === 'sticky_piston') {
+        return `minecraft:${into.type}[extended=true,facing=${into.facing}]`
+      }
+      return blockStateToMinecraftStr(into)
+    }
     case 'piston_head':
       return `minecraft:piston_head[facing=${block.facing},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
     case 'solid':
