@@ -2,7 +2,6 @@
   "name": "dust-block-repeater",
   "description": "dust→block→機構 (G2-G5): ワイヤーが指す固体ブロックの弱充電をリピーターが入力として読む。現 sim は弱充電を機構入力にできない",
   "mcVersion": "1.21.1",
-  "skipUntil": "I2",
   "skipReason": "G2-G5 弱充電系: 電力系 weak/strong 2 段モデル再設計 (I2) まで sim は不一致",
   "ticks": 16,
   "region": {
