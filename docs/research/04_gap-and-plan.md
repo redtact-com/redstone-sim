@@ -56,7 +56,7 @@
 
 ### 2.3 レイヤ B/C: 順序粒度の ground truth
 - **SubTick (lntricate1 版, LGPL-3.0, MC 1.17.1〜1.20.1)**: `/tick freeze [phase]` + queueStep で tile tick を priority 単位・block event を depth (BED) 単位に 1 件ずつステップし、HUD でキュー内容を確認。**1.20.2+ 非対応**なので対象バージョン判断に直結。
-- **Carpet-TIS-Addition microTiming**: detected/emitted block update・executed_tile_tick・executed_block_event を tick 内順序付きでログ出力。**neighbor update 順の ground truth はこれが唯一の実機手段** (SubTick は対象外)。`/carpet microTiming true`。
+- **Carpet-TIS-Addition microTiming**: detected/emitted block update・executed_tile_tick・executed_block_event を tick 内順序付きでログ出力。**neighbor update 順の ground truth はこれが唯一の実機手段** (SubTick は対象外。RSMM/GameTest との比較評価は 06_tool-eval.md [確定])。`/carpet microTiming true`。**注意 [確定: 06 §6.2 実機実測]: 出力は player chat 限定で rcon-only の自動パイプラインには載らない**。運用は (A) 手動クライアント観察で期待順を固定してスナップショット化 (最小コスト・初手) / (B) MicroTimingLoggerManager フックの補助 mixin で JSON 出力 (完全自動化・スコープ追加) の 2 段構え (06 §6.3)。
 - 補助: MC-ticker の「実 jar オラクル」発想 — 挙動という事実の抽出は著作権対象外なので合法的に応用可 [確定: 03 参照]。
 
 ### 2.4 補助テスト資産
