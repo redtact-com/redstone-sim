@@ -232,7 +232,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - NOT ゲート。状態変化は 2 gt 遅延の tile tick (`TOGGLE_DELAY = 2`)、priority 0 [確定: RedstoneTorchBlock]。
 - 入力: 取り付けブロックのみを読む (床置き = 直下 `hasSignal(pos.below(), DOWN)`、壁付け = FACING の逆) [確定]。
 - 給電: **取り付け面以外の全隣接 (床置きなら水平 4 + 上) に弱 15、直上ブロックのみ強充電**
-  [確定: getSignal は query 方向が取り付け方向のときのみ 0、getDirectSignal は DOWN query (=直上ブロックから) のみ 15]。
+  [確定: getSignal は取り付けブロックからの問い合わせのみ 0 (他 5 方向 15)、getDirectSignal は直上ブロックからの問い合わせのみ 15]。
 - NC 受信時: 「LIT == 入力あり」という**不整合状態のときだけ** 2 gt 後の tick を予約 (willTickThisTick ガード付き) [確定]。
 - **burnout** [確定: 未解明 #4 解消]: 定数 `RECENT_TOGGLE_TIMER=60` / `MAX_RECENT_TOGGLES=8` / `RESTART_DELAY=160`。
   tick 時に 60 gt より古いトグル記録を破棄 → 消灯のたびに記録を追加し、**同一 pos の記録が 8 件に達すると焼き切れ**
