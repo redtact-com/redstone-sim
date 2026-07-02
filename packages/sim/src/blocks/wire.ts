@@ -9,7 +9,10 @@ import { getSignal, getStrongPower, relative } from '../power.js'
  * このブロックがあると切断される。
  */
 export function isWireCutBlock(block: BlockState | null): boolean {
-  return !!block && (block.type === 'solid' || block.type === 'lamp')
+  // target は既定フルキューブ導体 (isRedstoneConductor=true) なので上下斜め接続を切る。
+  // redstone_block は isRedstoneConductor(never) = 非導体なので切らない
+  // [確定: 1.21.1 Blocks.REDSTONE_BLOCK / TargetBlock]。
+  return !!block && (block.type === 'solid' || block.type === 'lamp' || block.type === 'target')
 }
 
 /**
@@ -82,6 +85,15 @@ export function computeWirePower(pos: Pos3D, world: SimWorld): number {
     if (src.type === 'solid') {
       // 強充電された固体のみダストに給電（弱充電はダストに見えない）
       maxPower = Math.max(maxPower, getStrongPower(world, nPos))
+      continue
+    }
+    if (src.type === 'target') {
+      // target は導体かつ信号源 [確定: 1.21.1 Blocks.TARGET は
+      // isRedstoneConductor 非 override + TargetBlock.isSignalSource=true]。
+      // ダストから見える値は max(自身の outputPower, 強充電)。
+      // ダスト由来の弱充電は他のダストに見えない (shouldSignal=false 相当)
+      // 点は solid と同じ [確定: RedStoneWireBlock.calculateTargetStrength]
+      maxPower = Math.max(maxPower, getStrongPower(world, nPos), getSignal(world, pos, dir))
       continue
     }
     maxPower = Math.max(maxPower, getSignal(world, pos, dir))

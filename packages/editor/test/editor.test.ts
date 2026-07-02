@@ -73,6 +73,42 @@ describe('CircuitEditor: ワイヤー接続計算', () => {
     expect(wOutput.connections.west).toBe(true)
   })
 
+  it('ダストはレッドストーンブロックへ 4 面接続する', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(1, 0, 'redstone_block')
+    editor.placeBlock(0, 0, 'wire')  // west隣
+    editor.placeBlock(2, 0, 'wire')  // east隣
+    const wWest = editor.getBlock(0, 0)
+    const wEast = editor.getBlock(2, 0)
+    if (wWest?.type !== 'wire' || wEast?.type !== 'wire') throw new Error('wire not placed')
+    expect(wWest.connections.east).toBe(true)   // → redstone_block 方向
+    expect(wEast.connections.west).toBe(true)
+  })
+
+  it('ダストはターゲットへ 4 面接続する', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(1, 0, 'target')
+    editor.placeBlock(0, 0, 'wire')  // west隣
+    editor.placeBlock(1, 1, 'wire')  // south隣
+    const wWest = editor.getBlock(0, 0)
+    const wSouth = editor.getBlock(1, 1)
+    if (wWest?.type !== 'wire' || wSouth?.type !== 'wire') throw new Error('wire not placed')
+    expect(wWest.connections.east).toBe(true)
+    expect(wSouth.connections.north).toBe(true)  // → target 方向
+  })
+
+  it('レッドストーンブロックはダストを 15 に給電する (sim)', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'redstone_block')
+    editor.placeBlock(1, 0, 'wire')
+    editor.placeBlock(2, 0, 'lamp')
+    const world = editor.buildSimWorld()
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(1, 0, 0)).toMatchObject({ type: 'wire', power: 15 })
+    expect(world.getBlock(2, 0, 0)).toMatchObject({ type: 'lamp', lit: true })
+  })
+
   it('リピーターの側面隣のワイヤーはリピーターから信号を受け取らない', () => {
     // connections はあくまで「視覚的な形状」（孤立 = cross = 4方向true）であり、
     // 隣にリピーターの側面があっても孤立扱い → cross形状になる。

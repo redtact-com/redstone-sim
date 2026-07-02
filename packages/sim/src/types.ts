@@ -140,6 +140,32 @@ export interface ContainerState {
   signal: number
 }
 
+/**
+ * レッドストーンブロック。常時 weak 15 を全 6 方向に出す定数動力源。
+ * [確定: 1.21.1 PoweredBlock — getSignal=15 / isSignalSource=true /
+ *   getDirectSignal 非 override (=0, 固体を強充電しない) /
+ *   Blocks.REDSTONE_BLOCK は isRedstoneConductor(never) = 非導体]。
+ * 状態を持たない (常時通電)。
+ */
+export interface RedstoneBlockState {
+  type: 'redstone_block'
+}
+
+/**
+ * ターゲットブロック。投射物命中で発火する信号源だが、本 sim は投射物系を
+ * 持たないため「手動トリガ + 持続 gt + 全方向 weak」の折衷モデルで扱う。
+ * [確定: 1.21.1 TargetBlock — getSignal=OUTPUT_POWER(全方向 weak) /
+ *   getDirectSignal 非 override (=0) / isSignalSource=true /
+ *   持続 = 矢 20gt / その他 8gt / tick で POWER=0 / 既存 tick 中は再発火無視 /
+ *   POWER>0 で pending tick 無しの設置は onPlace が 0 に戻す]。
+ * activateBlock で命中を模し、outputPower=15 (中心命中相当) + 20gt 持続。
+ */
+export interface TargetState {
+  type: 'target'
+  /** 現在の出力信号強度 (0-15)。トリガ中は 15、消灯後 0 */
+  outputPower: number
+}
+
 /** 信号を充電・遮断する不透過ブロック（石・丸石など） */
 export interface SolidState {
   type: 'solid'
@@ -165,6 +191,8 @@ export type BlockState =
   | ButtonState
   | LampState
   | ContainerState
+  | RedstoneBlockState
+  | TargetState
   | SolidState
   | AirState
 

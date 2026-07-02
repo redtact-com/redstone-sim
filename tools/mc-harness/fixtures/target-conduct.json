@@ -1,0 +1,42 @@
+{
+  "name": "target-conduct",
+  "description": "target は導体として信号を伝える (#35 実機バグ報告 2 の回路 B を再現)。unit1: lever → dust×4 → target で、北隣 lamp 点灯・直上 torch 消灯・東隣 comparator が背面導体越しに充電 12 を読む。unit2: dust に弱充電された target は反対側のプローブ dust に給電しない (RedStoneWireBlock.shouldSignal)。lamp 消灯 4gt 遅延が sim 未実装のため ON のみ検証",
+  "mcVersion": "1.21.1",
+  "ticks": 14,
+  "region": { "from": [0, 0, 0], "to": [5, 2, 6] },
+  "player": { "spawn": [1.5, 1.0, 6.5], "facing": [180, 40], "lookAt": [0.5, 1.35, 5.5] },
+  "blocks": [
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [0, 0, 2], "block": "stone" },
+    { "pos": [0, 0, 3], "block": "stone" },
+    { "pos": [0, 0, 4], "block": "stone" },
+    { "pos": [0, 0, 5], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [2, 0, 1], "block": "stone" },
+    { "pos": [2, 0, 4], "block": "stone" },
+    { "pos": [3, 0, 4], "block": "stone" },
+    { "pos": [4, 0, 4], "block": "stone" },
+    { "pos": [5, 0, 4], "block": "stone" },
+    { "pos": [0, 0, 6], "block": "stone" },
+    { "pos": [1, 0, 6], "block": "stone" },
+    { "pos": [2, 0, 6], "block": "stone" },
+    { "pos": [0, 1, 5], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [0, 1, 4], "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]" },
+    { "pos": [0, 1, 3], "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]" },
+    { "pos": [0, 1, 2], "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]" },
+    { "pos": [0, 1, 1], "block": "redstone_wire[east=side,north=none,power=0,south=side,west=none]" },
+    { "pos": [1, 1, 1], "block": "target[power=0]" },
+    { "pos": [1, 1, 0], "block": "redstone_lamp[lit=false]" },
+    { "pos": [2, 1, 1], "block": "comparator[facing=west,mode=compare,powered=false]" },
+    { "pos": [1, 2, 1], "block": "redstone_torch[lit=true]" },
+    { "pos": [2, 1, 4], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [3, 1, 4], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [4, 1, 4], "block": "target[power=0]" },
+    { "pos": [5, 1, 4], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 5], "action": "use" },
+    { "tick": 8, "pos": [2, 1, 4], "action": "use" }
+  ]
+}

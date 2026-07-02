@@ -68,6 +68,8 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'repeater',   label: 'リピーター',    texture: 'block/repeater',        hasFacing: true,  hasDelay: true,  hasMode: false },
   { type: 'comparator', label: 'コンパレーター', texture: 'block/comparator',      hasFacing: true,  hasDelay: false, hasMode: true  },
   { type: 'lamp',       label: 'ランプ',        texture: 'block/redstone_lamp',   hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'redstone_block', label: 'レッドストーンブロック', texture: 'block/redstone_block', hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },
@@ -270,6 +272,11 @@ export function EditorPage({ onBack }: EditorPageProps) {
         if (b?.type === 'lever') {
           simWorld.activateBlock(x, pos[1], z)
           addLog(`レバートグル (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (b?.type === 'target') {
+          // ターゲットは手動トリガ (中心命中相当の 15、20gt 持続)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`ターゲット発火 (${x}, ${pos[1]}, ${z})`)
           rerender()
         }
       }
