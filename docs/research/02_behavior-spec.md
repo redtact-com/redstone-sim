@@ -299,7 +299,8 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   `startSignal` → `hasScheduledTick` (キュー全体) を確認して 2 gt の tile tick (priority 0) を予約 [確定]。
 - tick [確定: ObserverBlock.tick]: OFF なら ON 化 + **自身の OFF tick (2 gt) を先に予約**してから前方更新
   (`updateNeighborsInFront`)。ON なら OFF 化して前方更新 → パルス幅 2 gt。
-- 給電: 出力面 (FACING 背面側…`getSignal` は FACING == query 方向で 15) に 15、direct signal も同方向 (強充電可) [確定]。
+- 給電: 出力は観測面の反対側 (背面) の 1 ブロックのみ。`getSignal`/`getDirectSignal` とも query 方向 == FACING
+  (= 背面側の隣接ブロックからの問い合わせ) で 15 → 背面ブロックを強充電できる [確定]。
 - 設置時に POWERED だった場合は無更新で消灯 (onPlace, flag 18)、除去時は前方へ消灯通知 (onRemove) [確定]。
 
 ---
