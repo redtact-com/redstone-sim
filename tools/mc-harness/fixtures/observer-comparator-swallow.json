@@ -1,0 +1,23 @@
+{
+  "name": "observer-comparator-swallow",
+  "description": "レバー→オブザーバー→コンパレーター→ランプ (I8 ③ / 02 §2.4 最重要回帰)。オブザーバー単体の 2gt パルスはコンパレーターを通らない: オブザーバーの tick が自身の OFF tick(2gt)を近傍更新より先に予約するため、同 tick・同 priority(0) の飲み込み順序でコンパレーターの評価時にはオブザーバー出力が既に 0 に戻っている。コンパレーターは一度も powered にならず前面ランプも点灯しない。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": { "from": [0, 0, 0], "to": [3, 1, 1] },
+  "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 40], "lookAt": [0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [1, 1, 0], "block": "observer[facing=west,powered=false]" },
+    { "pos": [2, 1, 0], "block": "comparator[facing=east,mode=compare,powered=false]" },
+    { "pos": [3, 1, 0], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" }
+  ]
+}

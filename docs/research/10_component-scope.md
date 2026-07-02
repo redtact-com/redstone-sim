@@ -242,6 +242,13 @@
 > ピストン・オブザーバー・準接続 (QC) は**スコープ内**で、実装ロードマップ (docs/research/04 §3 の I7・I8) に
 > 含まれます。判断の根拠は docs/research/10_component-scope.md を参照。
 
+> **実装済み (I8 / #16)**: オブザーバー (`ObserverState { type:'observer', facing: Dir6, powered }`) を追加。
+> facing = 観測方向 (vanilla FACING 同一・非反転)、出力は背面 (`OPPOSITE[facing]`) へ strong 15。NC では起動せず、
+> シミュレーション中の観測可能な blockstate 変化 (PP/SU) を観測面から受けたときのみ 2gt 遅延で 2gt パルスを出す。
+> tick は自身の OFF tick を近傍更新より先に予約し、02 §2.4 の「コンパレーターがオブザーバー単体のパルスを飲み込む」
+> 順序を再現。C5 (note block) の (b)「use/音程変化を PP 発生源にする」ネタは音声機能ごとスコープ外で据え置き。
+> 実機 fixture 4 本 (dust / piston / comparator-swallow / chain) で tick 単位一致を確認済み。
+
 ---
 
 ## 11. 出典

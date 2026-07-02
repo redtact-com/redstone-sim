@@ -177,6 +177,24 @@ export interface SolidState {
   powered: boolean
 }
 
+/**
+ * オブザーバー。facing = 観測方向 (vanilla FACING と同一 = 顔のある面が向く方向)。
+ * 出力は背面 (OPPOSITE[facing]) の 1 ブロックへ strong 15 (diode 型)。
+ * [確定: 02 §4.1/§2.4/§6 observer + ObserverBlock デコンパイル / minecraft.wiki]:
+ *   - NC (neighborChanged) には反応しない (BlockBehaviour 既定 = 非 override)。
+ *   - updateShape (PP/SU) が観測面 (facing 方向) から届き、かつ非 powered のとき
+ *     2gt (priority 0) の tile tick を予約 (startSignal / hasScheduledTick ガード)。
+ *   - tick: OFF→ON は powered=true + 自身の OFF tick (2gt) を「近傍更新より先に」
+ *     予約 (§2.4 のパルス飲み込み順序の根拠)。ON→OFF は powered=false。
+ *     いずれも背面へ updateNeighborsInFront (NC)。パルス幅 = 2gt。
+ * mcstate/viewer/nbtIO とも facing は非反転 (piston と同じ。vanilla FACING = 観測方向)。
+ */
+export interface ObserverState {
+  type: 'observer'
+  facing: Dir6
+  powered: boolean
+}
+
 /** ピストン本体。extended=true のとき facing 方向に piston_head が存在する */
 export interface PistonState {
   type: 'piston' | 'sticky_piston'
@@ -219,6 +237,7 @@ export type BlockState =
   | RedstoneBlockState
   | TargetState
   | SolidState
+  | ObserverState
   | PistonState
   | PistonHeadState
   | MovingPistonState

@@ -137,6 +137,11 @@ export function mcToSim(state: string): BlockState | null {
       return { type: name as 'piston' | 'sticky_piston',
                facing: (props.facing ?? 'north') as Dir6,
                extended: props.extended === 'true' }
+    case 'observer':
+      // vanilla の facing = 観測方向 (顔のある面) = sim と同一 (反転不要)。
+      // powered は BE ではなく blockstate。outputPower は持たない (常に 15/0)
+      return { type: 'observer', facing: (props.facing ?? 'south') as Dir6,
+               powered: props.powered === 'true' }
     case 'piston_head':
       return { type: 'piston_head', facing: (props.facing ?? 'north') as Dir6,
                sticky: props.type === 'sticky' }
@@ -189,6 +194,8 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'piston':
       case 'sticky_piston':
         return formatMcState(sim.type, { extended: String(sim.extended), facing: sim.facing })
+      case 'observer':
+        return formatMcState('observer', { facing: sim.facing, powered: String(sim.powered) })
       case 'piston_head':
         return formatMcState('piston_head', {
           facing: sim.facing, short: 'false', type: sim.sticky ? 'sticky' : 'normal',
@@ -241,6 +248,9 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break // 状態を持たない (常時通電)
     case 'target':
       props.power = String(sim.outputPower)
+      break
+    case 'observer':
+      props.powered = String(sim.powered)
       break
     case 'container':
       break // signal は blockstate に現れない (authored 名 barrel/chest を保持)

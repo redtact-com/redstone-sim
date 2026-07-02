@@ -102,6 +102,10 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
       return src.powered && src.facing === toDir ? 15 : 0
     case 'comparator':
       return src.powered && src.facing === toDir ? src.outputPower : 0
+    case 'observer':
+      // 出力は背面 (観測面 facing の反対) の 1 マスのみに weak/strong 15。
+      // getSignal は getDirectSignal に委譲されるため weak=strong=15 [確定: §6 observer]。
+      return src.powered && toDir === OPPOSITE[src.facing] ? 15 : 0
     case 'wire': {
       if (src.power === 0) return 0
       if (toDir === 'down') return src.power
@@ -137,6 +141,10 @@ function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): nu
       return src.powered && src.facing === toDir ? 15 : 0
     case 'comparator':
       return src.powered && src.facing === toDir ? src.outputPower : 0
+    case 'observer':
+      // 背面 1 マスを強充電する (diode 型)。getDirectSignal が FACING==direction で
+      // 15 を返す = 観測面の反対 (OPPOSITE[facing]) へ direct 15 [確定: §6 observer]。
+      return src.powered && toDir === OPPOSITE[src.facing] ? 15 : 0
     default:
       return 0
   }

@@ -373,7 +373,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 
 - **既知の抽象化 (v1 制限) [要検証: 将来 fixture]**: sim は moving_piston の確定を **ST フェーズ**の tile tick (`schedule(pos,2gt)`) で行うが、vanilla は **block entity フェーズ** (phase10) の `PistonMovingBlockEntity.tick` で行う。ST (phase4) は runBlockEvents (phase8) の**前**、block entity (phase10) は**後**なので、確定したブロックが下流のピストンを起動する連鎖 (redstone block を押し合う等) では、下流 BE が sim では同 tick・vanilla では翌 tick に発火し **2 tick 間隔 vs 3 tick 間隔**の差が出る。現状 `redstone_block` は `isMovable` 外 (v1 で押せない) のためこの経路は到達不能で、26 fixture は green。可動な動力源ブロック対応時に実機再生成で pin する。
 
-### observer (未実装・仕様のみ)
+### observer (実装済み: I8 / issue #16)
 - PP/SU 更新で起動、NC では起動しない [確定: 4.1、ObserverBlock は neighborChanged 非 override]。
   起動条件: `updateShape` で **観測面 (FACING) 方向からの shape 更新** かつ非 POWERED のとき
   `startSignal` → `hasScheduledTick` (キュー全体) を確認して 2 gt の tile tick (priority 0) を予約 [確定]。
@@ -382,6 +382,17 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - 給電: 出力は観測面の反対側 (背面) の 1 ブロックのみ。`getSignal`/`getDirectSignal` とも query 方向 == FACING
   (= 背面側の隣接ブロックからの問い合わせ) で 15 → 背面ブロックを強充電できる [確定]。
 - 設置時に POWERED だった場合は無更新で消灯 (onPlace, flag 18)、除去時は前方へ消灯通知 (onRemove) [確定]。
+- **facing 意味論の確定 (I8)**: blockstate `facing` = **観測方向 (顔のある面が向く先)**、出力は `OPPOSITE[facing]` の背面
+  1 マス。sim の `ObserverState.facing` は vanilla FACING と同一で **反転しない** (mcstate/viewer/nbtIO とも piston と
+  同じ非反転規則。repeater/comparator/wall_torch の flip とは異なる)。ObserverBlock.updateShape の
+  `state.getValue(FACING) == direction` (direction = pos→変化した neighbor) と minecraft.wiki (「facing は観測方向」)
+  の両方で確定。実機 fixture `observer[facing=west]` がレバー (西) を観測しコンパレーター (東=背面) に出力する構成で一致検証済み。
+- **実装 (packages/sim)**: PP は「シミュレーション中に観測可能な blockstate が変化した座標」から隣接 6 (PP_UPDATE_ORDER
+  西東北南下上) へ発行 (`SimWorld.emitShapeUpdate`)。受信者はオブザーバーのみ (`observableChanged` が solid.powered /
+  comparator.outputPower / container.signal など blockstate でない派生値を除外)。オブザーバー tick は apply を経由せず
+  「powered 反転 → PP → (ON なら) OFF tick 予約 → 背面 NC」の順で実行し、§2.4 の飲み込み順序を保証する。
+- **実機 fixture (I8)**: observer-detects-dust / observer-piston / observer-comparator-swallow (§2.4 最重要回帰) /
+  observer-chain の 4 本を Fabric 1.21.1 + carpet で生成し tick 単位一致を確認済み。
 
 ---
 
