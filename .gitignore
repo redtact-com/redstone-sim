@@ -4,3 +4,9 @@ dist
 .wrangler
 .DS_Store
 *.local
+
+# Mojang 由来物 (jar / mappings / デコンパイル産物) は絶対にコミットしない
+# (docs/research/03_legal-decompile.md 参照)
+tools/decompile/jars/
+tools/decompile/work/
+tools/decompile/out/
