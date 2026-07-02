@@ -9,7 +9,7 @@
     "build": "npm run gen-bundle && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name redstone-sim"
+    "deploy": "npm run build && wrangler pages deploy"
   },
   "dependencies": {
     "@redstone/editor": "*",
