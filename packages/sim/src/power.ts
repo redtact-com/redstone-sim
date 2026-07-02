@@ -1,0 +1,209 @@
+import type {
+  Pos3D, Dir6, HDir, TorchState, WallTorchState,
+} from './types.js'
+import type { SimWorld } from './world.js'
+import { OPPOSITE, ALL_DIRS } from './types.js'
+
+// ============================================================
+// 電力クエリ関数群 (issue #10 / I2)
+//
+// 充電状態のキャッシュを持たず、vanilla 同様に「その場で隣接を
+// 見に行く」純クエリとして weak/strong 動力モデルを実装する。
+// 意味論は docs/research/02 §5 の weak/strong モデル (wiki 準拠):
+//   - 動力部品の weak 信号は隣接する機構 (lamp/torch/repeater 等) を
+//     作動させ、ダストにも給電する
+//   - 固体 (導体) を充電できるのは strong 信号源 (リピーター/
+//     コンパレーター出力・トーチ直上・レバー/ボタン取り付け面) と
+//     ダスト (弱充電) のみ。レバーやトーチの weak 信号は固体を
+//     充電しない [確定: 02 §5.2]
+//   - 弱充電された固体は隣接機構を作動させるが、ダストには給電しない
+//   - 強充電された固体はダストにも給電する
+// ============================================================
+
+/** pos から dir 方向に 1 進んだ座標 */
+export function relative(pos: Pos3D, dir: Dir6): Pos3D {
+  const [x, y, z] = pos
+  switch (dir) {
+    case 'north': return [x, y, z - 1]
+    case 'south': return [x, y, z + 1]
+    case 'east':  return [x + 1, y, z]
+    case 'west':  return [x - 1, y, z]
+    case 'up':    return [x, y + 1, z]
+    case 'down':  return [x, y - 1, z]
+  }
+}
+
+/** トーチの取り付け面 (トーチから見て土台がある方向) */
+export function getTorchAttachFace(block: TorchState | WallTorchState): Dir6 {
+  if (block.type === 'wall_torch') return block.facing
+  // 床置き (facing='up') → 土台は下。facing='down' は非バニラ配置だが対称に扱う
+  return block.facing === 'down' ? 'up' : 'down'
+}
+
+/**
+ * トーチが strong 信号 (固体の強充電) を出す方向。
+ * 床置き・壁付けとも直上のブロックのみ強充電する [要検証: 02 §6 torch は
+ * current 調査の記憶ベース。I1 デコンパイル確定後に要照合]。
+ * facing='down' の非バニラ配置のみアナロジーで直下とする。
+ */
+function getTorchStrongFace(block: TorchState | WallTorchState): Dir6 {
+  if (block.type === 'torch' && block.facing === 'down') return 'down'
+  return 'up'
+}
+
+/** レバー/ボタンの取り付け面 (facing はブロックが向いている方向 = 壁の逆) */
+function getAttachFace(facing: Dir6): Dir6 {
+  return OPPOSITE[facing]
+}
+
+/**
+ * srcPos のブロックが toDir 方向へ出す weak 信号 (0-15)。
+ * 固体の充電状態はここには含めない (isFacePowered / getSolidPower で扱う)。
+ *
+ * - レバー/ボタン: 全 6 方向に 15 [要検証: 02 §6 lever/button]
+ * - トーチ: 取り付け面以外の 5 方向に 15 (G3) [要検証: I1 確定後に要照合]
+ * - リピーター/コンパレーター: facing 方向のみ
+ * - ワイヤー: 足元 (down) + 接続方向の水平。上方向へは給電しない (G5)
+ *   [要検証: 02 §5.4]
+ */
+function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
+  const src = world.getBlockAt(srcPos)
+  if (!src) return 0
+  switch (src.type) {
+    case 'lever':
+    case 'button_stone':
+    case 'button_wood':
+      return src.powered ? 15 : 0
+    case 'torch':
+    case 'wall_torch': {
+      if (!src.lit) return 0
+      return toDir === getTorchAttachFace(src) ? 0 : 15
+    }
+    case 'repeater':
+      return src.powered && src.facing === toDir ? 15 : 0
+    case 'comparator':
+      return src.powered && src.facing === toDir ? src.outputPower : 0
+    case 'wire': {
+      if (src.power === 0) return 0
+      if (toDir === 'down') return src.power
+      if (toDir === 'up') return 0
+      return src.connections[toDir as HDir] ? src.power : 0
+    }
+    default:
+      return 0
+  }
+}
+
+/**
+ * srcPos のブロックが toDir 方向へ出す strong 信号 (0-15)。
+ * strong 信号は固体を「強充電」し、強充電された固体はダストにも給電する。
+ *
+ * - レバー/ボタン: 取り付け面のみ (G13) [要検証: 02 §6]
+ * - トーチ: 直上のみ (G3) [要検証: I1 確定後に要照合]
+ * - リピーター/コンパレーター: facing 方向
+ * - ワイヤー: strong 信号は出さない (足元弱充電は getWireWeakCharge で別扱い)
+ */
+function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
+  const src = world.getBlockAt(srcPos)
+  if (!src) return 0
+  switch (src.type) {
+    case 'lever':
+    case 'button_stone':
+    case 'button_wood':
+      return src.powered && toDir === getAttachFace(src.facing) ? 15 : 0
+    case 'torch':
+    case 'wall_torch':
+      return src.lit && toDir === getTorchStrongFace(src) ? 15 : 0
+    case 'repeater':
+      return src.powered && src.facing === toDir ? 15 : 0
+    case 'comparator':
+      return src.powered && src.facing === toDir ? src.outputPower : 0
+    default:
+      return 0
+  }
+}
+
+/** pos の dir 面に入ってくる weak 信号 (0-15) = 隣接ブロックの weak 出力 */
+export function getSignal(world: SimWorld, pos: Pos3D, dir: Dir6): number {
+  return getEmittedSignal(world, relative(pos, dir), OPPOSITE[dir])
+}
+
+/** pos の dir 面に入ってくる strong 信号 (0-15)。固体の強充電判定に使う */
+export function getDirectSignal(world: SimWorld, pos: Pos3D, dir: Dir6): number {
+  return getEmittedDirectSignal(world, relative(pos, dir), OPPOSITE[dir])
+}
+
+/** 6 方向から入る weak 信号の最大値 */
+export function getNeighborSignal(world: SimWorld, pos: Pos3D): number {
+  let max = 0
+  for (const dir of ALL_DIRS) {
+    max = Math.max(max, getSignal(world, pos, dir))
+    if (max >= 15) break
+  }
+  return max
+}
+
+/**
+ * 固体ブロック pos の強充電レベル (0-15)。
+ * 強充電された固体はダストにも隣接機構にも給電する。
+ */
+export function getStrongPower(world: SimWorld, pos: Pos3D): number {
+  let max = 0
+  for (const dir of ALL_DIRS) {
+    max = Math.max(max, getDirectSignal(world, pos, dir))
+    if (max >= 15) break
+  }
+  return max
+}
+
+/**
+ * 固体ブロック pos がダストから受ける弱充電レベル (0-15)。
+ * ダストは「足元のブロック + 接続方向のブロック」を弱充電する (G5, G14)
+ * [要検証: 02 §5.4]。弱充電は他のダストには見えない。
+ */
+export function getWireWeakCharge(world: SimWorld, pos: Pos3D): number {
+  let max = 0
+  for (const dir of ALL_DIRS) {
+    const nPos = relative(pos, dir)
+    if (world.getBlockAt(nPos)?.type !== 'wire') continue
+    max = Math.max(max, getEmittedSignal(world, nPos, OPPOSITE[dir]))
+    if (max >= 15) break
+  }
+  return max
+}
+
+/**
+ * 固体ブロックの充電レベル (強充電とダスト弱充電の最大)。
+ * コンパレーターの背面読み取りや隣接機構の作動判定に使う。
+ */
+export function getSolidPower(world: SimWorld, pos: Pos3D): number {
+  return Math.max(getStrongPower(world, pos), getWireWeakCharge(world, pos))
+}
+
+/** 固体ブロックが充電されているか (weak / strong を問わない) */
+export function isSolidPowered(world: SimWorld, pos: Pos3D): boolean {
+  return getSolidPower(world, pos) > 0
+}
+
+/**
+ * pos の dir 面が動力を受けているか。
+ * 隣が充電された固体 (weak/strong 問わず) か、weak 信号が入っていれば true。
+ */
+export function isFacePowered(world: SimWorld, pos: Pos3D, dir: Dir6): boolean {
+  const nPos = relative(pos, dir)
+  const nb = world.getBlockAt(nPos)
+  if (nb?.type === 'solid' && isSolidPowered(world, nPos)) return true
+  return getSignal(world, pos, dir) > 0
+}
+
+/**
+ * ブロックが動力を受けているか (vanilla の hasNeighborSignal 相当)。
+ * 機構 (lamp / repeater / comparator / torch 土台) の入力判定に使う。
+ * 直接の weak 信号受信、または隣接固体の充電 (弱充電含む) で true。
+ */
+export function isBlockPowered(world: SimWorld, pos: Pos3D): boolean {
+  for (const dir of ALL_DIRS) {
+    if (isFacePowered(world, pos, dir)) return true
+  }
+  return false
+}
