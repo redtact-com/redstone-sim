@@ -22,6 +22,14 @@ export {
 // World
 export { SimWorld, posKey, keyToPos } from './world.js'
 
+// 電力クエリ (weak/strong モデル)
+export {
+  getSignal, getDirectSignal, getNeighborSignal,
+  getStrongPower, getWireWeakCharge, getSolidPower,
+  isSolidPowered, isFacePowered, isBlockPowered,
+  getTorchAttachFace, relative,
+} from './power.js'
+
 // ブロックユーティリティ
 export { computeWirePower, getConnectedWireNeighbors, isWireCutBlock } from './blocks/wire.js'
 export { getTorchOutputFacing, getTorchBasePos, isBasePowered } from './blocks/torch.js'

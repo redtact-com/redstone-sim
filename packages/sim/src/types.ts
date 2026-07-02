@@ -105,7 +105,11 @@ export interface LampState {
 /** 信号を充電・遮断する不透過ブロック（石・丸石など） */
 export interface SolidState {
   type: 'solid'
-  /** このブロックが強充電されているか（強信号源が直接接しているとき true） */
+  /**
+   * このブロックが充電されているか（弱/強を問わない）。
+   * 表示用の派生値であり、判定ロジックは power.ts の純クエリ
+   * (isSolidPowered / getStrongPower) を使う。伝播処理の最後に更新される。
+   */
   powered: boolean
 }
 
