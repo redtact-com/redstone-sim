@@ -798,19 +798,59 @@ export class SimWorld {
     return false
   }
 
-  /** 伸長時の押しリスト (近い順)。押せなければ null。12 個上限 */
-  private collectPushList(pos: Pos3D, facing: Dir6): Pos3D[] | null {
-    const list: Pos3D[] = []
+  /**
+   * PUSH_DESTROY (押されると壊れる) ブロックか。sim ではアイテム化させず
+   * 消滅させる (13 §2 エンティティ境界原則、#64)。
+   * [確定: 26.2 — 各 Block の PushReaction。dust/torch/lever/button/感圧板は
+   *  DESTROY。piston_head・moving_piston は isPushable=false (障害物) のまま]
+   */
+  private isPushDestroy(block: BlockState): boolean {
+    switch (block.type) {
+      case 'wire':
+      case 'torch':
+      case 'wall_torch':
+      case 'lever':
+      case 'button_stone':
+      case 'button_wood':
+      case 'pressure_plate_wood':
+      case 'pressure_plate_stone':
+      case 'weighted_pressure_plate_light':
+      case 'weighted_pressure_plate_heavy':
+      case 'repeater':
+      case 'comparator':
+        return true
+      default:
+        return false
+    }
+  }
+
+  /**
+   * 伸長時の押し構造 (26.2 PistonStructureResolver.resolve/addBlockLine 相当)。
+   * - toPush: 移動するブロック (近い順)。12 個上限 [確定: 26.2 —
+   *   toPush.size()>=12 のチェックが add 前 = 破壊対象は上限にカウントされない]
+   * - toDestroy: チェーン終端の PUSH_DESTROY ブロック (そこで連鎖が止まり、
+   *   破壊して押し出せる)。sim ではアイテム化なしで air 化する (#64)
+   * 押せなければ null。retract 時の破壊は無い (26.2 resolve — DESTROY 分岐は
+   * extending 時のみ。sticky は引かずに置き去りにする = 既存挙動)。
+   */
+  private resolvePushStructure(
+    pos: Pos3D, facing: Dir6,
+  ): { toPush: Pos3D[]; toDestroy: Pos3D[] } | null {
+    const toPush: Pos3D[] = []
+    const toDestroy: Pos3D[] = []
     let cur = neighbor(pos, facing)
-    for (let i = 0; i < 13; i++) {
+    for (;;) {
       const b = this.getBlockAt(cur)
-      if (!b) return list          // 空きに到達 → 押せる
+      if (!b) return { toPush, toDestroy }   // 空きに到達 → 押せる
+      if (this.isPushDestroy(b)) {
+        toDestroy.push(cur)                  // 破壊して終端 (連鎖はここまで)
+        return { toPush, toDestroy }
+      }
       if (!this.isMovable(b)) return null
-      list.push(cur)
-      if (list.length > 12) return null  // 13 個目 = 押せない
+      if (toPush.length >= 12) return null   // 13 個目 = 押せない
+      toPush.push(cur)
       cur = neighbor(cur, facing)
     }
-    return null
   }
 
   private executeBlockEvent(ev: BlockEvent): string[] {
@@ -848,15 +888,24 @@ export class SimWorld {
       if (piston.extended) return []
       // 実行時再判定 (extend 要求だが既に電源なしなら中止 = vanilla triggerEvent)
       if (!this.shouldExtend(ev.pos, piston)) return []
-      const pushList = this.collectPushList(ev.pos, piston.facing)
-      if (pushList === null) {
+      const structure = this.resolvePushStructure(ev.pos, piston.facing)
+      if (structure === null) {
         // 押し切れない → 失敗 (状態不変)。トレース: BE 失敗 (08 §1 の "-")
         this.traceProcess('BE', 'Pi', 'p', 0, { failed: true })
         return []
       }
+      const { toPush: pushList, toDestroy } = structure
 
       // トレース: BE 実行 (伸長)。afterPistonMove の bu を updateFormula に収集
       this.traceProcess('BE', 'Pi', 'p', 0)
+      // 破壊対象 (チェーン終端の PUSH_DESTROY) を先に air 化する
+      // [確定: 26.2 moveBlocks — toDestroy を遠い順に destroy してから移動]。
+      // アイテム化 (ドロップ) はさせない (13 §2、#64)。NC/PP/接続張り替えは
+      // afterPistonMove が破壊座標込みで追随する
+      for (let i = toDestroy.length - 1; i >= 0; i--) {
+        this.setBlockAt(toDestroy[i], { type: 'air' })
+        changed.push(posKey(toDestroy[i]))
+      }
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
       for (let i = pushList.length - 1; i >= 0; i--) {
@@ -869,7 +918,11 @@ export class SimWorld {
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
       this.traceOpenUpdate(ev.pos)
-      this.afterPistonMove([ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing))])
+      this.afterPistonMove([
+        ev.pos, headPos,
+        ...pushList.map(p => neighbor(p, piston.facing)),
+        ...toDestroy,
+      ])
       this.traceCloseUpdate('Pi', 'p', 0, 'BE')
     } else {
       // retract

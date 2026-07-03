@@ -1,0 +1,25 @@
+{
+  "name": "destroy-push-dust",
+  "description": "#64 ピストン破壊: sticky piston が石を押すとチェーン終端のダストが破壊 (アイテム化なし=sim/ドロップ無視=比較対象外) されて石が跡地へ。retract で石は引き戻されるがダストは復活しない。隣のダストの接続形状変化 (#51 張り替え) も検証",
+  "mcVersion": "1.21.1",
+  "ticks": 26,
+  "region": { "from": [0, 0, 0], "to": [5, 2, 3] },
+  "player": { "spawn": [0.5, 1.0, 2.5], "facing": [180, 0], "lookAt": [0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [4, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 2], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=south,powered=false]" },
+    { "pos": [1, 1, 0], "block": "sticky_piston[extended=false,facing=east]" },
+    { "pos": [2, 1, 0], "block": "stone" },
+    { "pos": [3, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [4, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 14, "pos": [0, 1, 0], "action": "use" }
+  ]
+}

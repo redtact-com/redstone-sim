@@ -61,6 +61,16 @@ redstone-sim は **Web 上で動くレッドストーン回路シミュレータ
   非固体) を「破壊対象」として収集し、移動実行時にアイテム化なしで消滅させる。破壊による
   トポロジー変化は #51 の張り替え機構がそのまま追随する
 - 検証: 実機 fixture (押し先にダスト/トーチのある回路)
+- **実装済み (#64)**。確定事項 [確定: 26.2 PistonStructureResolver]:
+  - 破壊はチェーン終端の 1 ブロック (toDestroy)。そこで連鎖が止まる
+  - push limit 12 は toPush のみカウント (破壊対象は数えない — size>=12 チェックが add 前)
+  - retract に破壊は無い (DESTROY 分岐は extending 時のみ)。sticky は PUSH_DESTROY を引かず置き去り
+  - sim の PushReaction 対応: DESTROY = wire / torch / wall_torch / lever / button 2 種 / 感圧板 4 種 /
+    repeater / comparator (いずれも vanilla DESTROY)。
+    MOVE = solid / lamp / redstone_block / target / note_block / 非伸長 piston。
+    障害物 (押し不可) = extended piston / piston_head / moving_piston / container /
+    **observer (vanilla は MOVE だが、移動時のパルス発火の意味論が別途必要なため
+    当面障害物のまま — 必要になったら別 issue で可動化)**
 
 ### 4.2 ホッパー・ドロッパー物流 (数値モデル)
 
