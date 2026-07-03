@@ -169,7 +169,11 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   NC 系メソッドは `@Nullable Orientation` (1.21.2 のワイヤ更新順刷新で導入、旧称 WireOrientation) を運ぶ。
   **orientation は experimental evaluator 専用の文脈情報で、null なら従来挙動** [確定: 26.2 デコンパイル]。
   (注: 旧記述の「ChainRestrictedNeighborUpdater / SimpleNeighborUpdater」は Yarn マッピング名。公式名は上記。)
-- **update suppression**: 上記 1,000,000 総数制限の溢れ。skip 発生後も残りの tick 処理は継続する。再現要否は要判断。
+- **update suppression**: 上記 1,000,000 総数制限の溢れ。skip 発生後も残りの tick 処理は継続する。
+  **スコープ判断 (#53/#59 確定、12 §5)**: sim は (A) 総数上限打ち切りのみ忠実化する (world.ts submitUpdate、値 1,000,000)。
+  (B) 例外系抑制 (OOM/CCE 系) は 1.21.1/26.2 で非決定的または消滅済みのため**対象外**。
+  updateShape の深度上限 512 (`Level.setBlock` 既定 updateLimit) も sim は PP 再帰カスケードを持たないため対象外。
+  カウント意味論 (vanilla=提出数/multi 1 件/PP・CU 合流) の厳密一致は任意 (12 §2b の S2)。
 - ダスト更新は**決定的だが locational (座標依存)**。上記の通りコード根拠まで確定。carpet fastRedstoneDust / TIS-Addition
   redstoneDustRandomUpdateOrder の存在とも整合。
 
