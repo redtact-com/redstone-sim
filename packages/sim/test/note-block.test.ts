@@ -144,10 +144,11 @@ describe('note block: 立ち上がり検出と BE 発音', () => {
 
 describe('dust dot: 給電挙動', () => {
   it('dot は横 (水平) に給電しない (cross は給電する)', () => {
-    // redstone_block(0) → dot(1) → lamp(2)。dot は east=none なので lamp は点かない
+    // 真上の redstone_block → dot(1) → lamp(2)。dot は east=none なので lamp は点かない。
+    // (#51: 横に信号源を置くと接続が生えて dot を維持できないため真上から給電)
     const buildRow = (mkWire: () => BlockState) => {
       const world = new SimWorld()
-      place(world, 0, 0, 0, { type: 'redstone_block' })
+      place(world, 1, 1, 0, { type: 'redstone_block' })
       place(world, 1, 0, 0, mkWire())
       place(world, 2, 0, 0, { type: 'lamp', lit: false })
       world.initialize()
@@ -163,11 +164,12 @@ describe('dust dot: 給電挙動', () => {
   })
 
   it('dot は直下のブロックを弱充電する (down は給電する)', () => {
-    // dot(1,1,0) の直下 solid(1,0,0)。東の redstone_block(2,1,0) が dot を 15 に
+    // dot(1,1,0) の直下 solid(1,0,0)。真上の redstone_block(1,2,0) が dot を 15 に
+    // (#51: 横に置くと接続が生えて dot でなくなるため)
     const world = new SimWorld()
     place(world, 1, 1, 0, dot())
     place(world, 1, 0, 0, { type: 'solid', powered: false })
-    place(world, 2, 1, 0, { type: 'redstone_block' })
+    place(world, 1, 2, 0, { type: 'redstone_block' })
     world.initialize()
 
     expect(world.getBlockAt([1, 1, 0])).toMatchObject({ type: 'wire', power: 15 })

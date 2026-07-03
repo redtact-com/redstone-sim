@@ -229,6 +229,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('moving_piston', { facing: sim.facing, type: sim.kind })
       case 'solid':
         return 'stone'
+      case 'redstone_block':
+        // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
+        return 'redstone_block'
+      case 'target':
+        return formatMcState('target', { power: String(sim.outputPower) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'note_block':
@@ -253,9 +258,17 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
   }
   const { name, props } = parseMcState(authoredState!)
   switch (sim.type) {
-    case 'wire':
+    case 'wire': {
+      // #51 で接続形状が実行中に変わるようになったため、authored の
+      // north/south/east/west を流用せず sim 状態から直列化する
+      const val = (v: boolean | 'up') => v === 'up' ? 'up' : v ? 'side' : 'none'
+      props.north = val(sim.connections.north)
+      props.south = val(sim.connections.south)
+      props.east = val(sim.connections.east)
+      props.west = val(sim.connections.west)
       props.power = String(sim.power)
       break
+    }
     case 'repeater':
       props.powered = String(sim.powered)
       props.locked = String(sim.locked)

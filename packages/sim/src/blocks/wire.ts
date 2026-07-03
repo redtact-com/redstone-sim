@@ -29,7 +29,6 @@ export function isWireCutBlock(block: BlockState | null): boolean {
 export function getConnectedWireNeighbors(pos: Pos3D, world: SimWorld): Pos3D[] {
   const block = world.getBlockAt(pos)
   if (!block || block.type !== 'wire') return []
-  const wire = block as WireState
   const [x, y, z] = pos
   const result: Pos3D[] = []
 
@@ -40,8 +39,9 @@ export function getConnectedWireNeighbors(pos: Pos3D, world: SimWorld): Pos3D[] 
     const sidePos: Pos3D = [x + dx, y, z + dz]
     const side = world.getBlockAt(sidePos)
 
-    // 同レイヤー（接続方向のみ）
-    if (wire.connections[dir] && side?.type === 'wire') {
+    // 同レイヤー: 隣接ワイヤーは常に連結 (shouldConnectTo(wire)=true のため
+    // 導出接続は必ず立つ。保持値は自動拡張されないため参照しない #51)
+    if (side?.type === 'wire') {
       result.push(sidePos)
     }
 

@@ -48,48 +48,81 @@ const relOf: Record<Dir6, [number, number, number]> = {
 /**
  * wire(0,0,0) power=15 を固定し、相対位置 rel の「機構が動力を受けるか」を
  * isBlockPowered で判定する (initialize しない = 電力再計算を挟まない純クエリ検証)。
+ *
+ * #51 以降、給電の接続判定は保持値でなく query 時導出 (deriveWireConnections =
+ * vanilla getConnectionState) で行うため、形状は保持値の直接指定ではなく
+ * 「実際の隣接ジオメトリ」(接続方向に power 0 のワイヤーを置く) で作る。
+ * 隣接ワイヤーが占有する方向は検知器を置けないため期待行から除外する
+ * (対称方向で網羅される)。dot のみ保持値 (全 false) + 孤立の dot ガードで作る。
  */
-function emits(conn: WireConnections, dir: Dir6): boolean {
+function emits(neighborDirs: Dir6[], storedDot: boolean, dir: Dir6): boolean {
   const w = new SimWorld()
+  const conn: WireConnections = storedDot
+    ? { north: false, south: false, east: false, west: false }
+    : { north: true, south: true, east: true, west: true }
   const wire: WireState = { type: 'wire', connections: conn, power: 15 }
   w.setBlock(0, 0, 0, wire)
+  for (const nd of neighborDirs) {
+    const [nx, ny, nz] = relOf[nd]
+    w.setBlock(nx, ny, nz, {
+      type: 'wire',
+      connections: { north: false, south: false, east: false, west: false },
+      power: 0,
+    })
+  }
   return isBlockPowered(w, relOf[dir])
 }
 
-// 期待マトリクス [確定: 26.2 RedStoneWireBlock.getSignal]
-// 各方向へ給電するか (true=給電)
-const expectedMatrix: Record<string, Record<Dir6, boolean>> = {
-  cross:  { east: true,  west: true,  north: true,  south: true,  up: false, down: true },
-  lineEW: { east: true,  west: true,  north: false, south: false, up: false, down: true },
-  lineNS: { east: false, west: false, north: true,  south: true,  up: false, down: true },
-  bendNE: { east: true,  west: false, north: true,  south: false, up: false, down: true },
-  T_NES:  { east: true,  west: false, north: true,  south: true,  up: false, down: true },
-  dot:    { east: false, west: false, north: false, south: false, up: false, down: true },
-}
+// 期待マトリクス [確定: 26.2 RedStoneWireBlock.getSignal + getConnectionState]
+// 形状は隣接ワイヤー (neighbors) で作り、占有されていない方向のみ検証する。
+// 拡張端 (自動拡張された side) が「給電する」ことが #44 の核心。
+const cases: Array<{
+  name: string
+  neighbors: Dir6[]
+  storedDot?: boolean
+  expected: Partial<Record<Dir6, boolean>>
+}> = [
+  // 孤立 (保持 cross) → 導出 cross: 全水平に給電
+  { name: 'cross (孤立)', neighbors: [],
+    expected: { east: true, west: true, north: true, south: true, up: false, down: true } },
+  // 西に 1 本 → 直線 E-W: 拡張端 east に給電 / 垂直 north/south には給電しない
+  { name: 'lineEW (西 1 本)', neighbors: ['west'],
+    expected: { east: true, north: false, south: false, up: false, down: true } },
+  // 北に 1 本 → 直線 N-S
+  { name: 'lineNS (北 1 本)', neighbors: ['north'],
+    expected: { south: true, east: false, west: false, up: false, down: true } },
+  // 北+東 → bend: 非接続の west/south に給電しない
+  { name: 'bendNE', neighbors: ['north', 'east'],
+    expected: { west: false, south: false, up: false, down: true } },
+  // 北+東+南 → T 字: 非接続の west に給電しない
+  { name: 'T_NES', neighbors: ['north', 'east', 'south'],
+    expected: { west: false, up: false, down: true } },
+  // dot (保持 dot + 孤立 = dot ガード維持): 全水平に給電しない
+  { name: 'dot (dot ガード)', neighbors: [], storedDot: true,
+    expected: { east: false, west: false, north: false, south: false, up: false, down: true } },
+]
 
 describe('ダスト形状×隣接給電マトリクス [確定: 26.2 RedStoneWireBlock]', () => {
-  for (const [name, conn] of Object.entries(shapes)) {
-    const exp = expectedMatrix[name]
-    for (const dir of Object.keys(relOf) as Dir6[]) {
-      it(`${name} → ${dir}: ${exp[dir] ? '給電する' : '給電しない'}`, () => {
-        expect(emits(conn, dir)).toBe(exp[dir])
+  for (const c of cases) {
+    for (const [dir, exp] of Object.entries(c.expected) as Array<[Dir6, boolean]>) {
+      it(`${c.name} → ${dir}: ${exp ? '給電する' : '給電しない'}`, () => {
+        expect(emits(c.neighbors, c.storedDot ?? false, dir)).toBe(exp)
       })
     }
   }
 
-  it('直線 (lineEW) は延長端 (east/west) に給電し、垂直方向 (north/south) には給電しない', () => {
+  it('直線 (lineEW) は拡張端 (east) に給電し、垂直方向 (north/south) には給電しない', () => {
     // issue #44 の核心。observer-piston fixture で疑われた「単一接続=直線ダストの
-    // 隣接給電」を切り分けたもの: 直線は自動拡張された両端にのみ給電する。
-    expect(emits(shapes.lineEW, 'east')).toBe(true)
-    expect(emits(shapes.lineEW, 'west')).toBe(true)
-    expect(emits(shapes.lineEW, 'north')).toBe(false)
-    expect(emits(shapes.lineEW, 'south')).toBe(false)
+    // 隣接給電」を切り分けたもの: 直線は自動拡張された端にのみ給電する。
+    expect(emits(['west'], false, 'east')).toBe(true)
+    expect(emits(['west'], false, 'north')).toBe(false)
+    expect(emits(['west'], false, 'south')).toBe(false)
   })
 
   it('全形状で真上には給電しない / 足元には給電する', () => {
-    for (const conn of Object.values(shapes)) {
-      expect(emits(conn, 'up')).toBe(false)
-      expect(emits(conn, 'down')).toBe(true)
+    for (const c of cases) {
+      expect(emits(c.neighbors, c.storedDot ?? false, 'up')).toBe(false)
+      expect(emits(c.neighbors, c.storedDot ?? false, 'down')).toBe(true)
     }
   })
 })
@@ -122,6 +155,9 @@ describe('読み手側: 直線ダストの給電 (lineEW)', () => {
   it('ランプ: 延長端 (east) は点灯 / 垂直 (north) は消灯のまま', () => {
     const w = new SimWorld()
     w.setBlock(0, -1, 0, rblock())      // 直下から 15 供給
+    // 直線は実接続で作る (#51: initialize が接続形状を導出値へ張り替えるため、
+    // 隣接に接続対象の無い手書き lineEW は cross に正規化されてしまう)
+    w.setBlock(-1, 0, 0, wireWith(shapes.lineEW))  // west に wire → raw 1 本 → 直線へ自動拡張
     w.setBlock(0, 0, 0, wireWith(shapes.lineEW))
     w.setBlock(1, 0, 0, lamp())          // east: 延長端
     w.setBlock(0, 0, -1, lamp())         // north: 垂直
@@ -135,6 +171,7 @@ describe('読み手側: 直線ダストの給電 (lineEW)', () => {
   it('トーチ: 延長端の固体上は消灯 / 垂直の固体上は点灯のまま', () => {
     const w = new SimWorld()
     w.setBlock(0, -1, 0, rblock())
+    w.setBlock(-1, 0, 0, wireWith(shapes.lineEW))  // 実接続で直線化 (#51)
     w.setBlock(0, 0, 0, wireWith(shapes.lineEW))
     w.setBlock(1, 0, 0, solid())         // east: 弱充電される固体
     w.setBlock(1, 1, 0, torch())         // その上のトーチ → 消灯
@@ -151,6 +188,7 @@ describe('読み手側: 直線ダストの給電 (lineEW)', () => {
   it('ピストン: 延長端 (east) は伸長 / 垂直 (north) は伸長しない', () => {
     const w = new SimWorld()
     w.setBlock(0, -1, 0, rblock())
+    w.setBlock(-1, 0, 0, wireWith(shapes.lineEW))  // 実接続で直線化 (#51)
     w.setBlock(0, 0, 0, wireWith(shapes.lineEW))
     // east: 延長端。ピストンは wire と反対 (east) を向け、押し先 (2,0,0) は空
     w.setBlock(1, 0, 0, { type: 'piston', facing: 'east', extended: false })
@@ -184,9 +222,10 @@ describe('読み手側: cross / dot ', () => {
 
   it('dot: 水平4方向すべて消灯 / 足元 (下) のランプのみ点灯', () => {
     const w = new SimWorld()
-    // dot は水平接続ゼロ。redstone_block を east に置いて 15 を供給し (接続は張らない)、
-    // 足元 (下) の lamp のみ点灯することを見る
-    w.setBlock(1, 0, 0, rblock())   // east 隣から 15 供給 (dot は接続しない)
+    // dot は水平接続ゼロ。横に信号源を置くと vanilla では接続が生えて dot を
+    // 維持できない (#51 の張り替えで直線化する) ため、真上の redstone_block
+    // から 15 を供給する (rblock は shouldConnectTo の水平判定にしか効かない)
+    w.setBlock(0, 1, 0, rblock())   // 真上から 15 供給 (水平接続は生えない)
     w.setBlock(0, 0, 0, wireWith(shapes.dot))
     w.setBlock(0, -1, 0, lamp())    // down: 足元 → 点灯
     w.setBlock(0, 0, -1, lamp())    // north: 消灯
