@@ -1,0 +1,96 @@
+{
+  "name": "hopper-lock",
+  "description": "ホッパーのロック回路 (#65)。レバー (西隣) の受電でホッパー enabled が false になり (ロック)、解除で true に戻る。アイテム不要 (enabled は blockstate なので直接観測できる)。[確定: 26.2 HopperBlock.neighborChanged — enabled = !hasNeighborSignal]",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      1,
+      1,
+      2
+    ]
+  },
+  "player": {
+    "spawn": [
+      0.5,
+      1.0,
+      2.5
+    ],
+    "facing": [
+      180,
+      45
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "hopper[enabled=true,facing=down]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}

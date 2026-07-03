@@ -83,6 +83,8 @@ interface BlockMeta {
   hasPressedPower?: boolean
   /** コンテナの背面読み信号 (0-15) セレクタを表示するか */
   hasSignal?: boolean
+  /** ホッパー/ドロッパーの内容個数セレクタを表示するか (#65) */
+  hasCount?: boolean
 }
 
 const BLOCK_PALETTE: BlockMeta[] = [
@@ -110,6 +112,8 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'redstone_block', label: 'レッドストーンブロック', texture: 'block/redstone_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'container',  label: 'コンテナ',      texture: 'block/barrel_side',     hasFacing: false, hasDelay: false, hasMode: false, hasSignal: true },
+  { type: 'hopper',     label: 'ホッパー',      texture: 'block/hopper_outside',  hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
+  { type: 'dropper',    label: 'ドロッパー',    texture: 'block/dropper_front',   hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },
@@ -167,6 +171,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // 重量感圧板の踏まれ信号 (1-15, 既定 15) / コンテナの背面読み信号 (0-15, 既定 0)
   const [pressedPower, setPressedPower] = useState(15)
   const [signal, setSignal] = useState(0)
+  // ホッパー/ドロッパーの内容個数 (既定 0) (#65)
+  const [count, setCount] = useState(0)
 
   // グリッド上の選択セル (x, z)
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null)
@@ -291,6 +297,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const barSignal: number =
     gridBlock?.type === 'container' ? gridBlock.signal : signal
 
+  const barCount: number =
+    (gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper') ? gridBlock.count : count
+
   // 向き・遅延バーを表示するか
   const gridBlockHasFacing = !!gridBlock && 'facing' in gridBlock &&
     H_DIRS.some(([d]) => d === (gridBlock as unknown as Record<string, unknown>).facing)
@@ -302,22 +311,25 @@ export function EditorPage({ onBack }: EditorPageProps) {
     !!(selectedMeta?.hasMode) ||
     !!(selectedMeta?.hasPressedPower) ||
     !!(selectedMeta?.hasSignal) ||
+    !!(selectedMeta?.hasCount) ||
     gridBlockHasFacing ||
     gridBlock?.type === 'repeater' ||
     gridBlock?.type === 'comparator' ||
     gridBlock?.type === 'weighted_pressure_plate_light' ||
     gridBlock?.type === 'weighted_pressure_plate_heavy' ||
-    gridBlock?.type === 'container'
+    gridBlock?.type === 'container' ||
+    gridBlock?.type === 'hopper' ||
+    gridBlock?.type === 'dropper'
   )
 
   // ── ブロッククリック（edit + sim 共通） ─────────────────────────────────
 
   // useCallback の deps を最小化して IsometricView への参照を安定させる
-  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal })
-  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal }
+  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count })
+  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count }
 
   const handleBlockClick = useCallback((pos: Pos3D, button: 'left' | 'right') => {
-    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal } = stateRef.current
+    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count } = stateRef.current
     const [x, , z] = pos
 
     // ── シミュレーションモード: レバーのみ操作 ──────────────────────────
@@ -397,6 +409,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (existing.type === 'container') {
         setSignal(existing.signal)
       }
+      if (existing.type === 'hopper' || existing.type === 'dropper') {
+        setCount(existing.count)
+      }
       addLog(`選択: ${existing.type} (${x}, ${z})`)
     } else {
       // 空セルをクリック → 新規配置
@@ -407,6 +422,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (meta?.hasMode)   opts.mode   = comparatorMode
       if (meta?.hasPressedPower) opts.pressedPower = pressedPower
       if (meta?.hasSignal)       opts.signal       = signal
+      if (meta?.hasCount)        opts.count        = count
       editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
       setSelectedPos([x, z])
       addLog(`${meta?.label ?? selectedType} を配置 (${x}, ${z})`)
@@ -487,6 +503,23 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'container') {
           editorRef.current.placeBlock(prev[0], prev[1], 'container', { signal: newSignal })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
+  // ── 内容個数変更（ホッパー/ドロッパー #65） ─────────────────────────
+
+  const handleCountChange = useCallback((newCount: number) => {
+    setCount(newCount)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'hopper' || block?.type === 'dropper') {
+          const f = (block as unknown as Record<string, unknown>).facing as HDir
+          editorRef.current.placeBlock(prev[0], prev[1], block.type, { facing: f, count: newCount })
           rerender()
         }
       }
@@ -942,11 +975,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
           barMode={barMode}
           barPressedPower={barPressedPower}
           barSignal={barSignal}
+          barCount={barCount}
           onFacingChange={handleFacingChange}
           onDelayChange={handleDelayChange}
           onModeChange={handleModeChange}
           onPressedPowerChange={handlePressedPowerChange}
           onSignalChange={handleSignalChange}
+          onCountChange={handleCountChange}
         />
       )}
 
@@ -977,17 +1012,19 @@ interface FacingBarProps {
   barMode:            'compare' | 'subtract'
   barPressedPower:    number
   barSignal:          number
+  barCount:           number
   onFacingChange:     (f: HDir) => void
   onDelayChange:      (d: 1 | 2 | 3 | 4) => void
   onModeChange:       (m: 'compare' | 'subtract') => void
   onPressedPowerChange: (p: number) => void
   onSignalChange:     (s: number) => void
+  onCountChange:      (c: number) => void
 }
 
 function FacingBar({
   gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
-  barFacing, barDelay, barMode, barPressedPower, barSignal,
-  onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange,
+  barFacing, barDelay, barMode, barPressedPower, barSignal, barCount,
+  onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange, onCountChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
 
@@ -998,6 +1035,9 @@ function FacingBar({
     gridBlock?.type === 'weighted_pressure_plate_light' ||
     gridBlock?.type === 'weighted_pressure_plate_heavy'
   const showSignal = !!(meta?.hasSignal) || gridBlock?.type === 'container'
+  const showCount = !!(meta?.hasCount) ||
+    gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper'
+  const countMax = (gridBlock?.type === 'dropper' || selectedType === 'dropper') ? 576 : 320
 
   const label = selectedPos
     ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
@@ -1089,6 +1129,11 @@ function FacingBar({
       {/* 背面読み信号（コンテナ 0-15） */}
       {showSignal && (
         <PowerSelect label="SIGNAL" min={0} max={15} value={barSignal} onChange={onSignalChange} />
+      )}
+
+      {/* 内容個数（ホッパー/ドロッパー #65。範囲が広いため数値入力） */}
+      {showCount && (
+        <CountInput label="個数" max={countMax} value={barCount} onChange={onCountChange} />
       )}
 
       <div className="flex-1" />
@@ -1315,6 +1360,39 @@ function PowerSelect({ label, min, max, value, onChange }: {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ── CountInput ──────────────────────────────────────────────────────────────
+
+/**
+ * ホッパー/ドロッパーの内容個数入力 (#65)。値域が広い (0..576) ため
+ * PowerSelect のボタングリッドではなく数値入力にする (SIGNAL セレクタの前例に倣い
+ * ラベル + 入力を FacingBar に置く)。
+ */
+function CountInput({ label, max, value, onChange }: {
+  label:    string
+  max:      number
+  value:    number
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 shrink-0">
+      <span className="font-pixel text-center" style={{ fontSize: 11, color: '#555' }}>{label}</span>
+      <input
+        type="number" min={0} max={max} value={value}
+        onChange={e => {
+          const n = Math.max(0, Math.min(max, Math.floor(Number(e.target.value) || 0)))
+          onChange(n)
+        }}
+        className="mc-btn font-bold text-center"
+        style={{
+          width: 72, height: 28, fontSize: 12,
+          background: '#3a3a3a', color: '#ddd',
+          borderColor: '#666 #222 #222 #666',
+        }}
+      />
     </div>
   )
 }

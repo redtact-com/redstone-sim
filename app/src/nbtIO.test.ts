@@ -84,3 +84,25 @@ describe('nbtIO: コンテナ / 重量板の既存往復が壊れていない', 
       .toMatchObject({ type: 'weighted_pressure_plate_light', powered: false })
   })
 })
+
+describe('nbtIO: ホッパー / ドロッパーの往復 (#65)', () => {
+  it('hopper は facing/enabled を保持し count=0 で戻る (中身は NBT に無い)', () => {
+    expect(roundTrip({ type: 'hopper', facing: 'east', count: 12, enabled: true }))
+      .toMatchObject({ type: 'hopper', facing: 'east', enabled: true, count: 0 })
+  })
+
+  it('dropper は facing/triggered を保持し count=0 で戻る', () => {
+    expect(roundTrip({ type: 'dropper', facing: 'up', count: 5, triggered: false }))
+      .toMatchObject({ type: 'dropper', facing: 'up', triggered: false, count: 0 })
+  })
+
+  it('vanilla hopper[facing=down] → hopper 型 import', () => {
+    expect(importVanilla('minecraft:hopper', { enabled: 'true', facing: 'down' }))
+      .toMatchObject({ type: 'hopper', facing: 'down', enabled: true })
+  })
+
+  it('vanilla dropper[facing=north,triggered=false] → dropper 型 import', () => {
+    expect(importVanilla('minecraft:dropper', { facing: 'north', triggered: 'false' }))
+      .toMatchObject({ type: 'dropper', facing: 'north', triggered: false })
+  })
+})
