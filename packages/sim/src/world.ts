@@ -1130,8 +1130,12 @@ export class SimWorld {
         }
         this.neighborChanged(neighbor(top.around, NC_UPDATE_ORDER[top.idx++]))
       }
-      if (++this.updateCount > 65_536) {
-        // vanilla の maxChained 溢れ相当 (skip してエラーログのみ、02 §4.2)
+      if (++this.updateCount > 1_000_000) {
+        // vanilla の maxChainedNeighborUpdates = 1,000,000 溢れ相当
+        // (skip してエラーログのみ、02 §4.2)。以前は tile tick 上限 (§2.3 の
+        // 65,536) と取り違えていた (12 §2a で検出、#59 で修正)。
+        // カウント意味論は vanilla (提出数) と異なり実行 neighborChanged 数
+        // (12 §2b の S2 = 任意対応、必要になったら別 issue)
         console.warn('[sim] NC 更新数が上限を超過。以降の更新を破棄します')
         this.updateStack.length = 0
         this.addedThisLayer.length = 0
