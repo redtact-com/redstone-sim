@@ -48,7 +48,7 @@ npm run typecheck    # packages の型チェック
 
 | ブランチ | 役割 | URL（push で自動更新） |
 |---|---|---|
-| `main` | 正式リリース（本番） | https://redstone-sim.pages.dev |
+| `main` | 正式リリース（本番） | https://rdsim.com （= redstone-sim.pages.dev） |
 | `develop` | 日常の開発（デフォルトブランチ） | https://develop.redstone-sim.pages.dev |
 | `<issue番号>-<topic>` | feature ブランチ → develop へ PR | `https://pr-<N>.redstone-sim.pages.dev`（PR 作成/更新時） |
 

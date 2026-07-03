@@ -1,6 +1,6 @@
 # ブランチ別 Pages デプロイ (issue #7)
 #
-# - main への push    → 本番        https://redstone-sim.pages.dev
+# - main への push    → 本番        https://rdsim.com (カスタムドメイン。pages.dev 直も可)
 #   (Pages プロジェクトの production branch = main)
 # - develop への push → プレビュー  https://develop.redstone-sim.pages.dev
 #
