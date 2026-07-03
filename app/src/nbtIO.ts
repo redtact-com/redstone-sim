@@ -202,6 +202,20 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing:  'south',
         powered: String((block as any).powered ?? false),
       }]
+    case 'pressure_plate_wood':
+      return ['minecraft:oak_pressure_plate', { powered: String((block as any).powered ?? false) }]
+    case 'pressure_plate_stone':
+      return ['minecraft:stone_pressure_plate', { powered: String((block as any).powered ?? false) }]
+    case 'weighted_pressure_plate_light':
+      // 手動モデルの pressedPower は POWER として保存 (踏まれ中のみ >0 になる vanilla とは
+      // 意味が異なるため、非作動時は 0 を書く)
+      return ['minecraft:light_weighted_pressure_plate', {
+        power: String((block as any).powered ? ((block as any).pressedPower ?? 15) : 0),
+      }]
+    case 'weighted_pressure_plate_heavy':
+      return ['minecraft:heavy_weighted_pressure_plate', {
+        power: String((block as any).powered ? ((block as any).pressedPower ?? 15) : 0),
+      }]
     case 'piston':
     case 'sticky_piston':
       return [`minecraft:${(block as any).type}`, {
@@ -330,6 +344,21 @@ function minecraftToBlockState(
   if (name.endsWith('_button')) {
     const facing = (props.facing ?? 'north') as any
     return { type: 'lever', facing, powered: false } as BlockState
+  }
+
+  // 感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)
+  if (name === 'minecraft:light_weighted_pressure_plate') {
+    return { type: 'weighted_pressure_plate_light', powered: false, pressedPower: 15 } as BlockState
+  }
+  if (name === 'minecraft:heavy_weighted_pressure_plate') {
+    return { type: 'weighted_pressure_plate_heavy', powered: false, pressedPower: 15 } as BlockState
+  }
+  if (name === 'minecraft:stone_pressure_plate') {
+    return { type: 'pressure_plate_stone', powered: false } as BlockState
+  }
+  if (name.endsWith('_pressure_plate')) {
+    // 木材各種はまとめて木の感圧板として取り込む
+    return { type: 'pressure_plate_wood', powered: false } as BlockState
   }
 
   // 固体ブロック一覧
