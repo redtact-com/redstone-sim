@@ -198,9 +198,19 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - 出典: 26.2 server.jar デコンパイル (hasNeighborSignal(pos.above()))、https://minecraft.wiki/w/Quasi-connectivity、carpet quasiConnectivity ルール。
 - 注: ArcFrout の「間接続 4 種 (ダスト斜め含む)」はダスト斜め接続 (別機構) を含む独自上位概念。コード上の QC は上記 3 種。
 
-### 5.4 ダストの給電対象と斜め接続 [確定: RedStoneWireBlock デコンパイル]
+### 5.4 ダストの給電対象と斜め接続 [確定: 26.2 RedStoneWireBlock デコンパイル]
 - **給電対象** (`RedStoneWireBlock.getSignal`): 足元ブロック (下方向 query = 給電あり) + 接続方向の水平隣接のみ。
   **真上のブロックには給電しない** (query 方向 DOWN で常に 0)。水平は `getConnectionState` の接続判定を通った方向のみ。
+- **形状の自動拡張と「延長端への給電」** [確定: 26.2 — `getConnectionState` / `getMissingConnections`]:
+  `getSignal` は保持中の blockstate ではなく **`getConnectionState` を毎回再計算** して接続を判定する。
+  この再計算は物理接続が **0 本なら cross (4 方向 SIDE)**、**1 本なら反対側も SIDE = 直線** に拡張する
+  (2 本以上の bend/T/cross は拡張なし)。よって **直線ダストは物理接続の無い「延長端」にも給電する** が、
+  接続していない**垂直方向 (直線に対し 90°) には給電しない**。#44 で疑われた「単一接続=直線ダストの隣接ピストン
+  給電」はこの規則で、直線の延長端に当たるピストンは給電され、垂直に当たるピストンは給電されない (両者とも実機と一致)。
+  形状×方向の給電マトリクスは **docs/research/11_dust-shape-powering.md** に集約。sim は接続を静的に持つが、
+  拡張は接続導出層 (`mcstate.mcToSim` は vanilla 拡張済み blockstate をそのまま取り込み、
+  `editor.computeWireConnections` は 0→cross / 1→直線 を適用) で吸収し、`power.ts` は `connections` を素直に読む
+  → **power.ts に vanilla とのずれは無い** (#44 で `packages/sim/test/wire-shape-power.test.ts` により全形状確認)。
 - **弱充電の実装機構** [確定]: dust には weak/strong の別チャネルはなく、`shouldSignal` フラグで実現される。
   ダスト自身の強度計算 (`calculateTargetStrength`) 中のみ `shouldSignal=false` になり、その間ワイヤの
   `getDirectSignal`/`isSignalSource` が 0/false を返す → **ダスト給電された導体は機構には信号を伝えるが、

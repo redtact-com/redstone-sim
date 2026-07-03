@@ -79,7 +79,12 @@ function getAttachFace(facing: Dir6): Dir6 {
  * - ターゲット: 全 6 方向に outputPower [確定: 1.21.1 TargetBlock.getSignal]
  *   (いずれも getDirectSignal 非 override のため強充電はしない = weak のみ)
  * - ワイヤー: 足元 (down) + 接続方向の水平。上方向へは給電しない (G5)
- *   [要検証: 02 §5.4]
+ *   [確定: 26.2 デコンパイル RedStoneWireBlock.getSignal — direction==DOWN で 0
+ *    (真上は非給電)、power!=0 かつ (direction==UP または opposite 方向が接続) で power。
+ *    給電判定は getConnectionState (0 本→cross / 1 本→直線 拡張済) を再計算する。
+ *    sim は WireState.connections を静的に持つが、vanilla 拡張は接続導出層
+ *    (mcstate.mcToSim / editor.computeWireConnections) で済ませているため等価。
+ *    形状×方向マトリクスは docs/research/11。02 §5.4 と #44 で確定]。
  */
 function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
   const src = world.getBlockAt(srcPos)
