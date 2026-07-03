@@ -473,6 +473,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleStart = useCallback(() => {
     const world = editorRef.current.buildSimWorld()
     world.initialize()
+    // 音符ブロックの発音イベント (BE フェーズ) をログへ可視化 (C5 #38)
+    world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
     const leverState = saveCheckpoint(world, 0)
     setSimWorld(world)
     setTick(0)
@@ -500,6 +502,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     if (!checkpoint) return
     setRunning(false)
     const world = new SimWorld()
+    world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
     const leverState: Record<string, boolean> = {}
     for (const [key, block] of checkpoint) {
       const [x, y, z] = key.split(',').map(Number)
