@@ -184,6 +184,24 @@ export function mcToSim(state: string): BlockState | null {
       // コンテナ: 充填率 (signal) は blockstate に現れないため 0 で取り込む
       // [02 §6 comparator。実効 signal は BE の中身に依存する]
       return { type: 'container', signal: 0 }
+    case 'hopper':
+      // vanilla の facing = 送り込み方向 (down または水平) = sim と同一 (非反転)。
+      // count (内容) は blockstate に無いため 0 で取り込む (BE の中身)。
+      return {
+        type: 'hopper',
+        facing: (props.facing ?? 'down') as Dir6,
+        count: 0,
+        enabled: props.enabled !== 'false',
+        cooldownUntil: 0,
+      }
+    case 'dropper':
+      // vanilla の facing = 出力方向 (6 方向) = sim と同一 (非反転)。
+      return {
+        type: 'dropper',
+        facing: (props.facing ?? 'north') as Dir6,
+        count: 0,
+        triggered: props.triggered === 'true',
+      }
     case 'stone':
     case 'smooth_stone':
     case 'cobblestone':
@@ -234,6 +252,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return 'redstone_block'
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
+      case 'hopper':
+        return formatMcState('hopper', { enabled: String(sim.enabled), facing: sim.facing })
+      case 'dropper':
+        return formatMcState('dropper', { facing: sim.facing, triggered: String(sim.triggered) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'note_block':
@@ -317,7 +339,14 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.powered = String(sim.powered)
       break
     case 'container':
-      break // signal は blockstate に現れない (authored 名 barrel/chest を保持)
+      break // signal/count は blockstate に現れない (authored 名 barrel/chest を保持)
+    case 'hopper':
+      // count は BE で blockstate に無い。enabled のみ動的に上書き
+      props.enabled = String(sim.enabled)
+      break
+    case 'dropper':
+      props.triggered = String(sim.triggered)
+      break
     case 'solid':
       break // powered は blockstate に現れない
     case 'air':

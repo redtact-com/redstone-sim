@@ -13,8 +13,14 @@ import {
   refreshWireShape, wireShapeCandidates, sameConnections,
 } from './wire-shape.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
-import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
-import type { BlockEvent, PistonState, NoteBlockState } from './types.js'
+import {
+  containerCapacity, canContainerAccept, containerParticipates,
+  isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
+} from './blocks/container.js'
+import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
+import type {
+  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState,
+} from './types.js'
 
 /** 音符ブロック発音イベント (C5 #38)。BE フェーズの triggerEvent 相当で発火する */
 export interface NotePlayEvent {
@@ -316,10 +322,120 @@ export class SimWorld {
       for (const k of this.executeBlockEvent(ev)) changed.add(k)
     }
 
+    // ── BlockEntity フェーズ (02 §1.2 phase10 [確定]): ホッパー転送。
+    // ST (phase4) → BE (phase8) → BlockEntity (phase10) の順は vanilla と一致
+    // (ST は runBlockEvents の前、BlockEntity は後)。ドロッパーは ST フェーズの
+    // tile tick で発火するためここでは扱わない (piston/dispenser と同じ BEC/STC 系)。
+    this.tickBlockEntities(changed)
+
     return {
       changedPositions: [...changed].map(keyToPos),
       currentTick: this.currentTick,
     }
+  }
+
+  /**
+   * BlockEntity フェーズ (phase10) — ホッパーの転送 (C6' #65)。
+   *
+   * [確定: 26.2 HopperBlockEntity]: 毎 gt、クールダウン (8gt) 明け かつ enabled の
+   * ホッパーが、(1) facing 先コンテナへ 1 個 eject、(2) 直上コンテナから 1 個 suck
+   * を試みる (eject が先。両方成立し得る)。いずれか成功でクールダウン 8gt 再設定。
+   * コンテナ内容が変わったら CU (emitComparatorUpdate) で隣接コンパレーターへ通知。
+   *
+   * **既知の抽象化 (02 §6 に注記)**: vanilla の BlockEntity tick 順は
+   * ブロックエンティティ登録順 (ロード順) で観測可能だが、sim は決定論のため
+   * 座標順 (y 降順 → x → z = 上から下) で走査する。上下チェーンで上流を先に
+   * 処理することで、受信側クールダウン設定と併せて 1 個/8gt の素直な流下になる。
+   * 転送先ホッパーのクールダウン -1 補正 (vanilla の tickedGameTime 依存) は v1 では
+   * 一律 8 に単純化する (順序依存の double-move を防ぐ目的は達成。±1gt の差は
+   * blockstate 観測 = コンパレーター 0 交差では吸収される)。
+   */
+  private tickBlockEntities(changed: Set<string>): void {
+    // 座標順 (y 降順 → x → z): 上流 (高 y) を先に処理して素直な流下にする
+    const hoppers: Pos3D[] = []
+    for (const [key, b] of this.blocks) {
+      if (b.type === 'hopper') hoppers.push(keyToPos(key))
+    }
+    hoppers.sort((a, b) => b[1] - a[1] || a[0] - b[0] || a[2] - b[2])
+
+    for (const pos of hoppers) {
+      let h = this.getBlockAt(pos)
+      if (h?.type !== 'hopper') continue
+      const key = posKey(pos)
+      // ロック中 / クールダウン中はスキップ (vanilla: !enabled or isOnCooldown)
+      if (!h.enabled || this.currentTick < (h.cooldownUntil ?? 0)) continue
+      let moved = false
+
+      // (1) 送り込み (eject): facing 先のコンテナへ 1 個 (h が空でないとき)
+      if (h.count > 0) {
+        const destPos = neighbor(pos, h.facing)
+        const dest = this.getBlockAt(destPos)
+        if (canContainerAccept(dest)) {
+          const d = dest as HopperState | DropperState | ContainerState
+          this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
+          h = { ...h, count: h.count - 1 }
+          this.setBlockAt(pos, h)
+          // 受信側がホッパーでクールダウン明けなら 8gt を設定 (double-move 防止)
+          if (d.type === 'hopper' && this.currentTick >= ((d as HopperState).cooldownUntil ?? 0)) {
+            const cur = this.getBlockAt(destPos) as HopperState
+            this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN })
+          }
+          this.emitComparatorUpdate(destPos)
+          changed.add(posKey(destPos))
+          moved = true
+        }
+      }
+
+      // (2) 吸い出し (suck): 直上コンテナから 1 個 (h が満杯でないとき)
+      if (h.count < containerCapacity('hopper')) {
+        const srcPos: Pos3D = [pos[0], pos[1] + 1, pos[2]]
+        const src = this.getBlockAt(srcPos)
+        if (containerParticipates(src) && (src as { count?: number }).count! > 0) {
+          const s = src as HopperState | DropperState | ContainerState
+          this.setBlockAt(srcPos, { ...s, count: (s.count ?? 0) - 1 } as BlockState)
+          h = { ...h, count: h.count + 1 }
+          this.setBlockAt(pos, h)
+          this.emitComparatorUpdate(srcPos)
+          changed.add(posKey(srcPos))
+          moved = true
+        }
+      }
+
+      if (moved) {
+        this.setBlockAt(pos, { ...h, cooldownUntil: this.currentTick + HOPPER_COOLDOWN })
+        this.emitComparatorUpdate(pos)
+        changed.add(key)
+      }
+    }
+  }
+
+  /**
+   * CU (updateNeighbourForOutputSignal 相当。02 §4.1/§4.2 [確定])。
+   * コンテナ内容が変わったとき水平隣接 (北→東→南→西) のコンパレーターへ通知する。
+   * 直接隣接のコンパレーター、または導体 1 個越しのコンパレーターが対象
+   * (readComparatorBack の背面直読 / 導体越し読みに対応)。neighborChanged を直接
+   * 呼び、コンパレーターは出力変化時に 2gt tile tick を予約する。
+   */
+  private emitComparatorUpdate(pos: Pos3D): void {
+    for (const dir of CU_UPDATE_ORDER) {
+      const nPos = neighbor(pos, dir)
+      const nb = this.getBlockAt(nPos)
+      if (nb?.type === 'comparator') { this.neighborChanged(nPos); continue }
+      if (isConductor(nb)) {
+        const fPos = neighbor(nPos, dir)
+        if (this.getBlockAt(fPos)?.type === 'comparator') this.neighborChanged(fPos)
+      }
+    }
+  }
+
+  /**
+   * ドロッパー/ディスペンサーの起動判定 (通常受電 ∪ QC の 1 個上受電)。
+   * [確定: 26.2 DispenserBlock.neighborChanged — hasNeighborSignal(pos) ||
+   *  hasNeighborSignal(pos.above())]。QC は 02 §5.3 の 3 クラスの 1 つ。
+   */
+  private isDropperPowered(pos: Pos3D): boolean {
+    if (isBlockPowered(this, pos)) return true
+    return isBlockPowered(this, [pos[0], pos[1] + 1, pos[2]])
   }
 
   /**
@@ -436,6 +552,16 @@ export class SimWorld {
         // (初期状態は既に鳴り終わった相当。26.2 も onPlace で発音しない)。
         const powered = isBlockPowered(this, pos)
         if (block.powered !== powered) this.blocks.set(key, { ...block, powered })
+      } else if (block.type === 'hopper') {
+        // 受電で enabled を確定 (ロック)。cooldownUntil は 0 にリセットして即転送可に。
+        // count (内容) は authored 保持 (物流の初期条件)。
+        const enabled = !isBlockPowered(this, pos)
+        this.blocks.set(key, { ...block, enabled, cooldownUntil: 0 })
+      } else if (block.type === 'dropper') {
+        // 受電で triggered を確定するが initialize では発火しない (tile tick 予約なし。
+        // authored 安定状態は「既に発火済み」相当。runtime の立ち上がりでのみ発火)。
+        const powered = this.isDropperPowered(pos)
+        if (block.triggered !== powered) this.blocks.set(key, { ...block, triggered: powered })
       }
     }
 
@@ -729,6 +855,30 @@ export class SimWorld {
       this.emitShapeUpdate(pos)          // setBlock flag2 → PP (連鎖先オブザーバーを起動)
       if (next.powered) this.schedule(pos, 2, 0)  // OFF tick を背面 NC より先に予約
       this.propagateChange(pos)          // 背面 1 マスへ strong 15 の NC
+    } else if (block.type === 'dropper') {
+      // vanilla DropperBlock.dispenseFrom (ST フェーズ) [確定: 26.2]:
+      // ランダムスロットの 1 個を前方コンテナへ挿入。sim は種別なしなので count を移す。
+      if (block.count > 0) {
+        const destPos = neighbor(pos, block.facing)
+        const dest = this.getBlockAt(destPos)
+        if (canContainerAccept(dest)) {
+          // 前方コンテナに空きあり → 1 個挿入
+          const d = dest as HopperState | DropperState | ContainerState
+          this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
+          this.setBlockAt(pos, { ...block, count: block.count - 1 })
+          changed.push(posKey(pos), posKey(destPos))
+          this.emitComparatorUpdate(destPos)
+          this.emitComparatorUpdate(pos)
+        } else if (!isContainerType(dest?.type)) {
+          // 前方が非コンテナ → vanilla は発射 (アイテムエンティティ生成)。
+          // エンティティ境界原則 (13 §4.2) により 1 個消費して何も出さない。
+          this.setBlockAt(pos, { ...block, count: block.count - 1 })
+          changed.push(posKey(pos))
+          this.emitComparatorUpdate(pos)
+        }
+        // 前方が満杯コンテナ (canContainerAccept=false かつコンテナ種) は
+        // vanilla の挿入失敗と同じく no-op (アイテムは残る)。
+      }
     }
 
     return changed
@@ -1364,6 +1514,33 @@ export class SimWorld {
         }
         break
       }
+      case 'hopper': {
+        // vanilla HopperBlock.neighborChanged → checkPoweredState:
+        // enabled = !hasNeighborSignal(pos)。受電で enabled=false = ロック。
+        // [確定: 26.2 HopperBlock]。setBlock flag2 相当だが blockstate 変化なので
+        // オブザーバー検知用に PP も発行する。
+        const enabled = !isBlockPowered(this, pos)
+        if (block.enabled !== enabled) {
+          this.setBlockAt(pos, { ...block, enabled })
+          this.emitShapeUpdate(pos)
+        }
+        break
+      }
+      case 'dropper': {
+        // vanilla DispenserBlock.neighborChanged [確定: 26.2]:
+        // 受電 (通常 ∪ QC) の立ち上がりで TRIGGERED を立て 4gt tick を予約、
+        // 立ち下がりで TRIGGERED 解除。発火 (dispenseFrom) は ST フェーズの tick。
+        const powered = this.isDropperPowered(pos)
+        if (powered && !block.triggered) {
+          this.setBlockAt(pos, { ...block, triggered: true })
+          this.emitShapeUpdate(pos)
+          this.schedule(pos, DROPPER_TICK_DELAY, 0)
+        } else if (!powered && block.triggered) {
+          this.setBlockAt(pos, { ...block, triggered: false })
+          this.emitShapeUpdate(pos)
+        }
+        break
+      }
       default:
         break
     }
@@ -1462,8 +1639,9 @@ export class SimWorld {
     const backPos = neighbor(pos, backDir)
     const back = this.getBlockAt(backPos)
 
-    // 1. 背面直後のコンテナは通常信号を上書きする
-    if (back?.type === 'container') return back.signal
+    // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
+    //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
+    if (isContainerType(back?.type)) return effectiveContainerSignal(back)
 
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
@@ -1473,7 +1651,7 @@ export class SimWorld {
     // 3. 導体 1 個越しのコンテナ読み
     if (i < 15 && isConductor(back)) {
       const far = this.getBlockAt(neighbor(backPos, backDir))
-      if (far?.type === 'container') i = Math.max(i, far.signal)
+      if (isContainerType(far?.type)) i = Math.max(i, effectiveContainerSignal(far))
     }
     return i
   }
@@ -1539,7 +1717,11 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'piston':
     case 'sticky_piston': return (a.type === 'piston' || a.type === 'sticky_piston') &&
                                  (a.extended !== b.extended || a.facing !== b.facing)
-    // solid.powered / container.signal は blockstate ではない → 非観測
+    // hopper.enabled / dropper.triggered は blockstate プロパティ → 観測対象。
+    // count (内容) は BE で非観測 (コンパレーターのみ CU で読む)。
+    case 'hopper':      return a.type === 'hopper' && a.enabled !== b.enabled
+    case 'dropper':     return a.type === 'dropper' && a.triggered !== b.triggered
+    // solid.powered / container.signal / *.count は blockstate ではない → 非観測
     default:            return false
   }
 }

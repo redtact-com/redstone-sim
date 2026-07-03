@@ -178,23 +178,81 @@ export interface WeightedPressurePlateState {
 /**
  * コンテナ (チェスト / バレル等) の簡易モデル。
  *
- * 実際の充填率 (各スロットの item count / maxStackSize) は持たず、
- * コンパレーターが背面から読み取る「実効 signal」(0-15) を直接保持する。
+ * 2 つのモード (blocks/container.ts で吸収。移行方法は 02 §6 に注記):
+ *   1. 手動計測モード (C6, #13): count 未定義。コンパレーターが背面から読む
+ *      「実効 signal」(0-15) を signal に直接保持する。物流には不参加。
+ *   2. 物流モード (C6', #65): count 定義。個数を保持し、コンパレーター信号は
+ *      fillSignal(count, スロット数×64) で導出する (signal は無視)。ホッパー/
+ *      ドロッパーの転送先/元になれる。
  *
  * 充填率 → 強度の変換式 [確定: 02 §6 comparator —
  *   AbstractContainerMenu.getRedstoneSignalFromContainer]:
  *     f = (Σ 各スロットの count / maxStackSize) / スロット数
  *     signal = Mth.lerpDiscrete(f, 0, 15) = floor(f * 14) + (f > 0 ? 1 : 0)
- *   (空 = 0、非空は最低 1)。本 sim はスロット内容を持たないため、この式で
- *   求めた値を signal に直接与える運用とする。
+ *   (空 = 0、非空は最低 1)。
  *
- * editor パレットへの追加は本 issue (#13) のスコープ外。nbtIO は barrel/chest
- * 系を signal=0 で import し、viewer は minecraft:barrel として描画する。
+ * nbtIO は barrel/chest 系を signal=0 (手動モード) で import し、viewer は
+ * minecraft:barrel として描画する。
  */
 export interface ContainerState {
   type: 'container'
-  /** コンパレーター背面から読まれる実効出力 (0-15) */
+  /** 手動計測モードでコンパレーター背面から読まれる実効出力 (0-15) */
   signal: number
+  /** 物流モードの個数 (定義時は signal より優先。容量 = 27×64 = 1728) */
+  count?: number
+}
+
+/**
+ * ホッパー (物流。C6' #65)。アイテムは「個数 count」1 本の数値で持つ
+ * (スタック種別・スロットなし。容量 = 5×64 = 320)。
+ *
+ * [確定: 26.2 HopperBlockEntity / HopperBlock]:
+ *   - BlockEntity フェーズ (02 §1.2 phase10) で毎 gt tick。転送クールダウン
+ *     8gt (HOPPER_COOLDOWN)。1 回の転送で 1 個。
+ *   - tryMoveItems: **送り込み (facing 先コンテナへ eject) を先に**、続いて
+ *     **吸い出し (直上コンテナから suck)** を行う。両方が同 gt に起き得る
+ *     (それぞれ 1 個)。いずれか成功でクールダウンを 8 に再設定。
+ *   - ENABLED: HopperBlock.neighborChanged で `enabled = !hasNeighborSignal`。
+ *     受電中 (enabled=false) は転送しない = ロック (setBlock flag2)。
+ *   - コンテナ内容変化は CU (updateNeighbourForOutputSignal) で隣接コンパレーターへ。
+ * facing = vanilla FACING = 送り込み方向 (既定 down。piston/observer と同じ非反転)。
+ */
+export interface HopperState {
+  type: 'hopper'
+  /** 送り込み方向 (vanilla FACING。down または水平)。up は取らない */
+  facing: Dir6
+  /** 内容個数 (0..320) */
+  count: number
+  /** 転送可能か (= !受電)。false でロック */
+  enabled: boolean
+  /**
+   * このホッパーが次に転送可能になる絶対 gt (currentTick >= cooldownUntil で可)。
+   * vanilla cooldownTime のデクリメント意味論を絶対時刻で表す。省略時 0 (即可)。
+   */
+  cooldownUntil?: number
+}
+
+/**
+ * ドロッパー (物流。C6' #65)。前方がコンテナのときのみ 1 個挿入する。
+ * 前方が非コンテナ (vanilla は発射 = アイテムエンティティ生成) の場合は
+ * エンティティ境界原則 (13 §4.2) により **アイテムを 1 個消費して何も出さない**
+ * (前方が満杯コンテナのときは vanilla 同様 no-op でアイテムは残る)。
+ *
+ * [確定: 26.2 DropperBlock / DispenserBlock]:
+ *   - neighborChanged: `hasNeighborSignal(pos) || hasNeighborSignal(pos.above())`
+ *     (QC。02 §5.3 の 3 クラス) の立ち上がりで TRIGGERED を立て
+ *     scheduleTick(pos, this, 4) を予約 (setBlock flag2)。立ち下がりで TRIGGERED 解除。
+ *   - tick (ST フェーズ): dispenseFrom — ランダムスロットの 1 個を前方コンテナへ
+ *     HopperBlockEntity.addItem で挿入 (sim は種別なしなので count を 1 移す)。
+ * facing = vanilla FACING = 出力方向 (6 方向。既定 north。非反転)。
+ */
+export interface DropperState {
+  type: 'dropper'
+  facing: Dir6
+  /** 内容個数 (0..576) */
+  count: number
+  /** 受電エッジ検出フラグ (vanilla TRIGGERED)。 */
+  triggered: boolean
 }
 
 /**
@@ -294,6 +352,8 @@ export type BlockState =
   | PressurePlateState
   | WeightedPressurePlateState
   | ContainerState
+  | HopperState
+  | DropperState
   | RedstoneBlockState
   | TargetState
   | SolidState

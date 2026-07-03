@@ -90,6 +90,13 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // プロパティ無しではどのバリアントにもマッチせず描画されない (#58)。
       // facing=up (蓋が上) をコンテナの見た目として採用する
       return 'minecraft:barrel[facing=up,open=false]'
+    case 'hopper':
+      // facing は反転しない (piston/observer と同じ規則。vanilla FACING = 送り込み方向)。
+      // enabled は見た目に影響しないが blockstate バリアント選択のため付与する
+      return `minecraft:hopper[enabled=${block.enabled},facing=${block.facing}]`
+    case 'dropper':
+      // facing は反転しない。triggered は見た目に影響しないが付与する
+      return `minecraft:dropper[facing=${block.facing},triggered=${block.triggered}]`
     case 'piston':
     case 'sticky_piston':
       // facing は反転しない: head の出現位置 (構造座標) は非反転のため、
@@ -158,6 +165,8 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:redstone_block',
   'minecraft:observer',
   'minecraft:barrel',
+  'minecraft:hopper',
+  'minecraft:dropper',
   'minecraft:stone',
   'minecraft:cobblestone',
   'minecraft:glass',

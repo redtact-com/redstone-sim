@@ -9,6 +9,11 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 §4.2 送信方向順 / §6 の DiodeBlock 再評価・burnout・ボタン持続・コンパレーター遅延・コンテナ式 / §1.4 入力位相を [確定] 化。
 本文中の「デコンパイル」の典拠バージョンは断りがなければ **1.21.1 と 26.2 の両方で一致確認済み** を意味する。
 
+v2 更新 (2026-07-03, #65): アイテム物流 (ホッパー・ドロッパー) を「コンテナ内の数値」モデルで実装
+(13 §4.2 スコープ入り)。§6 に hopper/dropper/container 節を追加 (転送クールダウン 8gt / ドロッパー発火 4gt /
+eject→suck 順 / NC ロック / CU 連動 / 容量抽象・BE フェーズ順の既知抽象化)。典拠 26.2 HopperBlockEntity /
+DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
+
 ---
 
 ## 1. ゲームティック構造
@@ -354,6 +359,58 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   shouldSignal) / SignalGetter (getSignal, getDirectSignalTo) / ComparatorBlock.getInputSignal (導体 1 個越しの
   コンテナ読みも isRedstoneConductor 判定のため target 越しに可)。
   → sim は power.ts の導体判定 (isConductor = solid | target) / computeWirePower / readComparatorBack に実装済み。
+
+### hopper / dropper / container — アイテム物流 (C6' #65 実装済み)
+
+**方針 (13 §4.2 / エンティティ境界原則)**: アイテムは「コンテナ内の数値 `count`」としてのみ
+存在する。ワールドへのドロップ・吸い取り・射出 (アイテムエンティティ) は実装しない。
+スタック種別・スロット配置は持たず、コンテナごとに 1 本の個数で表す。典拠クラス:
+`HopperBlockEntity` / `HopperBlock` / `DropperBlock` / `DispenserBlock` / `Level.tickBlockEntities`
+(out/26.2、確度 [確定: 26.2])。sim 実装は `packages/sim/src/blocks/container.ts` +
+`world.ts` (`tickBlockEntities` / `emitComparatorUpdate` / dropper は `executeScheduledTick`)。
+
+- **容量の抽象化 (設計判断)**: sim は個数 1 本しか持たないため、アイテムが「スロット 0 から順に
+  スタックされる」(= ホッパー/ドロッパーの実挿入順) と仮定する。この下では per-slot の充填率式
+  (§6 comparator) と厳密一致し、`f = count / (スロット数×64)` になる。容量 = ホッパー **320**
+  (5×64) / ドロッパー **576** (9×64) / 汎用コンテナ **1728** (27×64)。信号は
+  `fillSignal(count, 容量) = floor(f*14) + (count>0?1:0)`。異種アイテムを別スロットに散らす配置は
+  表現しない (単一種前提)。
+- **コンテナの 2 モード (移行方法)**: 既存 `ContainerState` は `signal` 直接指定の「手動計測モード」
+  (C6/#13。樽/チェストを充填率ダミーとして使う) を維持しつつ、`count` を持つと「物流モード」
+  (信号は count から導出、ホッパー/ドロッパーの転送元/先になれる) に切り替わる。nbtIO/blockstate は
+  count を持たない (BE 内容) ため import 直後は手動モード (signal=0)。`count` は authored fixture
+  (`items` フィールド) / editor UI / 転送でのみ付く。
+- **ホッパー転送 [確定: 26.2 HopperBlockEntity]**:
+  - **BlockEntity フェーズ (§1.2 phase10)** で毎 gt 駆動。転送クールダウン **8gt** (`setCooldown(8)`)。
+    1 回の転送で **1 個**。
+  - `tryMoveItems`: **送り込み (facing 先コンテナへ eject) が先**、続いて **吸い出し (直上コンテナから
+    suck)**。両方が同 gt に成立し得る (それぞれ 1 個)。いずれか成功でクールダウン 8gt 再設定。
+  - **ロック**: `HopperBlock.neighborChanged` で `enabled = !hasNeighborSignal(pos)`。受電中は
+    `enabled=false` = 転送停止 (NC で再評価、blockstate プロパティ)。ロックは自分の能動転送のみを
+    止め、下段ホッパーが上段を吸い出すのは止めない (vanilla 準拠)。
+  - コンテナ内容が変わると **CU** (`updateNeighbourForOutputSignal`) で水平隣接 (北→東→南→西) の
+    コンパレーターへ通知 (直接隣接 or 導体 1 個越し)。
+- **ドロッパー [確定: 26.2 DropperBlock / DispenserBlock]**:
+  - `neighborChanged` で `hasNeighborSignal(pos) || hasNeighborSignal(pos.above())` (QC。§5.3 の 3
+    クラス) の立ち上がりで `TRIGGERED` を立て **`scheduleTick(pos, this, 4)`** (4gt) を予約、
+    立ち下がりで `TRIGGERED` 解除。発火は **ST フェーズ** の tile tick (STC 系。ホッパーと違い毎 gt
+    ではない)。
+  - `dispenseFrom`: 前方がコンテナなら 1 個挿入 (`HopperBlockEntity.addItem`)。前方が満杯コンテナは
+    挿入失敗で no-op (アイテムは残る)。**前方が非コンテナ** (vanilla は発射=アイテムエンティティ生成)
+    は、境界原則により **1 個消費して何も出さない** (consume-and-vanish。13 §4.2 に採否根拠)。
+  - ディスペンサーは射出/設置がエンティティ・ワールド作用のため **非実装** (13 §3 マトリクス)。
+- **既知の抽象化 (v1 制限)**: vanilla の BlockEntity tick 順は BE 登録順 (ロード順) で観測可能だが、
+  sim は決定論のため **座標順 (y 降順 → x → z = 上流から)** で走査する。転送先ホッパーの
+  クールダウン −1 補正 (vanilla `tickedGameTime` 依存) は v1 では一律 8 に単純化する (順序依存の
+  double-move を防ぐ目的は達成)。この差は blockstate 観測 (コンパレーター 0 交差 / hopper enabled /
+  dropper triggered) では ±1gt に収まり吸収される。moving_piston の ST 相確定 (下記 piston §) と同型の
+  抽象化で、厳密な BE 順の忠実化は必要になった時点で別 issue とする。
+- **実機 fixture (authored, docker 後段)**: `tools/mc-harness/fixtures/` に hopper-lock (enabled トグル・
+  アイテム不要) / dropper-insert (triggered エッジ + 挿入先ホッパーの充填をコンパレーターで読む) /
+  hopper-clock (ロック解除後 8gt 周期でドレインし充填コンパレーターの立ち下がりで周期を観測)。
+  アイテムは blockstate に現れないため fixture に `items` フィールドで初期個数を与える (実機側は
+  ハーネスの `inventory_set` で充填する想定)。settle 安定性のため各回路は初期ロック/無電源で
+  組み、入力で駆動する。
 
 ### piston (I7 実装済み)
 - BEC: 動力判定 (NC 受信時) → block event を予約 → ブロックイベントフェーズで実移動。0-tick 系はこのフェーズ差が前提 [確定]。

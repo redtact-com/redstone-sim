@@ -1,0 +1,25 @@
+{
+  "name": "hopper-clock",
+  "description": "ホッパー時計/タイマーの素 (#65)。西隣レバーで初期ロックされたホッパー H1 (items=2, east 向き) を t=2 で解除すると、8gt クールダウンごとに 1 個ずつ受け皿 H2 へ送り込む。H1 背面 (north) のコンパレーターが H1 の充填 (信号 1) を読み、2 個を送り終えて H1 が空になると 8gt 周期のあとに powered=false へ落ちる → 転送クールダウン 8gt が blockstate で観測できる。items はハーネスが inventory_set で充填。[確定: 26.2 HopperBlockEntity setCooldown(8) / BlockEntity フェーズ]",
+  "mcVersion": "1.21.1",
+  "ticks": 24,
+  "region": { "from": [0, 0, 0], "to": [2, 1, 1] },
+  "player": {
+    "spawn": [1.5, 1.0, 3.5],
+    "facing": [180, 45],
+    "lookAt": [1.0, 1.0, 0.5]
+  },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=north,powered=true]" },
+    { "pos": [1, 1, 0], "block": "hopper[enabled=false,facing=east]", "items": 2 },
+    { "pos": [2, 1, 0], "block": "hopper[enabled=true,facing=south]", "items": 0 },
+    { "pos": [1, 1, 1], "block": "comparator[facing=north,mode=compare,powered=true]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" }
+  ]
+}

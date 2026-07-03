@@ -42,7 +42,12 @@ export interface Fixture {
   skipReason?: string
   ticks: number
   region: { from: Pos3D; to: Pos3D }
-  blocks: { pos: Pos3D; block: string }[]
+  /**
+   * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
+   * items で初期個数を与えられる (実機側はハーネスが inventory_set で充填する想定。
+   * アイテムは blockstate に現れないため sim/実機とも item 数で初期化する)。
+   */
+  blocks: { pos: Pos3D; block: string; items?: number }[]
   inputs: FixtureInput[]
   expect: FixtureExpectEntry[]
   generated?: { at: string; mc: string; carpet: string }
@@ -84,7 +89,13 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
   for (const b of fx.blocks) {
     authored.set(posKey(b.pos), b.block)
     const sim = mcToSim(b.block)
-    if (sim) world.setBlockAt(b.pos, sim)
+    if (sim) {
+      // コンテナは items で初期個数を与える (blockstate に現れない BE 内容)
+      if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper' || sim.type === 'container')) {
+        (sim as { count?: number }).count = b.items
+      }
+      world.setBlockAt(b.pos, sim)
+    }
   }
 
   // 初期安定化 (実機側の fx_settle + settle step に相当)
@@ -132,7 +143,12 @@ export function traceFixtureOnSim(fx: Fixture, opts: { verbose?: boolean } = {})
   const world = new SimWorld()
   for (const b of fx.blocks) {
     const sim = mcToSim(b.block)
-    if (sim) world.setBlockAt(b.pos, sim)
+    if (sim) {
+      if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper' || sim.type === 'container')) {
+        (sim as { count?: number }).count = b.items
+      }
+      world.setBlockAt(b.pos, sim)
+    }
   }
   world.initialize()
   world.flush(64)

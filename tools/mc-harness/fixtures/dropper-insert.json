@@ -1,0 +1,25 @@
+{
+  "name": "dropper-insert",
+  "description": "ドロッパー挿入 (#65)。レバー (西隣) の立ち上がりでドロッパー triggered=true → 4gt 後の tile tick で前方 (east) のホッパーへ 1 個挿入。ホッパー背面のコンパレーターが充填 (1 個 = 信号 1) を読み powered=true に。ドロッパー items=5, ホッパー items=0 はハーネスが inventory_set で充填する。[確定: 26.2 DispenserBlock scheduleTick(pos,this,4) / DropperBlock.dispenseFrom]",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": { "from": [0, 0, 0], "to": [3, 1, 0] },
+  "player": {
+    "spawn": [1.5, 1.0, 2.5],
+    "facing": [180, 45],
+    "lookAt": [1.5, 1.0, 0.0]
+  },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [1, 1, 0], "block": "dropper[facing=east,triggered=false]", "items": 5 },
+    { "pos": [2, 1, 0], "block": "hopper[enabled=true,facing=south]", "items": 0 },
+    { "pos": [3, 1, 0], "block": "comparator[facing=west,mode=compare,powered=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" }
+  ]
+}
