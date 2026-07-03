@@ -18,23 +18,24 @@ export interface BlockGrid3D {
 
 /** ワイヤーの上下斜め接続をカットする不透過ブロックか（sim 側 isWireCutBlock と同義） */
 function isCutBlock(b: BlockState | null): boolean {
-  // target は既定フルキューブ導体でカットするが、redstone_block は
-  // isRedstoneConductor(never) = 非導体なのでカットしない [確定: 1.21.1]
-  return !!b && (b.type === 'solid' || b.type === 'lamp' || b.type === 'target')
+  // target / note_block は既定フルキューブ導体でカットするが、redstone_block は
+  // isRedstoneConductor(never) = 非導体なのでカットしない [確定: 1.21.1 / 26.2]
+  return !!b && (b.type === 'solid' || b.type === 'lamp'
+    || b.type === 'target' || b.type === 'note_block')
 }
 
 /**
- * 指定座標にあるワイヤーの接続形状を現在のグリッド状態から計算する。
+ * 隣接ブロックだけから決まる「生の」接続形状を計算する（孤立→cross や
+ * 1本→直線 の補完は行わない）。全方向 false のとき真の dot を表す。
  * 各方向の値: false=なし / true=side（同レイヤー・下りステップ） / 'up'=上りステップ
  */
-export function computeWireConnections(
+export function computeRawWireConnections(
   x: number,
   y: number,
   z: number,
   grid: BlockGrid3D,
 ): WireConnections {
   const conn: WireConnections = { north: false, south: false, east: false, west: false }
-  let connCount = 0
   const aboveSelfOpen = !isCutBlock(grid.getBlock3(x, y + 1, z))
 
   for (const dir of H_DIRS) {
@@ -80,8 +81,24 @@ export function computeWireConnections(
     }
 
     conn[dir] = v
-    if (v) connCount++
   }
+
+  return conn
+}
+
+/**
+ * 指定座標にあるワイヤーの接続形状を現在のグリッド状態から計算する。
+ * 生の接続に加えて Minecraft の自動整形（孤立→cross / 1本→直線）を適用する。
+ * 各方向の値: false=なし / true=side（同レイヤー・下りステップ） / 'up'=上りステップ
+ */
+export function computeWireConnections(
+  x: number,
+  y: number,
+  z: number,
+  grid: BlockGrid3D,
+): WireConnections {
+  const conn = computeRawWireConnections(x, y, z, grid)
+  const connCount = H_DIRS.filter(d => conn[d]).length
 
   // 接続が0本のとき: cross形状（4方向 side）
   if (connCount === 0) {

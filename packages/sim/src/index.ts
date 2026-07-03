@@ -6,7 +6,7 @@ export type {
   TorchState, WallTorchState,
   RepeaterState, ComparatorState,
   LeverState, ButtonState,
-  LampState, ContainerState, RedstoneBlockState, TargetState, SolidState,
+  LampState, NoteBlockState, ContainerState, RedstoneBlockState, TargetState, SolidState,
   PressurePlateState, WeightedPressurePlateState,
   ObserverState, AirState,
   WorldSnapshot,
@@ -23,6 +23,7 @@ export {
 
 // World
 export { SimWorld, posKey, keyToPos } from './world.js'
+export type { NotePlayEvent } from './world.js'
 
 // トレース (I10 #18。記法は docs/research/08)
 export {

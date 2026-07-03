@@ -11,7 +11,14 @@ import {
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
-import type { BlockEvent, PistonState } from './types.js'
+import type { BlockEvent, PistonState, NoteBlockState } from './types.js'
+
+/** 音符ブロック発音イベント (C5 #38)。BE フェーズの triggerEvent 相当で発火する */
+export interface NotePlayEvent {
+  pos: Pos3D
+  /** 音程 0-24 (vanilla NOTE) */
+  note: number
+}
 import {
   getSignal, getDirectSignal, getSolidPower,
   isBlockPowered, isFacePowered, isSolidPowered, isConductor,
@@ -74,6 +81,12 @@ export class SimWorld {
   // 挿入順 FIFO + (pos, blockType, param) 重複排除。BE フェーズで空になるまで処理
   private blockEvents: BlockEvent[] = []
 
+  // ── 音符ブロック発音コールバック (C5 #38) ──
+  // BE フェーズで note block の triggerEvent (発音) が走ったとき呼ばれる。
+  // sim は音を鳴らさず、UI 通知や検証のためにこのフックへ発音イベントを流す。
+  // clone() では引き継がない (投機シミュレーションで二重発火させないため)。
+  private noteHook: ((e: NotePlayEvent) => void) | null = null
+
   // ── トレース (I10 #18)。docs/research/08 記法 ──
   // tracer が null の間はフックはすべて no-op (副作用なし)。
   // traceBuf は verbose の updateFormula 収集用 (非 null の間 bu トークンを溜める)。
@@ -108,6 +121,17 @@ export class SimWorld {
   /** 収集済みトレースを消去する (初期 settle 後の起点合わせに使う) */
   clearTrace(): void {
     this.tracer?.clear()
+  }
+
+  // ── 音符ブロック発音フック (C5 #38) ──────────────────────
+
+  /**
+   * 音符ブロックの発音コールバックを登録する (null で解除)。
+   * BE フェーズで note block の発音イベント (26.2 triggerEvent 相当) が
+   * 実行されるたびに呼ばれる。sim は音自体を鳴らさない。
+   */
+  onNotePlay(cb: ((e: NotePlayEvent) => void) | null): void {
+    this.noteHook = cb
   }
 
   // ── トレース内部フック ───────────────────────────────────
@@ -233,8 +257,10 @@ export class SimWorld {
     if (this.blockEvents.some(e =>
       posKey(e.pos) === key && e.blockType === block.type && e.param === param)) return
     this.blockEvents.push({ pos, blockType: block.type, param })
-    // トレース: BE 予約 (08 §1 の delay='s')。extend=push / retract=retract。
-    this.traceReserve('BE', abbrOf(block), param === 'extend' ? 'p' : 'r', 's')
+    // トレース: BE 予約 (08 §1 の delay='s')。extend=push / retract=retract /
+    // play=note block 発音 (立ち上がりで鳴るので turn oN = 'n')。
+    const beAction: TraceAction = param === 'extend' ? 'p' : param === 'retract' ? 'r' : 'n'
+    this.traceReserve('BE', abbrOf(block), beAction, 's')
   }
 
   getBlockEvents(): readonly BlockEvent[] {
@@ -391,6 +417,11 @@ export class SimWorld {
         if (block.lit !== lit) this.blocks.set(key, { ...block, lit })
       } else if (block.type === 'solid') {
         const powered = isSolidPowered(this, pos)
+        if (block.powered !== powered) this.blocks.set(key, { ...block, powered })
+      } else if (block.type === 'note_block') {
+        // 音符ブロックの POWERED は authored 安定状態に合わせるだけで発音しない
+        // (初期状態は既に鳴り終わった相当。26.2 も onPlace で発音しない)。
+        const powered = isBlockPowered(this, pos)
         if (block.powered !== powered) this.blocks.set(key, { ...block, powered })
       }
     }
@@ -760,6 +791,16 @@ export class SimWorld {
     const block = this.getBlockAt(ev.pos)
     // 実行時検証 (02 §3 [確定])
     if (!block || block.type !== ev.blockType) return []
+
+    // 音符ブロックの発音 BE (26.2 NoteBlock.triggerEvent 相当)。
+    // sim は音を鳴らさず、発音イベントを trace とコールバックへ流す (C5 #38)。
+    // blockstate 変化は無い (POWERED は NC で更新済み) ため changed は空。
+    if (block.type === 'note_block' && ev.param === 'play') {
+      this.traceProcess('BE', 'Nb', 'n', 0)
+      this.noteHook?.({ pos: ev.pos, note: block.note })
+      return []
+    }
+
     if (block.type !== 'piston' && block.type !== 'sticky_piston') return []
 
     const changed: string[] = []
@@ -1179,6 +1220,23 @@ export class SimWorld {
         if (block.powered !== powered) this.setBlockAt(pos, { ...block, powered })
         break
       }
+      case 'note_block': {
+        // vanilla NoteBlock.neighborChanged を忠実に再現 (C5 #38 [確定: 26.2]):
+        //   signal = hasNeighborSignal(pos)
+        //   if (signal != POWERED) {
+        //     if (signal) playNote(...)      ← 立ち上がり (false→true) でのみ発音
+        //     setBlock(POWERED=signal, flag3) ← POWERED 更新 + PP/NC
+        //   }
+        // note block は信号を出力しないため下流への NC 伝播は不要 (lamp と同じく
+        // emitShapeUpdate = オブザーバー起動用の PP のみ発行する。G15)。
+        const signal = isBlockPowered(this, pos)
+        if (signal !== block.powered) {
+          if (signal) this.playNote(pos, block)   // 発音 BE を予約 (被覆条件つき)
+          this.setBlockAt(pos, { ...block, powered: signal })
+          this.emitShapeUpdate(pos)               // POWERED 変化 → PP (flag3 相当)
+        }
+        break
+      }
       case 'torch':
       case 'wall_torch': {
         // 土台の充電と現在の lit が食い違っていたら遷移を予約 (2gt, priority 0)。
@@ -1239,6 +1297,19 @@ export class SimWorld {
       default:
         break
     }
+  }
+
+  /**
+   * 音符ブロックの発音を予約する (26.2 NoteBlock.playNote 相当。C5 #38)。
+   * vanilla の被覆条件は `INSTRUMENT.worksAboveNoteBlock() || 直上が空気`。
+   * sim は instrument を省略 (常に BASE_BLOCK = worksAboveNoteBlock()=false) するため
+   * 「直上が空気」のみで判定する (直上が塞がれていれば発音しない。10 §C5 注記)。
+   * 条件を満たすとき level.blockEvent(pos, 0, 0) 相当の 'play' BE をキューする。
+   */
+  private playNote(pos: Pos3D, _block: NoteBlockState): void {
+    const above = this.getBlockAt([pos[0], pos[1] + 1, pos[2]])
+    if (above && above.type !== 'air') return  // 直上が塞がれている → 発音しない
+    this.scheduleBlockEvent(pos, 'play')
   }
 
   private collectAdjacentWires(pos: Pos3D): Pos3D[] {
@@ -1392,6 +1463,7 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
       return (a.type === 'weighted_pressure_plate_light' || a.type === 'weighted_pressure_plate_heavy') &&
         (a.powered ? a.pressedPower : 0) !== (b.powered ? b.pressedPower : 0)
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
+    case 'note_block':  return a.type === 'note_block' && (a.powered !== b.powered || a.note !== b.note)
     case 'target':      return a.type === 'target' && a.outputPower !== b.outputPower
     case 'observer':    return a.type === 'observer' && a.powered !== b.powered
     case 'piston':

@@ -65,6 +65,9 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
+    case 'note_block':
+      // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
+      return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`
     case 'pressure_plate_wood':
       return `minecraft:oak_pressure_plate[powered=${block.powered}]`
     case 'pressure_plate_stone':
@@ -145,6 +148,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:light_weighted_pressure_plate',
   'minecraft:heavy_weighted_pressure_plate',
   'minecraft:redstone_lamp',
+  'minecraft:note_block',
   'minecraft:piston',
   'minecraft:sticky_piston',
   'minecraft:piston_head',

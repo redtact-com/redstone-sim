@@ -164,6 +164,32 @@
 
 ## 5. C5: note block (音符ブロック)
 
+> **実装済み (#38 / C5)**: BlockType `note_block { powered, note(0-24) }` を追加。26.2 `NoteBlock`
+> デコンパイルに忠実に、**立ち上がり (POWERED false→true) でのみ発音**する 3 フェーズを実装:
+> ```
+> // ① NC (world.ts neighborChanged 'note_block' 相当)
+> signal = hasNeighborSignal(pos)          // = isBlockPowered
+> if (signal != POWERED) {
+>   if (signal) playNote(pos)               // 立ち上がりのみ
+>   setBlock(POWERED = signal, flag3)       // emitShapeUpdate (PP) + POWERED 更新
+> }
+> // ② playNote (被覆条件つき BE 予約)
+> if (INSTRUMENT.worksAboveNoteBlock() || 直上が空気)   // sim は直上=空気 のみで近似
+>   scheduleBlockEvent(pos, 'play')         // = level.blockEvent(pos, 0, 0)
+> // ③ BE フェーズ (world.ts executeBlockEvent 'play')
+> triggerEvent → onNotePlay({pos, note}) + trace BE[Nb{n}]  // 音は鳴らさず通知のみ
+> ```
+> **発音 BE は I7 (#15) の BE キュー (`scheduleBlockEvent`/`executeBlockEvent`) に相乗り接続済み**
+> (issue 完了条件)。sim は音声を鳴らさず、`SimWorld.onNotePlay` コールバックと trace (`Nb` 略号) で
+> 発音イベントを可視化する。**instrument (音色) は保持しない** — 常に BASE_BLOCK 相当 (`worksAboveNoteBlock()`
+> = false) とみなし、被覆条件は「直上が空気」のみで近似する (mob head の `worksAboveNoteBlock`=true 経路は
+> 省略)。note block は既定フルキューブ導体 (`isRedstoneConductor`=true) なので **solid 同等**に扱い、
+> ダストの上下斜め接続を切り (`isWireCutBlock`)、直接充電されると隣を活性化しうる (`isConductor`)。
+> POWERED 変化はオブザーバー検知対象 (`observableChanged`)。mcstate/viewer(`minecraft:note_block`)/nbtIO/
+> editor パレット対応。**音声機能そのもの (音程・楽器・パーティクル) はスコープ外**。
+> ⚠ start delay: player 入力起点の発音 BE は piston 同様「翌 tick の BE フェーズ」で鳴る
+> (`activateBlock` は BE キューを drain しない)。実機 fixture は未生成 (後段で pin)。
+
 - **回路勢重要度: 低 (回路論理への影響ほぼ皆無)**。note block は**レッドストーン信号を出力しない**
   (電源ではない) [確定: wiki + 常識]。主機能は音声再生で、論理シミュレータの出力に寄与しない。
   被覆条件 (直上に空気 or 頭 が必要で発音) も音声都合。
@@ -219,6 +245,28 @@
   2. トグル履歴の保持コスト (トーチ毎の時刻リスト) を許容するか (回路規模では軽微)。
 
 ## 8. C8: ダスト dot 形状
+
+> **実装済み (#38 / C8)**: dot = `WireState.connections` 全 false でモデル化 (既存の接続モデルで表現)。
+> 26.2 `RedStoneWireBlock.getSignal` を精査し、**dot の給電挙動を確定**した:
+> | 出力方向 | vanilla getSignal (`direction`=中心→ダスト) | dot が給電するか |
+> |---|---|---|
+> | 水平 (横) | `getConnectionState(...).getValue(dir.opposite).isConnected()` が false → **0** | **しない** |
+> | 直下 (down) | `direction==UP` 分岐で接続に依らず **power** を返す | **する** (弱充電) |
+> | 直上 (up) | 冒頭 `direction != DOWN` ガードで **0** | **しない** |
+>
+> **確定挙動: dot は横にも上にも給電せず、直下のブロックのみ弱充電する**。これは既存 `power.ts`
+> `getEmittedSignal` の wire 分岐 (`toDir==='down'→power` / `up→0` / 水平→`connections[toDir]`) が
+> connections 全 false でそのまま満たしており、**power.ts の改修は不要**だった (02 §5.4「給電=接続方向の
+> 水平隣接のみ」とも整合)。テストで横=給電なし / 直下=弱充電あり (強充電なし) / 直上=給電なし を pin。
+> なお vanilla の getSignal は**都度再計算した** connection state を使う (孤立 dot は再計算しても dot のまま)
+> のに対し sim は**配置時固定**の connections を使う点が唯一の差異だが、実行中に隣接が変わらない前提では
+> 一致する (形状の自動再計算は #44/#14 が精査中。本 issue では大改造しない)。
+> editor は **ワイヤーツールで既存ワイヤーをクリック**で dot⇄cross をトグル (26.2 `useWithoutItem` 準拠:
+> 実隣接があると dot を保てず再結線されるため孤立時のみ dot 化)。viewer は全 none を `redstone_wire`
+> [north=none,...] として描画 (deepslate が中心 dot 断面を描く)。
+> ⚠ 弱 vs 強: sim は直下ブロックを**弱充電**扱い (`getWireWeakCharge`) だが vanilla の `getDirectSignal` は
+> 直下に power を返す = **強充電**の可能性がある。これは dot 固有でなく wire 全般の既存モデル差で **#44 の
+> 精査対象**。本 issue では既存挙動を踏襲し変更しない。
 
 - **回路勢重要度: 低〜中**。ダストの**接続形状が給電方向を決める**ため、論理に効くのは主に
   「直線 (例 N-S 接続) は E/W 隣接を給電しない」ルール (02 §5.4 [確定]: 給電対象 = **接続方向の水平隣接のみ**)。

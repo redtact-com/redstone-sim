@@ -84,6 +84,7 @@ export function abbrOf(b: BlockState): string {
     case 'repeater':       return 'Re'
     case 'comparator':     return 'Co'
     case 'lamp':           return 'La'
+    case 'note_block':     return 'Nb'
     case 'solid':          return 'Bl'
     case 'redstone_block': return 'Rb'
     case 'target':         return 'Tg'

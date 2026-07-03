@@ -95,6 +95,7 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'weighted_pressure_plate_light', label: '重量板(金)', texture: 'block/gold_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'weighted_pressure_plate_heavy', label: '重量板(鉄)', texture: 'block/iron_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'lamp',       label: 'ランプ',        texture: 'block/redstone_lamp',   hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'note_block', label: '音符ブロック',  texture: 'block/note_block',      hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'piston',     label: 'ピストン',      texture: 'block/piston_top',      hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'sticky_piston', label: '粘着ピストン', texture: 'block/piston_top_sticky', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'observer',   label: 'オブザーバー',  texture: 'block/observer_front',   hasFacing: true,  hasDelay: false, hasMode: false },
@@ -336,6 +337,15 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
     // 左クリック（消しゴム以外）
     const existing = editorRef.current.getBlock(x, z)
+    // ワイヤーツールで既存ワイヤーをクリック → dot ⇄ cross 形状トグル (C8)
+    if (existing?.type === 'wire' && selectedType === 'wire') {
+      if (editorRef.current.toggleWireDot(x, z)) {
+        setSelectedPos([x, z])
+        addLog(`ワイヤー形状トグル (${x}, ${z})`)
+        rerender()
+      }
+      return
+    }
     if (existing && existing.type !== 'air') {
       // 既存ブロックをクリック → 選択して向き・遅延・モードを読み込む
       setSelectedPos([x, z])
@@ -495,6 +505,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleStart = useCallback(() => {
     const world = editorRef.current.buildSimWorld()
     world.initialize()
+    // 音符ブロックの発音イベント (BE フェーズ) をログへ可視化 (C5 #38)
+    world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
     saveCheckpoint(world, 0)
     setSimWorld(world)
     setTick(0)
@@ -520,6 +532,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     if (!checkpoint) return
     setRunning(false)
     const world = new SimWorld()
+    world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
     for (const [key, block] of checkpoint) {
       const [x, y, z] = key.split(',').map(Number)
       world.setBlock(x, y, z, block)

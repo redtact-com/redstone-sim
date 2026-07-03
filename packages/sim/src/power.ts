@@ -29,7 +29,9 @@ import { OPPOSITE, ALL_DIRS } from './types.js'
  * 充電状態は隣接機構・ダイオード入力に伝わる (getSolidPower / isFacePowered)。
  */
 export function isConductor(block: BlockState | null): boolean {
-  return !!block && (block.type === 'solid' || block.type === 'target')
+  // note_block は既定フルキューブで isRedstoneConductor=true (solid 同等)。
+  // 直接充電されると隣を活性化しうる (10 §C5)。信号は出さない [確定: 26.2]。
+  return !!block && (block.type === 'solid' || block.type === 'target' || block.type === 'note_block')
 }
 
 /** pos から dir 方向に 1 進んだ座標 */

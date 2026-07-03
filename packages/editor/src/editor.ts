@@ -69,6 +69,16 @@ export class CircuitEditor {
     this.emit()
   }
 
+  /**
+   * ワイヤーの dot ⇄ cross 形状をトグルする（C8 #38）。
+   * トグルが起きたら true を返し change を発火する。
+   */
+  toggleWireDot(x: number, z: number): boolean {
+    const changed = this.grid.toggleWireDot(x, z)
+    if (changed) this.emit()
+    return changed
+  }
+
   getBlock(x: number, z: number): BlockState | null {
     return this.grid.getBlock(x, z)
   }
@@ -164,6 +174,9 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'weighted_pressure_plate_heavy', pressedPower: opts.pressedPower ?? 15, powered: false }
     case 'lamp':
       return { type: 'lamp', lit: false }
+    case 'note_block':
+      // 発音は BE フック経由 (音自体はスコープ外)。初期は消灯・note=0
+      return { type: 'note_block', powered: false, note: 0 }
     case 'piston':
     case 'sticky_piston':
       return { type, facing, extended: false }
