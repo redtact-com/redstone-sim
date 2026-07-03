@@ -1,95 +1,30 @@
 /**
- * ワイヤー接続形状の計算（配置・削除時のみ実行）。
- * シミュレーション実行中には呼ばれない。
+ * ワイヤー接続形状の計算（配置・削除時に実行）。
  *
- * 3D 対応: 同レイヤー接続に加え、上りステップ ('up') と下りステップ (side) を
- * 判定する。上下斜めの接続は間のセルが不透過ブロック (solid/lamp) だと切れる。
+ * 導出ロジックの本体は #51 で @redstone/sim の wire-shape.ts へ一本化した
+ * (シミュレーション中のトポロジー変化にも同じ規則で追随させるため)。
+ * 本ファイルは editor 向けの薄いラッパー:
+ *   - computeWireConnections: 新規配置時の導出 (prev 無し = dot ガード無し)
+ *   - collectWireConnectionUpdates: 近傍変化時の再導出 (prev 付き = dot 維持)
  */
 
-import type { HDir, WireConnections, WireConnectionValue, BlockState } from '@redstone/sim'
-import { H_DIRS, H_DIR_VEC } from '@redstone/sim'
+import type { WireConnections, WireState } from '@redstone/sim'
+import {
+  computeRawWireConnections as simComputeRaw,
+  deriveWireConnections,
+  wireShapeCandidates,
+} from '@redstone/sim'
+import type { BlockGrid3D } from '@redstone/sim'
 
 export type GridPos = [number, number, number]  // [x, y, z]
+export type { BlockGrid3D }
 
-/** 3D ブロック読み取りインターフェース（EditorGrid が実装） */
-export interface BlockGrid3D {
-  getBlock3(x: number, y: number, z: number): BlockState | null
-}
-
-/** ワイヤーの上下斜め接続をカットする不透過ブロックか（sim 側 isWireCutBlock と同義） */
-function isCutBlock(b: BlockState | null): boolean {
-  // target / note_block は既定フルキューブ導体でカットするが、redstone_block は
-  // isRedstoneConductor(never) = 非導体なのでカットしない [確定: 1.21.1 / 26.2]
-  return !!b && (b.type === 'solid' || b.type === 'lamp'
-    || b.type === 'target' || b.type === 'note_block')
-}
-
-/**
- * 隣接ブロックだけから決まる「生の」接続形状を計算する（孤立→cross や
- * 1本→直線 の補完は行わない）。全方向 false のとき真の dot を表す。
- * 各方向の値: false=なし / true=side（同レイヤー・下りステップ） / 'up'=上りステップ
- */
-export function computeRawWireConnections(
-  x: number,
-  y: number,
-  z: number,
-  grid: BlockGrid3D,
-): WireConnections {
-  const conn: WireConnections = { north: false, south: false, east: false, west: false }
-  const aboveSelfOpen = !isCutBlock(grid.getBlock3(x, y + 1, z))
-
-  for (const dir of H_DIRS) {
-    const [dx, dz] = H_DIR_VEC[dir]
-    const nb = grid.getBlock3(x + dx, y, z + dz)
-    let v: WireConnectionValue = false
-
-    if (nb) {
-      if (nb.type === 'wire') {
-        v = true
-      } else if (nb.type === 'repeater') {
-        // リピーターの前後面にのみ接続
-        const opp = oppositeDir(dir)
-        if (nb.facing === opp || nb.facing === dir) v = true
-      } else if (nb.type === 'comparator') {
-        // コンパレーターは全4面で接続
-        v = true
-      } else if (
-        nb.type === 'lever' ||
-        nb.type === 'button_stone' ||
-        nb.type === 'button_wood' ||
-        nb.type === 'torch' ||
-        nb.type === 'redstone_block' ||
-        nb.type === 'target'
-      ) {
-        // 全方向動力源 (信号源) は 4 面すべてでダストと接続する
-        // [確定: 1.21.1 RedStoneWireBlock.shouldConnectTo — isSignalSource()]
-        v = true
-      } else if (nb.type === 'wall_torch') {
-        // facing = 壁方向。壁方向以外の3方向でダストと接続する
-        if (oppositeDir(dir) !== nb.facing) v = true
-      }
-    }
-
-    // 上りステップ: 自分の直上が開いていて、隣の1段上にワイヤー
-    if (!v && aboveSelfOpen && grid.getBlock3(x + dx, y + 1, z + dz)?.type === 'wire') {
-      v = 'up'
-    }
-
-    // 下りステップ: 隣のセルが不透過でなく、その1段下にワイヤー（表示は side）
-    if (!v && !isCutBlock(nb) && grid.getBlock3(x + dx, y - 1, z + dz)?.type === 'wire') {
-      v = true
-    }
-
-    conn[dir] = v
-  }
-
-  return conn
-}
+/** 生の接続形状 (自動拡張なし)。後方互換のため再エクスポート */
+export const computeRawWireConnections = simComputeRaw
 
 /**
  * 指定座標にあるワイヤーの接続形状を現在のグリッド状態から計算する。
- * 生の接続に加えて Minecraft の自動整形（孤立→cross / 1本→直線）を適用する。
- * 各方向の値: false=なし / true=side（同レイヤー・下りステップ） / 'up'=上りステップ
+ * 新規配置用 (prev 無し): 生の接続に自動整形 (孤立→cross / 1本→直線) を適用する。
  */
 export function computeWireConnections(
   x: number,
@@ -97,30 +32,13 @@ export function computeWireConnections(
   z: number,
   grid: BlockGrid3D,
 ): WireConnections {
-  const conn = computeRawWireConnections(x, y, z, grid)
-  const connCount = H_DIRS.filter(d => conn[d]).length
-
-  // 接続が0本のとき: cross形状（4方向 side）
-  if (connCount === 0) {
-    conn.north = true
-    conn.south = true
-    conn.east = true
-    conn.west = true
-  }
-
-  // 接続が1本のとき: 反対方向にも side を立てて直線にする
-  if (connCount === 1) {
-    const connDir = H_DIRS.find(d => conn[d])!
-    if (!conn[oppositeDir(connDir)]) conn[oppositeDir(connDir)] = true
-  }
-
-  return conn
+  return deriveWireConnections(x, y, z, grid)
 }
 
 /**
  * (x, y, z) のブロックが変化した後に、接続形状の再計算が必要な周辺ワイヤーの
- * 更新一覧を返す。対象は同レイヤーの水平4近傍・その上下レイヤー・直上直下
- * （上下斜め接続のカット判定が変わり得る範囲）。
+ * 更新一覧を返す。既存ワイヤーの現在形状を prev として渡すため、dot は
+ * vanilla の保持ガード (wasDot && isDot) どおり維持される (#38/#51)。
  */
 export function collectWireConnectionUpdates(
   x: number,
@@ -130,27 +48,15 @@ export function collectWireConnectionUpdates(
 ): Array<{ pos: GridPos; connections: WireConnections }> {
   const updates: Array<{ pos: GridPos; connections: WireConnections }> = []
 
-  const offsets: GridPos[] = [[0, -1, 0], [0, 1, 0]]
-  for (const dir of H_DIRS) {
-    const [dx, dz] = H_DIR_VEC[dir]
-    for (const dy of [-1, 0, 1]) offsets.push([dx, dy, dz])
-  }
-
-  for (const [dx, dy, dz] of offsets) {
-    const nx = x + dx
-    const ny = y + dy
-    const nz = z + dz
+  for (const [nx, ny, nz] of wireShapeCandidates([x, y, z])) {
+    if (nx === x && ny === y && nz === z) continue  // 自身は配置側で導出済み
     const nb = grid.getBlock3(nx, ny, nz)
     if (nb?.type !== 'wire') continue
-    updates.push({ pos: [nx, ny, nz], connections: computeWireConnections(nx, ny, nz, grid) })
+    updates.push({
+      pos: [nx, ny, nz],
+      connections: deriveWireConnections(nx, ny, nz, grid, (nb as WireState).connections),
+    })
   }
 
   return updates
-}
-
-function oppositeDir(dir: HDir): HDir {
-  const map: Record<HDir, HDir> = {
-    north: 'south', south: 'north', east: 'west', west: 'east',
-  }
-  return map[dir]
 }
