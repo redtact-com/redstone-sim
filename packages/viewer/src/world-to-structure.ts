@@ -85,8 +85,11 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // 描画されるため。sim.facing = vanilla FACING = 観測方向)
       return `minecraft:observer[facing=${block.facing},powered=${block.powered}]`
     case 'container':
-      // コンテナは barrel として描画する (signal 値は表示に影響しない)
-      return 'minecraft:barrel'
+      // コンテナは barrel として描画する (signal 値は表示に影響しない)。
+      // barrel の blockstate は facing+open キーのバリアント形式のため、
+      // プロパティ無しではどのバリアントにもマッチせず描画されない (#58)。
+      // facing=up (蓋が上) をコンテナの見た目として採用する
+      return 'minecraft:barrel[facing=up,open=false]'
     case 'piston':
     case 'sticky_piston':
       // facing は反転しない: head の出現位置 (構造座標) は非反転のため、
