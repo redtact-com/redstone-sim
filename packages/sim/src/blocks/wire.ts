@@ -1,8 +1,7 @@
-import type { Pos3D, HDir, BlockState, WireState, RepeaterState, ComparatorState, TorchState, WallTorchState, LeverState, ButtonState } from '../types.js'
+import type { Pos3D, BlockState, WireState } from '../types.js'
 import type { SimWorld } from '../world.js'
-import { H_DIRS, H_DIR_VEC, ALL_DIRS, OPPOSITE } from '../types.js'
-import { getTorchOutputFacing } from './torch.js'
-import { getRepeaterOutputFacing } from './repeater.js'
+import { H_DIRS, H_DIR_VEC, ALL_DIRS } from '../types.js'
+import { getSignal, getStrongPower, relative } from '../power.js'
 
 /**
  * ワイヤーの上下斜め接続をカットする（不透過扱いの）ブロックか。
@@ -10,7 +9,11 @@ import { getRepeaterOutputFacing } from './repeater.js'
  * このブロックがあると切断される。
  */
 export function isWireCutBlock(block: BlockState | null): boolean {
-  return !!block && (block.type === 'solid' || block.type === 'lamp')
+  // target / note_block は既定フルキューブ導体 (isRedstoneConductor=true) なので
+  // 上下斜め接続を切る。redstone_block は isRedstoneConductor(never) = 非導体なので
+  // 切らない [確定: 1.21.1 Blocks.REDSTONE_BLOCK / TargetBlock、26.2 NoteBlock]。
+  return !!block && (block.type === 'solid' || block.type === 'lamp'
+    || block.type === 'target' || block.type === 'note_block')
 }
 
 /**
@@ -26,7 +29,6 @@ export function isWireCutBlock(block: BlockState | null): boolean {
 export function getConnectedWireNeighbors(pos: Pos3D, world: SimWorld): Pos3D[] {
   const block = world.getBlockAt(pos)
   if (!block || block.type !== 'wire') return []
-  const wire = block as WireState
   const [x, y, z] = pos
   const result: Pos3D[] = []
 
@@ -37,8 +39,9 @@ export function getConnectedWireNeighbors(pos: Pos3D, world: SimWorld): Pos3D[] 
     const sidePos: Pos3D = [x + dx, y, z + dz]
     const side = world.getBlockAt(sidePos)
 
-    // 同レイヤー（接続方向のみ）
-    if (wire.connections[dir] && side?.type === 'wire') {
+    // 同レイヤー: 隣接ワイヤーは常に連結 (shouldConnectTo(wire)=true のため
+    // 導出接続は必ず立つ。保持値は自動拡張されないため参照しない #51)
+    if (side?.type === 'wire') {
       result.push(sidePos)
     }
 
@@ -61,84 +64,44 @@ export function getConnectedWireNeighbors(pos: Pos3D, world: SimWorld): Pos3D[] 
 /**
  * 指定座標のワイヤーが受け取る信号強度を計算する。
  *
- * 入力源（優先順）:
- * 1. 隣接する動力源（レバー・ボタン・トーチ・リピーター）から直接 → 15
- * 2. 強充電された隣接固体ブロック → 15
- * 3. 接続している隣接ワイヤー（同レイヤー・上り/下りステップ・直上直下）の power - 1
+ * 入力源:
+ * 1. 隣接する動力部品の weak 信号 (power.ts の getSignal。6 方向) → その強度
+ * 2. 強充電された隣接固体ブロック → 強充電レベル
+ *    (弱充電された固体はダストに給電しない [確定: docs/research/02 §5.2])
+ * 3. 接続している隣接ワイヤー（同レイヤー・上り/下りステップ）の power - 1
  */
 export function computeWirePower(pos: Pos3D, world: SimWorld): number {
   const block = world.getBlockAt(pos)
   if (!block || block.type !== 'wire') return 0
-  const wire = block as WireState
 
   let maxPower = 0
 
-  // 水平方向の信号源を確認
-  // ワイヤー同士は接続方向のみ伝播、非ワイヤー信号源は接続なしでも隣接していれば伝達
-  for (const dir of H_DIRS) {
-    const [dx, dz] = H_DIR_VEC[dir]
-    const nPos: Pos3D = [pos[0] + dx, pos[1], pos[2] + dz]
-    const src = world.getBlockAt(nPos)
-    if (!src) continue
-
-    switch (src.type) {
-      case 'wire':
-        // ワイヤー間は接続方向のみ
-        if (!wire.connections[dir]) break
-        maxPower = Math.max(maxPower, (src as WireState).power - 1)
-        break
-      case 'lever':
-      case 'button_stone':
-      case 'button_wood':
-        if ((src as LeverState | ButtonState).powered) maxPower = 15
-        break
-      case 'torch': {
-        const t = src as TorchState
-        if (t.lit && getTorchOutputFacing(t) === (OPPOSITE[dir] as HDir)) {
-          maxPower = 15
-        }
-        break
-      }
-      case 'wall_torch': {
-        const t = src as WallTorchState
-        // 壁方向（t.facing）以外の3方向に信号を伝える
-        if (t.lit && (OPPOSITE[dir] as HDir) !== t.facing) {
-          maxPower = 15
-        }
-        break
-      }
-      case 'repeater': {
-        const r = src as RepeaterState
-        if (r.powered && getRepeaterOutputFacing(r) === OPPOSITE[dir]) {
-          maxPower = 15
-        }
-        break
-      }
-      case 'comparator': {
-        const c = src as ComparatorState
-        if (c.powered && c.outputPower > 0 && c.facing === (OPPOSITE[dir] as HDir)) {
-          maxPower = Math.max(maxPower, c.outputPower)
-        }
-        break
-      }
-    }
-  }
-
-  // 強充電された隣接固体ブロック（真下含む6方向）から受電
+  // 隣接する動力部品からの weak 信号（6方向）
   for (const dir of ALL_DIRS) {
     if (maxPower >= 15) break
-    const [x, y, z] = pos
-    const nPos: Pos3D =
-      dir === 'up'   ? [x, y + 1, z] :
-      dir === 'down' ? [x, y - 1, z] :
-      [x + H_DIR_VEC[dir as HDir][0], y, z + H_DIR_VEC[dir as HDir][1]]
+    const nPos = relative(pos, dir)
     const src = world.getBlockAt(nPos)
-    if (src?.type === 'solid' && src.powered) maxPower = 15
+    if (!src) continue
+    if (src.type === 'wire') continue  // ワイヤー間は下の減衰伝播で扱う
+    if (src.type === 'solid') {
+      // 強充電された固体のみダストに給電（弱充電はダストに見えない）
+      maxPower = Math.max(maxPower, getStrongPower(world, nPos))
+      continue
+    }
+    if (src.type === 'target') {
+      // target は導体かつ信号源 [確定: 1.21.1 Blocks.TARGET は
+      // isRedstoneConductor 非 override + TargetBlock.isSignalSource=true]。
+      // ダストから見える値は max(自身の outputPower, 強充電)。
+      // ダスト由来の弱充電は他のダストに見えない (shouldSignal=false 相当)
+      // 点は solid と同じ [確定: RedStoneWireBlock.calculateTargetStrength]
+      maxPower = Math.max(maxPower, getStrongPower(world, nPos), getSignal(world, pos, dir))
+      continue
+    }
+    maxPower = Math.max(maxPower, getSignal(world, pos, dir))
   }
 
-  // 垂直方向（上り/下りステップ）のワイヤーから減衰伝播
+  // 接続ワイヤー（同レイヤー + 上り/下りステップ）からの減衰伝播
   for (const nPos of getConnectedWireNeighbors(pos, world)) {
-    if (nPos[1] === pos[1]) continue  // 同レイヤーは上の switch で処理済み
     const src = world.getBlockAt(nPos)
     if (src?.type === 'wire') {
       maxPower = Math.max(maxPower, (src as WireState).power - 1)

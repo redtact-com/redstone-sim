@@ -1,0 +1,86 @@
+import { describe, it, expect } from 'vitest'
+import {
+  NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
+} from 'deepslate/nbt'
+import type { BlockState } from '@redstone/sim'
+import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
+
+// ============================================================
+// nbtIO: ボタン専用型の往復 (#54)
+//
+// 従来 *_button は import でレバー近似していたが、sim に button_stone /
+// button_wood が実装されたため専用型で往復する。export は面 = floor 固定
+// (stone_button / oak_button)、import は面情報を捨てて facing='up' に正規化。
+// ============================================================
+
+const GRID = 16
+
+/** 単一ブロックを export → import して往復後の BlockState を得る */
+function roundTrip(block: BlockState): BlockState | undefined {
+  const src = new Map<string, BlockState>([['0,0,0', block]])
+  const bytes = exportToNbtBytes(src, GRID, GRID)
+  return importFromNbtBytes(bytes, 8).blocks.get('0,0,0')
+}
+
+/** 任意の vanilla ブロック名 + props を持つ最小構造 NBT を組み立てて import する */
+function importVanilla(name: string, props: Record<string, string> = {}): BlockState | undefined {
+  const air = new NbtCompound().set('Name', new NbtString('minecraft:air'))
+  const target = new NbtCompound().set('Name', new NbtString(name))
+  if (Object.keys(props).length > 0) {
+    const p = new NbtCompound()
+    for (const [k, v] of Object.entries(props)) p.set(k, new NbtString(v))
+    target.set('Properties', p)
+  }
+  const palette = new NbtList<NbtCompound>([air, target])
+  const blockEntry = new NbtCompound()
+    .set('state', new NbtInt(1))
+    .set('pos', new NbtList<NbtInt>([new NbtInt(0), new NbtInt(0), new NbtInt(0)]))
+  const root = new NbtCompound()
+    .set('size', new NbtList<NbtInt>([new NbtInt(1), new NbtInt(1), new NbtInt(1)]))
+    .set('palette', palette)
+    .set('blocks', new NbtList<NbtCompound>([blockEntry]))
+    .set('entities', new NbtList<NbtCompound>([]))
+  const bytes = new NbtFile('', root, 'gzip', false, undefined).write()
+  return importFromNbtBytes(bytes, 8).blocks.get('0,0,0')
+}
+
+describe('nbtIO: ボタン専用型の往復', () => {
+  it('button_stone は往復しても button_stone (レバーにならない)', () => {
+    expect(roundTrip({ type: 'button_stone', facing: 'up', powered: false }))
+      .toMatchObject({ type: 'button_stone', facing: 'up', powered: false })
+  })
+
+  it('button_wood は往復しても button_wood', () => {
+    expect(roundTrip({ type: 'button_wood', facing: 'up', powered: false }))
+      .toMatchObject({ type: 'button_wood', facing: 'up', powered: false })
+  })
+})
+
+describe('nbtIO: vanilla ボタン名 → 専用型 import', () => {
+  it('stone_button / polished_blackstone_button は button_stone', () => {
+    expect(importVanilla('minecraft:stone_button', { face: 'floor', facing: 'south', powered: 'false' }))
+      .toMatchObject({ type: 'button_stone', facing: 'up', powered: false })
+    expect(importVanilla('minecraft:polished_blackstone_button'))
+      .toMatchObject({ type: 'button_stone', facing: 'up' })
+  })
+
+  it('oak_button / bamboo_button など木材系は button_wood', () => {
+    expect(importVanilla('minecraft:oak_button')).toMatchObject({ type: 'button_wood', facing: 'up' })
+    expect(importVanilla('minecraft:bamboo_button')).toMatchObject({ type: 'button_wood', facing: 'up' })
+  })
+})
+
+describe('nbtIO: コンテナ / 重量板の既存往復が壊れていない', () => {
+  it('container は barrel として export → container(signal=0) で import', () => {
+    // signal は NBT に現れないため 0 で戻る
+    expect(roundTrip({ type: 'container', signal: 5 }))
+      .toMatchObject({ type: 'container', signal: 0 })
+  })
+
+  it('重量板(金)は往復後も専用型で powered=false に正規化される', () => {
+    // pressedPower は現状 import 時に既定 15 へ戻る (entity 由来のため OFF 正規化)。
+    // ここではボタン変更でこの既存挙動が壊れていないことを確認する。
+    expect(roundTrip({ type: 'weighted_pressure_plate_light', pressedPower: 6, powered: true }))
+      .toMatchObject({ type: 'weighted_pressure_plate_light', powered: false })
+  })
+})

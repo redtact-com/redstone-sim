@@ -1,0 +1,325 @@
+{
+  "name": "two-piston-locational",
+  "description": "#15 microTiming 突合用: 対称 2 ピストン回路 (piston W|dust|lever|dust|piston E)。状態系列は実機一致。within-tick BE 順 = 西→東 (microTiming 観測 2026-07-03、09_snapshots) — #46 で sim を実機順に修正済み",
+  "mcVersion": "1.21.1",
+  "ticks": 14,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      1,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "piston[extended=false,facing=west]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        0
+      ],
+      "block": "piston[extended=false,facing=east]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 9,
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=south,powered=true]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 3,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "piston[extended=true,facing=west]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            0
+          ],
+          "block": "piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "piston_head[facing=west,short=false,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "piston_head[facing=east,short=false,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 9,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=south,powered=false]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "piston[extended=false,facing=west]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            0
+          ],
+          "block": "piston[extended=false,facing=east]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-07-02T16:50:49.662Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

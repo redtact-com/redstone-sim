@@ -1,0 +1,115 @@
+{
+  "name": "dust-cross-powering",
+  "description": "#44 cross ダストと足元給電の静的検証 (inputs なし。settle 安定状態を実機と照合)。ゲートA: redstone_block(0,0,0) の上の孤立ダスト(0,1,0) は cross になり水平4方向の lamp を点灯、真上の lamp(0,2,0) は消灯。ゲートB: lamp(4,0,0) の上に載せ redstone_block(5,1,0) で通電したダスト(4,1,0) は足元 lamp(4,0,0) を点灯、真上 lamp(4,2,0) は消灯。cross=全方向○ / 真上× / 足元○ を実機で確認する。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      5,
+      2,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=true]"
+    },
+    {
+      "pos": [
+        -1,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=true]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        -1
+      ],
+      "block": "redstone_lamp[lit=true]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "redstone_lamp[lit=true]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "redstone_lamp[lit=true]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    }
+  ],
+  "inputs": [],
+  "expect": [],
+  "generated": {
+    "at": "2026-07-02T23:40:34.162Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

@@ -1,7 +1,27 @@
-import type { Dir6, HDir, TorchState, WallTorchState, WireState } from '../types.js'
+import type { Dir6, HDir, TorchState, WallTorchState } from '../types.js'
 import type { SimWorld } from '../world.js'
 import type { Pos3D } from '../types.js'
 import { OPPOSITE } from '../types.js'
+import { getTorchAttachFace, isFacePowered } from '../power.js'
+
+// ── burnout 定数 [確定: 02 §6 torch — RedstoneTorchBlock] ──────────────
+/** この gt より古い消灯記録は tick 実行時に破棄する (RECENT_TOGGLE_TIMER) */
+export const RECENT_TOGGLE_TIMER = 60
+/** 窓内の消灯記録がこの件数に達すると焼き切れる (MAX_RECENT_TOGGLES) */
+export const MAX_RECENT_TOGGLES = 8
+/** 焼き切れから復帰を試みるまでの遅延 gt (RESTART_DELAY) */
+export const RESTART_DELAY = 160
+
+/**
+ * 消灯履歴から 60gt (RECENT_TOGGLE_TIMER) より古い記録を落とす。
+ * vanilla は tick 冒頭で `while (now - list[0].when > 60) remove(0)` と
+ * ワールド単位の共有リストを先頭から刈るが、burnout 判定は pos 単位の件数で
+ * 決まるため、本 sim ではトーチ単位の履歴を同じ時間窓で刈れば等価。
+ */
+export function pruneToggles(toggles: readonly number[] | undefined, now: number): number[] {
+  if (!toggles || toggles.length === 0) return []
+  return toggles.filter(t => now - t <= RECENT_TOGGLE_TIMER)
+}
 
 /**
  * トーチが信号を出力する方向を返す。
@@ -40,39 +60,15 @@ export function getTorchBasePos(pos: Pos3D, block: TorchState | WallTorchState):
 }
 
 /**
- * トーチの土台ブロックが動力を持っているか判定する。
+ * トーチの土台ブロック（取り付け面）が動力を持っているか判定する。
  * 動力があるとき → トーチは消灯スケジュールを受ける。
  *
- * 固体ブロックが土台の場合:
- *   - 強充電（レバー・リピーターなど直接出力）: solid.powered = true
- *   - 弱充電（ワイヤーが隣接）: 隣接ワイヤーの power > 0
- *     ※ ワイヤーは固体ブロックを「弱充電」し、その固体の上にあるトーチを消灯できる
+ * 実装は power.ts の isFacePowered へ委譲する (G14):
+ *   - 土台が固体: 強充電またはダストによる弱充電（足元 + 接続方向のみ）で true
+ *   - 土台が動力部品: トーチ側へ weak 信号を出していれば true
  */
 export function isBasePowered(pos: Pos3D, world: SimWorld): boolean {
   const block = world.getBlockAt(pos)
   if (!block || (block.type !== 'torch' && block.type !== 'wall_torch')) return false
-  const basePos = getTorchBasePos(pos, block)
-  const base = world.getBlockAt(basePos)
-  if (!base) return false
-
-  if (base.type === 'solid') {
-    // 強充電
-    if (base.powered) return true
-    // 弱充電: 固体ブロックに隣接するワイヤーに電力があるか
-    const [bx, by, bz] = basePos
-    const adjacent: Pos3D[] = [
-      [bx + 1, by, bz], [bx - 1, by, bz],
-      [bx, by + 1, bz], [bx, by - 1, bz],
-      [bx, by, bz + 1], [bx, by, bz - 1],
-    ]
-    for (const nPos of adjacent) {
-      const n = world.getBlockAt(nPos)
-      if (n?.type === 'wire' && (n as WireState).power > 0) return true
-    }
-    return false
-  }
-  if (base.type === 'lever' || base.type === 'button_stone' || base.type === 'button_wood') {
-    return (base as { powered: boolean }).powered
-  }
-  return false
+  return isFacePowered(world, pos, getTorchAttachFace(block))
 }

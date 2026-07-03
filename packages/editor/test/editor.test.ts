@@ -73,6 +73,42 @@ describe('CircuitEditor: ワイヤー接続計算', () => {
     expect(wOutput.connections.west).toBe(true)
   })
 
+  it('ダストはレッドストーンブロックへ 4 面接続する', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(1, 0, 'redstone_block')
+    editor.placeBlock(0, 0, 'wire')  // west隣
+    editor.placeBlock(2, 0, 'wire')  // east隣
+    const wWest = editor.getBlock(0, 0)
+    const wEast = editor.getBlock(2, 0)
+    if (wWest?.type !== 'wire' || wEast?.type !== 'wire') throw new Error('wire not placed')
+    expect(wWest.connections.east).toBe(true)   // → redstone_block 方向
+    expect(wEast.connections.west).toBe(true)
+  })
+
+  it('ダストはターゲットへ 4 面接続する', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(1, 0, 'target')
+    editor.placeBlock(0, 0, 'wire')  // west隣
+    editor.placeBlock(1, 1, 'wire')  // south隣
+    const wWest = editor.getBlock(0, 0)
+    const wSouth = editor.getBlock(1, 1)
+    if (wWest?.type !== 'wire' || wSouth?.type !== 'wire') throw new Error('wire not placed')
+    expect(wWest.connections.east).toBe(true)
+    expect(wSouth.connections.north).toBe(true)  // → target 方向
+  })
+
+  it('レッドストーンブロックはダストを 15 に給電する (sim)', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'redstone_block')
+    editor.placeBlock(1, 0, 'wire')
+    editor.placeBlock(2, 0, 'lamp')
+    const world = editor.buildSimWorld()
+    world.initialize()
+    world.flush(64)
+    expect(world.getBlock(1, 0, 0)).toMatchObject({ type: 'wire', power: 15 })
+    expect(world.getBlock(2, 0, 0)).toMatchObject({ type: 'lamp', lit: true })
+  })
+
   it('リピーターの側面隣のワイヤーはリピーターから信号を受け取らない', () => {
     // connections はあくまで「視覚的な形状」（孤立 = cross = 4方向true）であり、
     // 隣にリピーターの側面があっても孤立扱い → cross形状になる。
@@ -85,12 +121,65 @@ describe('CircuitEditor: ワイヤー接続計算', () => {
 
     const world = editor.buildSimWorld()
     world.activateBlock(0, 0, 0)
-    world.tick()  // delay=1のリピーターが出力
+    world.tick()
+    world.tick()  // delay=1 のリピーターは 2gt 後に出力 (1rt = 2gt)
 
     // 出力先（east）のランプは点灯する
     expect(world.getBlock(2, 0, 0)).toMatchObject({ type: 'lamp', lit: true })
     // 側面のワイヤーは power=0 のまま（リピーターの側面からは信号が来ない）
     expect(world.getBlock(1, 0, 1)).toMatchObject({ type: 'wire', power: 0 })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+
+describe('CircuitEditor: 配置オプション (#54)', () => {
+  it('重量板(金)は pressedPower を設定して配置できる (既定 15)', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'weighted_pressure_plate_light', { pressedPower: 7 })
+    expect(editor.getBlock(0, 0)).toMatchObject({
+      type: 'weighted_pressure_plate_light', pressedPower: 7, powered: false,
+    })
+    // opts 省略時は既定 15
+    editor.placeBlock(1, 0, 'weighted_pressure_plate_heavy')
+    expect(editor.getBlock(1, 0)).toMatchObject({
+      type: 'weighted_pressure_plate_heavy', pressedPower: 15,
+    })
+  })
+
+  it('コンテナは signal を設定して配置できる (既定 0)', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'container', { signal: 10 })
+    expect(editor.getBlock(0, 0)).toMatchObject({ type: 'container', signal: 10 })
+    editor.placeBlock(1, 0, 'container')
+    expect(editor.getBlock(1, 0)).toMatchObject({ type: 'container', signal: 0 })
+  })
+
+  it('ボタン(石/木)は床置き (facing=up) で配置できる', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'button_stone')
+    editor.placeBlock(1, 0, 'button_wood')
+    expect(editor.getBlock(0, 0)).toMatchObject({ type: 'button_stone', facing: 'up', powered: false })
+    expect(editor.getBlock(1, 0)).toMatchObject({ type: 'button_wood', facing: 'up', powered: false })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+
+describe('CircuitEditor: コンテナ → コンパレーター背面読み (#54)', () => {
+  it('配置したコンテナの signal をコンパレーターが背面から読む', () => {
+    // container(西) → comparator(east 向き, 背面=西) → wire(east 出力)
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'container', { signal: 9 })
+    editor.placeBlock(1, 0, 'comparator', { facing: 'east' })
+    editor.placeBlock(2, 0, 'wire')
+
+    const world = editor.buildSimWorld()
+    world.initialize()
+    world.flush(64)
+
+    expect(world.getBlock(1, 0, 0)).toMatchObject({ type: 'comparator', outputPower: 9, powered: true })
+    expect(world.getBlock(2, 0, 0)).toMatchObject({ type: 'wire', power: 9 })
   })
 })
 

@@ -1,0 +1,107 @@
+{
+  "name": "redstone-block-static",
+  "description": "レッドストーンブロック (定数の弱 15 源) → ダスト3マス → ランプ。入力なしの静的通電。全 tick でダスト power=15/14/13・ランプ lit=true が不変であることを検証 (I11 / #35, 10 §1)。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      4,
+      1,
+      0
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=13,south=none,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=true]"
+    }
+  ],
+  "inputs": [],
+  "expect": [],
+  "generated": {
+    "at": "2026-07-02T12:57:26.645Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

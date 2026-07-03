@@ -183,11 +183,70 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       }]
     case 'lamp':
       return ['minecraft:redstone_lamp', { lit: String((block as any).lit ?? false) }]
+    case 'note_block':
+      return ['minecraft:note_block', {
+        instrument: 'harp',
+        note: String((block as any).note ?? 0),
+        powered: String((block as any).powered ?? false),
+      }]
+    case 'redstone_block':
+      return ['minecraft:redstone_block', {}]
+    case 'target':
+      return ['minecraft:target', { power: String(block.outputPower) }]
+    case 'observer':
+      // facing = 観測方向 = vanilla FACING (反転不要。repeater と同じ方針)
+      return ['minecraft:observer', {
+        facing: (block as any).facing ?? 'south',
+        powered: String((block as any).powered ?? false),
+      }]
+    case 'container':
+      // コンテナは barrel として書き出す (signal は NBT に現れないため破棄)
+      return ['minecraft:barrel', {}]
     case 'lever':
       return ['minecraft:lever', {
         face:    'floor',
         facing:  'south',
         powered: String((block as any).powered ?? false),
+      }]
+    case 'button_stone':
+      // 床ボタン固定 (face=floor)。感圧板と同様に専用型で往復する (#54)
+      return ['minecraft:stone_button', {
+        face:    'floor',
+        facing:  'south',
+        powered: String(block.powered),
+      }]
+    case 'button_wood':
+      return ['minecraft:oak_button', {
+        face:    'floor',
+        facing:  'south',
+        powered: String(block.powered),
+      }]
+    case 'pressure_plate_wood':
+      return ['minecraft:oak_pressure_plate', { powered: String((block as any).powered ?? false) }]
+    case 'pressure_plate_stone':
+      return ['minecraft:stone_pressure_plate', { powered: String((block as any).powered ?? false) }]
+    case 'weighted_pressure_plate_light':
+      // 手動モデルの pressedPower は POWER として保存 (踏まれ中のみ >0 になる vanilla とは
+      // 意味が異なるため、非作動時は 0 を書く)
+      return ['minecraft:light_weighted_pressure_plate', {
+        power: String((block as any).powered ? ((block as any).pressedPower ?? 15) : 0),
+      }]
+    case 'weighted_pressure_plate_heavy':
+      return ['minecraft:heavy_weighted_pressure_plate', {
+        power: String((block as any).powered ? ((block as any).pressedPower ?? 15) : 0),
+      }]
+    case 'piston':
+    case 'sticky_piston':
+      return [`minecraft:${(block as any).type}`, {
+        extended: String((block as any).extended ?? false),
+        facing: (block as any).facing ?? 'north',
+      }]
+    case 'moving_piston':
+      return ['minecraft:air', {}]  // 過渡状態は保存しない
+    case 'piston_head':
+      return ['minecraft:piston_head', {
+        facing: (block as any).facing ?? 'north',
+        type: (block as any).sticky ? 'sticky' : 'normal',
       }]
     case 'solid':
       return ['minecraft:stone', {}]
@@ -249,18 +308,91 @@ function minecraftToBlockState(
     } as BlockState
   }
 
+  if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') {
+    return {
+      type: name.replace('minecraft:', '') as 'piston' | 'sticky_piston',
+      facing: (props.facing ?? 'north') as any,
+      extended: props.extended === 'true',
+    } as BlockState
+  }
+
+  if (name === 'minecraft:piston_head') {
+    return {
+      type: 'piston_head',
+      facing: (props.facing ?? 'north') as any,
+      sticky: props.type === 'sticky',
+    } as BlockState
+  }
+
   if (name === 'minecraft:redstone_lamp') {
     return { type: 'lamp', lit: props.lit === 'true' } as BlockState
+  }
+
+  if (name === 'minecraft:note_block') {
+    return {
+      type: 'note_block',
+      powered: props.powered === 'true',
+      note: Number(props.note ?? 0),
+    } as BlockState
+  }
+
+  if (name === 'minecraft:redstone_block') {
+    return { type: 'redstone_block' } as BlockState
+  }
+
+  if (name === 'minecraft:target') {
+    return { type: 'target', outputPower: Number(props.power ?? 0) } as BlockState
+  }
+
+  if (name === 'minecraft:observer') {
+    return {
+      type: 'observer',
+      facing: (props.facing ?? 'south') as any,
+      powered: props.powered === 'true',
+    } as BlockState
+  }
+
+  // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。
+  // NBT には内容 (充填率) が現れないため signal=0 で取り込む。
+  if (
+    name === 'minecraft:barrel' ||
+    name === 'minecraft:chest' ||
+    name === 'minecraft:trapped_chest' ||
+    name.endsWith('shulker_box')
+  ) {
+    return { type: 'container', signal: 0 } as BlockState
   }
 
   if (name === 'minecraft:lever') {
     return { type: 'lever', facing: 'up', powered: props.powered === 'true' } as BlockState
   }
 
-  // レバーとして扱えるボタン類
+  // ボタン類 → 専用型 (石系 = stone_button / polished_blackstone_button、
+  // その他木材系 = button_wood)。editor は床ボタンのみ扱うため facing='up' 固定
+  // (踏まれ状態は entity 由来のため常に OFF で取り込む)。
   if (name.endsWith('_button')) {
-    const facing = (props.facing ?? 'north') as any
-    return { type: 'lever', facing, powered: false } as BlockState
+    const isStone =
+      name === 'minecraft:stone_button' || name === 'minecraft:polished_blackstone_button'
+    return {
+      type: isStone ? 'button_stone' : 'button_wood',
+      facing: 'up',
+      powered: false,
+    } as BlockState
+  }
+
+  // 感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)
+  if (name === 'minecraft:light_weighted_pressure_plate') {
+    return { type: 'weighted_pressure_plate_light', powered: false, pressedPower: 15 } as BlockState
+  }
+  if (name === 'minecraft:heavy_weighted_pressure_plate') {
+    return { type: 'weighted_pressure_plate_heavy', powered: false, pressedPower: 15 } as BlockState
+  }
+  if (name === 'minecraft:stone_pressure_plate') {
+    return { type: 'pressure_plate_stone', powered: false } as BlockState
+  }
+  if (name.endsWith('_pressure_plate')) {
+    // 木材各種はまとめて木の感圧板として取り込む
+    return { type: 'pressure_plate_wood', powered: false } as BlockState
   }
 
   // 固体ブロック一覧

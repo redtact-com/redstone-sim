@@ -44,11 +44,17 @@ npm test             # sim / editor のユニットテスト（vitest）
 npm run typecheck    # packages の型チェック
 ```
 
-## デプロイ / PR プレビュー
+## ブランチ運用とデプロイ
 
-- 本番: Cloudflare Pages プロジェクト `redstone-sim`（https://redstone-sim.pages.dev 、本番ブランチ = `deploy`、`app` で `npm run deploy`）
-- PR プレビュー: PR を作成/更新すると GitHub Actions（`.github/workflows/pr-preview.yml`）が
-  `https://pr-<N>.redstone-sim.pages.dev` にデプロイして PR にコメントする。PR クローズで自動削除。
+| ブランチ | 役割 | URL（push で自動更新） |
+|---|---|---|
+| `main` | 正式リリース（本番） | https://rdsim.com （= redstone-sim.pages.dev） |
+| `develop` | 日常の開発（デフォルトブランチ） | https://develop.redstone-sim.pages.dev |
+| `<issue番号>-<topic>` | feature ブランチ → develop へ PR | `https://pr-<N>.redstone-sim.pages.dev`（PR 作成/更新時） |
+
+- 流れ: feature ブランチ → PR → develop にマージ → リリース時に develop → main
+- 自動化: push は `.github/workflows/deploy.yml`、PR プレビュー（クローズで自動削除）は
+  `.github/workflows/pr-preview.yml`。手動デプロイは `app` で `npm run deploy`
 - 必要な secrets（未設定の間はスキップされる）: `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`
   （権限「アカウント / Cloudflare Pages / 編集」。発行手順は issue #4 参照）
 

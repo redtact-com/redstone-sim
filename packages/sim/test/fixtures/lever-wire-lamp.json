@@ -1,0 +1,203 @@
+{
+  "name": "lever-wire-lamp",
+  "description": "レバー → ワイヤー3マス → ランプ。点灯のみを見る (この fixture は ON 遷移の受け入れ基準)。ランプ消灯の 4gt 遅延は #36 (I12) で実装し、OFF 系列は lamp-off-delay fixture で検証する",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      4,
+      1,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=13,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=true]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-07-02T09:45:28.101Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

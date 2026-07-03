@@ -1,0 +1,25 @@
+{
+  "name": "destroy-push-torch",
+  "description": "#64 ピストン破壊: 押し先の床トーチ (信号源) を直接破壊 → 下流のワイヤー 0 化・ランプ消灯・接続形状 cross 化。retract してもトーチは復活しない",
+  "mcVersion": "1.21.1",
+  "ticks": 26,
+  "region": { "from": [0, 0, 0], "to": [4, 2, 3] },
+  "player": { "spawn": [0.5, 1.0, 2.5], "facing": [180, 0], "lookAt": [0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [4, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 2], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=south,powered=false]" },
+    { "pos": [1, 1, 0], "block": "piston[extended=false,facing=east]" },
+    { "pos": [2, 1, 0], "block": "redstone_torch[lit=true]" },
+    { "pos": [3, 1, 0], "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]" },
+    { "pos": [4, 1, 0], "block": "redstone_lamp[lit=true]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 14, "pos": [0, 1, 0], "action": "use" }
+  ]
+}

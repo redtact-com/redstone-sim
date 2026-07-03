@@ -65,6 +65,54 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
+    case 'note_block':
+      // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
+      return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`
+    case 'pressure_plate_wood':
+      return `minecraft:oak_pressure_plate[powered=${block.powered}]`
+    case 'pressure_plate_stone':
+      return `minecraft:stone_pressure_plate[powered=${block.powered}]`
+    case 'weighted_pressure_plate_light':
+      return `minecraft:light_weighted_pressure_plate[power=${block.powered ? block.pressedPower : 0}]`
+    case 'weighted_pressure_plate_heavy':
+      return `minecraft:heavy_weighted_pressure_plate[power=${block.powered ? block.pressedPower : 0}]`
+    case 'redstone_block':
+      return 'minecraft:redstone_block'
+    case 'target':
+      return `minecraft:target[power=${block.outputPower}]`
+    case 'observer':
+      // facing は反転しない (piston と同じ規則: 観測面/背面の相手は構造座標基準で
+      // 描画されるため。sim.facing = vanilla FACING = 観測方向)
+      return `minecraft:observer[facing=${block.facing},powered=${block.powered}]`
+    case 'container':
+      // コンテナは barrel として描画する (signal 値は表示に影響しない)。
+      // barrel の blockstate は facing+open キーのバリアント形式のため、
+      // プロパティ無しではどのバリアントにもマッチせず描画されない (#58)。
+      // facing=up (蓋が上) をコンテナの見た目として採用する
+      return 'minecraft:barrel[facing=up,open=false]'
+    case 'piston':
+    case 'sticky_piston':
+      // facing は反転しない: head の出現位置 (構造座標) は非反転のため、
+      // base モデルだけ flipDir すると逆向きに見える (wire 接続腕と同じ規則。
+      // 実機と逆向きになるユーザ報告 2026-07-03 で確定)
+      return `minecraft:${block.type}[extended=${block.extended},facing=${block.facing}]`
+    case 'moving_piston': {
+      // 途中伸び状態の近似表示 (vanilla は BE レンダラで補間するが、
+      // グリッド描画では中間 1 コマを静的に表す):
+      // - 伸長中の head セル → short ヘッド (vanilla の中間状態用モデル)
+      // - 収縮中の base セル → extended base (アーム収納中の見え方)
+      // - 押される payload → 中身をそのまま
+      const into = block.into
+      if (into.type === 'piston_head') {
+        return `minecraft:piston_head[facing=${into.facing},short=true,type=${into.sticky ? 'sticky' : 'normal'}]`
+      }
+      if (into.type === 'piston' || into.type === 'sticky_piston') {
+        return `minecraft:${into.type}[extended=true,facing=${into.facing}]`
+      }
+      return blockStateToMinecraftStr(into)
+    }
+    case 'piston_head':
+      return `minecraft:piston_head[facing=${block.facing},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -98,7 +146,18 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:lever',
   'minecraft:stone_button',
   'minecraft:oak_button',
+  'minecraft:oak_pressure_plate',
+  'minecraft:stone_pressure_plate',
+  'minecraft:light_weighted_pressure_plate',
+  'minecraft:heavy_weighted_pressure_plate',
   'minecraft:redstone_lamp',
+  'minecraft:note_block',
+  'minecraft:piston',
+  'minecraft:sticky_piston',
+  'minecraft:piston_head',
+  'minecraft:redstone_block',
+  'minecraft:observer',
+  'minecraft:barrel',
   'minecraft:stone',
   'minecraft:cobblestone',
   'minecraft:glass',

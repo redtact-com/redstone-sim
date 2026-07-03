@@ -43,6 +43,31 @@ const GRID_LAYERS = 8
 /** パレットアイテムの型。PlaceableType + 消しゴム + 移動 */
 type PaletteType = PlaceableType | 'eraser' | 'move'
 
+/** sim モードでパネルから手動トリガできる素子 */
+interface TriggerEntry {
+  pos: [number, number, number]
+  type: string
+}
+
+/** トリガパネルの対象素子と表示 (略号は trace の abbrOf と揃える) */
+const TRIGGER_META: Record<string, { abbr: string; log: string; momentary: boolean }> = {
+  lever:                           { abbr: 'Le', log: 'レバー',   momentary: false },
+  button_stone:                    { abbr: 'Bu', log: 'ボタン(石) を押す', momentary: true },
+  button_wood:                     { abbr: 'Bu', log: 'ボタン(木) を押す', momentary: true },
+  pressure_plate_wood:             { abbr: 'Pp', log: '感圧板(木) を踏む', momentary: true },
+  pressure_plate_stone:            { abbr: 'Pp', log: '感圧板(石) を踏む', momentary: true },
+  weighted_pressure_plate_light:   { abbr: 'Wp', log: '重量板(金) を踏む', momentary: true },
+  weighted_pressure_plate_heavy:   { abbr: 'Wp', log: '重量板(鉄) を踏む', momentary: true },
+  target:                          { abbr: 'Tg', log: 'ターゲット発火',   momentary: true },
+}
+const TRIGGER_TYPES = new Set(Object.keys(TRIGGER_META))
+
+/** トリガ素子の作動中表示 (lever/plate=powered, target=outputPower>0) */
+function isTriggerOn(b: { type: string; powered?: boolean; outputPower?: number }): boolean {
+  if (b.type === 'target') return (b.outputPower ?? 0) > 0
+  return b.powered ?? false
+}
+
 // ── パレット定義 ──────────────────────────────────────────────────────────────
 
 interface BlockMeta {
@@ -54,6 +79,10 @@ interface BlockMeta {
   hasFacing:  boolean
   hasDelay:   boolean
   hasMode:    boolean
+  /** 重量感圧板の踏まれ信号 (1-15) セレクタを表示するか */
+  hasPressedPower?: boolean
+  /** コンテナの背面読み信号 (0-15) セレクタを表示するか */
+  hasSignal?: boolean
 }
 
 const BLOCK_PALETTE: BlockMeta[] = [
@@ -63,11 +92,24 @@ const BLOCK_PALETTE: BlockMeta[] = [
     cssFilter: 'sepia(1) saturate(10) hue-rotate(320deg) brightness(0.8)',
     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'lever',      label: 'レバー',        texture: 'block/lever',           hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'button_stone', label: 'ボタン(石)',  texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'button_wood',  label: 'ボタン(木)',  texture: 'block/oak_planks',      hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'torch',      label: 'トーチ(床)',    texture: 'block/redstone_torch',  hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'wall_torch', label: 'トーチ(壁)',    texture: 'block/redstone_torch',  hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'repeater',   label: 'リピーター',    texture: 'block/repeater',        hasFacing: true,  hasDelay: true,  hasMode: false },
   { type: 'comparator', label: 'コンパレーター', texture: 'block/comparator',      hasFacing: true,  hasDelay: false, hasMode: true  },
+  { type: 'pressure_plate_wood',  label: '感圧板(木)', texture: 'block/oak_planks',   hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'pressure_plate_stone', label: '感圧板(石)', texture: 'block/stone',        hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'weighted_pressure_plate_light', label: '重量板(金)', texture: 'block/gold_block', hasFacing: false, hasDelay: false, hasMode: false, hasPressedPower: true },
+  { type: 'weighted_pressure_plate_heavy', label: '重量板(鉄)', texture: 'block/iron_block', hasFacing: false, hasDelay: false, hasMode: false, hasPressedPower: true },
   { type: 'lamp',       label: 'ランプ',        texture: 'block/redstone_lamp',   hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'note_block', label: '音符ブロック',  texture: 'block/note_block',      hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'piston',     label: 'ピストン',      texture: 'block/piston_top',      hasFacing: true,  hasDelay: false, hasMode: false },
+  { type: 'sticky_piston', label: '粘着ピストン', texture: 'block/piston_top_sticky', hasFacing: true, hasDelay: false, hasMode: false },
+  { type: 'observer',   label: 'オブザーバー',  texture: 'block/observer_front',   hasFacing: true,  hasDelay: false, hasMode: false },
+  { type: 'redstone_block', label: 'レッドストーンブロック', texture: 'block/redstone_block', hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'container',  label: 'コンテナ',      texture: 'block/barrel_side',     hasFacing: false, hasDelay: false, hasMode: false, hasSignal: true },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },
@@ -110,9 +152,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const [running, setRunning] = useState(false)
   const runIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // レバー一覧 [x, y, z] と ON/OFF 状態 (key: "x,y,z")
-  const [levers, setLevers] = useState<[number, number, number][]>([])
-  const [leverPowered, setLeverPowered] = useState<Record<string, boolean>>({})
+  // 手動トリガ素子一覧 (レバー/感圧板/ターゲット)。ON 表示は world から導出する
+  const [triggers, setTriggers] = useState<TriggerEntry[]>([])
 
   // チェックポイント（Initialize で保存した状態）
   const [checkpoint, setCheckpoint] = useState<Map<string, BlockState> | null>(null)
@@ -123,6 +164,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const [facing, setFacing] = useState<HDir>('east')
   const [delay, setDelay]   = useState<1 | 2 | 3 | 4>(1)
   const [comparatorMode, setComparatorMode] = useState<'compare' | 'subtract'>('compare')
+  // 重量感圧板の踏まれ信号 (1-15, 既定 15) / コンテナの背面読み信号 (0-15, 既定 0)
+  const [pressedPower, setPressedPower] = useState(15)
+  const [signal, setSignal] = useState(0)
 
   // グリッド上の選択セル (x, z)
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null)
@@ -239,6 +283,14 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const barMode: 'compare' | 'subtract' =
     gridBlock?.type === 'comparator' ? gridBlock.mode : comparatorMode
 
+  const barPressedPower: number =
+    (gridBlock?.type === 'weighted_pressure_plate_light' ||
+     gridBlock?.type === 'weighted_pressure_plate_heavy')
+      ? gridBlock.pressedPower : pressedPower
+
+  const barSignal: number =
+    gridBlock?.type === 'container' ? gridBlock.signal : signal
+
   // 向き・遅延バーを表示するか
   const gridBlockHasFacing = !!gridBlock && 'facing' in gridBlock &&
     H_DIRS.some(([d]) => d === (gridBlock as unknown as Record<string, unknown>).facing)
@@ -248,19 +300,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
     !!(selectedMeta?.hasFacing) ||
     !!(selectedMeta?.hasDelay) ||
     !!(selectedMeta?.hasMode) ||
+    !!(selectedMeta?.hasPressedPower) ||
+    !!(selectedMeta?.hasSignal) ||
     gridBlockHasFacing ||
     gridBlock?.type === 'repeater' ||
-    gridBlock?.type === 'comparator'
+    gridBlock?.type === 'comparator' ||
+    gridBlock?.type === 'weighted_pressure_plate_light' ||
+    gridBlock?.type === 'weighted_pressure_plate_heavy' ||
+    gridBlock?.type === 'container'
   )
 
   // ── ブロッククリック（edit + sim 共通） ─────────────────────────────────
 
   // useCallback の deps を最小化して IsometricView への参照を安定させる
-  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode })
-  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode }
+  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal })
+  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal }
 
   const handleBlockClick = useCallback((pos: Pos3D, button: 'left' | 'right') => {
-    const { mode, simWorld, selectedType, facing, delay, comparatorMode } = stateRef.current
+    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal } = stateRef.current
     const [x, , z] = pos
 
     // ── シミュレーションモード: レバーのみ操作 ──────────────────────────
@@ -270,6 +327,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
         if (b?.type === 'lever') {
           simWorld.activateBlock(x, pos[1], z)
           addLog(`レバートグル (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (b?.type === 'button_stone' || b?.type === 'button_wood') {
+          // ボタンは手動トリガ (押下 ON → 20/30gt 後に自動 OFF。作動中は no-op)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`ボタンを押す (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (b?.type === 'target') {
+          // ターゲットは手動トリガ (中心命中相当の 15、20gt 持続)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`ターゲット発火 (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (
+          b?.type === 'pressure_plate_wood' || b?.type === 'pressure_plate_stone' ||
+          b?.type === 'weighted_pressure_plate_light' || b?.type === 'weighted_pressure_plate_heavy'
+        ) {
+          // 感圧板は手動トリガ (踏まれ ON → 持続 gt で自動 OFF)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`感圧板を踏む (${x}, ${pos[1]}, ${z})`)
           rerender()
         }
       }
@@ -292,6 +367,15 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
     // 左クリック（消しゴム以外）
     const existing = editorRef.current.getBlock(x, z)
+    // ワイヤーツールで既存ワイヤーをクリック → dot ⇄ cross 形状トグル (C8)
+    if (existing?.type === 'wire' && selectedType === 'wire') {
+      if (editorRef.current.toggleWireDot(x, z)) {
+        setSelectedPos([x, z])
+        addLog(`ワイヤー形状トグル (${x}, ${z})`)
+        rerender()
+      }
+      return
+    }
     if (existing && existing.type !== 'air') {
       // 既存ブロックをクリック → 選択して向き・遅延・モードを読み込む
       setSelectedPos([x, z])
@@ -306,6 +390,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (existing.type === 'comparator') {
         setComparatorMode((existing as unknown as Record<string, unknown>).mode as 'compare' | 'subtract')
       }
+      if (existing.type === 'weighted_pressure_plate_light' ||
+          existing.type === 'weighted_pressure_plate_heavy') {
+        setPressedPower(existing.pressedPower)
+      }
+      if (existing.type === 'container') {
+        setSignal(existing.signal)
+      }
       addLog(`選択: ${existing.type} (${x}, ${z})`)
     } else {
       // 空セルをクリック → 新規配置
@@ -314,6 +405,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (meta?.hasFacing) opts.facing = facing
       if (meta?.hasDelay)  opts.delay  = delay
       if (meta?.hasMode)   opts.mode   = comparatorMode
+      if (meta?.hasPressedPower) opts.pressedPower = pressedPower
+      if (meta?.hasSignal)       opts.signal       = signal
       editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
       setSelectedPos([x, z])
       addLog(`${meta?.label ?? selectedType} を配置 (${x}, ${z})`)
@@ -361,6 +454,39 @@ export function EditorPage({ onBack }: EditorPageProps) {
         if (block?.type === 'comparator') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
           editorRef.current.placeBlock(prev[0], prev[1], 'comparator', { facing: f, mode: newMode })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
+  // ── 踏まれ信号変更（重量感圧板） ─────────────────────────────────────
+
+  const handlePressedPowerChange = useCallback((newP: number) => {
+    setPressedPower(newP)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'weighted_pressure_plate_light' ||
+            block?.type === 'weighted_pressure_plate_heavy') {
+          editorRef.current.placeBlock(prev[0], prev[1], block.type, { pressedPower: newP })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
+  // ── 背面読み信号変更（コンテナ） ─────────────────────────────────────
+
+  const handleSignalChange = useCallback((newSignal: number) => {
+    setSignal(newSignal)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'container') {
+          editorRef.current.placeBlock(prev[0], prev[1], 'container', { signal: newSignal })
           rerender()
         }
       }
@@ -423,16 +549,19 @@ export function EditorPage({ onBack }: EditorPageProps) {
     }
   }, [addLog, rerender])
 
-  // ── レバー一覧スキャン ────────────────────────────────────────────────
+  // ── 手動トリガ一覧スキャン ────────────────────────────────────────────
+  // sim の 3D ビューはカメラ回転優先でブロッククリックが届かないため、
+  // 手動トリガ素子 (レバー/感圧板/ターゲット) はパネルのボタンから操作する
 
-  const scanLevers = useCallback((): [number, number, number][] => {
-    const found: [number, number, number][] = []
+  const scanTriggers = useCallback((): TriggerEntry[] => {
+    const found: TriggerEntry[] = []
     for (const [key, block] of editorRef.current.getAllBlocks()) {
-      if (block.type !== 'lever') continue
+      if (!TRIGGER_TYPES.has(block.type)) continue
       const [x, y, z] = key.split(',').map(Number)
-      found.push([x, y, z])
+      found.push({ pos: [x, y, z], type: block.type })
     }
-    return found.sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0])
+    return found.sort((a, b) =>
+      a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2] || a.pos[0] - b.pos[0])
   }, [])
 
   // ── チェックポイント保存ヘルパー ────────────────────────────────────────
@@ -441,11 +570,6 @@ export function EditorPage({ onBack }: EditorPageProps) {
     const snap = world.snapshot()
     setCheckpoint(new Map(snap.blocks))
     setCheckpointTick(t)
-    const leverState: Record<string, boolean> = {}
-    for (const [key, block] of snap.blocks) {
-      if (block.type === 'lever') leverState[key] = block.powered
-    }
-    return leverState
   }, [])
 
   // ── シミュレーション開始 ─────────────────────────────────────────────
@@ -453,24 +577,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleStart = useCallback(() => {
     const world = editorRef.current.buildSimWorld()
     world.initialize()
-    const leverState = saveCheckpoint(world, 0)
+    // 音符ブロックの発音イベント (BE フェーズ) をログへ可視化 (C5 #38)
+    world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
+    saveCheckpoint(world, 0)
     setSimWorld(world)
     setTick(0)
     setMode('sim')
     setSelectedPos(null)
-    setLevers(scanLevers())
-    setLeverPowered(leverState)
+    setTriggers(scanTriggers())
     addLog('シミュレーション開始 — tick=0 の初期状態。+1 または ▶ で進める')
     rerender()
-  }, [addLog, rerender, scanLevers, saveCheckpoint])
+  }, [addLog, rerender, scanTriggers, saveCheckpoint])
 
   // ── Initialize: 現在の状態をチェックポイントとして保存 ────────────────
 
   const handleInitialize = useCallback(() => {
     if (!simWorld) return
     setRunning(false)
-    const leverState = saveCheckpoint(simWorld, tick)
-    setLeverPowered(leverState)
+    saveCheckpoint(simWorld, tick)
     addLog(`[sim] Initialize — tick ${tick} の状態を保存しました`)
   }, [simWorld, tick, addLog, saveCheckpoint])
 
@@ -480,11 +604,10 @@ export function EditorPage({ onBack }: EditorPageProps) {
     if (!checkpoint) return
     setRunning(false)
     const world = new SimWorld()
-    const leverState: Record<string, boolean> = {}
+    world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
     for (const [key, block] of checkpoint) {
       const [x, y, z] = key.split(',').map(Number)
       world.setBlock(x, y, z, block)
-      if (block.type === 'lever') leverState[key] = block.powered
     }
     // ブロック状態から wire 電力・スケジュール済み tick を再計算する
     // クロック回路では flush しないため、トーチの ON/OFF 状態に合わせた
@@ -492,22 +615,27 @@ export function EditorPage({ onBack }: EditorPageProps) {
     world.initialize()
     setSimWorld(world)
     setTick(checkpointTick)
-    setLeverPowered(leverState)
     addLog(`[sim] Clear — tick ${checkpointTick} の状態に戻しました`)
     rerender()
   }, [checkpoint, checkpointTick, addLog, rerender])
 
-  // ── 個別レバートグル ─────────────────────────────────────────────────
+  // ── 個別トリガ操作 (レバー=トグル / 感圧板・ターゲット=単発) ──────────
 
-  const handleToggleLever = useCallback((x: number, y: number, z: number) => {
+  const handleTrigger = useCallback((x: number, y: number, z: number) => {
     if (!simWorld) return
-    simWorld.activateBlock(x, y, z)
-    const key = `${x},${y},${z}`
-    setLeverPowered(prev => {
-      const next = !prev[key]
-      addLog(`レバー (${x}, ${y}, ${z}): ${next ? 'ON' : 'OFF'}`)
-      return { ...prev, [key]: next }
-    })
+    const b = simWorld.getBlockAt([x, y, z])
+    const meta = b ? TRIGGER_META[b.type] : undefined
+    if (!meta) return
+    if (b!.type === 'lever') {
+      simWorld.activateBlock(x, y, z)
+      const on = (simWorld.getBlockAt([x, y, z]) as { powered?: boolean })?.powered ?? false
+      addLog(`レバー (${x}, ${y}, ${z}): ${on ? 'ON' : 'OFF'}`)
+    } else {
+      // 単発系 (感圧板/ターゲット): 作動中は activateBlock が no-op
+      const wasOn = isTriggerOn(b!)
+      simWorld.activateBlock(x, y, z)
+      addLog(wasOn ? `${meta.log} (${x}, ${y}, ${z}) — 作動中` : `${meta.log} (${x}, ${y}, ${z})`)
+    }
     rerender()
   }, [simWorld, addLog, rerender])
 
@@ -559,22 +687,17 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleToggleLevers = useCallback(() => {
     if (!simWorld) return
     let found = false
-    const patch: Record<string, boolean> = {}
-    setLeverPowered(prev => {
-      for (const [x, y, z] of levers) {
-        const b = simWorld.getBlockAt([x, y, z])
-        if (b?.type === 'lever') {
-          simWorld.activateBlock(x, y, z)
-          const key = `${x},${y},${z}`
-          patch[key] = !prev[key]
-          found = true
-        }
+    for (const t of triggers) {
+      if (t.type !== 'lever') continue
+      const b = simWorld.getBlockAt(t.pos)
+      if (b?.type === 'lever') {
+        simWorld.activateBlock(t.pos[0], t.pos[1], t.pos[2])
+        found = true
       }
-      return { ...prev, ...patch }
-    })
+    }
     addLog(found ? '全レバートグル' : 'レバーなし')
     rerender()
-  }, [simWorld, levers, addLog, rerender])
+  }, [simWorld, triggers, addLog, rerender])
 
   // ── パレット選択 ─────────────────────────────────────────────────────
 
@@ -662,15 +785,18 @@ export function EditorPage({ onBack }: EditorPageProps) {
           </button>
         </div>
 
-        {/* レバーパネル */}
-        {levers.length > 0 && (
+        {/* 手動トリガパネル (レバー/感圧板/ターゲット。ON 表示は world から導出) */}
+        {triggers.length > 0 && (
           <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 overflow-x-auto"
                style={{ background: '#1a1a1a', borderBottom: '2px solid #2a2a2a', scrollbarWidth: 'none' }}>
-            <span className="font-pixel shrink-0 mr-1" style={{ fontSize: 12, color: '#555' }}>LEVER</span>
-            {levers.map(([x, y, z]) => {
-              const on = leverPowered[`${x},${y},${z}`] ?? false
+            <span className="font-pixel shrink-0 mr-1" style={{ fontSize: 12, color: '#555' }}>TRIG</span>
+            {triggers.map(({ pos: [x, y, z], type }) => {
+              const b = simWorld?.getBlockAt([x, y, z])
+              const on = b ? isTriggerOn(b) : false
+              const abbr = TRIGGER_META[type]?.abbr ?? '?'
               return (
-                <button key={`${x},${y},${z}`} onClick={() => handleToggleLever(x, y, z)} disabled={!simWorld}
+                <button key={`${x},${y},${z}`} onClick={() => handleTrigger(x, y, z)} disabled={!simWorld}
+                        title={TRIGGER_META[type]?.log}
                         className="mc-btn shrink-0 h-10 px-3 flex items-center gap-2"
                         style={{
                           background: on ? '#7a4400' : '#2a2a2a',
@@ -686,12 +812,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
                     transition: 'all 0.15s',
                   }} />
                   <span className="font-mono text-xs" style={{ color: on ? '#ffcc00' : '#666' }}>
-                    {x},{y},{z}
+                    {abbr} {x},{y},{z}
                   </span>
                 </button>
               )
             })}
-            {levers.length > 1 && (
+            {triggers.filter(t => t.type === 'lever').length > 1 && (
               <>
                 <div style={{ width: 1, alignSelf: 'stretch', background: '#333' }} />
                 <button onClick={handleToggleLevers} disabled={!simWorld}
@@ -814,9 +940,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
           barFacing={barFacing}
           barDelay={barDelay}
           barMode={barMode}
+          barPressedPower={barPressedPower}
+          barSignal={barSignal}
           onFacingChange={handleFacingChange}
           onDelayChange={handleDelayChange}
           onModeChange={handleModeChange}
+          onPressedPowerChange={handlePressedPowerChange}
+          onSignalChange={handleSignalChange}
         />
       )}
 
@@ -845,20 +975,29 @@ interface FacingBarProps {
   barFacing:          HDir
   barDelay:           1 | 2 | 3 | 4
   barMode:            'compare' | 'subtract'
+  barPressedPower:    number
+  barSignal:          number
   onFacingChange:     (f: HDir) => void
   onDelayChange:      (d: 1 | 2 | 3 | 4) => void
   onModeChange:       (m: 'compare' | 'subtract') => void
+  onPressedPowerChange: (p: number) => void
+  onSignalChange:     (s: number) => void
 }
 
 function FacingBar({
   gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
-  barFacing, barDelay, barMode, onFacingChange, onDelayChange, onModeChange,
+  barFacing, barDelay, barMode, barPressedPower, barSignal,
+  onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
 
   const showFacing = !!(meta?.hasFacing) || gridBlockHasFacing
   const showDelay  = !!(meta?.hasDelay)  || gridBlock?.type === 'repeater'
   const showMode   = !!(meta?.hasMode)   || gridBlock?.type === 'comparator'
+  const showPressedPower = !!(meta?.hasPressedPower) ||
+    gridBlock?.type === 'weighted_pressure_plate_light' ||
+    gridBlock?.type === 'weighted_pressure_plate_heavy'
+  const showSignal = !!(meta?.hasSignal) || gridBlock?.type === 'container'
 
   const label = selectedPos
     ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
@@ -940,6 +1079,16 @@ function FacingBar({
             ))}
           </div>
         </div>
+      )}
+
+      {/* 踏まれ信号（重量感圧板 1-15） */}
+      {showPressedPower && (
+        <PowerSelect label="POWER" min={1} max={15} value={barPressedPower} onChange={onPressedPowerChange} />
+      )}
+
+      {/* 背面読み信号（コンテナ 0-15） */}
+      {showSignal && (
+        <PowerSelect label="SIGNAL" min={0} max={15} value={barSignal} onChange={onSignalChange} />
       )}
 
       <div className="flex-1" />
@@ -1125,6 +1274,47 @@ function HeightPanel({
           borderColor: cutUpper ? '#3a6aaa #0a1a3a #0a1a3a #3a6aaa' : '#666 #222 #222 #666',
         }}
       >👁</button>
+    </div>
+  )
+}
+
+// ── PowerSelect ───────────────────────────────────────────────────────────────
+
+/**
+ * 信号強度セレクタ (DELAY バーと同型)。重量感圧板の踏まれ信号 (1-15) と
+ * コンテナの背面読み信号 (0-15) に共用。値が多いので 8 列グリッドで折り返す。
+ */
+function PowerSelect({ label, min, max, value, onChange }: {
+  label:    string
+  min:      number
+  max:      number
+  value:    number
+  onChange: (v: number) => void
+}) {
+  const values = Array.from({ length: max - min + 1 }, (_, i) => min + i)
+  return (
+    <div className="flex flex-col gap-1.5 shrink-0">
+      <span className="font-pixel text-center" style={{ fontSize: 11, color: '#555' }}>{label}</span>
+      <div className="grid grid-cols-8" style={{ gap: 3 }}>
+        {values.map(v => {
+          const active = value === v
+          return (
+            <button key={v} onClick={() => onChange(v)}
+                    className="mc-btn font-bold"
+                    style={{
+                      width: 28, height: 28, fontSize: 12,
+                      background: active ? '#6b0000' : '#3a3a3a',
+                      borderColor: active
+                        ? '#ff4444 #440000 #440000 #ff4444'
+                        : '#666 #222 #222 #666',
+                      color: active ? '#ff8888' : '#aaa',
+                      boxShadow: active ? '0 0 8px #cc2222' : 'none',
+                    }}>
+              {v}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

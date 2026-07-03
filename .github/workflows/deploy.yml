@@ -1,0 +1,68 @@
+# ブランチ別 Pages デプロイ (issue #7)
+#
+# - main への push    → 本番        https://rdsim.com (カスタムドメイン。pages.dev 直も可)
+#   (Pages プロジェクトの production branch = main)
+# - develop への push → プレビュー  https://develop.redstone-sim.pages.dev
+#
+# ブランチ名をそのまま `wrangler pages deploy --branch` に渡すため、
+# 対象ブランチを増やす場合は on.push.branches に足すだけでよい。
+# PR ごとのプレビューは pr-preview.yml が担当 (#4)。
+
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-pages-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT_NAME: redstone-sim
+    steps:
+      - name: secrets 確認
+        id: secrets
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID が未設定のためデプロイをスキップしました (issue #7)"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: ビルド
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          npm ci
+          npm run build
+
+      - name: Pages デプロイ (${{ github.ref_name }})
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          npx wrangler pages deploy app/dist \
+            --project-name "$PROJECT_NAME" \
+            --branch "${{ github.ref_name }}"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            URL="https://${PROJECT_NAME}.pages.dev"
+          else
+            URL="https://${{ github.ref_name }}.${PROJECT_NAME}.pages.dev"
+          fi
+          echo "🚀 ${{ github.ref_name }} → $URL" >> "$GITHUB_STEP_SUMMARY"

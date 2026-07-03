@@ -1,0 +1,25 @@
+{
+  "name": "pressure-plate-wood",
+  "description": "木の感圧板 → ワイヤー3マス。fake player が板を踏むと power=15 給電、20 gt (BasePressurePlateBlock.getPressedTime [確定: 26.2]) 後に自動オフ → 全ワイヤー 0 を検証。木/石板の出力は二値 15 なので手動モデル (activateBlock で 15 出力) と実機が完全一致する。負荷はワイヤーのみ (板持続の検証に集中、ランプ 4gt 遅延を避ける)。入力 action='step' は fake player を板中心へ tp して entityInside を発火させる新方式 (generate.ts。docker 実行は後段の親が直列で行い、press が載る tick を要確認)",
+  "mcVersion": "1.21.1",
+  "ticks": 26,
+  "region": { "from": [0, 0, 0], "to": [3, 1, 1] },
+  "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 0], "lookAt": [0.5, 1.0, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [2, 0, 1], "block": "stone" },
+    { "pos": [3, 0, 1], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "oak_pressure_plate[powered=false]" },
+    { "pos": [1, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [2, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [3, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "step" }
+  ]
+}

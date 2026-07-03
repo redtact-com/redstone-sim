@@ -1,0 +1,136 @@
+{
+  "name": "dynamic-step-cut",
+  "description": "#51 動的接続再計算: 上りステップ (A→B) の直上へ粘着ピストンが solid を押し込む→up 接続がカットされ A は cross 化+網から外れて 0、引き抜きで up 接続と 14 が復帰。カットブロックの動的出現/消滅の張り替えを実機系列と検証",
+  "mcVersion": "1.21.1",
+  "ticks": 26,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      3,
+      3,
+      6
+    ]
+  },
+  "player": {
+    "spawn": [
+      1.5,
+      1.0,
+      5.5
+    ],
+    "facing": [
+      180,
+      0
+    ],
+    "lookAt": [
+      1.5,
+      2.35,
+      3.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        2
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        3
+      ],
+      "block": "lever[face=floor,facing=south,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        2,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 14,
+      "pos": [
+        1,
+        2,
+        3
+      ],
+      "action": "use"
+    }
+  ]
+}

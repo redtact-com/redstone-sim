@@ -1,0 +1,5 @@
+# サーバ実体 (jar / world / Mojang 由来ファイル)。絶対にコミットしない
+data/
+
+# scarpet との受け渡し用 shared JSON (実行時生成物)
+scripts/shared/

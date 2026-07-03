@@ -1,0 +1,10 @@
+# Cloudflare Pages（静的フロントエンド）のデプロイ設定。
+# 本番ブランチは `main`。正規URL: https://redstone-sim.pages.dev
+# develop への push は https://develop.redstone-sim.pages.dev に反映される
+# （CI からのデプロイは .github/workflows/deploy.yml / pr-preview.yml 参照）。
+#
+#   npm run build && npx wrangler pages deploy
+#
+name = "redstone-sim"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-06-15"

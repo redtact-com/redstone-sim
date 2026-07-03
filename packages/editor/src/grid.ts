@@ -6,7 +6,9 @@
 
 import type { BlockState, HDir, WireConnections, WorldSnapshot } from '@redstone/sim'
 import { posKey } from '@redstone/sim'
-import { computeWireConnections, collectWireConnectionUpdates } from './wire-connect.js'
+import {
+  computeWireConnections, computeRawWireConnections, collectWireConnectionUpdates,
+} from './wire-connect.js'
 import type { GridPos } from './wire-connect.js'
 
 export type Pos2D = [number, number]  // [x, z]
@@ -115,6 +117,40 @@ export class EditorGrid {
     }
 
     this.pushHistory(changes)
+  }
+
+  /**
+   * ワイヤーの dot ⇄ cross（接続形状）をトグルする（C8 #38）。
+   * 26.2 RedStoneWireBlock.useWithoutItem 準拠:
+   *   - dot（全方向 none）→ 自動整形した接続形状（孤立なら cross）に戻す。
+   *   - 接続形状 → dot（全方向 none）。ただし実隣接があると vanilla は
+   *     getConnectionState で再結線され dot を保てないため、孤立時のみ dot 化する。
+   * トグルが起きたら true、対象外/変化なしなら false を返す。
+   */
+  toggleWireDot(x: number, z: number): boolean {
+    const y = this.activeLayer
+    const block = this.getBlock3(x, y, z)
+    if (!block || block.type !== 'wire') return false
+
+    const c = block.connections
+    const isDot = !c.north && !c.south && !c.east && !c.west
+
+    let target: WireConnections
+    if (isDot) {
+      // dot → 接続形状（孤立なら cross）
+      target = computeWireConnections(x, y, z, this)
+    } else {
+      // 接続形状 → dot。実隣接があると dot を保てない（再結線される）ため no-op
+      const raw = computeRawWireConnections(x, y, z, this)
+      if (raw.north || raw.south || raw.east || raw.west) return false
+      target = { north: false, south: false, east: false, west: false }
+    }
+
+    if (sameConnections(c, target)) return false
+    const after: BlockState = { ...block, connections: target }
+    this.setRaw(x, y, z, after)
+    this.pushHistory([{ pos: [x, y, z], before: block, after }])
+    return true
   }
 
   /** 全ブロック（3D キー "x,y,z"） */
