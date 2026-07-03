@@ -81,7 +81,12 @@ function getAttachFace(facing: Dir6): Dir6 {
  * - ターゲット: 全 6 方向に outputPower [確定: 1.21.1 TargetBlock.getSignal]
  *   (いずれも getDirectSignal 非 override のため強充電はしない = weak のみ)
  * - ワイヤー: 足元 (down) + 接続方向の水平。上方向へは給電しない (G5)
- *   [要検証: 02 §5.4]
+ *   [確定: 26.2 デコンパイル RedStoneWireBlock.getSignal — direction==DOWN で 0
+ *    (真上は非給電)、power!=0 かつ (direction==UP または opposite 方向が接続) で power。
+ *    給電判定は getConnectionState (0 本→cross / 1 本→直線 拡張済) を再計算する。
+ *    sim は WireState.connections を静的に持つが、vanilla 拡張は接続導出層
+ *    (mcstate.mcToSim / editor.computeWireConnections) で済ませているため等価。
+ *    形状×方向マトリクスは docs/research/11。02 §5.4 と #44 で確定]。
  */
 function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
   const src = world.getBlockAt(srcPos)
@@ -91,6 +96,15 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
     case 'button_stone':
     case 'button_wood':
       return src.powered ? 15 : 0
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone':
+      // 全方向へ weak 15 (BasePressurePlateBlock.ownSignal = getSignalForState)
+      // [確定: 26.2]。強充電は直下のみ (getEmittedDirectSignal 側)
+      return src.powered ? 15 : 0
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy':
+      // 全方向へ weak = 設定信号強度 (手動モデルは計数式を通さず直接出力)
+      return src.powered ? src.pressedPower : 0
     case 'redstone_block':
       return 15
     case 'target':
@@ -136,6 +150,15 @@ function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): nu
     case 'button_stone':
     case 'button_wood':
       return src.powered && toDir === getAttachFace(src.facing) ? 15 : 0
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone':
+      // 取り付け面 = 直下ブロックのみを強充電 [確定: 26.2
+      // BasePressurePlateBlock.getDirectSignal = (direction==UP) ? signal : 0。
+      // vanilla の UP = 受信側→板 の向き = sim の板→受信側 'down' に対応]
+      return src.powered && toDir === 'down' ? 15 : 0
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy':
+      return src.powered && toDir === 'down' ? src.pressedPower : 0
     case 'torch':
     case 'wall_torch':
       return src.lit && toDir === getTorchStrongFace(src) ? 15 : 0

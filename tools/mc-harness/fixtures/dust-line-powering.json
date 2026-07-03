@@ -1,0 +1,36 @@
+{
+  "name": "dust-line-powering",
+  "description": "#44 直線ダストの隣接給電。レバー→ワイヤ→リピーター(facing=west,出力east)→単一接続の直線ダスト(3,1,0)。直線は west=リピーター接続、east=自動拡張された延長端。延長端(east)の lamp(4,1,0) は点灯し、垂直方向(north/south)の lamp(3,1,-1)/(3,1,1) は消灯のまま。observer-piston fixture で疑われた『直線ダストが隣接機構へ給電するか』の切り分け: 延長端○・垂直× が vanilla 仕様であることを実機で確認する。",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": { "from": [0, 0, -1], "to": [4, 1, 1] },
+  "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 40], "lookAt": [0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, -1], "block": "stone" },
+    { "pos": [1, 0, -1], "block": "stone" },
+    { "pos": [2, 0, -1], "block": "stone" },
+    { "pos": [3, 0, -1], "block": "stone" },
+    { "pos": [4, 0, -1], "block": "stone" },
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [4, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [2, 0, 1], "block": "stone" },
+    { "pos": [3, 0, 1], "block": "stone" },
+    { "pos": [4, 0, 1], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [1, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [2, 1, 0], "block": "repeater[delay=1,facing=west,locked=false,powered=false]" },
+    { "pos": [3, 1, 0], "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]" },
+    { "pos": [4, 1, 0], "block": "redstone_lamp[lit=false]" },
+    { "pos": [3, 1, -1], "block": "redstone_lamp[lit=false]" },
+    { "pos": [3, 1, 1], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 10, "pos": [0, 1, 0], "action": "use" }
+  ]
+}

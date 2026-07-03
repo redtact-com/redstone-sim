@@ -74,6 +74,10 @@ export function abbrOf(b: BlockState): string {
     case 'lever':          return 'Le'
     case 'button_stone':
     case 'button_wood':    return 'Bu'
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone': return 'Pp'
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy': return 'Wp'
     case 'wire':           return 'Rs'
     case 'torch':
     case 'wall_torch':     return 'To'
@@ -107,6 +111,10 @@ export function pendingAction(b: BlockState): TraceAction {
     case 'repeater':       return b.powered ? 'f' : 'n'
     case 'button_stone':
     case 'button_wood':    return b.powered ? 'f' : 'n'
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone':
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy': return b.powered ? 'f' : 'n'
     case 'target':         return b.outputPower > 0 ? 'f' : 'n'
     case 'observer':       return b.powered ? 'f' : 'n'
     case 'comparator':     return 'c'
@@ -128,6 +136,10 @@ export function elemDelay(b: BlockState): number {
     case 'lamp':           return 4
     case 'button_stone':   return 20
     case 'button_wood':    return 30
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone': return 20   // [確定: 26.2 getPressedTime]
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy': return 10  // [確定: 26.2 getPressedTime]
     case 'target':         return 20
     case 'moving_piston':  return 2
     default:               return 0

@@ -141,6 +141,41 @@ export interface NoteBlockState {
 }
 
 /**
+ * 感圧板 (木 / 石)。エンティティが乗ると POWERED になり全方向へ weak 15、
+ * 直下 (取り付け面) へ strong 15 を出す入力装置。本 sim はエンティティを
+ * 持たないため activateBlock で手動 ON にし、持続 gt の tile tick で自動 OFF
+ * する折衷モデルで扱う (レバーの手動トグルではなく、ボタンの自動 OFF に近い)。
+ * [確定: 26.2 PressurePlateBlock / BasePressurePlateBlock]:
+ *   - getSignalForState = POWERED ? 15 : 0 (全方向 weak / getDirectSignal は UP のみ)。
+ *   - getPressedTime = 20gt (BasePressurePlateBlock 既定。PressurePlateBlock は非 override)。
+ *   - updateNeighbours = updateNeighborsAt(pos) + updateNeighborsAt(pos.below())。
+ * material は判定差 (wood=全 entity / stone=mob) と描画にのみ効き、手動モデルの
+ * 論理では両者とも 15 出力・20gt 持続で同一 (判定差は再現対象外)。
+ */
+export interface PressurePlateState {
+  type: 'pressure_plate_wood' | 'pressure_plate_stone'
+  powered: boolean
+}
+
+/**
+ * 重量感圧板 (light=金 / heavy=鉄)。乗ったエンティティ数に比例したアナログ信号を
+ * 出す。本 sim はエンティティ計数を持たないため、editor 設定値 pressedPower を
+ * そのまま出力する (計数式は通さない)。持続 gt は 10gt。
+ * [確定: 26.2 WeightedPressurePlateBlock]:
+ *   - getSignalStrength = count>0 ? ceil(min(count,maxWeight)/maxWeight * 15) : 0
+ *     (light maxWeight=15 / heavy maxWeight=150。手動モデルでは非適用)。
+ *   - getPressedTime = 10gt (override)。POWER プロパティ 0-15。
+ *   - 給電形状は wooden/stone と同じ (全方向 weak / 直下 strong / self+below の NC)。
+ */
+export interface WeightedPressurePlateState {
+  type: 'weighted_pressure_plate_light' | 'weighted_pressure_plate_heavy'
+  /** 踏まれたとき出力する信号強度 (editor 設定値, 1-15)。計数式は通さず直接出力 */
+  pressedPower: number
+  /** 現在踏まれているか。出力信号 = powered ? pressedPower : 0 */
+  powered: boolean
+}
+
+/**
  * コンテナ (チェスト / バレル等) の簡易モデル。
  *
  * 実際の充填率 (各スロットの item count / maxStackSize) は持たず、
@@ -256,6 +291,8 @@ export type BlockState =
   | ButtonState
   | LampState
   | NoteBlockState
+  | PressurePlateState
+  | WeightedPressurePlateState
   | ContainerState
   | RedstoneBlockState
   | TargetState

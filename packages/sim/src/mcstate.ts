@@ -129,6 +129,26 @@ export function mcToSim(state: string): BlockState | null {
         powered: props.powered === 'true',
       }
     }
+    case 'oak_pressure_plate':
+    case 'stone_pressure_plate':
+      // 木/石 感圧板。POWERED ? 15 : 0 [確定: 26.2 PressurePlateBlock]
+      return {
+        type: name === 'stone_pressure_plate' ? 'pressure_plate_stone' : 'pressure_plate_wood',
+        powered: props.powered === 'true',
+      }
+    case 'light_weighted_pressure_plate':
+    case 'heavy_weighted_pressure_plate': {
+      // 重量感圧板。POWER (0-15) = 現在出力。手動モデルは設定値 pressedPower を
+      // 保持する。authored の POWER>0 は乗った状態なので pressedPower に採用し、
+      // rest (POWER=0) では既定値 15 とする [確定: 26.2 WeightedPressurePlateBlock]
+      const power = Number(props.power ?? '0')
+      return {
+        type: name === 'heavy_weighted_pressure_plate'
+          ? 'weighted_pressure_plate_heavy' : 'weighted_pressure_plate_light',
+        pressedPower: power > 0 ? power : 15,
+        powered: power > 0,
+      }
+    }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
     case 'note_block':
@@ -215,6 +235,16 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         // instrument は authored に無いため harp 既定で合成する (発音音色は sim 無関係)
         return formatMcState('note_block',
           { instrument: 'harp', note: String(sim.note), powered: String(sim.powered) })
+      case 'pressure_plate_wood':
+        return formatMcState('oak_pressure_plate', { powered: String(sim.powered) })
+      case 'pressure_plate_stone':
+        return formatMcState('stone_pressure_plate', { powered: String(sim.powered) })
+      case 'weighted_pressure_plate_light':
+        return formatMcState('light_weighted_pressure_plate',
+          { power: String(sim.powered ? sim.pressedPower : 0) })
+      case 'weighted_pressure_plate_heavy':
+        return formatMcState('heavy_weighted_pressure_plate',
+          { power: String(sim.powered ? sim.pressedPower : 0) })
       case 'air':
         return 'air'
       default:
@@ -241,6 +271,14 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
     case 'button_stone':
     case 'button_wood':
       props.powered = String(sim.powered)
+      break
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone':
+      props.powered = String(sim.powered)
+      break
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy':
+      props.power = String(sim.powered ? sim.pressedPower : 0)
       break
     case 'lamp':
       props.lit = String(sim.lit)
