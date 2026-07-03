@@ -3,6 +3,7 @@ import type {
 } from './types.js'
 import type { SimWorld } from './world.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
+import { deriveWireConnections } from './wire-shape.js'
 
 // ============================================================
 // 電力クエリ関数群 (issue #10 / I2)
@@ -126,7 +127,12 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
       if (src.power === 0) return 0
       if (toDir === 'down') return src.power
       if (toDir === 'up') return 0
-      return src.connections[toDir as HDir] ? src.power : 0
+      // 水平方向は接続方向のみ。接続は保持値でなく query 時導出で判定する
+      // [確定: 26.2 getSignal → getConnectionState を毎 query 再計算 (11 §1.2)。
+      //  保持値は per-side 更新のみで自動拡張されず (#51)、給電の真実は導出側]
+      const derived = deriveWireConnections(
+        srcPos[0], srcPos[1], srcPos[2], world, src.connections)
+      return derived[toDir as HDir] ? src.power : 0
     }
     default:
       return 0

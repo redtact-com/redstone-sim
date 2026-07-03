@@ -9,6 +9,9 @@ import {
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
 } from './blocks/torch.js'
 import { computeWirePower, getConnectedWireNeighbors } from './blocks/wire.js'
+import {
+  refreshWireShape, wireShapeCandidates, sameConnections,
+} from './wire-shape.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type { BlockEvent, PistonState, NoteBlockState } from './types.js'
@@ -203,6 +206,11 @@ export class SimWorld {
     return this.blocks.get(posKey([x, y, z])) ?? null
   }
 
+  /** wire-shape.ts の BlockGrid3D 実装 (接続形状導出用) */
+  getBlock3(x: number, y: number, z: number): BlockState | null {
+    return this.getBlock(x, y, z)
+  }
+
   getBlockAt(pos: Pos3D): BlockState | null {
     return this.blocks.get(posKey(pos)) ?? null
   }
@@ -387,6 +395,11 @@ export class SimWorld {
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
       }
     }
+
+    // (#51 注記: 保持値の接続形状は initialize では触らない — vanilla は
+    //  構造ロード時に updateShape を発行せず、authored の「拡張されていない」
+    //  保持値もそのまま残る。給電判定は power.ts が query 時に導出するため
+    //  機能面は保持値に依存しない)
 
     // Step 2: ワイヤー電力を収束するまで繰り返し計算
     // （BFS だと処理順依存になるため、全体パスを繰り返す。
@@ -742,32 +755,45 @@ export class SimWorld {
 
   // ── ピストン (I7) ────────────────────────────────────────
 
-  /** ピストンの起動判定: 通常受電 (facing 面を除く) ∪ QC (1 個上の受電、down 面を除く) */
+  /**
+   * ピストンの起動判定: 通常受電 (facing 面を除く) ∪ QC (1 個上の受電、down 面を除く)。
+   * isFacePowered (weak 信号 + 充電導体) を方向除外つきで使う — 以前は包括
+   * isBlockPowered を併用しており facing 面 (QC 側は down 面) の信号源を
+   * 除外できていなかった (#51 の dynamic-connect-push fixture で検出: 面に
+   * redstone_block が直接触れるとレバー無しで伸びてしまう)。
+   * [確定: 26.2 PistonBaseBlock.getNeighborSignal — facing を除く 6 方向の
+   *  hasSignal + 1 個上の DOWN を除く hasSignal]
+   */
   private shouldExtend(pos: Pos3D, piston: PistonState): boolean {
     for (const dir of ALL_DIRS) {
       if (dir === piston.facing) continue
-      if (getSignal(this, pos, dir) > 0) return true
+      if (isFacePowered(this, pos, dir)) return true
     }
-    if (isBlockPowered(this, pos)) return true
     // QC (準接続): 1 個上のマスが受電していれば「動力源化」する (02 §4.3 / 10)。
     // NC を受けるまで活性化しない = BUD は、判定がここでなく neighborChanged /
     // BE 実行時にしか走らないことで自然に成立する
     const above: Pos3D = [pos[0], pos[1] + 1, pos[2]]
     for (const dir of ALL_DIRS) {
       if (dir === 'down') continue
-      if (getSignal(this, above, dir) > 0) return true
+      if (isFacePowered(this, above, dir)) return true
     }
-    if (isBlockPowered(this, above)) return true
     return false
   }
 
   /**
    * 押せるブロックか。v1 の簡略化 (PR#39 方針): ワイヤー・トーチ等の壊れ物は
    * vanilla ではアイテム化するが、アイテムエンティティが無いため「移動不可」扱い。
-   * コンテナ (BE 持ち)・extended ピストン・head は vanilla どおり不動
+   * コンテナ (BE 持ち)・extended ピストン・head は vanilla どおり不動。
+   *
+   * redstone_block / target / note_block は vanilla どおり可動 (PushReaction
+   * NORMAL) [確定: 26.2]。0-tick 系 (rblock 押し) と #51 の動的トポロジー
+   * 変化の前提。可動な動力源により 02 §6 の既知抽象化 (moving_piston 確定が
+   * sim=ST 相 / vanilla=BlockEntity 相) が「確定ブロックが下流ピストンを直接
+   * 起動する連鎖」で到達可能になる — 差が出る回路は 02 §6 参照。
    */
   private isMovable(block: BlockState): boolean {
     if (block.type === 'solid' || block.type === 'lamp') return true
+    if (block.type === 'redstone_block' || block.type === 'target' || block.type === 'note_block') return true
     if ((block.type === 'piston' || block.type === 'sticky_piston') && !block.extended) return true
     return false
   }
@@ -882,7 +908,10 @@ export class SimWorld {
    * 各座標から NC を発行する (移動は回路トポロジーを変える)
    */
   private afterPistonMove(positions: Pos3D[]): void {
-    const starts: Pos3D[] = []
+    // 接続形状の同期張り替え (#51): ピストン移動はトポロジー変化の主経路。
+    // moving_piston 化 (transit 中の切断) と確定 (再接続) の両方がここを通る
+    const reshaped = this.refreshWireShapesAround(positions)
+    const starts: Pos3D[] = [...reshaped]
     for (const p of positions) starts.push(...this.collectAdjacentWires(p))
     const changedWires = this.propagateWireBFS(starts)
     // ピストン移動で blockstate が変わった各座標 + power が変わったワイヤーの PP を発行
@@ -905,7 +934,14 @@ export class SimWorld {
    * 3) 電力が変化したワイヤーからダスト多段送信 (Java HashSet 順 = locational)
    */
   private propagateChange(pos: Pos3D): void {
-    const changedWires = this.propagateWireBFS(this.collectWireStarts(pos))
+    // 接続形状の同期張り替え (#51 案 A): pos の変化が周辺ワイヤーの接続導出に
+    // 影響し得るため、電力 BFS より先に保持値を導出値へ揃える。vanilla の
+    // setBlock → updateNeighbourShapes (updateShape 張り替え) の位置に対応。
+    // 形状が変わったワイヤーは電力も変わり得る (ステップ切断で網から外れる等)
+    // ため BFS 起点に加える。
+    const reshaped = this.refreshWireShapesAround([pos])
+    const changedWires = this.propagateWireBFS(
+      [...this.collectWireStarts(pos), ...reshaped])
     // ワイヤーの power 変化は blockstate 変化 = PP を発行 (観測面の隣接オブザーバー起動)。
     // vanilla のダスト setBlock (flag2 → updateNeighbourShapes) に相当し、多段 NC より先。
     for (const w of changedWires) this.emitShapeUpdate(w)
@@ -913,6 +949,36 @@ export class SimWorld {
     for (const w of changedWires) {
       for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
     }
+  }
+
+  /**
+   * 指定座標群の変化を受けて、周辺ワイヤーの接続形状を導出値へ張り替える (#51)。
+   * 26.2 の「接続は毎 query 再計算」(11 §1.2) と等価な意味論を、トポロジー
+   * 変化点での同期張り替えで実現する — 以降の全クエリ (BFS / 給電判定) は
+   * 張り替え後に走るため保持値 = 導出値が常に成り立つ。
+   * dot ガードは前の保持値を prev として deriveWireConnections が判定する。
+   * 形状が変わったワイヤーは blockstate 変化として PP を発行 (オブザーバー検知)。
+   * @returns 形状が変わったワイヤー座標
+   */
+  private refreshWireShapesAround(positions: Pos3D[]): Pos3D[] {
+    const seen = new Set<string>()
+    const changed: Pos3D[] = []
+    for (const p of positions) {
+      for (const cand of wireShapeCandidates(p)) {
+        const key = posKey(cand)
+        if (seen.has(key)) continue
+        seen.add(key)
+        const b = this.blocks.get(key)
+        if (b?.type !== 'wire') continue
+        const next = refreshWireShape(
+          cand[0], cand[1], cand[2], this, (b as WireState).connections)
+        if (sameConnections((b as WireState).connections, next)) continue
+        this.blocks.set(key, { ...(b as WireState), connections: next })
+        this.emitShapeUpdate(cand)
+        changed.push(cand)
+      }
+    }
+    return changed
   }
 
   /**
