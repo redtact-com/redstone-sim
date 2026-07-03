@@ -208,6 +208,19 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing:  'south',
         powered: String((block as any).powered ?? false),
       }]
+    case 'button_stone':
+      // 床ボタン固定 (face=floor)。感圧板と同様に専用型で往復する (#54)
+      return ['minecraft:stone_button', {
+        face:    'floor',
+        facing:  'south',
+        powered: String(block.powered),
+      }]
+    case 'button_wood':
+      return ['minecraft:oak_button', {
+        face:    'floor',
+        facing:  'south',
+        powered: String(block.powered),
+      }]
     case 'pressure_plate_wood':
       return ['minecraft:oak_pressure_plate', { powered: String((block as any).powered ?? false) }]
     case 'pressure_plate_stone':
@@ -354,10 +367,17 @@ function minecraftToBlockState(
     return { type: 'lever', facing: 'up', powered: props.powered === 'true' } as BlockState
   }
 
-  // レバーとして扱えるボタン類
+  // ボタン類 → 専用型 (石系 = stone_button / polished_blackstone_button、
+  // その他木材系 = button_wood)。editor は床ボタンのみ扱うため facing='up' 固定
+  // (踏まれ状態は entity 由来のため常に OFF で取り込む)。
   if (name.endsWith('_button')) {
-    const facing = (props.facing ?? 'north') as any
-    return { type: 'lever', facing, powered: false } as BlockState
+    const isStone =
+      name === 'minecraft:stone_button' || name === 'minecraft:polished_blackstone_button'
+    return {
+      type: isStone ? 'button_stone' : 'button_wood',
+      facing: 'up',
+      powered: false,
+    } as BlockState
   }
 
   // 感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)

@@ -52,6 +52,8 @@ interface TriggerEntry {
 /** トリガパネルの対象素子と表示 (略号は trace の abbrOf と揃える) */
 const TRIGGER_META: Record<string, { abbr: string; log: string; momentary: boolean }> = {
   lever:                           { abbr: 'Le', log: 'レバー',   momentary: false },
+  button_stone:                    { abbr: 'Bu', log: 'ボタン(石) を押す', momentary: true },
+  button_wood:                     { abbr: 'Bu', log: 'ボタン(木) を押す', momentary: true },
   pressure_plate_wood:             { abbr: 'Pp', log: '感圧板(木) を踏む', momentary: true },
   pressure_plate_stone:            { abbr: 'Pp', log: '感圧板(石) を踏む', momentary: true },
   weighted_pressure_plate_light:   { abbr: 'Wp', log: '重量板(金) を踏む', momentary: true },
@@ -77,6 +79,10 @@ interface BlockMeta {
   hasFacing:  boolean
   hasDelay:   boolean
   hasMode:    boolean
+  /** 重量感圧板の踏まれ信号 (1-15) セレクタを表示するか */
+  hasPressedPower?: boolean
+  /** コンテナの背面読み信号 (0-15) セレクタを表示するか */
+  hasSignal?: boolean
 }
 
 const BLOCK_PALETTE: BlockMeta[] = [
@@ -86,14 +92,16 @@ const BLOCK_PALETTE: BlockMeta[] = [
     cssFilter: 'sepia(1) saturate(10) hue-rotate(320deg) brightness(0.8)',
     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'lever',      label: 'レバー',        texture: 'block/lever',           hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'button_stone', label: 'ボタン(石)',  texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'button_wood',  label: 'ボタン(木)',  texture: 'block/oak_planks',      hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'torch',      label: 'トーチ(床)',    texture: 'block/redstone_torch',  hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'wall_torch', label: 'トーチ(壁)',    texture: 'block/redstone_torch',  hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'repeater',   label: 'リピーター',    texture: 'block/repeater',        hasFacing: true,  hasDelay: true,  hasMode: false },
   { type: 'comparator', label: 'コンパレーター', texture: 'block/comparator',      hasFacing: true,  hasDelay: false, hasMode: true  },
   { type: 'pressure_plate_wood',  label: '感圧板(木)', texture: 'block/oak_planks',   hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'pressure_plate_stone', label: '感圧板(石)', texture: 'block/stone',        hasFacing: false, hasDelay: false, hasMode: false },
-  { type: 'weighted_pressure_plate_light', label: '重量板(金)', texture: 'block/gold_block', hasFacing: false, hasDelay: false, hasMode: false },
-  { type: 'weighted_pressure_plate_heavy', label: '重量板(鉄)', texture: 'block/iron_block', hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'weighted_pressure_plate_light', label: '重量板(金)', texture: 'block/gold_block', hasFacing: false, hasDelay: false, hasMode: false, hasPressedPower: true },
+  { type: 'weighted_pressure_plate_heavy', label: '重量板(鉄)', texture: 'block/iron_block', hasFacing: false, hasDelay: false, hasMode: false, hasPressedPower: true },
   { type: 'lamp',       label: 'ランプ',        texture: 'block/redstone_lamp',   hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'note_block', label: '音符ブロック',  texture: 'block/note_block',      hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'piston',     label: 'ピストン',      texture: 'block/piston_top',      hasFacing: true,  hasDelay: false, hasMode: false },
@@ -101,6 +109,7 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'observer',   label: 'オブザーバー',  texture: 'block/observer_front',   hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'redstone_block', label: 'レッドストーンブロック', texture: 'block/redstone_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'container',  label: 'コンテナ',      texture: 'block/barrel_side',     hasFacing: false, hasDelay: false, hasMode: false, hasSignal: true },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },
@@ -155,6 +164,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const [facing, setFacing] = useState<HDir>('east')
   const [delay, setDelay]   = useState<1 | 2 | 3 | 4>(1)
   const [comparatorMode, setComparatorMode] = useState<'compare' | 'subtract'>('compare')
+  // 重量感圧板の踏まれ信号 (1-15, 既定 15) / コンテナの背面読み信号 (0-15, 既定 0)
+  const [pressedPower, setPressedPower] = useState(15)
+  const [signal, setSignal] = useState(0)
 
   // グリッド上の選択セル (x, z)
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null)
@@ -271,6 +283,14 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const barMode: 'compare' | 'subtract' =
     gridBlock?.type === 'comparator' ? gridBlock.mode : comparatorMode
 
+  const barPressedPower: number =
+    (gridBlock?.type === 'weighted_pressure_plate_light' ||
+     gridBlock?.type === 'weighted_pressure_plate_heavy')
+      ? gridBlock.pressedPower : pressedPower
+
+  const barSignal: number =
+    gridBlock?.type === 'container' ? gridBlock.signal : signal
+
   // 向き・遅延バーを表示するか
   const gridBlockHasFacing = !!gridBlock && 'facing' in gridBlock &&
     H_DIRS.some(([d]) => d === (gridBlock as unknown as Record<string, unknown>).facing)
@@ -280,19 +300,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
     !!(selectedMeta?.hasFacing) ||
     !!(selectedMeta?.hasDelay) ||
     !!(selectedMeta?.hasMode) ||
+    !!(selectedMeta?.hasPressedPower) ||
+    !!(selectedMeta?.hasSignal) ||
     gridBlockHasFacing ||
     gridBlock?.type === 'repeater' ||
-    gridBlock?.type === 'comparator'
+    gridBlock?.type === 'comparator' ||
+    gridBlock?.type === 'weighted_pressure_plate_light' ||
+    gridBlock?.type === 'weighted_pressure_plate_heavy' ||
+    gridBlock?.type === 'container'
   )
 
   // ── ブロッククリック（edit + sim 共通） ─────────────────────────────────
 
   // useCallback の deps を最小化して IsometricView への参照を安定させる
-  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode })
-  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode }
+  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal })
+  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal }
 
   const handleBlockClick = useCallback((pos: Pos3D, button: 'left' | 'right') => {
-    const { mode, simWorld, selectedType, facing, delay, comparatorMode } = stateRef.current
+    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal } = stateRef.current
     const [x, , z] = pos
 
     // ── シミュレーションモード: レバーのみ操作 ──────────────────────────
@@ -302,6 +327,11 @@ export function EditorPage({ onBack }: EditorPageProps) {
         if (b?.type === 'lever') {
           simWorld.activateBlock(x, pos[1], z)
           addLog(`レバートグル (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (b?.type === 'button_stone' || b?.type === 'button_wood') {
+          // ボタンは手動トリガ (押下 ON → 20/30gt 後に自動 OFF。作動中は no-op)
+          simWorld.activateBlock(x, pos[1], z)
+          addLog(`ボタンを押す (${x}, ${pos[1]}, ${z})`)
           rerender()
         } else if (b?.type === 'target') {
           // ターゲットは手動トリガ (中心命中相当の 15、20gt 持続)
@@ -360,6 +390,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (existing.type === 'comparator') {
         setComparatorMode((existing as unknown as Record<string, unknown>).mode as 'compare' | 'subtract')
       }
+      if (existing.type === 'weighted_pressure_plate_light' ||
+          existing.type === 'weighted_pressure_plate_heavy') {
+        setPressedPower(existing.pressedPower)
+      }
+      if (existing.type === 'container') {
+        setSignal(existing.signal)
+      }
       addLog(`選択: ${existing.type} (${x}, ${z})`)
     } else {
       // 空セルをクリック → 新規配置
@@ -368,6 +405,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (meta?.hasFacing) opts.facing = facing
       if (meta?.hasDelay)  opts.delay  = delay
       if (meta?.hasMode)   opts.mode   = comparatorMode
+      if (meta?.hasPressedPower) opts.pressedPower = pressedPower
+      if (meta?.hasSignal)       opts.signal       = signal
       editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
       setSelectedPos([x, z])
       addLog(`${meta?.label ?? selectedType} を配置 (${x}, ${z})`)
@@ -415,6 +454,39 @@ export function EditorPage({ onBack }: EditorPageProps) {
         if (block?.type === 'comparator') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
           editorRef.current.placeBlock(prev[0], prev[1], 'comparator', { facing: f, mode: newMode })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
+  // ── 踏まれ信号変更（重量感圧板） ─────────────────────────────────────
+
+  const handlePressedPowerChange = useCallback((newP: number) => {
+    setPressedPower(newP)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'weighted_pressure_plate_light' ||
+            block?.type === 'weighted_pressure_plate_heavy') {
+          editorRef.current.placeBlock(prev[0], prev[1], block.type, { pressedPower: newP })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
+  // ── 背面読み信号変更（コンテナ） ─────────────────────────────────────
+
+  const handleSignalChange = useCallback((newSignal: number) => {
+    setSignal(newSignal)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'container') {
+          editorRef.current.placeBlock(prev[0], prev[1], 'container', { signal: newSignal })
           rerender()
         }
       }
@@ -868,9 +940,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
           barFacing={barFacing}
           barDelay={barDelay}
           barMode={barMode}
+          barPressedPower={barPressedPower}
+          barSignal={barSignal}
           onFacingChange={handleFacingChange}
           onDelayChange={handleDelayChange}
           onModeChange={handleModeChange}
+          onPressedPowerChange={handlePressedPowerChange}
+          onSignalChange={handleSignalChange}
         />
       )}
 
@@ -899,20 +975,29 @@ interface FacingBarProps {
   barFacing:          HDir
   barDelay:           1 | 2 | 3 | 4
   barMode:            'compare' | 'subtract'
+  barPressedPower:    number
+  barSignal:          number
   onFacingChange:     (f: HDir) => void
   onDelayChange:      (d: 1 | 2 | 3 | 4) => void
   onModeChange:       (m: 'compare' | 'subtract') => void
+  onPressedPowerChange: (p: number) => void
+  onSignalChange:     (s: number) => void
 }
 
 function FacingBar({
   gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
-  barFacing, barDelay, barMode, onFacingChange, onDelayChange, onModeChange,
+  barFacing, barDelay, barMode, barPressedPower, barSignal,
+  onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
 
   const showFacing = !!(meta?.hasFacing) || gridBlockHasFacing
   const showDelay  = !!(meta?.hasDelay)  || gridBlock?.type === 'repeater'
   const showMode   = !!(meta?.hasMode)   || gridBlock?.type === 'comparator'
+  const showPressedPower = !!(meta?.hasPressedPower) ||
+    gridBlock?.type === 'weighted_pressure_plate_light' ||
+    gridBlock?.type === 'weighted_pressure_plate_heavy'
+  const showSignal = !!(meta?.hasSignal) || gridBlock?.type === 'container'
 
   const label = selectedPos
     ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
@@ -994,6 +1079,16 @@ function FacingBar({
             ))}
           </div>
         </div>
+      )}
+
+      {/* 踏まれ信号（重量感圧板 1-15） */}
+      {showPressedPower && (
+        <PowerSelect label="POWER" min={1} max={15} value={barPressedPower} onChange={onPressedPowerChange} />
+      )}
+
+      {/* 背面読み信号（コンテナ 0-15） */}
+      {showSignal && (
+        <PowerSelect label="SIGNAL" min={0} max={15} value={barSignal} onChange={onSignalChange} />
       )}
 
       <div className="flex-1" />
@@ -1179,6 +1274,47 @@ function HeightPanel({
           borderColor: cutUpper ? '#3a6aaa #0a1a3a #0a1a3a #3a6aaa' : '#666 #222 #222 #666',
         }}
       >👁</button>
+    </div>
+  )
+}
+
+// ── PowerSelect ───────────────────────────────────────────────────────────────
+
+/**
+ * 信号強度セレクタ (DELAY バーと同型)。重量感圧板の踏まれ信号 (1-15) と
+ * コンテナの背面読み信号 (0-15) に共用。値が多いので 8 列グリッドで折り返す。
+ */
+function PowerSelect({ label, min, max, value, onChange }: {
+  label:    string
+  min:      number
+  max:      number
+  value:    number
+  onChange: (v: number) => void
+}) {
+  const values = Array.from({ length: max - min + 1 }, (_, i) => min + i)
+  return (
+    <div className="flex flex-col gap-1.5 shrink-0">
+      <span className="font-pixel text-center" style={{ fontSize: 11, color: '#555' }}>{label}</span>
+      <div className="grid grid-cols-8" style={{ gap: 3 }}>
+        {values.map(v => {
+          const active = value === v
+          return (
+            <button key={v} onClick={() => onChange(v)}
+                    className="mc-btn font-bold"
+                    style={{
+                      width: 28, height: 28, fontSize: 12,
+                      background: active ? '#6b0000' : '#3a3a3a',
+                      borderColor: active
+                        ? '#ff4444 #440000 #440000 #ff4444'
+                        : '#666 #222 #222 #666',
+                      color: active ? '#ff8888' : '#aaa',
+                      boxShadow: active ? '0 0 8px #cc2222' : 'none',
+                    }}>
+              {v}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
