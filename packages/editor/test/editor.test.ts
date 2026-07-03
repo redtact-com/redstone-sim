@@ -133,6 +133,58 @@ describe('CircuitEditor: ワイヤー接続計算', () => {
 
 // ─────────────────────────────────────────────────────────────
 
+describe('CircuitEditor: 配置オプション (#54)', () => {
+  it('重量板(金)は pressedPower を設定して配置できる (既定 15)', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'weighted_pressure_plate_light', { pressedPower: 7 })
+    expect(editor.getBlock(0, 0)).toMatchObject({
+      type: 'weighted_pressure_plate_light', pressedPower: 7, powered: false,
+    })
+    // opts 省略時は既定 15
+    editor.placeBlock(1, 0, 'weighted_pressure_plate_heavy')
+    expect(editor.getBlock(1, 0)).toMatchObject({
+      type: 'weighted_pressure_plate_heavy', pressedPower: 15,
+    })
+  })
+
+  it('コンテナは signal を設定して配置できる (既定 0)', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'container', { signal: 10 })
+    expect(editor.getBlock(0, 0)).toMatchObject({ type: 'container', signal: 10 })
+    editor.placeBlock(1, 0, 'container')
+    expect(editor.getBlock(1, 0)).toMatchObject({ type: 'container', signal: 0 })
+  })
+
+  it('ボタン(石/木)は床置き (facing=up) で配置できる', () => {
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'button_stone')
+    editor.placeBlock(1, 0, 'button_wood')
+    expect(editor.getBlock(0, 0)).toMatchObject({ type: 'button_stone', facing: 'up', powered: false })
+    expect(editor.getBlock(1, 0)).toMatchObject({ type: 'button_wood', facing: 'up', powered: false })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+
+describe('CircuitEditor: コンテナ → コンパレーター背面読み (#54)', () => {
+  it('配置したコンテナの signal をコンパレーターが背面から読む', () => {
+    // container(西) → comparator(east 向き, 背面=西) → wire(east 出力)
+    const editor = new CircuitEditor(0)
+    editor.placeBlock(0, 0, 'container', { signal: 9 })
+    editor.placeBlock(1, 0, 'comparator', { facing: 'east' })
+    editor.placeBlock(2, 0, 'wire')
+
+    const world = editor.buildSimWorld()
+    world.initialize()
+    world.flush(64)
+
+    expect(world.getBlock(1, 0, 0)).toMatchObject({ type: 'comparator', outputPower: 9, powered: true })
+    expect(world.getBlock(2, 0, 0)).toMatchObject({ type: 'wire', power: 9 })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+
 describe('CircuitEditor: undo/redo', () => {
   it('undo で配置が取り消せる', () => {
     const editor = new CircuitEditor(0)

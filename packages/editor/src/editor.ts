@@ -12,6 +12,8 @@ export interface PlaceOptions {
   mode?: 'compare' | 'subtract'
   /** 重量感圧板が踏まれたとき出力する信号強度 (1-15)。既定 15 */
   pressedPower?: number
+  /** コンテナがコンパレーター背面から読まれる実効出力 (0-15)。既定 0 */
+  signal?: number
 }
 
 type ChangeHandler = (snapshot: WorldSnapshot) => void
@@ -194,8 +196,9 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'observer', facing, powered: false }
     case 'solid':
       return { type: 'solid', powered: false }
-    // 'container' は editor パレット追加が issue #13 のスコープ外のため
-    // default (null) に落として配置不可とする。sim / viewer / nbtIO のみ対応。
+    case 'container':
+      // コンパレーター背面から読まれる実効出力 (0-15) を editor で設定する (#54)。
+      return { type: 'container', signal: opts.signal ?? 0 }
     default:
       return null
   }
