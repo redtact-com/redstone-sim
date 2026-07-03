@@ -167,16 +167,32 @@ async function generateFixture(name: string): Promise<void> {
       await sleep(120)
     }
     for (const input of def.inputs.filter(i => i.tick === t)) {
-      if (input.action !== 'use') throw new Error(`未対応 action: ${input.action}`)
-      // input.pos のブロックへ毎回照準し直す (複数レバー fixture 対応)。
-      // 高さは fixture の player.lookAt の Y オフセットを流用する
-      // (床レバー 1.35 / 床ボタン 1.06 などブロック種で異なるため)
-      const lookY = def.player!.lookAt[1] - Math.floor(def.player!.lookAt[1])
-      rcon('player', PLAYER_NAME, 'look', 'at',
-        String(input.pos[0] + 0.5), String(input.pos[1] + lookY), String(input.pos[2] + 0.5))
-      await sleep(200)
-      rcon('player', PLAYER_NAME, 'use', 'once')
-      await sleep(200)
+      if (input.action === 'use') {
+        // input.pos のブロックへ毎回照準し直す (複数レバー fixture 対応)。
+        // 高さは fixture の player.lookAt の Y オフセットを流用する
+        // (床レバー 1.35 / 床ボタン 1.06 などブロック種で異なるため)
+        const lookY = def.player!.lookAt[1] - Math.floor(def.player!.lookAt[1])
+        rcon('player', PLAYER_NAME, 'look', 'at',
+          String(input.pos[0] + 0.5), String(input.pos[1] + lookY), String(input.pos[2] + 0.5))
+        await sleep(200)
+        rcon('player', PLAYER_NAME, 'use', 'once')
+        await sleep(200)
+      } else if (input.action === 'step') {
+        // 感圧板を踏む: fake player を板の中心へ tp して entityInside を発火させ、
+        // 直後に spawn へ戻して離れる (手動 sim モデルは単発 = getPressedTime 後 auto-off の
+        // ため、踏みっぱなしだと実機で再発火し続け sim と乖離する)。
+        // [未検証: docker 実行は後段で親が直列実行する。freeze 境界での entityInside 発火
+        //  タイミング / press が tick t に載るか t+1 に載るかは実機で要確認。ズレる場合は
+        //  authored の input.tick か expect を実機生成時に調整すること]
+        const [sx, sy, sz] = def.player!.spawn
+        rcon('tp', PLAYER_NAME,
+          String(input.pos[0] + 0.5), String(input.pos[1]), String(input.pos[2] + 0.5))
+        await sleep(200)
+        rcon('tp', PLAYER_NAME, String(sx), String(sy), String(sz))
+        await sleep(200)
+      } else {
+        throw new Error(`未対応 action: ${input.action}`)
+      }
     }
     scarpet(`fx_dump(${t})`)
   }

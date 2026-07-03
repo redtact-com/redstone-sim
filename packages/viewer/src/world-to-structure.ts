@@ -65,6 +65,14 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
+    case 'pressure_plate_wood':
+      return `minecraft:oak_pressure_plate[powered=${block.powered}]`
+    case 'pressure_plate_stone':
+      return `minecraft:stone_pressure_plate[powered=${block.powered}]`
+    case 'weighted_pressure_plate_light':
+      return `minecraft:light_weighted_pressure_plate[power=${block.powered ? block.pressedPower : 0}]`
+    case 'weighted_pressure_plate_heavy':
+      return `minecraft:heavy_weighted_pressure_plate[power=${block.powered ? block.pressedPower : 0}]`
     case 'redstone_block':
       return 'minecraft:redstone_block'
     case 'target':
@@ -132,6 +140,10 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:lever',
   'minecraft:stone_button',
   'minecraft:oak_button',
+  'minecraft:oak_pressure_plate',
+  'minecraft:stone_pressure_plate',
+  'minecraft:light_weighted_pressure_plate',
+  'minecraft:heavy_weighted_pressure_plate',
   'minecraft:redstone_lamp',
   'minecraft:piston',
   'minecraft:sticky_piston',

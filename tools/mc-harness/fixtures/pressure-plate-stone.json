@@ -1,0 +1,18 @@
+{
+  "name": "pressure-plate-stone",
+  "description": "石の感圧板の直下 strong 充電を検証。板 (0,1,0) の直下 support (0,0,0) に壁トーチ (1,0,0 facing=east → 土台=west=support) が付く。fake player が板を踏むと support が強充電され壁トーチが消灯、20gt (getPressedTime [確定: 26.2 PressurePlateBlock は override せず既定 20]) 後の板オフで復帰する。石板は MOBS 感知だが fake player は LivingEntity なので発火し、出力は二値 15 で手動モデルと実機が一致する。action='step' は fake player を板中心へ tp する新方式 (generate.ts、docker は後段の親が直列実行)",
+  "mcVersion": "1.21.1",
+  "ticks": 28,
+  "region": { "from": [0, 0, 0], "to": [1, 1, 1] },
+  "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 0], "lookAt": [0.5, 1.0, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "stone_pressure_plate[powered=false]" },
+    { "pos": [1, 0, 0], "block": "redstone_wall_torch[facing=east,lit=true]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "step" }
+  ]
+}

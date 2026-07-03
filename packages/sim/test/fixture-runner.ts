@@ -16,7 +16,12 @@ import type { Pos3D } from '@redstone/sim'
 export interface FixtureInput {
   tick: number
   pos: Pos3D
-  action: 'use'
+  /**
+   * 'use'  … 右クリック相当 (レバー/ボタン/ターゲット)。
+   * 'step' … 感圧板を踏む相当。sim の手動モデルでは activateBlock で 'use' と同一に扱うが、
+   *          実機 (generate.ts) では fake player を板上へ移動させて entityInside を発火させる。
+   */
+  action: 'use' | 'step'
 }
 
 export interface FixtureChange {
@@ -106,7 +111,8 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
   for (let t = 0; t <= fx.ticks; t++) {
     if (t > 0) world.tick()
     for (const input of inputsAt(t)) {
-      if (input.action === 'use') {
+      if (input.action === 'use' || input.action === 'step') {
+        // 'step' (感圧板を踏む) も手動モデルでは activateBlock で ON にする
         world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
       }
     }
@@ -138,7 +144,8 @@ export function traceFixtureOnSim(fx: Fixture, opts: { verbose?: boolean } = {})
   for (let t = 0; t <= fx.ticks; t++) {
     if (t > 0) world.tick()
     for (const input of inputsAt(t)) {
-      if (input.action === 'use') {
+      if (input.action === 'use' || input.action === 'step') {
+        // 'step' (感圧板を踏む) も手動モデルでは activateBlock で ON にする
         world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
       }
     }

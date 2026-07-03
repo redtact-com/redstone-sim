@@ -10,6 +10,8 @@ export interface PlaceOptions {
   facing?: HDir
   delay?: 1 | 2 | 3 | 4
   mode?: 'compare' | 'subtract'
+  /** 重量感圧板が踏まれたとき出力する信号強度 (1-15)。既定 15 */
+  pressedPower?: number
 }
 
 type ChangeHandler = (snapshot: WorldSnapshot) => void
@@ -152,6 +154,14 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'button_stone', facing: 'up', powered: false }
     case 'button_wood':
       return { type: 'button_wood', facing: 'up', powered: false }
+    case 'pressure_plate_wood':
+      return { type: 'pressure_plate_wood', powered: false }
+    case 'pressure_plate_stone':
+      return { type: 'pressure_plate_stone', powered: false }
+    case 'weighted_pressure_plate_light':
+      return { type: 'weighted_pressure_plate_light', pressedPower: opts.pressedPower ?? 15, powered: false }
+    case 'weighted_pressure_plate_heavy':
+      return { type: 'weighted_pressure_plate_heavy', pressedPower: opts.pressedPower ?? 15, powered: false }
     case 'lamp':
       return { type: 'lamp', lit: false }
     case 'piston':
