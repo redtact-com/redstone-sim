@@ -1,0 +1,61 @@
+# ダスト多段送信の起点集合 (dustUpdateOrigins: {自身 + 隣接6} の 7 origin) の
+# **HashSet イテレーション順**を verbose bu(...) トークン列で直接観測する最小回路。
+# 同じ形状を +10x 平行移動すると**同じ 7 トークンが別の順**で並ぶ = 座標依存
+# (MC-11193 の直接根拠)。
+#
+# 仕様クロスチェック (02 §4.2 [確定: 1.21.1/26.2] / 11 / updates.ts):
+#   RedStoneWireBlock.updatePowerStrength は強度変化時に HashSet<BlockPos> へ
+#   {自身 + 隣接6} を Direction.values() 順で add し、その**イテレーション順**で
+#   各 origin から updateNeighborsAt (6 方向 NC) を送る。HashSet バケット index =
+#   spread(BlockPos.hashCode) & 15 は座標依存 → 送信起点順は locational。
+#   sim は javaHashSetOrder() でこれを忠実化 (dustUpdateOrigins)。
+#
+# 観測: レバー ON → 直付けダスト 1 個の power 0→15。propagateChange(レバー) の
+#   verbose updateFormula "Le{n.0}; {...}" に、レバー自身 (bu(o)) + 取付面 (bu(-y))
+#   の後、ダスト 7 origin の bu トークンが HashSet 順で並ぶ (トークンはレバーからの
+#   相対座標。うち bu(o) はダストの西隣 origin = レバー座標に一致するため 2 度出る)。
+#   アーム A (x=1) と +10x のアーム B は**同じ 7 トークン集合を別順**で出す。
+#   sim=仕様(locational を持つ) が一致 (PASS)。**検証対象はトークンの並び順**。
+#
+# locational は sim の決定論的実装順を固定するもの。実機一致 (MC-11193 の存在) は
+# #46 fixture 系が担保し、ここは sim の HashSet エミュレートを回帰から守る。
+meta {
+  name: ダスト origin の HashSet 順 (MC-11193 平行移動で並べ替え)
+  ref: 02 §4.2 dust / 11 / 26.2 RedStoneWireBlock.updatePowerStrength / updates.ts dustUpdateOrigins,javaHashSetOrder / #46
+}
+
+circuit {
+  # アーム A (ダスト at x=1)
+  (0,0,0) stone
+  (1,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # アーム B (+10x 平行移動。同一形状)
+  (10,0,0) stone
+  (11,0,0) stone
+  (10,1,0) lever[face=floor,facing=north,powered=false]
+  (11,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2 use (0,1,0)
+  t8 use (10,1,0)
+}
+
+ticks 14
+
+# 部分一致 (verbose): 2 本の bu 行は**同じ 7 origin トークン集合が別順**。
+# {+x, +x-z, +x-y, +x+z, +2x, +x+y, o(=西隣ダスト origin)} が A と B で入れ替わる。
+trace {
+  2gt[PI]: Le{n.0}
+  Le{n.0}; {bu(o), bu(-y), bu(+x), bu(+x-z), bu(+x-y), bu(+x+z), bu(+2x), bu(+x+y), bu(o)}
+  8gt[PI]: Le{n.0}
+  Le{n.0}; {bu(o), bu(-y), bu(+x-z), bu(+x+y), bu(o), bu(+x), bu(+x-y), bu(+x+z), bu(+2x)}
+}
+
+state {
+  # ダストは駆動で power 15 に上がる (順序は state に出ない)
+  t0 (1,1,0)  redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  t2 (1,1,0)  redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t8 (11,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+}
