@@ -1,0 +1,66 @@
+# 1 個の PP 発行が複数のオブザーバーを同 tick で並列起動する = 伝播網の枝分かれ (#79 領域4)。
+# 中央 dust の power 変化 (PP) を、dust を挟んで向かい合う 2 個のオブザーバー (北面/南面から
+# それぞれ dust を観測) が同時に検知して 2gt 後に並列パルスする。02 §4.2 の
+# 「PP は隣接 6 マスへ broadcast」を、複数受信者の同時反応で固定する。
+#
+# 配置: dust D=(1,1,0) を lever(0,1,0) が西から駆動。
+#   OB_N=(1,1,-1) facing=south (南=D を観測)、背面 north=(1,1,-2) lamp。
+#   OB_S=(1,1,1)  facing=north (北=D を観測)、背面 south=(1,1,2) lamp。
+#
+# 仕様クロスチェック (02 §4.1/§4.2/§6 observer [確定]):
+#   §4.2: setBlock の PP は UPDATE_SHAPE_ORDER (西東北南下上) で隣接 6 マスへ broadcast。
+#     D の power が変わると北隣 OB_N・南隣 OB_S の両方へ shape 更新が届く。
+#   §6 observer: 各オブザーバーは「自身の facing == D への方向」のときだけ起動 → 両者とも
+#     D を観測するため両者予約 → 同 tick に 2gt パルス。背面 lamp を同時点灯。
+#   導出: t2 lever→D 通電 → OB_N/OB_S 予約 → t4 両者 ON + 両 lamp 点灯 → t6 両者 OFF →
+#     lamp は 4gt off-delay で t10 消灯。sim=仕様が一致 (PASS)。gt オフセット無し。
+meta {
+  name: PP fan-out — 1 発行が 2 オブザーバーを並列起動
+  ref: 02 §4.2 (PP broadcast 隣接 6) / §6 observer (facing 一致で起動)
+}
+
+circuit {
+  (0,0,0) stone
+  (1,0,0) stone
+  (1,0,-1) stone
+  (1,0,-2) stone
+  (1,0,1) stone
+  (1,0,2) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=none,north=side,power=0,south=side,west=side]   # 観測される D
+  (1,1,-1) observer[facing=south,powered=false]     # OB_N: D を南面観測、背面 lampN
+  (1,1,-2) redstone_lamp[lit=false]
+  (1,1,1) observer[facing=north,powered=false]      # OB_S: D を北面観測、背面 lampS
+  (1,1,2) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)      # D 通電 → 両オブザーバーが同一 PP を検知
+}
+
+ticks 12
+
+# 部分一致。同一 D の PP から 2gt[ST] に Ob(n.2) が 2 本並ぶ = 単一発行の並列起動。
+# 4gt[ST] の Ob(f.2) 2 本 = 両者が独立に 2gt パルス。
+trace {
+  2gt[ST]: Ob(n.2) p0     # OB_N/OB_S の一方を予約 (同一 D の PP)
+  2gt[ST]: Ob(n.2) p0     # もう一方も同 tick で予約 (fan-out)
+  4gt[ST]: Ob(f.2) p0     # 一方の自身 OFF
+  4gt[ST]: Ob(f.2) p0     # 他方の自身 OFF
+}
+
+state {
+  t0 (1,1,-1) observer[facing=south,powered=false]
+  t0 (1,1,1) observer[facing=north,powered=false]
+  # t4: 両オブザーバーが並列 ON、両背面 lamp 同時点灯
+  t4 (1,1,-1) observer[facing=south,powered=true]
+  t4 (1,1,1) observer[facing=north,powered=true]
+  t4 (1,1,-2) redstone_lamp[lit=true]
+  t4 (1,1,2) redstone_lamp[lit=true]
+  # t6: 両者 OFF (幅 2gt)
+  t6 (1,1,-1) observer[facing=south,powered=false]
+  t6 (1,1,1) observer[facing=north,powered=false]
+  # t10: lamp は 4gt off-delay で同時消灯
+  t10 (1,1,-2) redstone_lamp[lit=false]
+  t10 (1,1,2) redstone_lamp[lit=false]
+}

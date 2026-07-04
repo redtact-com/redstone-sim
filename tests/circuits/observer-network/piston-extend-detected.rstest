@@ -1,0 +1,48 @@
+# ピストンの伸縮 (head セルの出現/消滅) をオブザーバーが PP として検知する = 機構の動きを
+# 観測する側の複合 (#79 領域4)。既存 composite/observer-piston-chain は「観測でピストンを起動」
+# (observer→piston)。ここは逆向き「ピストンの動きを観測」(piston→observer) を fixture
+# observer-piston (実機 ground truth) の配置で、オブザーバー検知と BE の相対タイミングを固定する。
+#
+# 配置 (fixture observer-piston): lever→piston P=(1,1,0,facing=east) 直付け。head セル=(2,1,0)。
+#   OB=(3,1,0,facing=west) が head セル (2,1,0) を観測、背面 east=(4,1,0) lamp。
+#
+# 仕様クロスチェック (02 §6 piston タイムライン / §6 observer / §4.1 PP [確定]):
+#   §6 piston: lever ON (player-action) → 翌 tick の BE フェーズで extend 発火 (start delay 1gt) →
+#     head セルに moving_piston 出現 → 2gt 後 piston_head 確定。
+#   §6 observer/§4.1: head セルの air→moving_piston は観測可能な blockstate 変化 = PP。OB は
+#     観測面 (west=head セル) から受けて 2gt tile tick を予約 → 2gt パルス。
+#   導出: t2 lever ON → t3 BE で伸長 (head セル moving_piston) → OB が PP 検知・予約 →
+#     t5 OB ON (moving_piston 出現の +2gt) + lamp 点灯 → t7 OB OFF (幅 2gt)。
+#     収縮 (lever off t11) → t12 head セル air 化 (観測可能変化) → t14 OB ON (再検知)。
+#   sim=実機 fixture が一致 (PASS)。gt オフセット無し。
+#   ※ moving_piston→piston_head (t5) の 2 度目の変化は OB が既に ON のため飲まれる (guard)。
+#     ※ オブザーバー tile tick 実行は trace 行を出さない (既知 #75)。検知の証拠は
+#       伸長 BE と同 tick の Ob(n.2) 予約 + 2gt 後の powered state。
+meta {
+  name: ピストン伸縮の検知 (piston→observer、fixture observer-piston 再利用)
+  ref: 02 §6 piston (伸長 2gt/start delay) / §6 observer (PP 検知) / §4.1 / fixture observer-piston
+}
+
+fixture observer-piston
+
+# 部分一致。伸長 BE (Pi{p.0}) と同 tick でオブザーバーが moving_piston 出現を PP 検知して
+# ON を予約する (start delay 由来のタイミング) ことを pin。オブザーバー実行行は #75 で出ない。
+trace {
+  2gt[BE]: Pi(p.s)        # lever ON → 翌 tick の伸長 BE を予約 (start delay 1)
+  3gt[BE]: Pi{p.0}        # 伸長実行 → head セルに moving_piston 出現
+  3gt[ST]: Ob(n.2) p0     # OB が moving_piston 出現 (PP) を検知 → 2gt 後 ON を予約
+}
+
+state {
+  t0 (2,1,0) air                                                # head セル初期は空
+  t0 (3,1,0) observer[facing=west,powered=false]
+  # 伸長: head セルの出現をオブザーバーが検知 (過渡 moving_piston は断言せず確定形のみ)
+  t5 (2,1,0) piston_head[facing=east,short=false,type=normal]   # 伸長 2gt 後に確定
+  t5 (3,1,0) observer[facing=west,powered=true]                 # +2gt で検知 ON
+  t5 (4,1,0) redstone_lamp[lit=true]                            # 背面 lamp 点灯
+  t7 (3,1,0) observer[facing=west,powered=false]               # 2gt パルス立ち下がり
+  # 収縮: head セルの消滅をオブザーバーが再検知
+  t12 (2,1,0) air                                               # 収縮で head セル消滅 (観測可能変化)
+  t14 (3,1,0) observer[facing=west,powered=true]               # 消滅を +2gt で再検知
+  t16 (3,1,0) observer[facing=west,powered=false]              # 再パルスの立ち下がり
+}

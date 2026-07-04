@@ -1,0 +1,59 @@
+# オブザーバーは観測面 (facing) からの PP でのみ起動し、背面/側面の NC (給電) では起動しない
+# ことを、同一オブザーバーへの 2 種の刺激で時系列に開く (#79 領域4)。02 §4.1 の
+# 「オブザーバーは PP/SU で起動し NC/BU では起動しない」を回路 state + strict trace で固定。
+#
+# 配置: オブザーバー O=(0,1,0) facing=north (観測面=北)。
+#   facing 枝 (北): dust(0,1,-1) を lever(0,1,-2) が駆動。dust の power 変化 (PP) が O の
+#     観測面から届く。
+#   back 枝 (南=背面): dust(0,1,1) を lever(0,1,2) が駆動。背面 dust の power 変化は O へ
+#     NC/PP として届くが、O の facing (北) と一致しない方向のため updateShape を無視する。
+#
+# 仕様クロスチェック (02 §4.1/§4.2/§6 observer [確定: ObserverBlock デコンパイル]):
+#   ObserverBlock.updateShape は state.getValue(FACING) == (pos→変化 neighbor 方向) のときのみ
+#   startSignal → 2gt tile tick を予約。背面 (南) からの shape 更新は方向不一致で無反応。
+#   NC (neighborChanged) はそもそも ObserverBlock 非 override = 完全無反応。
+#   導出: t2 back lever ON → 背面 dust 通電 → O は無反応 (schedule 0 件)。
+#         t8 facing lever ON → 観測面 dust 通電 (PP) → O 予約 → t10 ON → t12 OFF (幅 2gt)。
+#   sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ strict trace の要点: 背面刺激 (2gt) の後に Ob 予約が一切現れず、観測面刺激 (8gt) の
+#     後にだけ Ob(n.2)/Ob(f.2) が出る = 「NC では起動しない」の直接証拠。
+meta {
+  name: PP 方向性 — 観測面のみ起動・背面 NC は無反応 (§4.1)
+  ref: 02 §4.1 (PP 起動/NC 無反応) / §4.2 UPDATE_SHAPE / §6 observer
+}
+
+circuit {
+  (0,0,-2) stone
+  (0,0,-1) stone
+  (0,0,0) stone
+  (0,0,1) stone
+  (0,0,2) stone
+  (0,1,0) observer[facing=north,powered=false]                                 # O: 観測面=北
+  (0,1,-1) redstone_wire[east=none,north=side,power=0,south=side,west=none]     # 観測面 dust
+  (0,1,-2) lever[face=floor,facing=north,powered=false]                        # facing lever
+  (0,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]      # 背面 dust
+  (0,1,2) lever[face=floor,facing=north,powered=false]                         # back lever
+}
+
+inputs {
+  t2 use (0,1,2)      # back lever ON → 背面 dust 通電 (O は無反応の想定)
+  t8 use (0,1,-2)     # facing lever ON → 観測面 dust 通電 (O が起動)
+}
+
+ticks 14
+
+# 完全一致。背面刺激 (2gt[PI]) の後に Ob 予約が無い = NC 非反応。観測面刺激 (8gt[PI]) の
+# 後にだけ Ob(n.2)/Ob(f.2) が現れる = PP 起動。この 2 事象の非対称が §4.1 の核心。
+trace strict {
+  2gt[PI]: Le{n.0}        # back lever ON — 以降に Ob 予約が無い (背面 NC は無反応)
+  8gt[PI]: Le{n.0}        # facing lever ON
+  8gt[ST]: Ob(n.2) p0     # 観測面 PP → O が ON を予約
+  10gt[ST]: Ob(f.2) p0    # ON 実行時に自身 OFF を予約 (パルス幅 2gt)
+}
+
+state {
+  t4 (0,1,0) observer[facing=north,powered=false]    # 背面刺激後: 無反応
+  t8 (0,1,0) observer[facing=north,powered=false]    # 背面通電が続いても O は OFF のまま
+  t10 (0,1,0) observer[facing=north,powered=true]    # 観測面刺激で ON (PP 起動)
+  t12 (0,1,0) observer[facing=north,powered=false]   # 2gt 後に OFF (パルス幅 2gt)
+}
