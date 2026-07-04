@@ -1,0 +1,47 @@
+# 水平ホッパー3段連鎖 — 上流ドレインは堅牢 / 下流直列化は実機突合候補 (#79 領域1 複合物流)。
+# 水平連鎖 (H1→H2→H3→barrel, すべて facing=east) は直上 suck が無く eject のみ。
+# 仕様 [確定: 02 §6 hopper]: 転送 8gt (setCooldown(8))、1 個/回。
+#
+# 【断言する堅牢な部分】: 先頭 H1 の受電ロック (enabled) と H1 自身の 8gt ドレイン。
+#   H1(items=3) をレバーで初期ロック→t2 解除。H1 は下流に空きがある限り 8gt 毎に 1 個 eject
+#   するので t3/t11/t19 に排出し t19 で空 → 背面(north)コンパレーターが t21 に消灯。
+#   これは単段ホッパーと同じ堅牢な位相 (fixture hopper-clock と整合)。
+#
+# 【断言しない = realMachineCandidate (実機 docker 突合候補)】:
+#   sim の転送先クールダウン一律 8 (02 §6「既知の抽象化」/ 領域4 の -1 補正未実装) により、
+#   H1 が 8gt 毎に H2 を再クールダウンし、H2 は H1 が空になるまで前送できない (直列化)。
+#   結果 sink barrel は 40gt 以内に受け取らない (sim 実測: 下流 comparator(5,1,0) は終始消灯)。
+#   vanilla は tickedGameTime 依存の -1 補正 + BlockEntity 登録順で連鎖がストリームし、
+#   sink はもっと早く充填されるはず。この throughput 差 (±1gt に収まらない) は docker 実機で
+#   決着する。よって sink 側は断言せず、中間段の個数分布・sink 初到達も断言しない。
+meta {
+  name: 物流 水平ホッパー3段連鎖 (上流8gtドレインは断言 / 下流直列化は実機突合候補)
+  ref: 02 §6 hopper (setCooldown(8) / 既知抽象化: 転送先 -1 補正なし・BE 順) / 領域4 -1 補正
+}
+
+circuit {
+  (0,0,0)..(5,0,0) stone
+  (1,0,1) stone
+  (0,1,0) lever[face=floor,facing=north,powered=true]
+  (1,1,0) hopper[enabled=true,facing=east] items=3
+  (2,1,0) hopper[enabled=true,facing=east]
+  (3,1,0) hopper[enabled=true,facing=east]
+  (4,1,0) barrel items=0
+  (5,1,0) comparator[facing=west,mode=compare,powered=false]
+  (1,1,1) comparator[facing=north,mode=compare,powered=false]
+}
+
+inputs {
+  t2 use (0,1,0)                                                    # H1 ロック解除
+}
+
+ticks 40
+
+state {
+  t0  (1,1,0) hopper[enabled=false,facing=east]                     # H1 初期ロック
+  t0  (1,1,1) comparator[facing=north,mode=compare,powered=true]    # H1 満 (items=3, 非空)
+  t2  (1,1,0) hopper[enabled=true,facing=east]                      # 解除
+  t20 (1,1,1) comparator[facing=north,mode=compare,powered=true]    # H1 まだ 1 個保持 (堅牢な 8gt ドレイン中)
+  t22 (1,1,1) comparator[facing=north,mode=compare,powered=false]   # H1 空 (t3/t11/t19 排出→t19空→+2gt)
+  # sink 側 (4,1,0)/(5,1,0) は直列化により未充填 = 実機突合候補のため断言しない
+}

@@ -1,0 +1,47 @@
+# コンパレーター充填読みによる転送ホッパーのフィードバック ロック (#79 領域1 複合物流)。
+# 「充填率でホッパーを止める」制御: 監視コンテナ C の充填を読むコンパレーターの
+# 前方に転送ホッパー H_lock を置き、C が非空になったら H_lock をロックする自己制限フィラー。
+# 仕様 [確定: 02 §6 hopper / comparator / dropper]:
+#   - コンパレーターは前方 (facing の反対) へ出力し、その前方ブロックを NC で更新する。
+#     前方が H_lock ならその hasNeighborSignal が真 → enabled=false (ロック)。
+#   - C の充填 (fillSignal>0) → コンパレーター 2gt → powered=true → H_lock ロック。
+# 配置: D(east,items=5)→C(barrel,items=0); comparator(facing=west) 背面=C・前方=H_lock;
+#        H_lock(east,items=5)→sink barrel(items=0)。
+# 期待値の導出:
+#   t0-1: C 空 → comparator 消灯 → H_lock 解放 (enabled=true)。t1 で H_lock が 1 個転送 (sink へ)。
+#         (H_lock の次回 eject は t9。ロックはそれより前に効くので転送は 1 個で止まる。)
+#   t2:   レバー ON → D triggered。
+#   t6:   D 発火 (4gt) → C に 1 個。CU → Co(c.2)。
+#   t8:   コンパレーター確定 (powered=true) → 同 tick で前方 H_lock を NC → enabled=false (ロック)。
+#   以後 H_lock は転送停止 (充填フィードバックが成立)。
+meta {
+  name: 物流 コンパレーター充填読みで転送ホッパーをロック (フィードバック制御)
+  ref: 02 §6 comparator (前方 NC / 充填読み / getDelay=2) / hopper (enabled=!hasNeighborSignal) / dropper (scheduleTick 4gt)
+}
+
+circuit {
+  (-3,0,0)..(2,0,0) stone
+  (-3,1,0) lever[face=floor,facing=north,powered=false]
+  (-2,1,0) dropper[facing=east,triggered=false] items=5
+  (-1,1,0) barrel items=0
+  (0,1,0) comparator[facing=west,mode=compare,powered=false]
+  (1,1,0) hopper[enabled=true,facing=east] items=5
+  (2,1,0) barrel items=0
+}
+
+inputs {
+  t2 use (-3,1,0)                                                   # D を発火 → C を充填 → H_lock をロック
+}
+
+ticks 24
+
+state {
+  t0 (1,1,0) hopper[enabled=true,facing=east]                       # C 空 → H_lock 解放
+  t0 (0,1,0) comparator[facing=west,mode=compare,powered=false]     # C 空 → 消灯
+  t2 (-2,1,0) dropper[facing=east,triggered=true]                   # 立ち上がりで triggered
+  t7 (0,1,0) comparator[facing=west,mode=compare,powered=false]     # 発火直後、まだ 2gt 遅延中
+  t7 (1,1,0) hopper[enabled=true,facing=east]                       # まだ解放 (転送継続中)
+  t8 (0,1,0) comparator[facing=west,mode=compare,powered=true]      # C 充填 (count=1) を読み点灯
+  t8 (1,1,0) hopper[enabled=false,facing=east]                      # フィードバック: 前方 H_lock をロック
+  t20 (1,1,0) hopper[enabled=false,facing=east]                     # ロック維持 (転送停止)
+}

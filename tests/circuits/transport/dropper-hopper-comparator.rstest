@@ -1,0 +1,50 @@
+# ドロッパー発火 → ホッパー挿入 → コンパレーター読み → ランプ フィードバック (#79 領域1 複合物流)。
+# 仕様 [確定: 02 §6 dropper / comparator]:
+#   - DropperBlock.neighborChanged: 受電(通常∪QC)の立ち上がりで TRIGGERED を立て
+#     scheduleTick(pos,this,4) を予約 (4gt)。発火は ST フェーズ (dispenseFrom)。
+#   - dispenseFrom: 前方コンテナへ 1 個挿入 (HopperBlockEntity.addItem)。
+#   - コンテナ内容変化 → CU → コンパレーター 2gt (getDelay=2)。
+#   - RedstoneLampBlock: 点灯は NC 受信で即時 (遅延なし)。
+# レバー(西隣) → D(east,items=5) triggered。H(facing=down で床へ、転送できず保持) が受け皿。
+#   H を背面(north)コンパレーターが読み、前方(south)ランプへフィードバック。
+# 期待値の導出:
+#   t2: レバー ON → dropper triggered=true (立ち上がり)、Dr(c.4) 予約。
+#   t6: 4gt 後に発火 → H へ 1 個挿入 (t2+4)。CU → Co(c.2) 予約。
+#   t8: コンパレーター 2gt 後に確定 (powered=true) → 同 tick で NC → ランプ即時点灯 (t6+2)。
+meta {
+  name: 物流 ドロッパー4gt発火→ホッパー挿入→コンパレーター→ランプ
+  ref: 02 §6 dropper (scheduleTick 4gt / dispenseFrom) / comparator (CU / getDelay=2) / lamp (点灯即時)
+}
+
+circuit {
+  (0,0,0)..(2,0,0) stone
+  (2,0,1) stone
+  (2,0,2) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) dropper[facing=east,triggered=false] items=5
+  (2,1,0) hopper[enabled=true,facing=down]
+  (2,1,1) comparator[facing=north,mode=compare,powered=false]
+  (2,1,2) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)                                                    # 立ち上がり → triggered
+}
+
+ticks 16
+
+# 4gt 発火予約 Dr(c.4) → 挿入で CU → コンパレーター 2gt。
+trace {
+  2gt[PI]: Le{n.0}                                                  # レバー ON
+  2gt[ST]: Dr(c.4) p0                                              # 4gt 後の発火を予約
+  6gt[ST]: Co(c.2) p0                                             # 挿入 (t6) で再計算予約
+  8gt[ST]: Co{c.2}                                               # 2gt 後に確定 (powered=true)
+}
+
+state {
+  t2 (1,1,0) dropper[facing=east,triggered=true]                    # 受電立ち上がりで triggered
+  t7 (2,1,1) comparator[facing=north,mode=compare,powered=false]    # 挿入直後、まだ 2gt 遅延中
+  t7 (2,1,2) redstone_lamp[lit=false]
+  t8 (2,1,1) comparator[facing=north,mode=compare,powered=true]     # 充填 (count=1) を読み点灯
+  t8 (2,1,2) redstone_lamp[lit=true]                               # フィードバック: ランプ即時点灯
+}
