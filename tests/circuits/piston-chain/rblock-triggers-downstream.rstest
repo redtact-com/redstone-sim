@@ -1,0 +1,63 @@
+# 連鎖起動 (実機突合候補): ピストン A が redstone_block を押し、確定した rblock が下流の
+# ピストン B を直接起動する (rblock 押し玉突きの核)。**02 §6 の既知抽象化が効く最前線**。
+#
+# 【断言方針 — 過渡/相差は断言しない】
+#   02 §6 [確定: microTiming 2026-07-03]: moving_piston の確定を sim は ST フェーズ (phase4)、
+#   vanilla は BlockEntity フェーズ (phase10) で行う。ST は runBlockEvents (phase8) の前、
+#   BlockEntity は後。よって「確定した rblock が下流ピストンを直接起動する連鎖」では、
+#   B の BE が sim では rblock 確定と同 tick (t5) / vanilla では翌 tick (t6) に発火する
+#   = A 起動→B 伸長の間隔が sim 2gt / vanilla 3gt でズレうる。
+#   → **B の伸長タイミングは断言しない** (sim 出力は下記コメントに記録し、実機で決着させる)。
+#   実測 sim trace (参考): 5gt[ST]: Rb{c.2} の直後に 5gt[BE]: Pi(p.s)/Pi{p.0} (B が同 tick 発火)。
+#
+# 【断言する非分岐部分 — 仕様クロスチェック (02 §6 piston)】
+#   (a) A の伸長は player-action 起動の基本形と同一 (非分岐): t2→t3(BE)→t5 rblock 確定。
+#       rblock は (1,1,0)→(2,1,0) へ +1 (A の押し)。この dump 断面は sim/vanilla 一致。
+#   (b) 最終収束形は timing に依らず一意: レバーは押しっぱなし → rblock は B の側面を給電し
+#       続け、B は 1 度伸長したら維持。よって十分後 (t14) には A 伸長 + rblock(2,1,0) +
+#       B 伸長 + head(3,1,1) + 石(4,1,1) に収束 (sim/vanilla 共通)。この収束形のみ断言する。
+meta {
+  name: 連鎖起動 rblock 押しが下流ピストンを起動 (実機突合候補・収束形のみ断言)
+  ref: 02 §6 piston (既知抽象化: 確定=sim ST 相/vanilla BE 相 → 下流 piston 直接起動で 2gt vs 3gt)
+}
+
+circuit {
+  (-2,0,0)..(4,0,0) stone
+  (2,0,1) stone
+  (3,0,1) stone
+  (4,0,1) stone
+  (-2,1,0) lever[face=floor,facing=north,powered=false]
+  (-1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (0,1,0) piston[extended=false,facing=east]
+  (1,1,0) redstone_block
+  (2,1,1) piston[extended=false,facing=east]
+  (3,1,1) stone
+}
+
+inputs {
+  t2 use (-2,1,0)
+}
+
+ticks 14
+
+# 部分一致 (verbose)。断言は A の押し (非分岐) と rblock 確定までに限定し、B の BE 発火行は
+# 敢えて含めない (それが sim ST 相 vs vanilla BE 相で相違しうる箇所のため)。
+trace {
+  2gt[BE]: Pi(p.s)        # A 伸長予約 (player-action → start delay 1gt)
+  3gt[BE]: Pi{p.0}        # A 伸長実行
+  3gt[ST]: Rb(c.2) p0     # 押された rblock の moving 確定を +2gt 予約
+  5gt[ST]: Rb{c.2}        # rblock 確定 ((2,1,0) に着地。state t5 と同時成立)
+}
+
+state {
+  # --- A の押し (非分岐: 基本伸縮と同一) ---
+  t3 (0,1,0) piston[extended=true,facing=east]                   # A 伸長開始
+  t5 (1,1,0) piston_head[facing=east,short=false,type=normal]    # A の head 確定
+  t5 (2,1,0) redstone_block                                      # rblock が B 側面 (北) へ着地
+  # --- 収束形 (timing 非依存。B の伸長 tick 自体は断言しない) ---
+  t14 (0,1,0) piston[extended=true,facing=east]
+  t14 (2,1,0) redstone_block
+  t14 (2,1,1) piston[extended=true,facing=east]                  # B は最終的に伸長 (rblock 給電)
+  t14 (3,1,1) piston_head[facing=east,short=false,type=normal]   # B の head
+  t14 (4,1,1) stone                                             # B が押した石の最終位置
+}

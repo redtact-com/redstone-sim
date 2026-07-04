@@ -1,0 +1,58 @@
+# ブロック押し列: 1 台のピストンが接触する石 3 個をまとめて 1 マス押す (押し先の連鎖)。
+# 単発の基本伸縮 (components/piston/basic = 石 1 個) と非重複で、resolvePushStructure の
+# toPush が連鎖する多ブロック押しを検証する。
+#
+# 仕様クロスチェック (02 §6 piston [確定]):
+#   (a) 導出: §6 piston — 起動判定 getNeighborSignal(背面ダスト=受電) → 押し構造 resolve は
+#       facing 方向へ可動ブロック (石=PushReaction NORMAL) を連結収集し 12 個以内なら成立。
+#       ここは石 3 個 (<12) → 伸長成立。player-action 起動なので start delay 1gt (入力は
+#       tick 境界適用 → 翌 tick の BE フェーズで発火)、extension 2gt (moving_piston が
+#       t3・t4 に在位 → t5 で確定)。3 石は各 +1 マス変位。
+#   (b) 期待 .rstest → (c) 実行採取 → (d) 照合: sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ t3・t4 の (3..6,1,0) は過渡 moving_piston のため state 断言せず、trace の Bl(c.2)×3 +
+#     Ph(c.2) の予約 → t5 確定 と最終形 state で担保する。
+meta {
+  name: ブロック押し列 (石 3 個をまとめて 1 マス押す)
+  ref: 02 §6 piston (getNeighborSignal / resolvePushStructure toPush 連鎖 / 2gt extension)
+}
+
+circuit {
+  (0,0,0)..(7,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) piston[extended=false,facing=east]
+  (3,1,0) stone
+  (4,1,0) stone
+  (5,1,0) stone
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 8
+
+# strict: 3 石の moving 予約 (Bl(c.2)×3) + head 予約 (Ph(c.2)) が 1 BE で並び、+2gt で確定。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  3gt[ST]: Bl(c.2) p0
+  3gt[ST]: Bl(c.2) p0
+  3gt[ST]: Bl(c.2) p0
+  3gt[ST]: Ph(c.2) p0
+  5gt[ST]: Bl{c.2}
+  5gt[ST]: Bl{c.2}
+  5gt[ST]: Bl{c.2}
+  5gt[ST]: Ph{c.2}
+}
+
+state {
+  t2 (2,1,0) piston[extended=false,facing=east]                  # 入力適用直後、BE 未発火
+  t3 (2,1,0) piston[extended=true,facing=east]                   # 翌 tick の BE で伸長開始
+  t5 (3,1,0) piston_head[facing=east,short=false,type=normal]    # head 確定
+  t5 (4,1,0) stone                                               # 3 石が各 +1 マスへ確定
+  t5 (5,1,0) stone
+  t5 (6,1,0) stone
+  t8 (6,1,0) stone                                               # 押し切った石は保持
+}
