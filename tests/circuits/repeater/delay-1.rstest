@@ -1,0 +1,39 @@
+# リピーター delay=1 の 1tick(=2gt) 遅延。新規回路 (fixture 不使用)。
+# レバー → ワイヤー → リピーター(delay=1) → ワイヤー2マス。ON/OFF 両遷移で rt=2gt。
+meta {
+  name: リピーター delay=1 (2gt 遅延)
+  ref: 02 §6 repeater / trace 記法 docs/research/08
+}
+
+circuit {
+  (0,0,0)..(4,0,1) stone                 # 床
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]
+  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2  use (0,1,0)                          # ON
+  t10 use (0,1,0)                          # OFF
+}
+
+# ticks 省略 → max(input t)+8 = 18
+
+# 部分一致 (順序保存)。delay=1 の予約遅延は 2gt、OFF の priority は -2。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.2) p-1
+  4gt[ST]: Re{n.2}
+  10gt[ST]: Re(f.2) p-2
+  12gt[ST]: Re{f.2}
+}
+
+state {
+  t2  (0,1,0) lever[face=floor,facing=north,powered=true]
+  t4  (2,1,0) repeater[delay=1,facing=west,locked=false,powered=true]
+  t4  (4,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+  t12 (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]
+  t12 (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
