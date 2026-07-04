@@ -333,6 +333,10 @@ export interface MovingPistonState {
   facing: Dir6
   kind: 'normal' | 'sticky'
   into: BlockState
+  /** 確定 (into へ遷移) する gt。移動開始 tick + 2gt [#80: BlockEntity 相で確定] */
+  finalizeDue: number
+  /** 同 tick に複数の moving_piston が確定するときの順序 (旧 ST 相 tile tick の seq 相当) */
+  seq: number
 }
 
 export interface AirState {
