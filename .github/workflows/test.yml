@@ -38,3 +38,32 @@ jobs:
 
       - name: build
         run: npm run build
+
+  # E2E スモーク (issue #70)。本番ビルド (vite preview) に対して Playwright を回す。
+  # GIF 生成 (npm run demo-gif) はローカル専用で CI には入れない。
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存インストール
+        run: npm ci
+
+      - name: Playwright chromium インストール
+        run: npx playwright install chromium --with-deps
+
+      - name: e2e (preview ビルドに対して Playwright)
+        run: npm run e2e
+
+      - name: レポート保存 (失敗時)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

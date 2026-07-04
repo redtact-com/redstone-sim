@@ -15,9 +15,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ground-truth": "bash tools/mc-harness/scripts/run-fixture.sh",
+    "demo-gif": "node tools/demo/demo-gif.mjs",
+    "e2e": "playwright test",
     "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "gifenc": "^1.0.3",
+    "playwright": "^1.61.1",
+    "pngjs": "^7.0.0",
     "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "vitest": "^2.0.0"
