@@ -10,6 +10,7 @@
 #       player-action 起動なので伸長 t2→t3(BE)→t5(確定)、収縮 t10→t11(BE)→t13(確定)。
 #   (b) → (c) → (d): sim=仕様が一致 (PASS)。gt オフセット無し。
 #   ※ 過渡 moving_piston は断言せず、確定後 (t5 伸長形 / t13 収縮形) を断言する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 meta {
   name: 粘着ピストン 引きは 1 個 (押し 2 個・引き 1 個で片方置き去り)
   ref: 02 §6 piston (retract は neighbor(head) の 1 ブロックのみ pull / 連鎖 pull 無し)
@@ -31,25 +32,20 @@ inputs {
 
 ticks 16
 
-# strict: 収縮で pull されるのは 1 個 (11gt に Bl(c.2) が 1 つだけ + base の Pi(c.2))。
-# 押し (伸長) は Bl(c.2)×2 だが、収縮は Bl(c.2)×1 = 引きが 1 個であることの証拠。
+# strict: 収縮で pull されるのは 1 個 (13gt の確定に Bl{c.2} が 1 つだけ + base の Pi{c.2})。
+# 押し (伸長) は Bl{c.2}×2 だが、収縮は Bl{c.2}×1 = 引きが 1 個であることの証拠。
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   3gt[BE]: Pi{p.0}
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Ph(c.2) p0
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Ph{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Ph{c.2}
   10gt[PI]: Le{f.0}
   10gt[BE]: Pi(r.s)
   11gt[BE]: Pi{r.0}
-  11gt[ST]: Bl(c.2) p0
-  11gt[ST]: Pi(c.2) p0
-  13gt[ST]: Bl{c.2}
-  13gt[ST]: Pi{c.2}
+  13gt[TE]: Bl{c.2}
+  13gt[TE]: Pi{c.2}
 }
 
 state {

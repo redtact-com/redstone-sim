@@ -8,8 +8,9 @@
 #       は保存 (blockstate はそのまま移動)、extended=false のまま (押しても起動しない)。
 #       head は (3,1,0) に確定。player-action なので t2→t3(BE)→t5(確定)。
 #   (b) → (c) → (d): sim=仕様が一致 (PASS)。gt オフセット無し。
-#   ※ trace の Pi(c.2) は押された B の moving 確定予約、Ph(c.2) は A の head。過渡 moving_piston
+#   ※ trace の Pi{c.2} は押された B の moving 確定、Ph{c.2} は A の head。過渡 moving_piston
 #     は断言せず、t5 の確定形を断言する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 meta {
   name: 玉突き ピストンがピストンを押す (非伸長ピストンは可動・facing 保存)
   ref: 02 §6 piston (isMovable: 非伸長 piston は PushReaction NORMAL)
@@ -29,15 +30,13 @@ inputs {
 
 ticks 8
 
-# strict: 押された B の moving 確定 (Pi(c.2)) + A の head (Ph(c.2)) が 1 BE で並び +2gt 確定。
+# strict: 押された B の moving 確定 (Pi{c.2}) + A の head (Ph{c.2}) が +2gt 後に TE 相で確定。
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   3gt[BE]: Pi{p.0}
-  3gt[ST]: Pi(c.2) p0
-  3gt[ST]: Ph(c.2) p0
-  5gt[ST]: Pi{c.2}
-  5gt[ST]: Ph{c.2}
+  5gt[TE]: Pi{c.2}
+  5gt[TE]: Ph{c.2}
 }
 
 state {

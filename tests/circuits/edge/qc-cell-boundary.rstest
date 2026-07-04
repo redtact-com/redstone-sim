@@ -40,8 +40,8 @@ state {
 # strict: verbose=false の全 process 行。伸長するのは P1 の 1 台だけ = Pi の BE が 1 系列のみ
 # (P2 は BE を一切出さない) ことを固定する。gt は入力起点でなく settle でキューされた BE の
 # 実 gt (start delay 1gt 相当で gt1 発火)。検証対象は「BE 系列が 1 本のみ」であって gt 絶対値でない。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 trace strict {
   1gt[BE]: Pi{p.0}
-  1gt[ST]: Ph(c.2) p0
-  3gt[ST]: Ph{c.2}
+  3gt[TE]: Ph{c.2}
 }

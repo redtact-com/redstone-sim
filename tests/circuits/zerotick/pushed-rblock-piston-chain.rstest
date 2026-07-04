@@ -1,31 +1,24 @@
-# 0-tick ピストン連鎖 (最前線): ピストン A が redstone_block を押し、確定した動力源が
-# **下流ピストン B を直接起動する**。ダウンストリームが BEC (ピストン) なので、
-# 「確定を ST 相で行う sim」と「BlockEntity 相で行う vanilla」で **B の起動 tick に相差が出る**
-# (02 §6 line 448 の既知抽象化)。
+# 0-tick ピストン連鎖: ピストン A が redstone_block を押し、確定した動力源が **下流ピストン B を
+# 直接起動する**。ダウンストリームが BEC (ピストン) の連鎖。**#80 で実機一致に解決済み**。
 #
-# ★ 品質規律 (0-tick は ST 相確定 vs vanilla BlockEntity 相の差が最も出る領域):
-#   B が最初に extended=true になる tick は sim と実機で食い違う可能性が高いため **断言しない**。
-#   両者が確実に一致する部分だけを断言する:
-#     (a) transit 中 (t3,t4): moving_piston は無信号 → B は未起動 (両者一致)。
-#     (b) A の確定 (t5): (4,1,0)=redstone_block 着地 = piston-basic と同型の player 起動押込で
-#         sim=実機一致 (実機 fixture piston-basic で検証済みの系列)。
-#     (c) 十分に落ち着いた最終形 (t12): B は伸長し (6,1,0)=piston_head / (7,1,0)=石。
-#         起動 tick は違っても最終形は両者一致する。
-#   B が「いつ」伸び始めるか (sim=t5 / vanilla=t6) の相差は **実機 docker で確認済み (#79→#80)**:
-#   fixture rblock-piston-chain で B 伸長=実機 t6/sim t5・head 確定=実機 t8/sim t7 の 1tick 差を実証。
-#   修正は #80 (ST 相確定→BlockEntity 相)。本 .rstest は両者一致する bookend のみ断言。
+# ★ #80 修正済み・実機一致 (旧「相差」は解消):
+#   旧 sim は moving_piston の確定を ST 相 (phase4 = BE phase8 の前) で行っていたため、確定
+#   rblock が同 tick (t5) の BE-drain で B を起動し、B 伸長=sim t5 / vanilla t6・head 確定=
+#   sim t7 / vanilla t8 と 1tick ズレていた (実機 docker fixture rblock-piston-chain #79→#80 で実証)。
+#   #80 で確定を BlockEntity (TE) 相 (phase10 = BE phase8 の後) へ移したため、確定 rblock の NC を
+#   受けた B の extend BE は **翌 tick (t6) の phase8** で発火する = vanilla 一致。
+#   → **B の伸長 tick (t6) と head 確定 (t8) も断言できるようになった** (下記 trace/state で固定)。
 #
 # 仕様クロスチェック (先に導出 → sim で照合):
-#   §6 piston [確定]: player 起動 A → start delay 1gt → BE 実行 (t3) → +2gt ST 確定 (t5) で
-#     redstone_block が (4,1,0) に着地。(4,1,0) は B (5,1,0) の背面 (facing=east の非 facing 面) を
-#     給電 → B 起動。
-#   §6 line 448 [確定]: sim は確定を ST 相 (phase4 = BE phase8 の前) で行うため、B の extend BE を
-#     **同 tick (t5) の BE-drain で消化** (sim 観測: 下の trace で 5gt[ST] Rb{c.2} → 5gt[BE] Pi{p.0})。
-#     vanilla は確定を BlockEntity 相 (phase10 = BE phase8 の後) で行うため B の extend BE は
-#     **翌 tick (t6) の phase8** で発火する見込み → B 伸長 tick が 1 早い (2tick vs 3tick 間隔)。
+#   §6 piston [確定]: player 起動 A → start delay 1gt → BE 実行 (t3) → +2gt の BlockEntity (TE)
+#     相で確定 (t5) → redstone_block が (4,1,0) に着地。(4,1,0) は B (5,1,0) の背面 (facing=east の
+#     非 facing 面) を給電 → B 起動。
+#   下流 +1tick: 確定 (t5, TE=phase10) の NC を受けた B の extend BE は BE phase (phase8) を
+#     すでに過ぎているため翌 tick t6 に発火 → B 伸長=t6、その +2gt の TE 相で head 確定=t8。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相確定→TE 相・下流 B の伸長 tick も断言)。
 meta {
-  name: 0-tick ピストン連鎖 押込 redstone_block が下流ピストンを起動 (相差は断言せず最終形のみ)
-  ref: 02 §6 piston / §6 line 448 (ST 相確定 vs BlockEntity 相 = 実機突合候補) / #51
+  name: 0-tick ピストン連鎖 押込 redstone_block が下流ピストンを起動 (#80 で実機一致・B 伸長 tick も断言)
+  ref: 02 §6 piston / #80 (確定を BlockEntity 相へ = 下流 BEC 直接起動が vanilla 一致) / #51
 }
 
 circuit {
@@ -44,22 +37,31 @@ inputs {
 
 ticks 12
 
-# 安全なトレース (A 側の押し出しと確定のみ)。B の同 tick 起動 (5gt[BE] Pi) は sim 固有の
-# 相挙動なので **意図的に断言しない** (subsequence にも含めない)。A の確定 5gt[ST] Rb{c.2} まで。
+# トレース: A の押し出し → 確定 (TE 相) → B の伸長 (翌 tick) → B の head 確定 まで一貫して固定。
+# #80 で確定を BlockEntity 相へ移したため B の extend BE は t6 に発火 (下流 +1tick = vanilla 一致)。
 trace {
   2gt[PI]: Le{n.0}
-  2gt[BE]: Pi(p.s)
-  3gt[BE]: Pi{p.0}
-  5gt[ST]: Rb{c.2}
+  2gt[BE]: Pi(p.s)        # A 伸長予約
+  3gt[BE]: Pi{p.0}        # A 伸長実行
+  5gt[TE]: Rb{c.2}        # A の rblock 確定 (BlockEntity 相。(4,1,0) 着地)
+  5gt[BE]: Pi(p.s)        # 確定 rblock の NC で B の伸長を予約 (同 tick 予約)
+  6gt[BE]: Pi{p.0}        # B 伸長実行は翌 tick (下流 +1tick = vanilla 一致)
+  8gt[TE]: Ph{c.2}        # B の head 確定 (extension 2gt、BlockEntity 相)
 }
 
 state {
-  # transit 中: 押される redstone_block は moving_piston (無信号) → B は未起動 (両者一致)
+  # transit 中: 押される redstone_block は moving_piston (無信号) → B は未起動
   t3 (5,1,0) piston[extended=false,facing=east]
   t4 (5,1,0) piston[extended=false,facing=east]
-  # A の確定 tick t5: redstone_block が (4,1,0) に着地 (piston-basic と同型 = 両者一致)
+  # A の確定 tick t5: redstone_block が (4,1,0) に着地。B はまだ非伸長 (下流 +1tick)
   t5 (4,1,0) redstone_block
-  # 最終形 (十分に落ち着いた t12): B 伸長・石を (7,1,0) へ変位。起動 tick は違っても最終形は一致
+  t5 (5,1,0) piston[extended=false,facing=east]
+  # B 伸長 (#80 で t6、vanilla 一致)
+  t6 (5,1,0) piston[extended=true,facing=east]
+  # B の head 確定 (#80 で t8、vanilla 一致)。B が押した石は (7,1,0) へ
+  t8 (6,1,0) piston_head[facing=east,short=false,type=normal]
+  t8 (7,1,0) stone
+  # 最終形 (十分に落ち着いた t12): B 伸長・石を (7,1,0) へ変位
   t12 (4,1,0) redstone_block
   t12 (5,1,0) piston[extended=true,facing=east]
   t12 (6,1,0) piston_head[facing=east,short=false,type=normal]

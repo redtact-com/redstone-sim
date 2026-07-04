@@ -7,7 +7,8 @@
 #       起きる。通常ピストンは pull せず head を撤去するだけ → 押し出した 2 石はどちらも
 #       残る (恒久変位)。伸長 t2→t3(BE)→t5、収縮 t10→t11(BE, head 即撤去)→t13(base 確定)。
 #   (b) → (c) → (d): sim=仕様が一致 (PASS)。gt オフセット無し。
-#   ※ 収縮の trace に Bl(c.2) (pull) が現れず base の Pi(c.2) だけ = pull ゼロの証拠。
+#   ※ 収縮の trace に Bl{c.2} (pull) が現れず base の Pi{c.2} だけ = pull ゼロの証拠。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 meta {
   name: 通常ピストンは引かない (押し 2 個・収縮しても両方残置)
   ref: 02 §6 piston (retract の pull は sticky のみ / 通常は head 撤去のみ)
@@ -29,22 +30,18 @@ inputs {
 
 ticks 16
 
-# strict: 収縮 (11gt[BE]) の ST 予約が base の Pi(c.2) 1 本のみ = Bl(c.2) (pull) が無い。
+# strict: 収縮確定 (13gt[TE]) が base の Pi{c.2} 1 本のみ = Bl{c.2} (pull) が無い。
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   3gt[BE]: Pi{p.0}
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Ph(c.2) p0
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Ph{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Ph{c.2}
   10gt[PI]: Le{f.0}
   10gt[BE]: Pi(r.s)
   11gt[BE]: Pi{r.0}
-  11gt[ST]: Pi(c.2) p0
-  13gt[ST]: Pi{c.2}
+  13gt[TE]: Pi{c.2}
 }
 
 state {

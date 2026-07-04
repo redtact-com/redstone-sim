@@ -1,22 +1,28 @@
 # 観測でピストンを起動する連鎖: オブザーバーがダストの変化を検知し、その出力 (背面 strong 15)
-# がピストンの背面を給電して伸長させる。オブザーバーは 2gt パルスのため、ピストンは 1 回だけ
-# 伸縮するが、押した石は通常ピストンでは引き戻らないため恒久的に 1 マス変位する = 単発観測が
-# 残す不可逆な結果を state で観測する。
+# がピストンの背面を給電して伸長させる。オブザーバーは 2gt パルスのため、ピストンは伸長し
+# 石を 1 マス押す。#80 でこの短パルス連鎖の挙動が変わったので state で固定する。
 #
 # 仕様クロスチェック (02 §6 observer / §6 piston / §4.1 PP [確定]):
 #   §6 observer: PP (updateShape) を観測面 (facing=west) から受けて 2gt tile tick を予約 →
 #     ON→2gt後OFF の 2gt パルス。出力は背面 (OPPOSITE[facing]=east) 1 マスに strong 15。
 #   §6 piston: オブザーバー ON の NC は ST 相由来 → start delay 0 で同 tick に BE 発火 → 伸長。
-#     通常ピストンは押した石を retract で引かない → 石は変位したまま。
 #   導出: t2 lever→dust 通電 (PP) → t4 OB on → piston 伸長・石を (4,1,0)→(5,1,0) へ押す →
-#     t6 OB off (2gt パルス) → piston 収縮するが石は (5,1,0) に残る → t8 収縮完了。
-#   sim=仕様が一致 (PASS)。gt オフセット無し。
+#     伸長 moving_piston は +2gt 後の t6 に BlockEntity (TE) 相で確定 → 石は (5,1,0) に着地。
 #   ※ 観測面 facing はオブザーバーでは反転しない (piston と同じ非反転規則。§6 observer)。
-#   ※ 伸長途中 (t4-t5) の moving_piston head 確定は §6 の既知抽象化領域のため断言しない。
-#      恒久変位 (石が (5,1,0) に残る) と伸縮の起点/終点を断言する。
+#
+# 【#80 で変わった点 — 短パルスの収縮は v1 では落ちる】
+#   OB off (t6) の NC は同 tick に piston の収縮 BE (Pi(r.s)) を予約する。だが #80 で伸長
+#   moving_piston の確定を BlockEntity 相 (t6 TE = phase10) へ移したため、収縮 BE が走る
+#   t6 の BE 相 (phase8) 時点では head セル (4,1,0) がまだ moving_piston。sim v1 は「伸縮中
+#   (moving) セルが絡む再イベントは無視」(world.ts:1061、vanilla の短パルス droppings は v2 送り)
+#   なので収縮は Pi{r.0} を出さずに落ち、ピストンは伸長したまま固定される。石は (5,1,0) に
+#   恒久変位。旧 sim は確定を ST 相 (t6 の BE より前) で行っていたため収縮が成立し t8 で
+#   縮んでいたが、それは実機と乖離する ST 相確定の副作用だった。
+#   → 収縮しない (伸長維持) が #80 後の実出力。v2 で droppings を実装するまではこれが仕様。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (収縮 BE が moving セル無視に当たり伸長維持)。
 meta {
-  name: 観測でピストン起動 (オブザーバー 2gt パルス → 石を恒久変位)
-  ref: 02 §6 observer (PP 起動・2gt パルス・背面 strong) / §6 piston (start delay 0) / §4.1 PP
+  name: 観測でピストン起動 (オブザーバー 2gt パルス → 伸長維持・石を恒久変位)
+  ref: 02 §6 observer (PP 起動・2gt パルス・背面 strong) / §6 piston (start delay 0) / §4.1 PP / #80
 }
 
 circuit {
@@ -34,13 +40,15 @@ inputs {
 
 ticks 14
 
-# 部分一致 (verbose)。OB の PP 起動 (2gt パルス) と、その ON の NC が同 tick で piston BE を
-# 起こす (start delay 0 = ST 相由来) ことを pin する。
+# 部分一致 (verbose)。OB の PP 起動 (2gt パルス) → piston 伸長 (start delay 0) → 伸長 moving の
+# TE 相確定 (t6) を pin する。収縮 (Pi(r.s)) は予約されるが moving セル無視で Pi{r.0} は出ない。
 trace {
   2gt[ST]: Ob(n.2) p0     # dust 通電 (PP) → OB が 2gt tile tick を予約
   4gt[ST]: Ob(f.2) p0     # OB on → 2gt 後の OFF を予約 (パルス幅 2gt)
   4gt[BE]: Pi(p.s)        # OB on の NC (ST 相由来) が同 tick で piston 伸長 BE を予約 (start delay 0)
   4gt[BE]: Pi{p.0}        # 伸長実行 → 石を押す
+  6gt[BE]: Pi(r.s)        # OB off (t6) の NC が収縮を予約するが…
+  6gt[TE]: Ph{c.2}        # 伸長 head の確定は BlockEntity (TE) 相 = 収縮 BE 窓 (phase8) の後 → 収縮は落ちる
 }
 
 state {
@@ -50,12 +58,13 @@ state {
   # t4: OB パルス立ち上がり → piston 伸長開始
   t4 (2,1,0) observer[facing=west,powered=true]          # OB 検知 (パルス ON)
   t4 (3,1,0) piston[extended=true,facing=east]           # 伸長 (OB 出力で起動)
-  # t6: OB パルス立ち下がり (2gt 幅) → 石は押し切られ (5,1,0) に着地
+  # t6: OB パルス立ち下がり (2gt 幅) → 伸長 moving が TE 相確定 → 石は (5,1,0) に着地
   t6 (2,1,0) observer[facing=west,powered=false]         # パルス OFF (幅 2gt)
   t6 (5,1,0) stone                                       # 押された石が変位
-  # t8: piston 収縮完了。石は残る = 単発観測の不可逆な結果
-  t8 (3,1,0) piston[extended=false,facing=east]          # 収縮完了
-  t8 (4,1,0) air                                         # 元位置は空
+  # t8: #80 で収縮 BE が moving セル無視に当たり落ちる → 伸長維持 (旧 sim は t8 で収縮していた)
+  t8 (3,1,0) piston[extended=true,facing=east]           # 収縮せず伸長のまま
+  t8 (4,1,0) piston_head[facing=east,short=false,type=normal]  # head は残る
   t8 (5,1,0) stone
-  t14 (5,1,0) stone                                      # 恒久変位 (retract で引き戻らない)
+  t14 (3,1,0) piston[extended=true,facing=east]          # 恒久的に伸長維持 (v1 短パルス abstraction)
+  t14 (5,1,0) stone                                      # 石は (5,1,0) に恒久変位
 }

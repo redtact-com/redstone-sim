@@ -4,12 +4,13 @@
 # (接続再計算・電力伝播に遅延が無い = 0-tick 回路が成立する前提)。
 #
 # 仕様クロスチェック (02 §6 piston / §4.2 wire / #51):
-#   moving_piston の確定は BE 予約 → +2gt の ST tick。確定と同時に afterPistonMove が
-#   接続形状を張り替え (vanilla updateShape 相当) → ダストが T 字化して給電される。
-#   sim では確定(t5)と再接続+給電(t5)が同 tick、引き抜き(t15)の切断も同 tick。
+#   moving_piston の確定は BE 予約 → +2gt の BlockEntity (TE) 相 tick。確定と同時に
+#   afterPistonMove が接続形状を張り替え (vanilla updateShape 相当) → ダストが T 字化して
+#   給電される。sim では確定(t5)と再接続+給電(t5)が同 tick、引き抜き(t15)の切断も同 tick。
 #   sim=仕様が一致 (PASS)。gt オフセット無し。
 #   ※ 部分一致トレース + state で「同 tick 内即時性」を固定。実機系列一致は
 #     fixtures.test.ts (dynamic-connect-push) が別途担保。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・確定 ST→TE)。
 meta {
   name: 動的接続の within-tick 即時性 (0-tick 前提)
   ref: 02 §6 piston / §4.2 / #51 / fixture dynamic-connect-push
@@ -21,8 +22,7 @@ trace {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)         # 伸長 BE 予約
   3gt[BE]: Pi{p.0}         # BE 実行 (start delay 1gt)
-  3gt[ST]: Rb(c.2) p0      # redstone_block(moving) の確定を +2gt 予約
-  5gt[ST]: Rb{c.2}         # redstone_block 確定 (この tick で下の state が同時成立)
+  5gt[TE]: Rb{c.2}         # redstone_block 確定 (BlockEntity 相。この tick で下の state が同時成立)
 }
 
 state {
