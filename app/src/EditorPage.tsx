@@ -31,6 +31,26 @@ import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
 
+/**
+ * E2E テスト用の命令的フック (issue #70)。
+ * パレット/コントロールは data-testid で実クリックする一方、canvas 上のグリッド
+ * 配置 (ピクセル校正が脆弱) と sim 状態読み取りだけをこの API 経由にして再現性を担保する。
+ */
+export interface EditorTestApi {
+  placeAt: (x: number, y: number, z: number, type: PlaceableType, opts?: PlaceOptions) => void
+  removeAt: (x: number, y: number, z: number) => void
+  clearAll: () => void
+  getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
+  getSimStateAt: (x: number, y: number, z: number) => BlockState | null
+  getMode: () => 'edit' | 'sim'
+}
+
+declare global {
+  interface Window {
+    __editorTest?: EditorTestApi
+  }
+}
+
 // ── 定数 ──────────────────────────────────────────────────────────────────────
 
 const GRID_W = 16
@@ -739,6 +759,34 @@ export function EditorPage({ onBack }: EditorPageProps) {
     setSelectedPos(null)  // 選択解除（次の配置設定モードへ）
   }, [])
 
+  // ── E2E テスト用フック (issue #70) ────────────────────────────────────
+  const simWorldRef = useRef<SimWorld | null>(null)
+  simWorldRef.current = simWorld
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+
+  useEffect(() => {
+    window.__editorTest = {
+      placeAt(x, y, z, type, opts) {
+        const ed = editorRef.current
+        const prev = ed.activeLayer
+        ed.setActiveLayer(y)
+        ed.placeBlock(x, z, type, opts ?? {})
+        ed.setActiveLayer(prev)
+        rerender()
+      },
+      removeAt(x, y, z) {
+        editorRef.current.removeBlock3(x, y, z)
+        rerender()
+      },
+      clearAll() { handleClear() },
+      getEditorBlockAt: (x, y, z) => editorRef.current.getBlock3(x, y, z),
+      getSimStateAt: (x, y, z) => simWorldRef.current?.getBlockAt([x, y, z]) ?? null,
+      getMode: () => modeRef.current,
+    }
+    return () => { delete window.__editorTest }
+  }, [handleClear, rerender])
+
   // ── render ───────────────────────────────────────────────────────────
 
   // ── シミュレーションモード ──────────────────────────────────────────────
@@ -749,7 +797,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
         {/* プライマリヘッダー */}
         <div className="shrink-0 flex items-center gap-2 px-2 py-2" style={{ background: '#2d2d2d', borderBottom: '2px solid #444' }}>
           {/* 編集に戻る */}
-          <button onClick={handleBackToEdit} title="編集に戻る" className="mc-btn w-10 h-10 text-base">
+          <button onClick={handleBackToEdit} title="編集に戻る" data-testid="btn-edit"
+                  className="mc-btn w-10 h-10 text-base">
             ✏
           </button>
 
@@ -758,7 +807,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
           {/* ティックカウンター */}
           <div className="flex items-center gap-2 px-3 h-10" style={{ background: '#1a1a1a', border: '2px solid #333' }}>
             <span className="font-pixel" style={{ fontSize: 11, color: '#666', letterSpacing: 2 }}>TICK</span>
-            <span className="font-pixel" style={{ fontSize: 18, color: '#ff9900', letterSpacing: 3, textShadow: '0 0 10px #cc6600' }}>
+            <span data-testid="tick-counter" className="font-pixel" style={{ fontSize: 18, color: '#ff9900', letterSpacing: 3, textShadow: '0 0 10px #cc6600' }}>
               {String(tick).padStart(4, '0')}
             </span>
           </div>
@@ -780,13 +829,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
           <div className="flex-1" />
 
           {/* +1 ティック */}
-          <button onClick={doTick} disabled={running || !simWorld}
+          <button onClick={doTick} disabled={running || !simWorld} data-testid="btn-tick"
                   className="mc-btn w-10 h-10 font-mono text-sm font-bold">
             +1
           </button>
 
           {/* 連続/停止 */}
-          <button onClick={handleToggleRun} disabled={!simWorld}
+          <button onClick={handleToggleRun} disabled={!simWorld} data-testid="btn-run"
                   className="mc-btn h-10 px-5 font-bold text-xl"
                   style={{
                     background: !simWorld ? '#2a2a2a' : running ? '#7a3300' : '#1a4a1a',
@@ -829,6 +878,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
               const abbr = TRIGGER_META[type]?.abbr ?? '?'
               return (
                 <button key={`${x},${y},${z}`} onClick={() => handleTrigger(x, y, z)} disabled={!simWorld}
+                        data-testid={`trigger-${x}-${y}-${z}`}
                         title={TRIGGER_META[type]?.log}
                         className="mc-btn shrink-0 h-10 px-3 flex items-center gap-2"
                         style={{
@@ -910,23 +960,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
         {/* ⋯ サブメニュー */}
         <div className="relative">
-          <button onClick={() => setShowMenu(m => !m)} className="mc-btn w-10 h-10 text-lg">⋯</button>
+          <button onClick={() => setShowMenu(m => !m)} data-testid="btn-menu" className="mc-btn w-10 h-10 text-lg">⋯</button>
           {showMenu && (
             <div className="absolute left-0 top-full mt-1 z-50 flex flex-col py-1"
                  style={{ background: '#2d2d2d', border: '2px solid #555', minWidth: 164 }}>
-              <McMenuBtn onClick={() => { handleClear(); setShowMenu(false) }} danger>クリア</McMenuBtn>
-              <McMenuBtn onClick={() => { handleExportNbt(); setShowMenu(false) }}>↓ NBT 保存</McMenuBtn>
-              <McMenuBtn onClick={() => { importInputRef.current?.click(); setShowMenu(false) }}>↑ NBT 読込</McMenuBtn>
+              <McMenuBtn onClick={() => { handleClear(); setShowMenu(false) }} danger testid="menu-clear">クリア</McMenuBtn>
+              <McMenuBtn onClick={() => { handleExportNbt(); setShowMenu(false) }} testid="menu-nbt-save">↓ NBT 保存</McMenuBtn>
+              <McMenuBtn onClick={() => { importInputRef.current?.click(); setShowMenu(false) }} testid="menu-nbt-load">↑ NBT 読込</McMenuBtn>
             </div>
           )}
         </div>
 
         <input ref={importInputRef} type="file" accept=".nbt,.litematic,.schem" className="hidden"
+          data-testid="nbt-file-input"
           onChange={e => { const f = e.target.files?.[0]; if (f) { handleImportNbt(f); e.target.value = '' } }} />
 
         <div className="flex-1" />
 
-        <button onClick={handleStart}
+        <button onClick={handleStart} data-testid="btn-start"
                 className="mc-btn h-10 px-4 font-pixel"
                 style={{ background: '#1a4a1a', borderColor: '#4a8a4a #0a2a0a #0a2a0a #4a8a4a', fontSize: 15, letterSpacing: 2 }}>
           ▶ START
@@ -1162,6 +1213,7 @@ function EditorPalette({ selected, onSelect }: {
               key={type}
               onClick={() => onSelect(type)}
               title={label}
+              data-testid={`palette-${type}`}
               className="mc-slot shrink-0 flex flex-col items-center justify-center"
               style={{
                 width: 58, height: 66, padding: '4px 2px 2px',
@@ -1424,14 +1476,16 @@ function DPadBtn({ active, onClick, children }: {
 
 // ── McMenuBtn ─────────────────────────────────────────────────────────────────
 
-function McMenuBtn({ onClick, danger, children }: {
+function McMenuBtn({ onClick, danger, testid, children }: {
   onClick: () => void
   danger?: boolean
+  testid?: string
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      data-testid={testid}
       className="w-full text-left px-4 py-2.5 font-mono text-sm"
       style={{ color: danger ? '#ff8888' : '#d0d0d0' }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = danger ? '#4a1010' : '#3a3a3a' }}

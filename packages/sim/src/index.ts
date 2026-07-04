@@ -64,3 +64,13 @@ export {
   isContainerType, containerSlots, containerCapacity, fillSignal,
   containerCount, containerParticipates, canContainerAccept, effectiveContainerSignal,
 } from './blocks/container.js'
+
+// fixture 再生ドライバ (CI 回帰 fixture-runner とデモページ ?demo= の共通基盤)
+export {
+  buildFixtureWorld, fixtureInputsAt, applyFixtureInputsAt,
+  snapshotFixtureRegion, runFixtureOnSim, FixtureRunner,
+} from './fixture-driver.js'
+export type {
+  Fixture, FixtureInput, FixtureChange, FixtureExpectEntry,
+  StateMap, FixtureRunnerOptions,
+} from './fixture-driver.js'
