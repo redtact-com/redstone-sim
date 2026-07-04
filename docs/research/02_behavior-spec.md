@@ -255,6 +255,7 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
   [確定: getSignal は取り付けブロックからの問い合わせのみ 0 (他 5 方向 15)、getDirectSignal は直上ブロックからの問い合わせのみ 15]。
 - NC 受信時: 「LIT == 入力あり」という**不整合状態のときだけ** 2 gt 後の tick を予約 (willTickThisTick ガード付き) [確定]。
 - **burnout** [確定: 未解明 #4 解消]: 定数 `RECENT_TOGGLE_TIMER=60` / `MAX_RECENT_TOGGLES=8` / `RESTART_DELAY=160`。
+- **自励クロックは焼き切れ後 160gt でも復帰しない** [確定: 実機 200tick 一致 #74 finding1]。RESTART_DELAY=160 の復帰 tile tick は、消灯遷移で走る自 NC の 2gt 再予約に (pos,block) dedup され消えるため、2gt 自励トーチクロックは一度焼き切れると恒久停止する。vanilla RedstoneTorchBlock.tick でも同 dedup が対称に成立 (fixture torch-burnout-recovery で実機確認)。
   tick 時に 60 gt より古いトグル記録を破棄 → 消灯のたびに記録を追加し、**同一 pos の記録が 8 件に達すると焼き切れ**
   (煙エフェクト levelEvent 1502) → **160 gt 後の tick で再点灯を試みる** (その時点でも 8 件あれば再点灯しない)。
   記録はワールド単位の WeakHashMap (`RECENT_TOGGLES`)。

@@ -1,6 +1,6 @@
 {
   "name": "repeater-clock",
-  "description": "リピータークロック: トーチ NOT + repeater(delay=3) の帰還ループ。周期 = 2×(torch 2gt + repeater 6gt) = 16gt。repeater で周期を延ばし burnout を回避。lever(B 上)で初期 gate、t2 解除で発振。02 §6 torch(2gt)/repeater(delay*2)。",
+  "description": "リピータークロック: トーチ NOT + repeater(delay=3) の帰還ループ。周期 = 2×(torch 2gt + repeater 6gt) = 16gt。repeater で周期を延ばし burnout を回避。lever(B 上)で初期 gate、t2 解除で発振。02 §6 torch(2gt)/repeater(delay*2)。 [fake-player 照準 rework 要: 実機で fake player のレバークリックが外れ未生成 (#74)。.rstest (machines/) が sim 単体で挙動を担保]",
   "mcVersion": "1.21.1",
   "ticks": 38,
   "region": {

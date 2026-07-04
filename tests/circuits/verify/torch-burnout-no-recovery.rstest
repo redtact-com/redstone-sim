@@ -1,0 +1,18 @@
+# #74 finding1 決着: 自励トーチクロックは焼き切れ (8 消灯) 後、RESTART_DELAY=160gt
+# を経ても復帰しない。実機 probe (torch-burnout-recovery, 200tick) が sim と完全一致し、
+# vanilla でも復帰しないことを確認した (160gt 復帰予約が自 NC の 2gt 再予約に dedup される。
+# world.ts の dedup 論拠が vanilla RedstoneTorchBlock.tick でも対称に成立)。
+meta {
+  name: トーチ自励クロックは焼き切れ後 160gt でも復帰しない
+  ref: 02 §6 torch / fixture torch-burnout-recovery (実機 200tick 一致) / #74 finding1
+}
+
+fixture torch-burnout-recovery
+
+# t34 で 8 消灯目に焼き切れ、以降 t200 まで lit=false 固定 (復帰なし)。
+state {
+  t34  (1,1,0) redstone_wall_torch[facing=east,lit=false]
+  t100 (1,1,0) redstone_wall_torch[facing=east,lit=false]
+  t194 (1,1,0) redstone_wall_torch[facing=east,lit=false]
+  t200 (1,1,0) redstone_wall_torch[facing=east,lit=false]
+}

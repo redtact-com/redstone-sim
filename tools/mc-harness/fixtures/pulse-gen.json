@@ -1,6 +1,6 @@
 {
   "name": "pulse-gen",
-  "description": "パルス生成 (コンパレーター減算モノステーブル)。back=lever 直結 dust (0gt)、side=repeater(delay=2)=4gt 経由。subtract out=back-side → 立ち上がりで幅 4gt (=side 遅延) のパルス。02 §6 comparator(2gt)/repeater(delay*2)。",
+  "description": "パルス生成 (コンパレーター減算モノステーブル)。back=lever 直結 dust (0gt)、side=repeater(delay=2)=4gt 経由。subtract out=back-side → 立ち上がりで幅 4gt (=side 遅延) のパルス。02 §6 comparator(2gt)/repeater(delay*2)。 [fake-player 照準 rework 要: 実機で fake player のレバークリックが外れ未生成 (#74)。.rstest (machines/) が sim 単体で挙動を担保]",
   "mcVersion": "1.21.1",
   "ticks": 18,
   "region": {
