@@ -17,7 +17,3 @@ tools/decompile/jars/
 tools/decompile/work/
 tools/decompile/out/
 .claude/
-
-# Playwright 実行痕跡
-test-results/
-playwright-report/
