@@ -1,0 +1,25 @@
+# オブザーバー単体の 2gt パルスはコンパレーターに飲み込まれる (02 §2.4 最重要回帰)。
+# オブザーバーが自身の OFF(2gt) を近傍更新より先に予約するため、同 tick・同 priority(0) の
+# 飲み込み順序でコンパレーター評価時にはオブザーバー出力が既に 0 に戻っている。
+# → コンパレーターは一度も powered にならず、前面ランプも点灯しない。
+meta {
+  name: オブザーバー飲み込み (comparator swallow)
+  ref: 02 §2.4 / fixture observer-comparator-swallow
+}
+
+fixture observer-comparator-swallow      # blocks/inputs/ticks を取込
+
+# strict: verbose=false の全トレースを列挙。Co(コンパレーター) 行が一切現れないことが
+# 「飲み込み」の証拠 (オブザーバーの ON 予約と自己 OFF 予約だけで完結する)。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob(f.2) p0
+}
+
+state {
+  t4 (1,1,0) observer[facing=west,powered=true]     # オブザーバーは 2gt パルスを出す
+  t6 (1,1,0) observer[facing=west,powered=false]     # 2gt 後に自己 OFF
+  t6 (2,1,0) comparator[facing=east,mode=compare,powered=false]   # コンパレーターは点かない
+  t6 (3,1,0) redstone_lamp[lit=false]                # ランプも点かない
+}
