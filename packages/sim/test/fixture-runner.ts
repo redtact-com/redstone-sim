@@ -1,60 +1,29 @@
 // ============================================================
-// fixture を @redstone/sim に流して tick 状態系列を得る共通ロジック。
+// fixture を @redstone/sim に流して tick 状態系列を得る回帰ロジック。
 // - packages/sim/test/fixtures.test.ts (CI 回帰)
 // - tools/mc-harness/runner/run.ts (手元 diff CLI)
 // の両方から使う。
 //
-// tick 規約 (tools/mc-harness/README.md「tick 規約」と一致させること):
+// tick 前進・world 構築・region 観測は packages/sim の fixture-driver に集約し
+// (デモページ ?demo= と共通)、ここでは expect (実機 ground truth) との突き合わせ
+// (expandExpect / diff) とトレース収集だけを担う。
+//
+// tick 規約 (tools/mc-harness/README.md「tick 規約」と一致):
 //   state[t] = 「tick t の ScheduledTick フェーズ完了後、inputs[tick==t] を
 //   適用した直後」の状態。実機側は tick freeze 境界で fake player 入力を
 //   適用してから dump するので同じ意味論になる。
 // ============================================================
 
-import { SimWorld, mcToSim, simToMc, canonicalize, posKey } from '@redstone/sim'
-import type { Pos3D } from '@redstone/sim'
+import {
+  canonicalize, posKey,
+  buildFixtureWorld, applyFixtureInputsAt, runFixtureOnSim,
+} from '@redstone/sim'
+import type { Fixture, FixtureInput, FixtureChange, FixtureExpectEntry, StateMap } from '@redstone/sim'
 
-export interface FixtureInput {
-  tick: number
-  pos: Pos3D
-  /**
-   * 'use'  … 右クリック相当 (レバー/ボタン/ターゲット)。
-   * 'step' … 感圧板を踏む相当。sim の手動モデルでは activateBlock で 'use' と同一に扱うが、
-   *          実機 (generate.ts) では fake player を板上へ移動させて entityInside を発火させる。
-   */
-  action: 'use' | 'step'
-}
-
-export interface FixtureChange {
-  pos: Pos3D
-  block: string
-}
-
-export interface FixtureExpectEntry {
-  tick: number
-  changes: FixtureChange[]
-}
-
-export interface Fixture {
-  name: string
-  description?: string
-  mcVersion: string
-  skipUntil?: string
-  skipReason?: string
-  ticks: number
-  region: { from: Pos3D; to: Pos3D }
-  /**
-   * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
-   * items で初期個数を与えられる (実機側はハーネスが inventory_set で充填する想定。
-   * アイテムは blockstate に現れないため sim/実機とも item 数で初期化する)。
-   */
-  blocks: { pos: Pos3D; block: string; items?: number }[]
-  inputs: FixtureInput[]
-  expect: FixtureExpectEntry[]
-  generated?: { at: string; mc: string; carpet: string }
-}
-
-/** 'x,y,z' → 正規化 blockstate 文字列 のスナップショット */
-export type StateMap = Map<string, string>
+// fixture 型・world ドライバは @redstone/sim (fixture-driver) が正。ここで再輸出して
+// 既存 import 元 (fixtures.test / trace.test / tools/mc-harness) の参照を保つ。
+export type { Fixture, FixtureInput, FixtureChange, FixtureExpectEntry, StateMap }
+export { runFixtureOnSim }
 
 /** fixture の authored blocks から初期 StateMap を作る */
 export function authoredStateMap(fx: Fixture): StateMap {
@@ -82,56 +51,6 @@ export function expandExpect(fx: Fixture): StateMap[] {
   return states
 }
 
-/** fixture を sim で実行し、tick 0..ticks の StateMap 系列を返す */
-export function runFixtureOnSim(fx: Fixture): StateMap[] {
-  const world = new SimWorld()
-  const authored = new Map<string, string>()
-  for (const b of fx.blocks) {
-    authored.set(posKey(b.pos), b.block)
-    const sim = mcToSim(b.block)
-    if (sim) {
-      // コンテナは items で初期個数を与える (blockstate に現れない BE 内容)
-      if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper' || sim.type === 'container')) {
-        (sim as { count?: number }).count = b.items
-      }
-      world.setBlockAt(b.pos, sim)
-    }
-  }
-
-  // 初期安定化 (実機側の fx_settle + settle step に相当)
-  world.initialize()
-  world.flush(64)
-
-  const inputsAt = (t: number) => fx.inputs.filter(i => i.tick === t)
-  // ピストン移動で authored 外の座標にもブロックが現れるため region 全域を走査する
-  const snapshot = (): StateMap => {
-    const m: StateMap = new Map()
-    const [x0, y0, z0] = fx.region.from
-    const [x1, y1, z1] = fx.region.to
-    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) {
-      const key = posKey([x, y, z])
-      const sim = world.getBlock(x, y, z)
-      if (!sim) continue
-      const s = simToMc(sim, authored.get(key))
-      if (s !== 'air') m.set(key, canonicalize(s))
-    }
-    return m
-  }
-
-  const states: StateMap[] = []
-  for (let t = 0; t <= fx.ticks; t++) {
-    if (t > 0) world.tick()
-    for (const input of inputsAt(t)) {
-      if (input.action === 'use' || input.action === 'step') {
-        // 'step' (感圧板を踏む) も手動モデルでは activateBlock で ON にする
-        world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
-      }
-    }
-    states.push(snapshot())
-  }
-  return states
-}
-
 /**
  * fixture を sim で実行し、トレース (docs/research/08 記法) を 1 行 1 イベントの
  * 文字列配列で返す。初期 settle は clearTrace で捨て、入力起点 (tick 0..) からの
@@ -140,31 +59,14 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
  * runFixtureOnSim と完全に一致する (回帰は fixtures.test.ts が担保)。
  */
 export function traceFixtureOnSim(fx: Fixture, opts: { verbose?: boolean } = {}): string[] {
-  const world = new SimWorld()
-  for (const b of fx.blocks) {
-    const sim = mcToSim(b.block)
-    if (sim) {
-      if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper' || sim.type === 'container')) {
-        (sim as { count?: number }).count = b.items
-      }
-      world.setBlockAt(b.pos, sim)
-    }
-  }
-  world.initialize()
-  world.flush(64)
+  const { world } = buildFixtureWorld(fx)
   // settle 由来のイベントを捨て、入力駆動分だけを起点 0 から集める
   world.enableTrace({ verbose: opts.verbose })
   world.clearTrace()
 
-  const inputsAt = (t: number) => fx.inputs.filter(i => i.tick === t)
   for (let t = 0; t <= fx.ticks; t++) {
     if (t > 0) world.tick()
-    for (const input of inputsAt(t)) {
-      if (input.action === 'use' || input.action === 'step') {
-        // 'step' (感圧板を踏む) も手動モデルでは activateBlock で ON にする
-        world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
-      }
-    }
+    applyFixtureInputsAt(world, fx, t)
   }
   return world.getTrace()
 }

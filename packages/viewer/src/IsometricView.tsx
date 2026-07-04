@@ -25,6 +25,15 @@ export interface CameraState {
   panZ: number
 }
 
+/** 外部からカメラを 1 回だけ上書きするためのパッチ (デモの fitCamera 用)。 */
+export interface CameraInput {
+  distance?: number
+  panX?: number
+  panZ?: number
+  rotX?: number
+  rotY?: number
+}
+
 export interface IsometricViewProps {
   /** 表示対象のスナップショット */
   snapshot: WorldSnapshot
@@ -44,6 +53,13 @@ export interface IsometricViewProps {
   cameraStateRef?: React.MutableRefObject<CameraState | null>
   /** true のとき左クリック/タッチドラッグで平面パン（移動ツール選択時） */
   panMode?: boolean
+  /**
+   * 外部からカメラを命令的に上書きするための ref。値をセットすると次フレームで
+   * 適用され null に消費される (デモの fitCamera など)。
+   */
+  cameraInputRef?: React.MutableRefObject<CameraInput | null>
+  /** テクスチャ読込 + 初回 Structure 構築が完了して描画可能になった時に一度呼ぶ。 */
+  onReady?: () => void
 }
 
 // ─── コンポーネント ────────────────────────────────────────────────────────────
@@ -55,8 +71,13 @@ export function IsometricView({
   placementY = 1,
   cameraStateRef,
   panMode = false,
+  cameraInputRef,
+  onReady,
 }: IsometricViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // init effect は deps=[] で一度だけ張るため、最新の onReady を ref 経由で読む
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
   const rendererRef = useRef<StructureRenderer | null>(null)
   const structureRef = useRef<Structure | null>(null)
   const prevSnapshotRef = useRef<WorldSnapshot | null>(null)
@@ -327,10 +348,23 @@ export function IsometricView({
         cameraRef.current.distance = Math.max(size[0], size[1], size[2]) * 1.5
 
         setStatus('ready')
+        let readyFired = false
 
         const draw = () => {
           if (!structureRef.current || !rendererRef.current) return
           const cam = cameraRef.current
+
+          // 外部からのカメラ上書き (fitCamera 等) を消費する
+          if (cameraInputRef?.current) {
+            const ci = cameraInputRef.current
+            if (ci.distance !== undefined) cam.distance = ci.distance
+            if (ci.panX !== undefined) cam.panX = ci.panX
+            if (ci.panZ !== undefined) cam.panZ = ci.panZ
+            if (ci.rotX !== undefined) cam.rotX = ci.rotX
+            if (ci.rotY !== undefined) cam.rotY = ci.rotY
+            cameraInputRef.current = null
+          }
+
           const w = canvas.clientWidth
           const h = canvas.clientHeight
           if (canvas.width !== w || canvas.height !== h) {
@@ -355,6 +389,12 @@ export function IsometricView({
           gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
           renderer.drawStructure(vm)
           renderer.drawGrid(vm)
+
+          // 初回描画が済んだ時点で ready 通知 (デモの window.__demo.ready 用)
+          if (!readyFired) {
+            readyFired = true
+            onReadyRef.current?.()
+          }
 
           rafId = requestAnimationFrame(draw)
         }

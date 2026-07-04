@@ -5,6 +5,12 @@ dist
 .DS_Store
 *.local
 
+# Playwright E2E (issue #70)
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+
 # Mojang 由来物 (jar / mappings / デコンパイル産物) は絶対にコミットしない
 # (docs/research/03_legal-decompile.md 参照)
 tools/decompile/jars/
