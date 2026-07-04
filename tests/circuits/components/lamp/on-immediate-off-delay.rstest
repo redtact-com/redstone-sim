@@ -1,0 +1,23 @@
+# ランプ = 点灯即時・消灯 4gt 遅延 (02 §6 lamp [確定])。
+# 仕様: 点灯は NC 受信で即時 (setBlock 遅延なし)。消灯は 4gt の tile tick を予約し、
+#       tick 時に入力を再評価してまだ無入力なら消灯 → 4gt 未満の入力断では消灯しない。
+# t2 入力 ON → 即点灯。t10 入力 OFF → 4gt 後の t14 で消灯 (t10..t13 は点灯保持)。
+meta {
+  name: ランプ 点灯即時・消灯 4gt 遅延
+  ref: 02 §6 lamp (点灯 NC 即時 / 消灯 4gt tile tick) / fixture lamp-off-delay
+}
+
+fixture lamp-off-delay
+
+state {
+  t2  (4,1,0) redstone_lamp[lit=true]    # 入力 ON と同 tick で点灯 (即時)
+  t10 (4,1,0) redstone_lamp[lit=true]    # 入力 OFF 直後もまだ点灯 (4gt 予約中)
+  t13 (4,1,0) redstone_lamp[lit=true]    # 3gt 経過でも点灯 (4gt 未満)
+  t14 (4,1,0) redstone_lamp[lit=false]   # 4gt 後に消灯
+}
+
+# 消灯は 4gt 遅延の tile tick (priority 0)。点灯には tile tick が出ない (即時 = NC)。
+trace {
+  10gt[ST]: La(f.4) p0    # 入力 OFF → 消灯を 4gt 後に予約
+  14gt[ST]: La{f.4}       # 4gt 後に消灯実行
+}

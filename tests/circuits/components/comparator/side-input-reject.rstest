@@ -1,0 +1,18 @@
+# コンパレーター側面入力の受理規則: レバー/トーチは水平に direct signal を出さないため
+# 側面入力にならない (02 §6 comparator side [確定])。
+# 構成: subtract コンパレーター(2,1,1) の両側面に redstone_torch(2,1,2) と lever(2,1,0)=ON。
+#       背面 = 15。もし側面が効けば 15-15=0 で消灯するはずだが、トーチ/レバーは側面無効なので
+#       side=0 → 出力 = 15-0 = 15 (点灯・出力 15)。「点灯する」こと自体が側面棄却の証拠。
+meta {
+  name: コンパレーター側面 lever/torch は棄却 (出力 15)
+  ref: 02 §6 comparator (side に lever/torch 無効) / fixture comparator-side-reject
+}
+
+fixture comparator-side-reject
+
+state {
+  t2 (2,1,1) comparator[facing=west,mode=subtract,powered=false]  # 2gt 予約中
+  t4 (2,1,1) comparator[facing=west,mode=subtract,powered=true]   # side 棄却 → 15-0=15 で点灯
+  t4 (3,1,1) redstone_wire[east=side,north=none,power=15,south=none,west=side]  # 出力 15 (側面が効けば 0 のはず)
+  t4 (4,1,1) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+}

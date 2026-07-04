@@ -1,0 +1,21 @@
+# リピーター delay=4 の遅延 (02 §6 repeater [確定])。
+# 仕様: 遅延 = DELAY*2 gt。delay=4 → 8gt。入力 t2 → t10 で ON (8gt 後)。
+# t8 時点ではまだ未反映 = 遅延が 6gt でも 4gt でもなく確かに 8gt であることを pin。
+meta {
+  name: リピーター delay=4 (8gt 遅延)
+  ref: 02 §6 repeater (DELAY*2 = 8gt) / fixture repeater-delay-4
+}
+
+fixture repeater-delay-4
+
+state {
+  t8  (2,1,0) repeater[delay=4,facing=west,locked=false,powered=false]  # 8gt 未満はまだ OFF
+  t10 (2,1,0) repeater[delay=4,facing=west,locked=false,powered=true]   # 8gt 後に ON
+  t10 (3,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+}
+
+# 予約遅延 = 8gt (delay=4 → DELAY*2) を検証する。
+trace {
+  2gt[ST]: Re(n.8) p-1    # ON を 8gt 後に予約
+  10gt[ST]: Re{n.8}       # 8gt 後に実行
+}

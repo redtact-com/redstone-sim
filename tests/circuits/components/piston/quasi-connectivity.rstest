@@ -1,0 +1,22 @@
+# ピストンの準接続 (QC): 1 個上のマスが受電するとピストンが伸長する
+# (02 §5.3 QC [確定] / §6 piston getNeighborSignal)。
+# 仕様: ピストンの起動判定は facing 面を除く 6 方向 ∪ 自身 down ∪ 「1 個上のマス」の被電を含む。
+#       ダストが直接隣接していなくても、1 個上が電源化すれば伸長する = QC。
+# fixture qc-bud: レバー→ダスト→(石の上に載る)ダストが piston(2,1,1) の QC 位置を電源化 → 伸長。
+meta {
+  name: ピストン 準接続 (1 個上受電で伸長)
+  ref: 02 §5.3 QC / §6 piston (getNeighborSignal に pos.above() 含む) / fixture qc-bud
+}
+
+fixture qc-bud
+
+state {
+  t2 (2,1,1) piston[extended=false,facing=south]   # 入力適用直後 (BE 未発火)
+  t3 (2,1,1) piston[extended=true,facing=south]    # QC で伸長 (1 個上の被電を検知)
+}
+
+# QC 経由でも通常伸長と同じ BE 系列 (push 予約→実行) を辿る。
+trace {
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+}

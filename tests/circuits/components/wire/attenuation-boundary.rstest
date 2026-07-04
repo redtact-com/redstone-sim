@@ -1,0 +1,20 @@
+# ダスト減衰の 15→1 と 15/16 マス境界 (02 §5.1 [確定])。
+# 仕様: 動力源は 15 を供給、ダストは 1 ブロックごとに 1 減衰、到達は最大 15 マス。
+# ∴ レバー直結の 1 マス目 (x=1) = 15、N マス目 = 16-N。15 マス目 (x=15) = 1、
+#   16 マス目 (x=16) = 0 (15 マスで尽きる)。この境界を state で pin する。
+# 期待値は上記仕様から先に導出し、実 sim 出力 (fixture attenuation-15-16) と照合 → 一致。
+meta {
+  name: ダスト減衰 15→1 と 15/16 マス境界
+  ref: 02 §5.1 (減衰 1/block・最大 15 マス) / fixture attenuation-15-16
+}
+
+fixture attenuation-15-16
+
+# ダストは PLC (即時伝播)。入力適用後 settle した t4 断面で境界を確認する。
+state {
+  t4 (1,1,0)  redstone_wire[east=side,north=none,power=15,south=none,west=side]   # 源直結 = 15
+  t4 (8,1,0)  redstone_wire[east=side,north=none,power=8,south=none,west=side]    # 8 マス目 = 16-8
+  t4 (14,1,0) redstone_wire[east=side,north=none,power=2,south=none,west=side]    # 14 マス目 = 2
+  t4 (15,1,0) redstone_wire[east=side,north=none,power=1,south=none,west=side]    # 15 マス目 = 1 (下限)
+  t4 (16,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]    # 16 マス目 = 0 (境界)
+}

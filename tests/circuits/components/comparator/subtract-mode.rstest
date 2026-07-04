@@ -1,0 +1,17 @@
+# コンパレーター subtract モード (02 §6 comparator [確定])。
+# 仕様: subtract は出力 = back - side (side = max(側面_L, 側面_R))。遅延 2gt。
+# 構成は compare 版と同一 (back=13, side=11) だが mode=subtract。
+#       → 出力 = 13 - 11 = 2 (出力ダスト 2→1)。
+meta {
+  name: コンパレーター subtract (出力=back-side=2)
+  ref: 02 §6 comparator (subtract=back-side) / fixture comparator-subtract
+}
+
+fixture comparator-subtract
+
+state {
+  t2 (4,1,0) comparator[facing=west,mode=subtract,powered=false]  # 2gt 予約中
+  t4 (4,1,0) comparator[facing=west,mode=subtract,powered=true]   # 2gt 後に点灯
+  t4 (5,1,0) redstone_wire[east=side,north=none,power=2,south=none,west=side]   # 出力 = 13-11 = 2
+  t4 (6,1,0) redstone_wire[east=side,north=none,power=1,south=none,west=side]
+}

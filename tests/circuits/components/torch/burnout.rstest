@@ -1,0 +1,27 @@
+# トーチ焼き切れ (02 §6 torch burnout [確定])。
+# 仕様: 消灯のたびに記録を追加し、同一 pos の記録が 8 件 (MAX_RECENT_TOGGLES) に達すると
+#       焼き切れる。速い自励トーチクロックはこの上限で止まる。
+# fixture torch-burnout は 2gt 周期の自励クロック。消灯 (lit true→false) は t6,t10,...,t34 の
+# 8 回で、8 回目の消灯 (t34) で焼き切れ → 以降 lit=false に固定される。
+# 期待値は「8 消灯で焼き切れ」の仕様から先に導出。fixture の実機 ground-truth も t34 の消灯までを
+# 収録しており一致 (詳細は下の ※)。
+meta {
+  name: トーチ焼き切れ (8 消灯で停止)
+  ref: 02 §6 torch (MAX_RECENT_TOGGLES=8, RECENT_TOGGLE_TIMER=60) / fixture torch-burnout
+}
+
+fixture torch-burnout
+
+# 自励クロックの前半オン/オフと、8 消灯後の焼き切れ固定を pin する。
+state {
+  t4  (1,1,0) redstone_wall_torch[facing=east,lit=true]    # クロック点灯 (1 サイクル目 ON)
+  t6  (1,1,0) redstone_wall_torch[facing=east,lit=false]   # 1 消灯目
+  t32 (1,1,0) redstone_wall_torch[facing=east,lit=true]    # 8 サイクル目の ON (焼き切れ直前)
+  t34 (1,1,0) redstone_wall_torch[facing=east,lit=false]   # 8 消灯目 → 焼き切れ
+  t50 (1,1,0) redstone_wall_torch[facing=east,lit=false]   # 焼き切れ後は消灯固定
+  t100 (1,1,0) redstone_wall_torch[facing=east,lit=false]  # 依然消灯 (発振停止)
+}
+
+# ※ 復帰 (RESTART_DELAY=160) は自励クロックでは起きない (sim は自 NC の 2gt 再予約に
+#   160gt 予約が重複デデュープされる旨をコード上明記)。焼き切れ後の復帰有無は本 fixture の
+#   ground-truth (t34 まで) の範囲外で未検証のため、ここでは断言しない (findings/openQuestions 参照)。
