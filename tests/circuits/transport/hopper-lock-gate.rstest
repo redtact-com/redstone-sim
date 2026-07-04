@@ -1,0 +1,45 @@
+# ホッパーのロックによる物流ゲート (#79 領域1 複合物流)。
+# 仕様 [確定: 02 §6 hopper]: HopperBlock.neighborChanged で enabled = !hasNeighborSignal。
+#   受電中 enabled=false = 能動転送停止 (NC で再評価する blockstate)。転送 8gt (setCooldown(8))。
+# レバー(西隣)で H(items=3, east) を初期ロック → 転送しないので sink barrel は空のまま。
+#   t2 で解除 → 8gt 周期で 1 個ずつ barrel(items=0)へ送る。barrel 背面(west)コンパレーターが
+#   充填 (fillSignal(1,1728)=1 > 0) を読み点灯。
+# 期待値の導出:
+#   - t0/t1: レバー ON → enabled=false (ロック)、barrel 空 → comparator 消灯 (0)。
+#   - t2:    解除 (input は tick 境界後適用) → enabled=true。
+#   - t3:    解除後 最初の tick で eject → barrel に 1 個 (単段なので 8gt = hopper-clock と同一の堅牢な位相)。
+#   - t5:    barrel 充填の CU → コンパレーター 2gt (getDelay=2 固定) → powered=true。
+#   単段転送のため中間段の抽象化に触れず、位相は堅牢 (fixture hopper-clock と整合)。
+meta {
+  name: 物流 ホッパーロックによる転送ゲート (enabled で止める→流す)
+  ref: 02 §6 hopper (enabled=!hasNeighborSignal / NC ロック / setCooldown(8)) / comparator getDelay=2
+}
+
+circuit {
+  (0,0,0)..(3,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=true]
+  (1,1,0) hopper[enabled=true,facing=east] items=3
+  (2,1,0) barrel items=0
+  (3,1,0) comparator[facing=west,mode=compare,powered=false]
+}
+
+inputs {
+  t2 use (0,1,0)                                                    # ロック解除 → 転送開始
+}
+
+ticks 20
+
+# 解除 → t3 で最初の転送 (barrel 充填) → CU → コンパレーター 2gt。
+trace {
+  2gt[PI]: Le{f.0}                                                  # レバー OFF (解除)
+  3gt[ST]: Co(c.2) p0                                               # barrel 充填の CU で再計算予約
+  5gt[ST]: Co{c.2}                                                  # 2gt 後に確定 (powered=true)
+}
+
+state {
+  t0 (1,1,0) hopper[enabled=false,facing=east]                      # ロック中 (転送停止)
+  t0 (3,1,0) comparator[facing=west,mode=compare,powered=false]     # barrel 空
+  t2 (1,1,0) hopper[enabled=true,facing=east]                       # 解除
+  t4 (3,1,0) comparator[facing=west,mode=compare,powered=false]     # まだ 2gt 遅延中
+  t5 (3,1,0) comparator[facing=west,mode=compare,powered=true]      # 転送で充填 → 点灯
+}

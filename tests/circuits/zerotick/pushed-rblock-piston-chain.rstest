@@ -1,0 +1,67 @@
+# 0-tick ピストン連鎖 (最前線): ピストン A が redstone_block を押し、確定した動力源が
+# **下流ピストン B を直接起動する**。ダウンストリームが BEC (ピストン) なので、
+# 「確定を ST 相で行う sim」と「BlockEntity 相で行う vanilla」で **B の起動 tick に相差が出る**
+# (02 §6 line 448 の既知抽象化)。
+#
+# ★ 品質規律 (0-tick は ST 相確定 vs vanilla BlockEntity 相の差が最も出る領域):
+#   B が最初に extended=true になる tick は sim と実機で食い違う可能性が高いため **断言しない**。
+#   両者が確実に一致する部分だけを断言する:
+#     (a) transit 中 (t3,t4): moving_piston は無信号 → B は未起動 (両者一致)。
+#     (b) A の確定 (t5): (4,1,0)=redstone_block 着地 = piston-basic と同型の player 起動押込で
+#         sim=実機一致 (実機 fixture piston-basic で検証済みの系列)。
+#     (c) 十分に落ち着いた最終形 (t12): B は伸長し (6,1,0)=piston_head / (7,1,0)=石。
+#         起動 tick は違っても最終形は両者一致する。
+#   B が「いつ」伸び始めるか (sim=t5 / vanilla=t6) の相差は **実機 docker で確認済み (#79→#80)**:
+#   fixture rblock-piston-chain で B 伸長=実機 t6/sim t5・head 確定=実機 t8/sim t7 の 1tick 差を実証。
+#   修正は #80 (ST 相確定→BlockEntity 相)。本 .rstest は両者一致する bookend のみ断言。
+#
+# 仕様クロスチェック (先に導出 → sim で照合):
+#   §6 piston [確定]: player 起動 A → start delay 1gt → BE 実行 (t3) → +2gt ST 確定 (t5) で
+#     redstone_block が (4,1,0) に着地。(4,1,0) は B (5,1,0) の背面 (facing=east の非 facing 面) を
+#     給電 → B 起動。
+#   §6 line 448 [確定]: sim は確定を ST 相 (phase4 = BE phase8 の前) で行うため、B の extend BE を
+#     **同 tick (t5) の BE-drain で消化** (sim 観測: 下の trace で 5gt[ST] Rb{c.2} → 5gt[BE] Pi{p.0})。
+#     vanilla は確定を BlockEntity 相 (phase10 = BE phase8 の後) で行うため B の extend BE は
+#     **翌 tick (t6) の phase8** で発火する見込み → B 伸長 tick が 1 早い (2tick vs 3tick 間隔)。
+meta {
+  name: 0-tick ピストン連鎖 押込 redstone_block が下流ピストンを起動 (相差は断言せず最終形のみ)
+  ref: 02 §6 piston / §6 line 448 (ST 相確定 vs BlockEntity 相 = 実機突合候補) / #51
+}
+
+circuit {
+  (0,0,0)..(7,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) piston[extended=false,facing=east]
+  (3,1,0) redstone_block
+  (5,1,0) piston[extended=false,facing=east]
+  (6,1,0) stone
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 12
+
+# 安全なトレース (A 側の押し出しと確定のみ)。B の同 tick 起動 (5gt[BE] Pi) は sim 固有の
+# 相挙動なので **意図的に断言しない** (subsequence にも含めない)。A の確定 5gt[ST] Rb{c.2} まで。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  5gt[ST]: Rb{c.2}
+}
+
+state {
+  # transit 中: 押される redstone_block は moving_piston (無信号) → B は未起動 (両者一致)
+  t3 (5,1,0) piston[extended=false,facing=east]
+  t4 (5,1,0) piston[extended=false,facing=east]
+  # A の確定 tick t5: redstone_block が (4,1,0) に着地 (piston-basic と同型 = 両者一致)
+  t5 (4,1,0) redstone_block
+  # 最終形 (十分に落ち着いた t12): B 伸長・石を (7,1,0) へ変位。起動 tick は違っても最終形は一致
+  t12 (4,1,0) redstone_block
+  t12 (5,1,0) piston[extended=true,facing=east]
+  t12 (6,1,0) piston_head[facing=east,short=false,type=normal]
+  t12 (7,1,0) stone
+}
