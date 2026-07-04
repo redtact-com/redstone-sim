@@ -1,0 +1,69 @@
+# ダスト多段送信の locational 順 (MC-11193)。同一形状のアームを x=5 と x=11 に置き、
+# 別 tick で駆動する。各アーム: repA(delay=1 → Re(n.2)) - wire - CENTER - wire -
+# repB(delay=2 → Re(n.4))、CENTER をレバーが南から給電。両 rep は dust の「遠端」
+# (2 マス先) にあり、隣接 origin 経由で NC を受けるため予約順が dust 多段送信の
+# Java HashSet 順 = 座標依存 (locational) になる。
+#
+# 仕様クロスチェック (02 §4.2 [確定] / 11 / updates.ts):
+#   ダスト強度変化時は {自身+隣接6} を HashSet に入れ、そのイテレーション順で
+#   各 origin から NC を送る。HashSet バケット index = BlockPos.hashCode が座標依存
+#   → 送信順は座標依存 (= MC-11193 の直接根拠)。javaHashSetOrder が忠実化。
+#   実機一致は #46 fixture が担保。ここは sim の決定論的 locational 順を strict で固定する。
+#   **検証対象は同 gt 内の 2 予約行の ORDER であって p 値や gt 絶対値ではない**:
+#     x=5  → Re(n.2) が先 (repA→repB)
+#     x=11 → Re(n.4) が先 (repB→repA)   ← 同一形状の平行移動で順序が反転
+#   sim=仕様(locational を持つ) が一致 (PASS)。
+meta {
+  name: ダスト locational 送信順 (MC-11193 反転)
+  ref: 02 §4.2 / 11 / updates.ts javaHashSetOrder / #46
+}
+
+circuit {
+  # --- アーム A (x=5): repA→repB 順 ---
+  (3,0,5)..(7,0,5) stone
+  (5,0,6) stone
+  (3,1,5) repeater[delay=1,facing=east,locked=false,powered=false]     # repA (delay1)
+  (4,1,5) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (5,1,5) redstone_wire[east=side,north=none,power=0,south=side,west=side]
+  (6,1,5) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (7,1,5) repeater[delay=2,facing=west,locked=false,powered=false]     # repB (delay2)
+  (5,1,6) lever[face=floor,facing=north,powered=false]
+  # --- アーム B (x=11): 同一形状を +6x 平行移動 → 順序反転 ---
+  (9,0,5)..(13,0,5) stone
+  (11,0,6) stone
+  (9,1,5)  repeater[delay=1,facing=east,locked=false,powered=false]    # repA (delay1)
+  (10,1,5) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (11,1,5) redstone_wire[east=side,north=none,power=0,south=side,west=side]
+  (12,1,5) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (13,1,5) repeater[delay=2,facing=west,locked=false,powered=false]    # repB (delay2)
+  (11,1,6) lever[face=floor,facing=north,powered=false]
+}
+
+inputs {
+  t2  use (5,1,6)      # アーム A
+  t10 use (11,1,6)     # アーム B
+}
+
+ticks 16
+
+# strict: 同 gt 内の 2 予約行の ORDER が locational 観測点。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.2) p-1     # x=5: repA(delay1) が先
+  2gt[ST]: Re(n.4) p-1     #      repB(delay2) が後
+  4gt[ST]: Re{n.2}
+  6gt[ST]: Re{n.4}
+  10gt[PI]: Le{n.0}
+  10gt[ST]: Re(n.4) p-1    # x=11: repB(delay2) が先 ← 平行移動で反転
+  10gt[ST]: Re(n.2) p-1    #       repA(delay1) が後
+  12gt[ST]: Re{n.2}
+  14gt[ST]: Re{n.4}
+}
+
+state {
+  # 両アームとも最終的に 4 リピーターが on になる (順序は state には現れない)
+  t4  (3,1,5)  repeater[delay=1,facing=east,locked=false,powered=true]
+  t6  (7,1,5)  repeater[delay=2,facing=west,locked=false,powered=true]
+  t12 (9,1,5)  repeater[delay=1,facing=east,locked=false,powered=true]
+  t14 (13,1,5) repeater[delay=2,facing=west,locked=false,powered=true]
+}

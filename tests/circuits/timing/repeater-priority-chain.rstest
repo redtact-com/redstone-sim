@@ -1,0 +1,61 @@
+# リピーター TickPriority -3 / -1 / -2 を 1 回路で固定する (02 §2.2 [確定])。
+# インライン連鎖 lever - wire - repA - repB - wire。repA は front が別ダイオード(repB)の
+# 背面給電なので priority -3 (ON/OFF どちらも)。repB は front がワイヤなので
+# ON=-1 / OFF=-2。
+#
+# 仕様クロスチェック (先に 02 §2.2 から導出):
+#   §2.2 表は「上から順に最初に該当した行の priority」。
+#     1) 出力先が別ダイオードの側面/背面 → -3
+#     2) 信号が切れる(オフ化)とき      → -2
+#     3) その他                          → -1
+#   → repA は常に (1) に該当するため ON も OFF も -3 (オフ化でも (2) より (1) が優先)。
+#     repB は front=wire で (1) 非該当 → ON=-1 / OFF=-2。
+#   デコンパイル典拠: DiodeBlock.checkTickOnNeighbor.shouldPrioritize
+#   (出力先がダイオードかつ FACING が出力方向と不一致で真)。
+#   sim=仕様が一致 (PASS)。gt はオフセット無し (初期 settle に予約無し)。検証対象は
+#   p 値であって gt 絶対値ではない。
+meta {
+  name: リピーター priority -3/-1/-2 連鎖
+  ref: 02 §2.2 / §6 repeater / DiodeBlock.checkTickOnNeighbor / 08
+}
+
+circuit {
+  (0,0,0)..(5,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]   # repA: front=repB(diode)
+  (3,1,0) repeater[delay=1,facing=west,locked=false,powered=false]   # repB: front=wire
+  (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2  use (0,1,0)     # ON
+  t12 use (0,1,0)     # OFF
+}
+
+ticks 18
+
+# strict: 余計なイベントが起きないことまで固定。各 Re 予約行の p 値が要点。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.2) p-3      # repA ON: front=別ダイオード背面 → -3
+  4gt[ST]: Re{n.2}
+  4gt[ST]: Re(n.2) p-1      # repB ON: front=wire → -1
+  6gt[ST]: Re{n.2}
+  12gt[PI]: Le{f.0}
+  12gt[ST]: Re(f.2) p-3     # repA OFF: それでも front=別ダイオード → -3 (precedence)
+  14gt[ST]: Re{f.2}
+  14gt[ST]: Re(f.2) p-2     # repB OFF: front=wire かつ オフ化 → -2
+  16gt[ST]: Re{f.2}
+}
+
+state {
+  t4  (2,1,0) repeater[delay=1,facing=west,locked=false,powered=true]   # repA on (2gt)
+  t6  (3,1,0) repeater[delay=1,facing=west,locked=false,powered=true]   # repB on (+2gt)
+  t6  (4,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t6  (5,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+  t14 (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]  # repA off
+  t16 (3,1,0) repeater[delay=1,facing=west,locked=false,powered=false]  # repB off
+  t16 (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
