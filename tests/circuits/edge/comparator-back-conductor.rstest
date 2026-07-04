@@ -1,0 +1,48 @@
+# コンパレーター背面のコンテナ読みが「導体 1 個越し」まで届く境界
+# (02 §6 comparator 背面 / §4.2 CU の導体越し経路 [確定: 26.2 ComparatorBlock.getInputSignal])。
+# 仕様: 背面ブロックが hasAnalogOutputSignal (コンテナ) ならその充填率信号を読む。
+#       通常信号 <15 かつ背面が導体 (solid/target) なら、さらに 1 マス先のコンテナを読む
+#       (固体 1 個越し)。2 個越しは対象外 → 読めない。
+#   → CU (updateNeighbourForOutputSignal) がコンテナ変化をこの同じ隣接経路
+#     (直接 or 導体 1 個越し) でコンパレーターへ届ける根拠でもある。
+# 3 系統を対で断言 (barrel 充填 items=864 → fillSignal(864,27*64)= floor(864/1728*14)+1 = 8):
+#   直接隣接 → 8 / 導体 1 個越し → 8 (届く) / 導体 2 個越し → 0 (届かない)。
+# 期待値は 02 §6 の [確定] 変換式・読み規則から先に導出 → sim 実行で照合 → 一致 (PASS)。
+meta {
+  name: コンパレーター背面コンテナ読み (直接/導体1個越し=届く・2個越し=届かない)
+  ref: 02 §6 comparator (背面 導体1個越しのコンテナ読み) / §4.2 CU / 充填率 lerpDiscrete 式
+}
+
+circuit {
+  (0,0,0)..(5,0,6) stone
+  # --- 系統A: barrel が背面に直接隣接 (0 導体) ---
+  (0,1,0) barrel items=864
+  (1,1,0) comparator[facing=west,mode=compare,powered=false]     # 背面=west=barrel
+  (2,1,0)..(3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # --- 系統B: barrel — 石 — コンパレーター (導体 1 個越し) ---
+  (0,1,3) barrel items=864
+  (1,1,3) stone
+  (2,1,3) comparator[facing=west,mode=compare,powered=false]      # 背面=west=石, その先=barrel
+  (3,1,3)..(4,1,3) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # --- 系統C: barrel — 石 — 石 — コンパレーター (導体 2 個越し) ---
+  (0,1,6) barrel items=864
+  (1,1,6) stone
+  (2,1,6) stone
+  (3,1,6) comparator[facing=west,mode=compare,powered=false]      # 背面=west=石, その先も石 (コンテナでない)
+  (4,1,6)..(5,1,6) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+# 定常回路 (入力なし)。初期 settle 後の t0 断面で読み取り可否を確認する。
+state {
+  # A 直接隣接: 読める → 出力 8
+  t0 (1,1,0) comparator[facing=west,mode=compare,powered=true]
+  t0 (2,1,0) redstone_wire[east=side,north=none,power=8,south=none,west=side]   # 背面コンテナ = 8
+  t0 (3,1,0) redstone_wire[east=side,north=none,power=7,south=none,west=side]
+  # B 導体 1 個越し: 読める → 出力 8 (石を隔てても届く)
+  t0 (2,1,3) comparator[facing=west,mode=compare,powered=true]
+  t0 (3,1,3) redstone_wire[east=side,north=none,power=8,south=none,west=side]   # 導体 1 個越しで 8
+  t0 (4,1,3) redstone_wire[east=side,north=none,power=7,south=none,west=side]
+  # C 導体 2 個越し: 読めない → 出力 0 (境界: 1 個までしか届かない)
+  t0 (3,1,6) comparator[facing=west,mode=compare,powered=false]
+  t0 (4,1,6) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # 2 個越しは 0
+}
