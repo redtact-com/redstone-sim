@@ -93,13 +93,15 @@ async function main() {
 
   // 2. vite preview 起動
   console.log(`[demo-gif] starting preview on :${opts.port} ...`)
+  // detached + プロセスグループ kill: npm 経由だと孫 (vite) が親 kill で残り、
+  // ポートを占有し続ける (孤児 preview が次回実行の strictPort を殺す) ため
   const preview = spawn(
     'npm',
     ['run', 'preview', '-w', 'app', '--', '--port', String(opts.port), '--strictPort', '--host', '127.0.0.1'],
-    { cwd: REPO_ROOT, stdio: 'ignore' },
+    { cwd: REPO_ROOT, stdio: 'ignore', detached: true },
   )
   const baseUrl = `http://127.0.0.1:${opts.port}`
-  const shutdown = () => { try { preview.kill('SIGTERM') } catch { /* noop */ } }
+  const shutdown = () => { try { process.kill(-preview.pid, 'SIGTERM') } catch { /* noop */ } }
   process.on('exit', shutdown)
   process.on('SIGINT', () => { shutdown(); process.exit(1) })
 
@@ -127,7 +129,9 @@ async function main() {
     await page.goto(url, { waitUntil: 'load' })
 
     // 4. __demo.ready → fitCamera
-    await page.waitForFunction(() => !!window.__demo, null, { timeout: 20000 })
+    // polling は interval 指定 (既定の rAF はヘッドレスの非表示スロットリングで
+    // 発火せず、__demo が存在しても timeout し得る)
+    await page.waitForFunction(() => !!window.__demo, null, { timeout: 30000, polling: 250 })
     await page.evaluate(() => window.__demo.ready)
     await page.evaluate(() => window.__demo.fitCamera())
 
