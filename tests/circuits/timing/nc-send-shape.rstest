@@ -1,0 +1,43 @@
+# 素子別の NC 送信形状を verbose bu() 行で固定する (02 §4.2 素子別例外 [確定])。
+# ワイヤを一切置かず (lever - repeater - lamp) dust 多段カスケードを排除し、bu() 行が
+# 素子固有の送信形状そのものになるようにした。
+#
+# 仕様クロスチェック (02 §4.2 [確定: 1.21.1/26.2 デコンパイル]):
+#   - lever: updateNeighbours = 自身の隣接6 + 取り付けブロックの隣接6。
+#     → bu(o) (自身) の直後に bu(-y) (床=取り付けブロック) が並ぶ。
+#   - repeater: flag2 + updateNeighborsInFront = 出力先1マスに NC → 出力先の隣接5マス
+#     (自身方向 west を除く UPDATE_ORDER 順)。
+#     → bu(+x) (front 単発) の直後に bu(+x\west) (front の隣接、skip=west)。
+#   sim=仕様が一致 (PASS)。トークンは発行元からの相対座標 (08 §5 の割当)。
+#   ※ 部分一致 (verbose=true)。検証対象は送信形状 (bu の並び) であって gt 絶対値ではない。
+meta {
+  name: NC 送信形状 (lever/repeater, bu 行)
+  ref: 02 §4.2 素子別例外 / 08 §2 / NeighborUpdater.UPDATE_ORDER
+}
+
+circuit {
+  (0,0,0)..(2,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) repeater[delay=1,facing=west,locked=false,powered=false]   # back=lever, front=lamp
+  (2,1,0) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 8
+
+# verbose 部分一致: process 行と bu() 行の並びを固定。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.2) p-1
+  Le{n.0}; {bu(o), bu(-y)}
+  4gt[ST]: Re{n.2}
+  Re{n.2}; {bu(+x), bu(+x\west)}
+}
+
+state {
+  t4 (1,1,0) repeater[delay=1,facing=west,locked=false,powered=true]
+  t4 (2,1,0) redstone_lamp[lit=true]
+}
