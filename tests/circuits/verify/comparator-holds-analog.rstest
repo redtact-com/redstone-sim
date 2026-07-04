@@ -1,0 +1,39 @@
+# コンパレーターはアナログ値を保持する (02 §5.1 [要検証]→確定)。リピーターと対の回路。
+# 典拠 (26.2 デコンパイル): ComparatorBlock.getOutputSignal は ComparatorBlockEntity に
+# 保存した calculateOutputSignal (compare モード = 背面値) を返す。refreshOutputState が
+# setOutputSignal(outputValue) でアナログ値を保持する。
+# → 背面入力 10 は前面へ 10 のまま出る (リピーターのように 15 へリセットしない)。
+#
+# 導出 (spec 先行): repeater-resets-to-15 と同一配置でリピーターをコンパレーター(compare)に
+#   置換。背面入力 = 10 → compare 出力 = 10 → 直後ダスト 10、次で 9。
+# 実行して照合 → 一致 (sim=spec)。出力 10 == 入力 10 が「アナログ保持」の証拠。
+meta {
+  name: コンパレーターはアナログ値を保持 (compare)
+  ref: 02 §5.1 / 26.2 ComparatorBlock.getOutputSignal(ComparatorBlockEntity 保持)
+}
+
+circuit {
+  (0,0,0)..(9,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0)..(6,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (7,1,0) comparator[facing=west,mode=compare,powered=false]
+  (8,1,0)..(9,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+# 部分一致。コンパレーターも STC 素子: 予約(c.2) → 2gt後 実行(c). priority 0 (出力先が非ダイオード)。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Co(c.2) p0
+  4gt[ST]: Co{c.2}
+}
+
+state {
+  t8 (6,1,0) redstone_wire[east=side,north=none,power=10,south=none,west=side]   # 背面入力 = 10
+  t8 (7,1,0) comparator[facing=west,mode=compare,powered=true]
+  t8 (8,1,0) redstone_wire[east=side,north=none,power=10,south=none,west=side]   # 出力 = 10 (保持, == 入力)
+  t8 (9,1,0) redstone_wire[east=side,north=none,power=9,south=none,west=side]
+}
