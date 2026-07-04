@@ -1,0 +1,28 @@
+# リピーターのロック = 背面ロックで入力無視 (02 §6 repeater lock [確定])。
+# 仕様: 側面のダイオード (リピーター/コンパレーター) の direct signal > 0 でロックされ、
+#       ロック中は入力再評価をせず状態を固定する。
+# 構成: 主リピーター R1(2,1,0) は側面リピーター R2(2,1,1) にロックされている。R1 の背面入力を
+#       t2 で ON にしても、R2 が生きている間 R1 は powered=false のまま (入力無視)。
+#       t12 で R2 の駆動レバーを OFF → R2 が消灯 (t14) → R1 のロック解除 → R1 が t16 で ON。
+meta {
+  name: リピーター背面ロックで入力無視
+  ref: 02 §6 repeater lock / §2.2 (側面ダイオード → priority -3) / fixture repeater-lock
+}
+
+fixture repeater-lock
+
+state {
+  t8  (2,1,0) repeater[delay=1,facing=west,locked=true,powered=false]   # 入力 ON (t2) 済でもロック中は無視
+  t8  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]  # 出力も 0 のまま
+  t14 (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]  # R2 消灯でロック解除
+  t16 (2,1,0) repeater[delay=1,facing=west,locked=false,powered=true]   # 解除後にようやく ON
+  t16 (3,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+}
+
+# ロック用リピーター R2 の消灯予約は、出力先 (R1) が別ダイオードの側面 → priority -3。
+trace {
+  12gt[ST]: Re(f.2) p-3   # R2: 出力先がダイオード側面 → EXTREMELY_HIGH (-3)
+  14gt[ST]: Re{f.2}
+  14gt[ST]: Re(n.2) p-1   # ロック解除後、R1 が ON を予約
+  16gt[ST]: Re{n.2}
+}

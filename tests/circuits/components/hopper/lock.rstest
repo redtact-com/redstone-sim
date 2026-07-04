@@ -1,0 +1,16 @@
+# ホッパーの受電ロック (02 §6 hopper [確定: 26.2 HopperBlockEntity])。
+# 仕様: HopperBlock.neighborChanged で enabled = !hasNeighborSignal(pos)。受電中は enabled=false
+#       (能動転送停止)。NC で再評価される blockstate プロパティ。
+# t2 レバー ON → enabled=false (ロック)。t10 レバー OFF → enabled=true (解除)。
+meta {
+  name: ホッパー 受電ロック (enabled トグル)
+  ref: 02 §6 hopper (enabled = !hasNeighborSignal, NC ロック) / fixture hopper-lock
+}
+
+fixture hopper-lock
+
+state {
+  t0  (1,1,0) hopper[enabled=true,facing=down]     # 初期は無電源 = enabled
+  t2  (1,1,0) hopper[enabled=false,facing=down]    # 受電で即ロック (NC)
+  t10 (1,1,0) hopper[enabled=true,facing=down]      # 給電断で解除
+}

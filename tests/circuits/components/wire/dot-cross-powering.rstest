@@ -1,0 +1,24 @@
+# ダストの形状×方向 給電規則 (02 §5.4 / 11 §2 マトリクス [確定: 26.2])。
+# 仕様: cross ダストは水平 4 方向 + 直下に給電、真上には給電しない。
+#       ダストは足元 (直下) のブロックのみ弱充電し、真上のブロックには給電しない。
+# redstone_block 直下供給の cross ダスト (0,1,0) と、ランプ上に載せたダスト (4,1,0) の
+# 足元給電で、水平○/直下○/真上− を state で pin する (静的 = 初期状態で確定)。
+meta {
+  name: ダスト cross の水平給電と足元給電 (真上は非給電)
+  ref: 02 §5.4 / 11 §2 (形状×方向マトリクス) / fixture dust-cross-powering
+}
+
+fixture dust-cross-powering
+
+# 静的回路 (入力なし)。初期 settle 後の t0 断面で給電方向を確認する。
+state {
+  # cross ダスト (0,1,0) = power15。水平 4 方向のランプは点灯。
+  t0 (1,1,0)  redstone_lamp[lit=true]     # east
+  t0 (-1,1,0) redstone_lamp[lit=true]     # west
+  t0 (0,1,-1) redstone_lamp[lit=true]     # north
+  t0 (0,1,1)  redstone_lamp[lit=true]     # south
+  t0 (0,2,0)  redstone_lamp[lit=false]    # 真上 = 非給電 (消灯)
+  # ランプ上のダスト (4,1,0) の足元給電: 直下ランプ点灯・真上ランプ消灯。
+  t0 (4,0,0)  redstone_lamp[lit=true]     # 足元 (直下) = 弱充電で点灯
+  t0 (4,2,0)  redstone_lamp[lit=false]    # 真上 = 非給電 (消灯)
+}

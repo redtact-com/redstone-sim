@@ -54,7 +54,7 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
 - **PLC** (Phaseless): 遅延なし即時伝播 — RS ダスト
 - **STC** (Scheduled Tick): tile tick で駆動 — リピーター/コンパレーター/トーチ/オブザーバー
 - **BEC** (Block Event): ブロックイベントで駆動 — ピストン
-- 出典: ArcFrout chap2 草稿 (git 履歴復元) [要検証: 分類自体は実装対応が確認できるが素子割当の網羅は未執筆]
+- 出典: ArcFrout chap2 草稿 (git 履歴復元)。sim 実装素子の割当は [確定: 26.2 — dust=RedStoneWireBlock.neighborChanged→updatePowerStrength を即時実行 (scheduleTick 経由せず) = PLC / リピーター・コンパレーター・トーチ・オブザーバー=neighborChanged (or updateShape)→scheduleTick 駆動 = STC / ピストン=checkIfExtend→level.blockEvent 駆動 = BEC]。ArcFrout 草稿側の全素子網羅は未執筆だが、概念フレーム自体は上記デコンパイルで実装対応を確認。
 
 ### 1.4 プレイヤー入力の適用位相 [確定] (1.21.1 デコンパイル、批評#9 解消)
 
@@ -115,7 +115,7 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
 - 非 ticking チャンクのイベントは退避して次 tick へ再スケジュール [確定]。
 - 実行時検証: getBlockState(pos).isOf(event.block) が不一致なら no-op [確定]。
 - **BED (block event delay)**: フェーズ開始時 (または前レイヤー処理後) のキュー内容を 1 層とする BFS 的レイヤー概念。現行実装は単一 FIFO だが観測順序は層状と等価 (1.12 以前は文字通り 2 リストスワップ) [確定]。
-- 使用ブロック: ピストン (伸縮)、音符ブロック、チェスト/シュルカーボックス (蓋)、鐘、エンドゲートウェイ、スポナー [要検証: techmcdocs 単一源]。
+- 使用ブロック: ピストン (伸縮)、音符ブロック、チェスト/シュルカーボックス (蓋)、鐘、エンドゲートウェイ、スポナー [確定: 26.2 — `level.blockEvent` を呼ぶクラス悉皆 grep: PistonBaseBlock / NoteBlock / ChestBlockEntity / ShulkerBoxBlockEntity / BellBlockEntity / TheEndGatewayBlockEntity / SpawnerBlockEntity。26.2 では EnderChestBlockEntity・DecoratedPotBlockEntity・PotentSulfurBlock も追加で使用 (元リストの拡張)。sim 実装分はピストンのみ (10 §)]。
 - 出典: 1.21.1/1.18 デコンパイル (ServerLevel.runBlockEvents)、SubTick BlockEventWorldMixin、https://techmcdocs.github.io/pages/GameTick/
 
 ---
@@ -182,8 +182,9 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
 - ダスト更新は**決定的だが locational (座標依存)**。上記の通りコード根拠まで確定。carpet fastRedstoneDust / TIS-Addition
   redstoneDustRandomUpdateOrder の存在とも整合。
 
-### 4.3 動力源化と活性化の分離 (BUD の原理) [要検証: ArcFrout 草稿単一源だが実装上重要]
+### 4.3 動力源化と活性化の分離 (BUD の原理) [確定: 26.2 デコンパイル]
 - 「動力源化 (powered)」に隣接更新は不要、「活性化 (状態変化)」は隣接更新を受けて初めて再評価される。→ powered なのに activated でない BUD 状態が生じる。
+- **典拠 [確定: 26.2]**: (a) 出力/被動力の**読み**は保持 state を即読みし更新を要さない — DiodeBlock.ownSignal=`POWERED?getOutputSignal:0` / RedStoneWireBlock.ownSignal=`POWER` / RedstoneTorchBlock.ownSignal=`LIT?15:0` / ObserverBlock.ownSignal=`POWERED?15:0` で、各 getSignal はこれを即返す。(b) **状態遷移 (activation)** は `tick()` でのみ起き、その tile tick 予約は近傍更新契機のみ — DiodeBlock.checkTickOnNeighbor / RedstoneTorchBlock.neighborChanged (LIT==入力 の不整合時)→scheduleTick、ObserverBlock は updateShape(PP)→startSignal。(c) PistonBaseBlock.getNeighborSignal は quasi 位置 (`pos.above()`) の下面以外の hasSignal を **live** で読み、checkIfExtend は neighborChanged 契機で呼ばれる → 「1 個上が受電 (powered) しても NC が来るまで伸長 (activated) しない」= BUD の実体。sim 観測: tests/circuits/verify/qc-bud-activation (facing 直背面でなく quasi 位置の通電で伸長)。
 - **設計指針: powered フラグ更新と neighbor update 受信時の状態再評価を別レイヤに分ける。**
 
 ---
@@ -193,13 +194,13 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
 ### 5.1 信号強度 [確定]
 - 0〜15 の 16 段階。動力部品は基本 15 を供給、ダストは 1 ブロックごとに 1 減衰 (最大 15 マス)。
 - 複数信号源の合流は **max 合成** [確定: HLPtool 実装 + techmcdocs]。
-- アナログ値を保持するのはダストとコンパレーターのみ。リピーターは 15 にリセット [要検証: ArcFrout 草稿]。
+- アナログ値を保持するのはダストとコンパレーターのみ。リピーターは 15 にリセット [確定: 26.2 — DiodeBlock.getOutputSignal は定数 15、RepeaterBlock は非 override (ownSignal=POWERED?getOutputSignal:0)。アナログ保持は RedStoneWireBlock.ownSignal=POWER と ComparatorBlock.getOutputSignal(ComparatorBlockEntity に保存した calculateOutputSignal) のみ。sim 観測: tests/circuits/verify/{repeater-resets-to-15,comparator-holds-analog} — 入力 10 でもリピーター出力 15/コンパレーター出力 10]。
 - 出典: https://ja.minecraft.wiki/w/レッドストーン回路、ArcFrout chap1
 
 ### 5.2 強/弱動力 (strong/hard・weak/soft powering) [確定]
 - リピーター/コンパレーター/トーチ (直上)/レバー等 (取り付け面) から直接給電された導体 = **強動力源化** → 起動素子にもダストにも伝える。
 - ダストから給電された導体 = **弱動力源化** → 起動素子には伝えるが**別のダストには伝えない**。
-- 動力源化した導体が他の導体をさらに動力源化することはない。信号強度は動力源化を経ても維持 [要検証: 強度維持は ArcFrout 単一源]。
+- 動力源化した導体が他の導体をさらに動力源化することはない。信号強度は動力源化を経ても維持 [確定: 26.2 — SignalGetter.getSignal = isRedstoneConductor ? max(state.getSignal, getDirectSignalTo(pos)) : state.getSignal。getDirectSignalTo は隣接 6 方向の getDirectSignal を **減衰なし** で max 集約するため、強充電された導体は源の強度をそのまま再放出する。−1 減衰はダスト間 (RedStoneWireBlock.calculateTargetStrength = 隣接ワイヤ最大 −1) のみで発生。sim 観測: tests/circuits/verify/strength-through-conductor — コンパレーター出力 12 が石を経て 12 のまま、その先のダストで初めて 11]。
 - 出典: https://ja.minecraft.wiki/w/レッドストーン回路 + ArcFrout chap1 の 2 源一致。
 
 ### 5.3 準接続 (QC) [確定 — デコンパイル悉皆確認済み]
@@ -254,6 +255,7 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
   [確定: getSignal は取り付けブロックからの問い合わせのみ 0 (他 5 方向 15)、getDirectSignal は直上ブロックからの問い合わせのみ 15]。
 - NC 受信時: 「LIT == 入力あり」という**不整合状態のときだけ** 2 gt 後の tick を予約 (willTickThisTick ガード付き) [確定]。
 - **burnout** [確定: 未解明 #4 解消]: 定数 `RECENT_TOGGLE_TIMER=60` / `MAX_RECENT_TOGGLES=8` / `RESTART_DELAY=160`。
+- **自励クロックは焼き切れ後 160gt でも復帰しない** [確定: 実機 200tick 一致 #74 finding1]。RESTART_DELAY=160 の復帰 tile tick は、消灯遷移で走る自 NC の 2gt 再予約に (pos,block) dedup され消えるため、2gt 自励トーチクロックは一度焼き切れると恒久停止する。vanilla RedstoneTorchBlock.tick でも同 dedup が対称に成立 (fixture torch-burnout-recovery で実機確認)。
   tick 時に 60 gt より古いトグル記録を破棄 → 消灯のたびに記録を追加し、**同一 pos の記録が 8 件に達すると焼き切れ**
   (煙エフェクト levelEvent 1502) → **160 gt 後の tick で再点灯を試みる** (その時点でも 8 件あれば再点灯しない)。
   記録はワールド単位の WeakHashMap (`RECENT_TOGGLES`)。

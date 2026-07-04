@@ -1,0 +1,18 @@
+# レッドストーンブロック = 常時弱 15 の定数動力源 (02 §6 redstone block / I11 #35 [確定])。
+# 仕様: getSignal=15 (全方向 weak)・getDirectSignal 非 override (=0 → 固体を強充電しない)・
+#       ダストは 4 面すべてで接続。状態も tile tick も持たない (静的)。
+# レッドストーンブロック→ダスト 3 マス→ランプ。初期状態で 15→14→13 と減衰し、ランプ点灯。
+meta {
+  name: レッドストーンブロック 定数弱 15
+  ref: 02 §6 redstone block (getSignal=15 全方向 weak, ダスト 4 面接続) / fixture redstone-block-static
+}
+
+fixture redstone-block-static
+
+# 静的 (入力なし)。初期 settle 済の t0 で定数 15 供給を確認。
+state {
+  t0 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]  # 隣接ダスト = 15
+  t0 (2,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]  # 1 減衰
+  t0 (3,1,0) redstone_wire[east=side,north=none,power=13,south=none,west=side]
+  t0 (4,1,0) redstone_lamp[lit=true]    # 到達したダストがランプを点灯
+}

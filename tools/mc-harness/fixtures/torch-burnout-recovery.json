@@ -1,0 +1,135 @@
+{
+  "name": "torch-burnout-recovery",
+  "description": "#74 finding1 検証: 自励トーチクロックの焼き切れ後、RESTART_DELAY=160gt で復帰するか。t34 で 8 消灯焼き切れ→t194 (=34+160) 前後の再点灯有無を実機採取。sim は復帰しない (world.ts dedup)。復帰すれば sim バグ確定。",
+  "mcVersion": "1.21.1",
+  "ticks": 200,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      1,
+      2,
+      2
+    ]
+  },
+  "player": {
+    "spawn": [
+      0.5,
+      1.0,
+      2.5
+    ],
+    "facing": [
+      180,
+      30
+    ],
+    "lookAt": [
+      0.5,
+      1.5,
+      1.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "lever[face=wall,facing=south,powered=true]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "action": "use"
+    }
+  ]
+}

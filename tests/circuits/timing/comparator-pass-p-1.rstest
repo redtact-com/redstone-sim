@@ -1,0 +1,54 @@
+# 02 §2.4 の例外: コンパレーターが別ダイオードに向く場合は priority -1 になり、
+# オブザーバー単体パルスが飲み込まれずに通る。comparator-swallow-p0 との対比で、
+# front を ランプ→リピーター に替えただけ (back=observer は同じ)。
+#   lever - observer(facing=west) - comparator(facing=west, front=repeater) - repeater - wire
+#
+# 仕様クロスチェック (02 §2.4 例外 [確定]):
+#   comparator の front が別ダイオード → shouldPrioritize 真 → priority -1。
+#   オブザーバー OFF は priority 0 のまま。同 gt では priority 昇順でコンパレーター(-1)が
+#   オブザーバー OFF(0) より **先に** 実行される → コンパレーター評価時にオブザーバー
+#   はまだ ON(15) → コンパレーターが発火してパルスが通る。sim=仕様が一致 (PASS)。
+#
+# strict の要点: swallow 版に無かった Co{c.2} (実行) が priority -1 で現れる = 通過。
+meta {
+  name: コンパレーター通過 (別ダイオード向き, priority -1)
+  ref: 02 §2.4 例外 / §6 observer,comparator / 08
+}
+
+circuit {
+  (0,0,0)..(4,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) observer[facing=west,powered=false]
+  (2,1,0) comparator[facing=west,mode=compare,powered=false]     # back=observer, front=repeater
+  (3,1,0) repeater[delay=1,facing=west,locked=false,powered=false]
+  (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 12
+
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob(f.2) p0
+  4gt[ST]: Co(c.2) p-1      # front=別ダイオード → priority -1
+  6gt[ST]: Co{c.2}          # -1 なのでオブザーバー OFF(0) より先に実行 → パルスを掴む (通過)
+  6gt[ST]: Re(n.2) p-1      # 下流リピーターへ伝播
+  6gt[ST]: Co(c.2) p-1      # オブザーバー OFF 後に出力 0 へ戻す再予約
+  8gt[ST]: Re{n.2}
+  8gt[ST]: Co(c.2) p-1
+  8gt[ST]: Co{c.2}
+  8gt[ST]: Re(f.2) p-2
+  10gt[ST]: Re{f.2}
+}
+
+state {
+  t4  (1,1,0) observer[facing=west,powered=true]
+  t6  (2,1,0) comparator[facing=west,mode=compare,powered=true]    # 通過: コンパレーター発火
+  t8  (3,1,0) repeater[delay=1,facing=west,locked=false,powered=true]
+  t8  (4,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t10 (2,1,0) comparator[facing=west,mode=compare,powered=false]   # 短パルス通過後は 0 へ
+}

@@ -1,0 +1,33 @@
+# レバーは保持 = トグルするまで状態が持続 (02 §6 lever [確定])。
+# 仕様: レバーは即時トグルで、ボタンのような自動 OFF (tile tick) を持たない。
+#       → ON にしたら次に操作するまで ON を保持する (石ボタンの 20gt 自動 OFF とは対照的)。
+# 新規回路: レバー→ダスト 2 マス→ランプ。t2 で ON、t26 で OFF。
+#       t24 (ON から 22gt 後) でも powered=true = 自動 OFF なし を pin (石ボタンなら t22 で OFF)。
+meta {
+  name: レバー保持 (自動 OFF なし)
+  ref: 02 §6 lever (保持・ボタンの自動 OFF と対照) / インライン
+}
+
+circuit {
+  (0,0,0)..(3,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (3,1,0) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2  use (0,1,0)     # ON
+  t26 use (0,1,0)     # OFF
+}
+
+ticks 34
+
+state {
+  t2  (0,1,0) lever[face=floor,facing=north,powered=true]    # 即時 ON
+  t2  (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t24 (0,1,0) lever[face=floor,facing=north,powered=true]    # 22gt 後も保持 (石ボタンは 20gt で OFF)
+  t24 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t26 (0,1,0) lever[face=floor,facing=north,powered=false]   # 操作でのみ OFF
+  t26 (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}

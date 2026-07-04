@@ -1,0 +1,26 @@
+# リピーター delay=2 の遅延と予約 priority (02 §6 repeater / §2.2 [確定])。
+# 仕様: 遅延 = DELAY*2 gt。delay=2 → 4gt。priority は ON 化 (その他) = -1、
+#       OFF 化 (信号が切れる) = -2 (VERY_HIGH)。
+# 入力 t2 → 4gt 後の t6 で ON、入力 OFF t10 → t14 で OFF。
+meta {
+  name: リピーター delay=2 (4gt 遅延・priority -1/-2)
+  ref: 02 §6 repeater (DELAY*2) / §2.2 (priority -1/-2) / fixture repeater-delay-2
+}
+
+fixture repeater-delay-2
+
+state {
+  t2  (2,1,0) repeater[delay=2,facing=west,locked=false,powered=false]  # 入力直後はまだ未反映 (4gt 予約)
+  t6  (2,1,0) repeater[delay=2,facing=west,locked=false,powered=true]   # 4gt 後に ON
+  t6  (3,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]  # 出力 = 15 (強度保持しない)
+  t6  (4,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+  t14 (2,1,0) repeater[delay=2,facing=west,locked=false,powered=false]  # OFF も 4gt 遅延
+}
+
+# delay=2 の予約遅延 4gt と priority (-1 ON / -2 OFF) を検証する。
+trace {
+  2gt[ST]: Re(n.4) p-1    # ON を 4gt 後に予約 (その他 = priority -1)
+  6gt[ST]: Re{n.4}
+  10gt[ST]: Re(f.4) p-2   # OFF を 4gt 後に予約 (信号が切れる = priority -2)
+  14gt[ST]: Re{f.4}
+}

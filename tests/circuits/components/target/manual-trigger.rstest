@@ -1,0 +1,39 @@
+# ターゲットブロックの手動トリガ折衷モデル (02 §6 target / I11 #35 [確定: 折衷])。
+# 仕様 (sim 折衷): activateBlock で中心命中を模し outputPower=15 を出し、矢の 20gt 持続後に
+#       tile tick (priority 0) で POWER=0 に戻す。全方向 weak (getSignal=POWER)。
+# 新規回路: ランプ(0,1,0) | target(1,1,0) | ダスト(2,1,0)。use でトリガ。
+#       t2 → power=15・隣接ランプ点灯・隣接ダスト 15。t22 (20gt 後) → power=0。
+#       ランプは 4gt 消灯遅延で t26 に消灯。
+meta {
+  name: ターゲット 手動トリガ 15 + 20gt 持続
+  ref: 02 §6 target (outputPower=15, 矢 20gt, priority 0) / インライン
+}
+
+circuit {
+  (0,0,0)..(2,0,0) stone
+  (0,1,0) redstone_lamp[lit=false]
+  (1,1,0) target[power=0]
+  (2,1,0) redstone_wire[east=none,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2 use (1,1,0)     # ターゲット命中を模す
+}
+
+ticks 30
+
+state {
+  t2  (1,1,0) target[power=15]          # トリガで即 15
+  t2  (0,1,0) redstone_lamp[lit=true]   # 全方向 weak → 隣接ランプ点灯
+  t2  (2,1,0) redstone_wire[east=none,north=none,power=15,south=none,west=side]  # 隣接ダスト = 15
+  t20 (1,1,0) target[power=15]          # 20gt 持続の内側はまだ 15
+  t22 (1,1,0) target[power=0]           # 20gt 後に消灯
+  t22 (2,1,0) redstone_wire[east=none,north=none,power=0,south=none,west=side]
+  t26 (0,1,0) redstone_lamp[lit=false]  # ランプは 4gt 遅延で消灯 (22+4)
+}
+
+# 持続 = 矢の 20gt (priority 0) の tile tick で消灯予約されることを検証する。
+trace {
+  2gt[ST]: Tg(f.20) p0
+  22gt[ST]: Tg{f.20}
+}

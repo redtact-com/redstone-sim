@@ -1,0 +1,23 @@
+# ターゲットは導体としても振る舞う (02 §6 target 導体伝導 [確定: #35 実機 target-conduct])。
+# 仕様: target は isRedstoneConductor=true。ダストが指す target は solid と同じ規則で充電され、
+#       隣接ランプ・直上トーチ・背面コンパレーターに伝導する。一方、他のダストには伝わらない。
+# 系統 A: ダスト→target(1,1,1)。隣接ランプ(1,1,0) 点灯 / 直上トーチ(1,2,1) 消灯 /
+#         背面コンパレーター(2,1,1) 点灯。target 自身の power は 0 (源ではなく導体)。
+# 系統 B: ダスト(3,1,4)→target(4,1,4)→ダスト(5,1,4)。target 越しに次のダストへは伝わらない。
+meta {
+  name: ターゲット 導体伝導 (ランプ/トーチ/コンパレーターへ・ダストへは非伝導)
+  ref: 02 §6 target (isRedstoneConductor=true, 導体伝導) / fixture target-conduct
+}
+
+fixture target-conduct
+
+state {
+  # 系統 A (入力 t2): target は充電を機構へ伝導する
+  t2 (1,1,0) redstone_lamp[lit=true]     # 隣接ランプは即点灯 (target 経由の充電)
+  t4 (1,2,1) redstone_torch[lit=false]   # 直上トーチは 2gt 後に消灯 (target が強充電)
+  t4 (2,1,1) comparator[facing=west,mode=compare,powered=true]  # 背面コンパレーターは target を読む
+  t2 (1,1,1) target[power=0]             # target 自身は源でない (power=0・導体として伝えるだけ)
+  # 系統 B (入力 t8): target 越しに次のダストへは伝わらない
+  t10 (3,1,4) redstone_wire[east=side,north=none,power=15,south=none,west=side]  # 手前ダストは 15
+  t10 (5,1,4) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # target 越しの奥ダストは 0
+}

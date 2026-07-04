@@ -1,0 +1,159 @@
+{
+  "name": "repeater-clock",
+  "description": "リピータークロック: トーチ NOT + repeater(delay=3) の帰還ループ。周期 = 2×(torch 2gt + repeater 6gt) = 16gt。repeater で周期を延ばし burnout を回避。lever(B 上)で初期 gate、t2 解除で発振。02 §6 torch(2gt)/repeater(delay*2)。 [fake-player 照準 rework 要: 実機で fake player のレバークリックが外れ未生成 (#74)。.rstest (machines/) が sim 単体で挙動を担保]",
+  "mcVersion": "1.21.1",
+  "ticks": 38,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      1,
+      2,
+      3
+    ]
+  },
+  "player": {
+    "spawn": [
+      0.5,
+      1,
+      3.5
+    ],
+    "facing": [
+      180,
+      30
+    ],
+    "lookAt": [
+      0.5,
+      1.5,
+      1.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "repeater[delay=3,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}
