@@ -1,0 +1,61 @@
+# 観測でピストンを起動する連鎖: オブザーバーがダストの変化を検知し、その出力 (背面 strong 15)
+# がピストンの背面を給電して伸長させる。オブザーバーは 2gt パルスのため、ピストンは 1 回だけ
+# 伸縮するが、押した石は通常ピストンでは引き戻らないため恒久的に 1 マス変位する = 単発観測が
+# 残す不可逆な結果を state で観測する。
+#
+# 仕様クロスチェック (02 §6 observer / §6 piston / §4.1 PP [確定]):
+#   §6 observer: PP (updateShape) を観測面 (facing=west) から受けて 2gt tile tick を予約 →
+#     ON→2gt後OFF の 2gt パルス。出力は背面 (OPPOSITE[facing]=east) 1 マスに strong 15。
+#   §6 piston: オブザーバー ON の NC は ST 相由来 → start delay 0 で同 tick に BE 発火 → 伸長。
+#     通常ピストンは押した石を retract で引かない → 石は変位したまま。
+#   導出: t2 lever→dust 通電 (PP) → t4 OB on → piston 伸長・石を (4,1,0)→(5,1,0) へ押す →
+#     t6 OB off (2gt パルス) → piston 収縮するが石は (5,1,0) に残る → t8 収縮完了。
+#   sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ 観測面 facing はオブザーバーでは反転しない (piston と同じ非反転規則。§6 observer)。
+#   ※ 伸長途中 (t4-t5) の moving_piston head 確定は §6 の既知抽象化領域のため断言しない。
+#      恒久変位 (石が (5,1,0) に残る) と伸縮の起点/終点を断言する。
+meta {
+  name: 観測でピストン起動 (オブザーバー 2gt パルス → 石を恒久変位)
+  ref: 02 §6 observer (PP 起動・2gt パルス・背面 strong) / §6 piston (start delay 0) / §4.1 PP
+}
+
+circuit {
+  (0,0,0)..(6,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # OB の観測対象
+  (2,1,0) observer[facing=west,powered=false]     # 観測面=西(dust)、出力=東(piston 背面)
+  (3,1,0) piston[extended=false,facing=east]       # OB 出力が背面を給電 → 伸長
+  (4,1,0) stone                                    # 押される石
+}
+
+inputs {
+  t2 use (0,1,0)      # dust 通電 → OB が PP を検知
+}
+
+ticks 14
+
+# 部分一致 (verbose)。OB の PP 起動 (2gt パルス) と、その ON の NC が同 tick で piston BE を
+# 起こす (start delay 0 = ST 相由来) ことを pin する。
+trace {
+  2gt[ST]: Ob(n.2) p0     # dust 通電 (PP) → OB が 2gt tile tick を予約
+  4gt[ST]: Ob(f.2) p0     # OB on → 2gt 後の OFF を予約 (パルス幅 2gt)
+  4gt[BE]: Pi(p.s)        # OB on の NC (ST 相由来) が同 tick で piston 伸長 BE を予約 (start delay 0)
+  4gt[BE]: Pi{p.0}        # 伸長実行 → 石を押す
+}
+
+state {
+  t0 (2,1,0) observer[facing=west,powered=false]         # 初期
+  t0 (4,1,0) stone
+  t0 (5,1,0) air
+  # t4: OB パルス立ち上がり → piston 伸長開始
+  t4 (2,1,0) observer[facing=west,powered=true]          # OB 検知 (パルス ON)
+  t4 (3,1,0) piston[extended=true,facing=east]           # 伸長 (OB 出力で起動)
+  # t6: OB パルス立ち下がり (2gt 幅) → 石は押し切られ (5,1,0) に着地
+  t6 (2,1,0) observer[facing=west,powered=false]         # パルス OFF (幅 2gt)
+  t6 (5,1,0) stone                                       # 押された石が変位
+  # t8: piston 収縮完了。石は残る = 単発観測の不可逆な結果
+  t8 (3,1,0) piston[extended=false,facing=east]          # 収縮完了
+  t8 (4,1,0) air                                         # 元位置は空
+  t8 (5,1,0) stone
+  t14 (5,1,0) stone                                      # 恒久変位 (retract で引き戻らない)
+}

@@ -1,0 +1,80 @@
+# BUD 分離回路 (#75): 「powered だが activated でない」を時間差で観測する。
+# qc-bud fixture は quasi 給電の多段 NC が同 tick でピストンに届きギャップが畳まれる。
+# ここでは QC 位置の受電を「ピストンへ NC を送らない経路」で先に確立し、後で無関係な
+# 隣接 NC で初めて活性化させることで、BUD の本質を state 系列に開く。
+#
+# 仕様クロスチェック (02 §4.3 BUD / §5.3 QC / §6 piston / §6 torch / §6 repeater [確定]):
+#   §4.3 [確定: 26.2]: PistonBaseBlock.getNeighborSignal は pos.above() (quasi 位置) の
+#     被電を live で読むが (= 動力源化)、checkIfExtend (状態遷移) は neighborChanged / BE
+#     実行時にしか走らない → 「powered なのに activated でない」BUD 状態が生じる。
+#   よって spec からの導出: (A) quasi を給電しても piston に NC が来なければ伸長しない、
+#     (B) 後から piston へ NC が届いた時に QC を live 読みして初めて伸長する。
+#
+# 回路 (piston P=(2,1,0) facing=east、quasi=(2,2,0)):
+#   QC 枝: 石 S=(2,2,1) を repeater R=(2,2,2) が北出力で強充電 → quasi を south から給電。
+#     R の NC (updateNeighborsInFront) は front=S とその隣接のみで piston を含まない
+#     → QC は確立するが piston に NC を送らない。
+#   トリガ枝: wall_torch T=(2,1,-2) は piston 非隣接 (給電しない) だが、LIT 変化の 2 段 NC が
+#     中継 (2,1,-1) 経由で piston へ届く = 給電中立な NC 源。lever LT で ON/OFF する。
+#   ※ sim は wall_torch/repeater の facing を反転取り込み (mcstate)。torch facing=south →
+#     sim 土台=北(=Bp)、repeater facing=south → sim 出力=北(=S)・入力=南(=LR)。
+#
+# 手順と spec 期待:
+#   t2  LT on  → t4 T 消灯 (torch 2gt)。NC は piston に届くが QC 未確立 → 伸長せず [対照:NC単独]
+#   t8  LR on  → t10 R on → S 強充電 → quasi 受電 = QC 確立。R の NC は piston 非到達 →
+#                 t10..t15 piston は powered だが未活性 [BUD: 受電のみで不活性]
+#   t14 LT off → t16 T 点灯 → 2 段 NC が piston へ → QC を live 読み → 伸長 [活性化]。
+#                 ST 相由来の NC のため start delay 0 → 同 tick BE → 2gt 後に head 確定。
+meta {
+  name: BUD 分離 — QC 受電を先行確立し後続 NC で活性化 (#75)
+  ref: 02 §4.3 BUD / §5.3 QC / §6 piston (getNeighborSignal=pos.above() live) / §6 torch(2gt) / §6 repeater / #75
+}
+
+circuit {
+  (1,0,-3)..(4,0,3) stone                                             # 床
+  (2,1,0) piston[extended=false,facing=east]                          # P: 被試験ピストン
+  # QC 枝: R → S → quasi、piston へ NC を送らない
+  (2,2,1) stone                                                       # S: 強充電され quasi を給電
+  (2,2,2) repeater[delay=1,facing=south,locked=false,powered=false]   # R: 北出力(→S)・南入力(←LR)
+  (2,2,3) lever[face=floor,facing=north,powered=false]                # LR: R の背面を駆動
+  # トリガ枝: 給電中立な 2 段 NC 源 (wall torch NOT ゲート)
+  (2,1,-3) stone                                                      # Bp: トーチ土台
+  (2,1,-2) redstone_wall_torch[facing=south,lit=true]                 # T: 土台=Bp(北)。piston 非隣接
+  (2,2,-3) lever[face=floor,facing=north,powered=false]               # LT: Bp を強充電し T を反転
+}
+
+inputs {
+  t2  use (2,2,-3)    # LT on  → T 消灯 → NC 到達 (QC 未確立 → 伸長せず: 対照)
+  t8  use (2,2,3)     # LR on  → R on → QC 確立 (piston へ NC 無し → BUD)
+  t14 use (2,2,-3)    # LT off → T 点灯 → NC 到達 (QC 確立済 → 伸長)
+}
+
+ticks 24
+
+# 部分一致。BUD 分離の核: (1) R の NC 送信形状に piston が含まれない (QC 確立が piston を
+# NC しない)、(2) torch 点灯の NC (ST 相由来) が同 tick で piston BE を起こす (start delay 0)。
+# gt オフセット無し (初期 settle で tile tick が動かないため input gt = 反応 gt)。
+trace {
+  8gt[ST]: Re(n.2) p-1                # LR on → R on を予約 (delay=1 → 2gt)
+  10gt[ST]: Re{n.2}                   # R on → S 強充電 → quasi 受電 = QC 確立
+  Re{n.2}; {bu(-z), bu(-z\south)}     # R の NC = front(S=北) + S 隣接\south。piston 非含 = QC は piston を NC しない
+  16gt[ST]: To{n.2}                   # LT off → T 点灯 (torch 2gt)
+  16gt[BE]: Pi(p.s)                   # T の NC (ST 相由来) が同 tick で piston BE を予約 (start delay 0)
+  16gt[BE]: Pi{p.0}                   # 伸長実行 = QC を live 読みして初めて活性化 (BUD)
+  16gt[ST]: Ph(c.2) p0                # head 確定を +2gt 予約 (extension 2gt)
+}
+
+state {
+  t0  (2,1,0) piston[extended=false,facing=east]        # 初期: 無給電・無活性
+  # 対照 (NC 単独では活性化しない): t4 で T 消灯の NC が piston に届くが QC 未確立 → 伸長せず
+  t4  (2,1,-2) redstone_wall_torch[facing=south,lit=false]   # NC 事象 (T 消灯) が起きたこと
+  t4  (2,1,0) piston[extended=false,facing=east]        # NC は来たが QC 無し → 未活性
+  # BUD 窓 (受電のみで未活性): R は t10 で on = QC 確立、だが piston へ NC 無し
+  t10 (2,2,2) repeater[delay=1,facing=south,locked=false,powered=true]   # QC 源が活性 (R on = S 給電)
+  t12 (2,1,0) piston[extended=false,facing=east]        # QC 確立済でも NC 未着 → powered だが未活性 (BUD)
+  t15 (2,1,0) piston[extended=false,facing=east]        # トリガ直前まで未活性を維持
+  # 活性化 (後続 NC が QC を live 読み): t16 で T 点灯の NC → 伸長
+  t16 (2,1,-2) redstone_wall_torch[facing=south,lit=true]    # トリガ NC 事象 (T 点灯)
+  t16 (2,1,0) piston[extended=true,facing=east]         # QC を live 読みして活性化 (start delay 0)
+  t18 (3,1,0) piston_head[facing=east,short=false,type=normal]   # extension 2gt 後に head 確定
+}
