@@ -1,0 +1,35 @@
+# 下りステップの −1 減衰伝播 (02 §5.4 / 11 §1.2 [確定: 26.2])。
+# 仕様: 水平隣接のセル (下段ダストの直上) が非導体なら、その 1 段下のダストへ接続する。
+#   下りステップの表示は 'side' (上りは 'up')。伝播は上りと同じく段ごとに −1 減衰。
+# 導出 (spec 先行): 上段 base(1,2,0)=15 → 下りステップで (2,1,0)=14 →
+#   さらに下って (3,0,0)=13。低い相手を向く辺は 'side'、相方 (下段) から見た高い相手を
+#   向く辺は上りステップ扱いで 'up' になる (同一ペアを上下から見た非対称表示)。
+# 実行して照合 → 一致 (sim=spec)。
+meta {
+  name: 下りステップの −1 減衰伝播 (2 段降り, 表示 side)
+  ref: 02 §5.4 (斜め下読み: 水平隣接が非導体 → 斜め下のワイヤ) / 11 §1.2 / §5.1
+}
+
+circuit {
+  (0,1,0) stone
+  (0,2,0) lever[face=floor,facing=north,powered=false]
+  (1,2,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]    # 上段 base
+  (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]      # 1 段下
+  (3,0,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]      # 2 段下
+}
+
+inputs {
+  t2 use (0,2,0)
+}
+
+ticks 6
+
+state {
+  t0 (1,2,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  t0 (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]
+  t0 (3,0,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]
+  # レバー ON → 下り段ごとに −1。base=15 → 14 → 13。
+  t2 (1,2,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]   # 源直結
+  t2 (2,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=up]     # 下りステップ −1
+  t2 (3,0,0) redstone_wire[east=side,north=none,power=13,south=none,west=up]     # さらに下り −1
+}

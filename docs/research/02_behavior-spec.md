@@ -168,6 +168,7 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
   - wiki の「隣接 6 マス (下→上→北→南→西→東) を基準に…」という記述は集合**構築**順 (Direction.values() 順) であり、
     **送信順は HashSet 順で座標依存** — wiki 記述はここが不正確 (訂正)。
   - 接続形状変化時は `updateNeighborsOfNeighboringWires`/`checkCornerChangeAt` により水平隣接と斜め上下のワイヤにも同型の多段送信を行う。
+  - **2 素子の within-tick BE 順との機構差 [確定: #77 検証]**: 「2 ピストンのどちらが先に BE を投入するか」(#46) は上記 dust HashSet 順ではなく、**更新元 (レバー等) の NC 送信順 (W,E,D,U,N,S) が collectAdjacentWires→changedWires→blockEvents FIFO へ伝播する固定順**由来で、純平行移動では不変 (西→東 固定)。dust HashSet 順 (MC-11193 本体) は分岐ダスト網の予約順に効き、こちらは +z 平行移動で反転しうる (別機構)。tests/circuits/locational/ 参照。
 
 補足事実:
 - 更新機構は 1.19+ で NeighborUpdater 化。26.2 の実装は `CollectingNeighborUpdater` / `InstantNeighborUpdater` の 2 種で、

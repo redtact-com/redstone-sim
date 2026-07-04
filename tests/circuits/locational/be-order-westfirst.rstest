@@ -1,0 +1,82 @@
+# within-tick の BlockEvent 順を、識別可能な 2 素子 (ピストン + 音符ブロック) で
+# 直接可視化する。#46 の 2 ピストン (実機=西→東) を「別アングル」= 予約行が同一
+# ("Pi(p.s)" ×2) では見えない順序を Pi/Nb の別トークンで露出させた版。
+# **西側素子の BE が先に予約される** (西→東)。両素子の位置を入れ替えると順序が反転。
+#
+# 仕様クロスチェック (02 §1 phase / §3 BE / §4.2 [確定: 1.21.1/26.2]):
+#   レバー ON → 両側ダストが power 変化。ダスト多段送信の連結探索 (collectAdjacentWires)
+#   は NC_UPDATE_ORDER = {W,E,...} で走査するため、西アームの changedWire が先に
+#   処理され、西素子が先に neighborChanged → 先に scheduleBlockEvent。
+#   BlockEvent キューは挿入順 FIFO (ObjectLinkedOpenHashSet, 02 §3 [確定]) なので
+#   BE 実行も西→東。→ **BE 順は西素子先**。#46 で sim を実機順 (西→東) に修正済み。
+#   (これは方向配列由来で、純平行移動では反転しない。反転は素子の**位置入替**で起きる
+#    = 順序は座標=西/東の別で決まる、という意味の locational。dust の HashSet 順とは
+#    別機構。)
+#
+# 観測: レバー中心、片アーム端にピストン (BE=extend → Pi(p.s) / Pi{p.0} + head の
+#   Ph(c.2))、他端に音符ブロック (BE=play → Nb(n.s) / Nb{n.0})。
+#   レイアウト A (ピストン西・音符東): Pi が先 → Pi(p.s), Nb(n.s)。
+#   レイアウト B (音符西・ピストン東): Nb が先 → Nb(n.s), Pi(p.s)  ← 入替で反転。
+#   sim=仕様(西→東) が一致 (PASS)。**検証対象は 2 BE の ORDER**であり gt 絶対値でない。
+#
+# locational は sim の実装順を固定するもので、対称 2 ピストンの実機 西→東 一致は
+# #46 fixture (two-piston-locational) が担保。ここは可視化アングルと入替反転を固定する。
+meta {
+  name: 2 素子 BlockEvent 順 西→東 (#46, 位置入替で反転)
+  ref: 02 §1 phase / §3 BE / §4.2 NC_UPDATE_ORDER / #46 / fixture two-piston-locational
+}
+
+circuit {
+  # レイアウト A: ピストン WEST, 音符ブロック EAST
+  (0,0,0)..(6,0,0) stone
+  (1,1,0) piston[extended=false,facing=west]
+  (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (3,1,0) lever[face=floor,facing=south,powered=false]
+  (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (5,1,0) note_block[note=0,powered=false]
+  # レイアウト B: 音符ブロック WEST, ピストン EAST (位置入替) +10x
+  (10,0,0)..(16,0,0) stone
+  (11,1,0) note_block[note=0,powered=false]
+  (12,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (13,1,0) lever[face=floor,facing=south,powered=false]
+  (14,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (15,1,0) piston[extended=false,facing=east]
+}
+
+inputs {
+  t2 use (3,1,0)
+  t10 use (13,1,0)
+}
+
+ticks 16
+
+# strict: 各レイアウトの同 gt 内 2 BE 行の ORDER が西→東 観測点。
+#   A: Pi(p.s) → Nb(n.s) / 実行 Pi{p.0}(+Ph) → Nb{n.0}
+#   B: Nb(n.s) → Pi(p.s) / 実行 Nb{n.0} → Pi{p.0}(+Ph)  ← 位置入替で反転
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  2gt[BE]: Nb(n.s)
+  3gt[BE]: Pi{p.0}
+  3gt[ST]: Ph(c.2) p0
+  3gt[BE]: Nb{n.0}
+  5gt[ST]: Ph{c.2}
+  10gt[PI]: Le{n.0}
+  10gt[BE]: Nb(n.s)
+  10gt[BE]: Pi(p.s)
+  11gt[BE]: Nb{n.0}
+  11gt[BE]: Pi{p.0}
+  11gt[ST]: Ph(c.2) p0
+  13gt[ST]: Ph{c.2}
+}
+
+state {
+  # レイアウト A: 西ピストン伸長 (t3) → 2gt 後にヘッド確定 (t5)。音符は NC で即 powered。
+  t2 (5,1,0) note_block[note=0,powered=true]
+  t3 (1,1,0) piston[extended=true,facing=west]
+  t5 (0,1,0) piston_head[facing=west,short=false,type=normal]
+  # レイアウト B: 東ピストン伸長 (t11) → ヘッド確定 (t13)。音符は t10 で powered。
+  t10 (11,1,0) note_block[note=0,powered=true]
+  t11 (15,1,0) piston[extended=true,facing=east]
+  t13 (16,1,0) piston_head[facing=east,short=false,type=normal]
+}

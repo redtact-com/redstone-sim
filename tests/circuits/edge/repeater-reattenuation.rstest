@@ -1,0 +1,48 @@
+# リピーターで再生した信号の「再減衰」境界 (02 §5.1 減衰 + §6 repeater リセット [確定])。
+# 第一弾 components/wire/attenuation-boundary は「レバー直結の 15 マス境界」を pin する。
+# 本ケースはその境界がリピーターの下流で**もう一度**適用されることを対で断言する:
+#   (a) リピーターは背面ワイヤの POWER を直読するが、出力は入力値に依らず常に 15
+#       (§6 repeater: DiodeBlock.getOutputSignal=定数 15。アナログ保持しない [確定])。
+#       → 弱まった入力 (power=6) を 15 へ「再生」する。
+#   (b) 再生後のダストは新たに 15 から 1/マス減衰し、15 マス目 (x=26) = 1・
+#       16 マス目 (x=27) = 0 で尽きる (§5.1 最大 15 マス [確定])。
+# 期待値は 02 の [確定] claim から先に導出 → sim 実行で照合 → 一致 (PASS)。
+meta {
+  name: リピーター下流の再減衰と 15 マス境界 (入力 6→出力 15→再減衰)
+  ref: 02 §5.1 (減衰 1/block・最大 15 マス) / §6 repeater (出力常時 15・背面 POWER 直読)
+}
+
+circuit {
+  (0,0,0)..(27,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0)..(10,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # 前置きダスト (減衰する)
+  (11,1,0) repeater[delay=1,facing=west,locked=false,powered=false]                    # facing=west: 背面=west, 出力=east
+  (12,1,0)..(27,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # 再生後の 16 マス
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 10
+
+# リピーターは STC: 予約 (n.2) → 2gt 後 実行 (n)。priority -1 (出力先がダイオードでない)。
+# ここでの trace 断言目的は「delay=1 の 2gt 遅延と priority=-1」の検証 (gt 絶対値でなく
+# 予約→実行の差分と priority を見る。gt は settle オフセット込みの実出力)。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.2) p-1
+  4gt[ST]: Re{n.2}
+}
+
+state {
+  # 前置きダストは減衰: 源直結 15 → リピーター背面で 6 (弱まった入力)。
+  t6 (1,1,0)  redstone_wire[east=side,north=none,power=15,south=none,west=side]   # レバー直結 = 15
+  t6 (10,1,0) redstone_wire[east=side,north=none,power=6,south=none,west=side]    # リピーター背面 = 6 (<15)
+  t6 (11,1,0) repeater[delay=1,facing=west,locked=false,powered=true]
+  # リセット: 入力 6 でも出力は 15 (アナログ保持しない)。
+  t6 (12,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]   # 再生 = 15 (入力 6 の丸写しでない)
+  # 再減衰の 15 マス境界 (対で断言):
+  t6 (26,1,0) redstone_wire[east=side,north=none,power=1,south=none,west=side]    # 再生後 15 マス目 = 1
+  t6 (27,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]    # 16 マス目 = 0 (尽きる)
+}

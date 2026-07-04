@@ -1,0 +1,61 @@
+# トーチ + リピーター直列の複合遅延。リピーター(delay=2)の出力が石を強充電し、その石を
+# 土台に読む wall torch (NOT) が反転する。入力エッジ → 出力までの遅延が両素子の直列和に
+# なることを、リピーター完了 tick とトーチ反転 tick を分けて観測する。
+#
+# 仕様クロスチェック (02 §6 repeater [delay*2] / §6 torch [TOGGLE_DELAY=2] / §2.2 priority):
+#   - リピーター delay=2 → 遅延 2*2 = 4gt。priority は出力先が非ダイオード(石) → 立ち上がり
+#     -1 (HIGH) / 立ち下がり -2 (VERY_HIGH, ON→OFF)。
+#   - トーチ: 土台給電で 2gt 後に消灯、無給電で 2gt 後に点灯。priority 0。
+#   → 直列合計 = 4gt(リピーター) + 2gt(トーチ) = 6gt。sim=仕様が一致 (PASS)。
+#   ※ sim は wall_torch/repeater の facing を反転取り込み: torch facing=east → sim 土台=西(石)、
+#     repeater facing=west → sim 出力=東(石を強充電)。gt オフセット無し。
+#   ※ 検証対象は 2 素子の遅延の直列合成 (4gt→2gt) と priority。gt 絶対値は実出力どおり。
+meta {
+  name: トーチ+リピーター直列の複合遅延 (4gt+2gt=6gt)
+  ref: 02 §6 repeater (delay*2) / §6 torch (TOGGLE_DELAY=2) / §2.2 priority (-1/-2/0)
+}
+
+circuit {
+  (0,0,0)..(6,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) repeater[delay=2,facing=west,locked=false,powered=false]   # sim 出力=東 → (3,1,0)を強充電
+  (3,1,0) stone                                                      # トーチ土台 (リピーターが強充電)
+  (4,1,0) redstone_wall_torch[facing=east,lit=true]                  # sim 土台=西=(3,1,0)。out 東
+  (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (6,1,0) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2  use (0,1,0)     # 立ち上がり
+  t14 use (0,1,0)     # 立ち下がり
+}
+
+ticks 26
+
+# 部分一致 (verbose)。リピーター(4gt)予約→完了、続いてトーチ(2gt)予約→完了 = 直列 6gt。
+# priority は立ち上がり Re -1 / 立ち下がり Re -2 / トーチ 0。
+trace {
+  2gt[ST]: Re(n.4) p-1     # 入力 ON → リピーター 4gt(delay=2) 予約、turn-on priority -1
+  6gt[ST]: Re{n.4}         # リピーター ON (入力から 4gt) → 石を強充電
+  6gt[ST]: To(f.2) p0      # 土台給電 → トーチ消灯を 2gt 後に予約 (priority 0)
+  8gt[ST]: To{f.2}         # トーチ消灯 (さらに 2gt) → 複合遅延 = t2→t8 = 6gt
+  14gt[ST]: Re(f.4) p-2    # 入力 OFF → turn-off priority -2 (VERY_HIGH)
+  18gt[ST]: Re{f.4}        # リピーター OFF (4gt)
+  18gt[ST]: To(n.2) p0     # 土台無給電 → トーチ点灯を 2gt 後に予約
+  20gt[ST]: To{n.2}        # トーチ点灯 (直列 6gt)
+}
+
+state {
+  t0  (4,1,0) redstone_wall_torch[facing=east,lit=true]    # 初期: リピーター OFF → トーチ点灯
+  # 立ち上がり: リピーターは t6 で完了するが、トーチはまだ反転しない = 遅延が直列である証拠
+  t6  (2,1,0) repeater[delay=2,facing=west,locked=false,powered=true]   # リピーター ON (4gt)
+  t7  (4,1,0) redstone_wall_torch[facing=east,lit=true]    # トーチは未反転 (トーチ遅延分 残り)
+  t8  (4,1,0) redstone_wall_torch[facing=east,lit=false]   # トーチ消灯 (6gt = 4+2)
+  t8  (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]  # 出力 0
+  # 立ち下がり: 同じ直列 6gt でトーチ点灯
+  t18 (2,1,0) repeater[delay=2,facing=west,locked=false,powered=false]  # リピーター OFF (4gt)
+  t19 (4,1,0) redstone_wall_torch[facing=east,lit=false]   # トーチ未反転
+  t20 (4,1,0) redstone_wall_torch[facing=east,lit=true]    # トーチ点灯 (6gt)
+  t20 (5,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+}

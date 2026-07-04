@@ -1,0 +1,79 @@
+# CU (comparatorUpdate) の送信順 N→E→S→W をコンテナ 1 個 × 周囲コンパレーター 4 台で固定する。
+#
+# 仕様クロスチェック (02 §4.2 [確定: 1.21.1/26.2 デコンパイル]):
+#   コンテナ内容が変わると updateNeighbourForOutputSignal が水平隣接 4 マスへ
+#   Direction.Plane.HORIZONTAL = {NORTH, EAST, SOUTH, WEST} 順で CU を送る。
+#   sim は emitComparatorUpdate が CU_UPDATE_ORDER = [north,east,south,west] で走査。
+#   → 4 コンパレーターの予約順 = N,E,S,W。
+#   これは方向配列由来の**固定順**であり、座標に依存しない (locational ではない)。
+#   ダストの HashSet 順 (branch-fanout-flip / dust-origin-hashset) との対比。
+#
+# 観測の作り方: コンパレーターの予約行は全て "Co(c.2) p-1" で同一のため、
+#   各コンパレーターの前方に **遅延の異なるリピーター** (N→delay1 / E→delay2 /
+#   S→delay3 / W→delay4) を置き、確定 (t8) 時に各コンパレーターが自分の下流を
+#   駆動させる。確定順 = t6 予約順 (同 priority → seq = FIFO) なので、t8 の
+#   Re(n.2)/Re(n.4)/Re(n.6)/Re(n.8) の並びが CU 順 N,E,S,W を可視化する。
+#   priority -1 は「出力先が別ダイオードの背面」= shouldPrioritize (02 §2.2 [確定])。
+#
+# 駆動: 西隣レバー立ち上がり → ドロッパー 4gt 発火 (02 §6 dropper [確定]) → 直上
+#   ホッパーへ 1 個挿入 → 充填変化で CU (dropper dispenseFrom → emitComparatorUpdate)。
+#   sim=仕様が一致 (PASS)。**検証対象は CU の送信順**であって gt 絶対値ではない
+#   (gt/遅延は順序を可視化する担体)。
+meta {
+  name: CU 送信順 N,E,S,W (コンテナ→コンパレーター4台)
+  ref: 02 §4.2 CU / 26.2 Level.updateNeighbourForOutputSignal / Direction.Plane.HORIZONTAL / updates.ts CU_UPDATE_ORDER
+}
+
+circuit {
+  (-1,-1,0) stone
+  (-1,0,0) lever[face=floor,facing=north,powered=false]
+  (0,0,0) dropper[facing=up,triggered=false] items=5
+  (0,1,0) hopper[enabled=true,facing=north] items=0
+  # ホッパーを背面入力に読む 4 コンパレーター (MC facing = ホッパー方向)
+  (0,1,-1) comparator[facing=south,mode=compare,powered=false]   # N 側
+  (1,1,0)  comparator[facing=west,mode=compare,powered=false]    # E 側
+  (0,1,1)  comparator[facing=north,mode=compare,powered=false]   # S 側
+  (-1,1,0) comparator[facing=east,mode=compare,powered=false]    # W 側
+  # 各コンパレーター前方の遅延違いリピーター (確定順を可視化)
+  (0,1,-2) repeater[delay=1,facing=south,locked=false,powered=false]   # N → delay1
+  (2,1,0)  repeater[delay=2,facing=west,locked=false,powered=false]    # E → delay2
+  (0,1,2)  repeater[delay=3,facing=north,locked=false,powered=false]   # S → delay3
+  (-2,1,0) repeater[delay=4,facing=east,locked=false,powered=false]    # W → delay4
+}
+
+inputs {
+  t2 use (-1,0,0)
+}
+
+ticks 18
+
+# strict: t8 の Co{c.2}→Re(n.X) の交互が CU 順 N,E,S,W を可視化する観測点。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Dr(c.4) p0
+  6gt[ST]: Co(c.2) p-1
+  6gt[ST]: Co(c.2) p-1
+  6gt[ST]: Co(c.2) p-1
+  6gt[ST]: Co(c.2) p-1
+  8gt[ST]: Co{c.2}
+  8gt[ST]: Re(n.2) p-1
+  8gt[ST]: Co{c.2}
+  8gt[ST]: Re(n.4) p-1
+  8gt[ST]: Co{c.2}
+  8gt[ST]: Re(n.6) p-1
+  8gt[ST]: Co{c.2}
+  8gt[ST]: Re(n.8) p-1
+  10gt[ST]: Re{n.2}
+  12gt[ST]: Re{n.4}
+  14gt[ST]: Re{n.6}
+  16gt[ST]: Re{n.8}
+}
+
+state {
+  # 充填 (count=1) 前は 0 出力、CU 確定後 (t8) に 4 台とも点灯 (仕様: 空=0 / 非空≥1)
+  t6 (0,1,-1) comparator[facing=south,mode=compare,powered=false]
+  t8 (0,1,-1) comparator[facing=south,mode=compare,powered=true]
+  t8 (-1,1,0) comparator[facing=east,mode=compare,powered=true]
+  # 最初に確定した N コンパレーターの下流 (delay1) が最初に点灯
+  t10 (0,1,-2) repeater[delay=1,facing=south,locked=false,powered=true]
+}

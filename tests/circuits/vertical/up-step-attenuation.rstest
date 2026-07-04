@@ -1,0 +1,41 @@
+# 上りステップ ('up' 接続) の −1 減衰伝播 (02 §5.4 / 11 §1.2 [確定: 26.2])。
+# 仕様: ダストの直上が非導体で開いていれば、水平隣接の 1 段上のダストへ接続する
+#   (getConnectionState の up 判定 = blockstate の 'up')。ワイヤ間伝播は
+#   calculateTargetStrength = 隣接ワイヤ最大 −1 で 1 段ごとに 1 減衰する (02 §5.1)。
+# 導出 (spec 先行): レバー直結の base(1,1,0)=15 → up ステップで (2,2,0)=14 →
+#   さらに up ステップで (3,3,0)=13。段を登るたび −1。
+#   接続表示: 段の相手方向は up ステップ側 = 'up'、下り側 = 'side'、頂上の延長端は
+#   自動拡張で 'side' (物理接続 1 本 → 直線化, 11 §1.2)。
+# 実行して照合 → 一致 (sim=spec)。ダストは PLC (即時) なので入力適用と同 tick で確定。
+meta {
+  name: 上りステップの −1 減衰伝播 (2 段登り)
+  ref: 02 §5.4 (斜め接続 up) / 11 §1.2 (getConnectionState 1本→直線拡張) / §5.1 (−1 減衰)
+}
+
+circuit {
+  (0,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]      # base
+  (2,1,0) stone                                                               # 段の壁 (上段ダストの土台)
+  (2,2,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]      # 1 段上
+  (3,2,0) stone
+  (3,3,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]    # 2 段上 (頂上, 延長端 side)
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 6
+
+state {
+  # 初期 (レバー OFF) は全段 0。接続形状 (up/side) は配置どおり保持。
+  t0 (1,1,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]
+  t0 (2,2,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]
+  t0 (3,3,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # レバー ON → 各段が −1 ずつ減衰して確定 (15 → 14 → 13)。
+  t2 (0,1,0) lever[face=floor,facing=north,powered=true]
+  t2 (1,1,0) redstone_wire[east=up,north=none,power=15,south=none,west=side]   # 源直結
+  t2 (2,2,0) redstone_wire[east=up,north=none,power=14,south=none,west=side]   # 上りステップ −1
+  t2 (3,3,0) redstone_wire[east=side,north=none,power=13,south=none,west=side] # さらに上り −1
+}

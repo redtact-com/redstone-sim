@@ -1,0 +1,79 @@
+# RS ラッチ (トーチ 2 個の相互ループ = NOR ラッチ)。2 つのトーチ NOT ゲートを交差結合し、
+# 各トーチの出力が相手の土台ブロックを充電する。Set/Reset で一方を消して状態を反転させ、
+# 入力を離しても相互フィードバックで状態が「保持」されることを state 系列で観測する。
+#
+# 仕様クロスチェック (02 §6 torch [確定] + NOR 交差結合トポロジー):
+#   §6 torch: 土台給電 → 2gt 後に消灯 / 無給電 → 2gt 後に点灯 (TOGGLE_DELAY=2, priority 0)。
+#   Q = T1(=NOT(QB OR Reset))、Q' = T2(=NOT(QA OR Set))。QA=Q 出力→B2 充電、QB=Q' 出力→B1 充電。
+#   導出: 初期は QA=15 が B2 を充電し T2 消灯 → B1 無給電 → T1 点灯 = Q=1 (安定 SET)。
+#     Reset パルス → B1 充電 → T1 消灯 (2gt) → QA=0 → B2 無給電 → T2 点灯 (さらに 2gt) →
+#       QB=15 が B1 を充電し続ける → Reset を離しても Q=0 保持 (メモリ)。
+#     Set パルス → 対称に Q=1 へ戻し保持。
+#   sim=仕様が一致 (PASS)。交差結合の 1 反転 = トーチ 2 段 = 入力から 4gt で settle。
+#   ※ sim は wall_torch の facing を反転取り込み: facing=east → sim 土台=西。
+#   ※ 入力 tick 直後の帰還レーン dust の過渡値 (充電された土台を逆読み) は本質でないため断言しない。
+#      検証対象は Q/Q' (トーチ lit) の反転と、入力を離した後の保持。
+meta {
+  name: RS トーチラッチ (相互ループ NOR・Set/Reset で状態保持)
+  ref: 02 §6 torch (TOGGLE_DELAY=2, priority 0) / NOR 交差結合 / メモリ (状態保持)
+}
+
+circuit {
+  (0,0,0)..(6,0,2) stone
+  # gate 1: B1 → T1 (Q)
+  (0,1,0) stone                                                       # B1 (T1 土台)
+  (1,1,0) redstone_wall_torch[facing=east,lit=true]                   # T1: 土台=西=B1, 出力=東
+  # gate 2: B2 → T2 (Q')
+  (4,1,0) stone                                                       # B2 (T2 土台)
+  (5,1,0) redstone_wall_torch[facing=east,lit=false]                  # T2: 土台=西=B2, 出力=東
+  # QA (Q = T1 出力 → B2 を充電)
+  (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # QB (Q' = T2 出力 → 帰還レーン z=2 → B1 を充電)
+  (6,1,0) redstone_wire[east=none,north=side,power=0,south=none,west=side]
+  (6,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (6,1,2) redstone_wire[east=none,north=none,power=0,south=side,west=side]
+  (1,1,2)..(5,1,2) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (0,1,2) redstone_wire[east=side,north=none,power=0,south=side,west=none]
+  (0,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  # 入力: Reset = B1 上のレバー、Set = B2 上のレバー (土台を強充電)
+  (0,2,0) lever[face=floor,facing=north,powered=false]   # Reset
+  (4,2,0) lever[face=floor,facing=north,powered=false]   # Set
+}
+
+inputs {
+  t4  use (0,2,0)    # Reset on
+  t6  use (0,2,0)    # Reset off (パルス: 離しても保持されることを見る)
+  t14 use (4,2,0)    # Set on
+  t16 use (4,2,0)    # Set off (パルス)
+}
+
+ticks 26
+
+# 部分一致。トーチの 2gt 遅延と交差結合の伝播 (一方 消灯 → 2gt 後 他方 点灯) を pin する。
+# (トーチ略号は T1/T2 を区別しないため、順序のみ: Reset→消灯(2gt)→相手点灯(2gt))。
+trace {
+  4gt[ST]: To(f.2) p0     # Reset → T1 消灯を 2gt 後に予約
+  6gt[ST]: To{f.2}        # T1 消灯 (Q=0)。Reset から 2gt
+  8gt[ST]: To{n.2}        # T2 点灯 (Q'=1)。T1 消灯から 2gt = 交差結合ループ → latched
+}
+
+state {
+  # 初期: 安定 SET (Q=1)。QA=15 が B2 を充電し T2 を消灯させている
+  t0  (1,1,0) redstone_wall_torch[facing=east,lit=true]    # Q=1
+  t0  (5,1,0) redstone_wall_torch[facing=east,lit=false]   # Q'=0
+  t0  (2,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]   # QA=15 (帰還)
+  # Reset パルス (t4 on / t6 off): Q=0 へ反転
+  t6  (1,1,0) redstone_wall_torch[facing=east,lit=false]   # T1 消灯 (Reset から 2gt)
+  t8  (5,1,0) redstone_wall_torch[facing=east,lit=true]    # T2 点灯 (交差結合 2gt) → Q'=1
+  # 保持: Reset は t6 で離したが、QB=15 が B1 を充電し続けて Q=0 を保持
+  t12 (1,1,0) redstone_wall_torch[facing=east,lit=false]   # Q=0 保持 (メモリ)
+  t12 (5,1,0) redstone_wall_torch[facing=east,lit=true]    # Q'=1 保持
+  t12 (6,1,0) redstone_wire[east=none,north=none,power=15,south=side,west=side]   # QB=15 (帰還が保持)
+  # Set パルス (t14 on / t16 off): Q=1 へ戻す
+  t16 (5,1,0) redstone_wall_torch[facing=east,lit=false]   # T2 消灯 (Set から 2gt)
+  t18 (1,1,0) redstone_wall_torch[facing=east,lit=true]    # T1 点灯 (交差結合 2gt) → Q=1
+  # 保持: Set を離しても Q=1 保持
+  t24 (1,1,0) redstone_wall_torch[facing=east,lit=true]    # Q=1 保持 (メモリ)
+  t24 (5,1,0) redstone_wall_torch[facing=east,lit=false]   # Q'=0 保持
+}
