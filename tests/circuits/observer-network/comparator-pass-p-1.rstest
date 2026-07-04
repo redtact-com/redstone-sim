@@ -1,0 +1,57 @@
+# オブザーバー単体 2gt パルスの「飲み込み」の例外: コンパレーターの前面が別ダイオード
+# (こちらを向いていない=側面向き) だと priority -1 になり、オブザーバー OFF より先に
+# コンパレーターが評価される → パルスが通る (#79 領域4)。既存 timing/comparator-swallow-p0 は
+# 前面ランプ (priority 0) で飲み込む対照。ここは前面 side-facing repeater で通す真の subtick 差。
+#
+# 配置: lever→OB=(1,1,0,facing=west, lever を観測)→CMP=(2,1,0, back=OB, front=east)→
+#   前面 repeater=(3,1,0, facing=south=側面向き)。 (MC comparator/repeater の facing は入力側 →
+#   sim は OPPOSITE 取り込み。comparator[facing=west] = back 西=OB・front 東。)
+#
+# 仕様クロスチェック (02 §2.4 [確定: ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER]):
+#   §2.4 例外: 「コンパレーターが別ダイオードに向く場合は priority -1 になりパルスが通る」。
+#   ComparatorBlock.checkTickOnNeighbor の shouldPrioritize (front がダイオードかつその facing が
+#     出力方向と不一致) → scheduleTick(2, -1)。priority -1 < 0 なので、同 gt にある
+#     オブザーバーの自己 OFF (priority 0) より先にコンパレーター tick が走り、入力=15 を読んで ON。
+#   導出: t2 lever → t4 OB ON → CMP は NC を priority -1 で予約 (delay2) → t6 CMP が先に実行
+#     (OB OFF はまだ) → CMP ON。t6 に OB OFF → 次段 NC で CMP は OFF を priority -1 再予約 →
+#     t8 CMP OFF。 = オブザーバーの 2gt パルスが CMP を通過 (powered t6..t7)。
+#   sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ 対照 (飲み込み) は timing/comparator-swallow-p0: 前面ランプ → Co(c.2) p0 予約するが
+#     Co{c.2} 実行が現れない。ここは Co(c.2) p-1 かつ Co{c.2} が実行される = パルス通過の証拠。
+meta {
+  name: 飲み込みの例外 — 前面 side-facing ダイオードで priority -1、パルス通過
+  ref: 02 §2.4 例外 (priority -1) / §6 comparator (shouldPrioritize) / 対照 timing/comparator-swallow-p0
+}
+
+circuit {
+  (0,0,0)..(3,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) observer[facing=west,powered=false]                        # lever を観測、背面 east=CMP
+  (2,1,0) comparator[facing=west,mode=compare,powered=false]         # back=OB(西)・front=東
+  (3,1,0) repeater[facing=south,delay=1,locked=false,powered=false]  # 前面=側面向きダイオード
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 12
+
+# 完全一致。CMP の予約が priority -1 (Co(c.2) p-1) かつ実行 (Co{c.2}) が現れる = 通過。
+# (飲み込み側 timing/comparator-swallow-p0 は Co(c.2) p0 予約のみで Co{c.2} が出ない。)
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Ob(n.2) p0     # OB が lever を PP 検知 → ON 予約
+  4gt[ST]: Ob(f.2) p0     # OB ON: 自身 OFF を予約 (パルス幅 2gt)
+  4gt[ST]: Co(c.2) p-1    # OB ON の背面 NC → CMP 予約 (前面 side-facing → priority -1)
+  6gt[ST]: Co{c.2}        # CMP 実行: OB OFF より先に走り入力 15 を読み ON (パルス通過)
+  6gt[ST]: Co(c.2) p-1    # OB OFF の NC → CMP は OFF を priority -1 再予約
+  8gt[ST]: Co{c.2}        # CMP OFF 実行 (通過パルスの立ち下がり)
+}
+
+state {
+  t4 (1,1,0) observer[facing=west,powered=true]                    # OB 2gt パルス立ち上がり
+  t6 (1,1,0) observer[facing=west,powered=false]                   # OB 立ち下がり
+  t6 (2,1,0) comparator[facing=west,mode=compare,powered=true]     # CMP はパルスを通す (点灯)
+  t8 (2,1,0) comparator[facing=west,mode=compare,powered=false]    # 通過パルスの立ち下がり
+}

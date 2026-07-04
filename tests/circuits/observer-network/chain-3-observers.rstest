@@ -1,0 +1,62 @@
+# オブザーバー 3 連チェーン: 単一パルスが 1 段ごと 2gt 遅れて伝播する信号伝播網 (#79 領域4)。
+# lever→dust→OB_A(facing=west, dust を観測)→OB_B(facing=west, OB_A を観測)→
+# OB_C(facing=west, OB_B を観測)→lamp。各オブザーバーは自身の powered 反転 (PP) を
+# 背面隣接のオブザーバーが観測して 2gt 後にパルスする。既存 fixture observer-chain は
+# 2 連 (obs1→obs2)。ここは 3 連にして「発振しない単発チェーンが段数ぶん 2gt ずつ遅延する」
+# ことを段ごとの state と、各段が次段を起こす trace の連鎖予約で固定する。
+#
+# 仕様クロスチェック (02 §4.1 PP / §6 observer [確定: 1.21.1/26.2 デコンパイル]):
+#   §6 observer: 観測面 (facing) からの shape 更新 (PP) かつ非 powered で 2gt tile tick を予約。
+#     tick で powered 反転 → setBlock flag2 の PP を背面隣接へ発行 (連鎖の根拠) →
+#     ON なら自身の OFF tick(2gt) を近傍更新より先に予約 → 背面 1 マスへ NC。パルス幅 2gt。
+#   §4.1: オブザーバーは PP でのみ起動し NC (背面給電) では起動しない。
+#   導出: t2 lever→dust 通電 (PP) → OB_A 予約 → t4 OB_A ON (自身 OFF@t6 予約 + OB_B 予約) →
+#     t6 OB_A OFF & OB_B ON (OB_C 予約) → t8 OB_B OFF & OB_C ON (lamp NC 点灯) →
+#     t10 OB_C OFF → lamp は 4gt off-delay で t14 消灯。sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ オブザーバーの tile tick 実行は trace 行を出さない (既知 #75)。連鎖の証拠は
+#     各段の ON 予約 Ob(n.2) が次 gt に現れること (段ごと 2gt 間隔)。
+meta {
+  name: オブザーバー 3 連チェーン (単一パルスが段ごと 2gt 伝播)
+  ref: 02 §4.1 PP / §6 observer (2gt パルス・背面 PP 連鎖) / 既存 observer-chain (2 連) と非重複
+}
+
+circuit {
+  (0,0,0)..(5,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # OB_A の観測対象
+  (2,1,0) observer[facing=west,powered=false]     # OB_A: dust を観測、背面 east=OB_B
+  (3,1,0) observer[facing=west,powered=false]     # OB_B: OB_A を観測、背面 east=OB_C
+  (4,1,0) observer[facing=west,powered=false]     # OB_C: OB_B を観測、背面 east=lamp
+  (5,1,0) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)      # dust 通電 → OB_A が PP を検知
+}
+
+ticks 16
+
+# 部分一致。各段の ON 予約 (Ob(n.2)) が 2gt ずつずれて現れ、末段 OB_C は下流にオブザーバーが
+# 無いため自身 OFF (Ob(f.2)) のみ → その後 lamp の off-delay 予約に落ちる、という連鎖を pin。
+trace {
+  2gt[ST]: Ob(n.2) p0     # dust PP → OB_A 予約
+  4gt[ST]: Ob(n.2) p0     # OB_A ON の PP → OB_B 予約 (連鎖 1 段目)
+  6gt[ST]: Ob(n.2) p0     # OB_B ON の PP → OB_C 予約 (連鎖 2 段目)
+  8gt[ST]: Ob(f.2) p0     # OB_C ON: 下流にオブザーバー無し → 自身 OFF のみ
+  10gt[ST]: La(f.4) p0    # OB_C OFF の NC → lamp 4gt off-delay 予約
+  14gt[ST]: La{f.4}       # lamp 消灯実行
+}
+
+state {
+  t0 (2,1,0) observer[facing=west,powered=false]     # 初期
+  t0 (5,1,0) redstone_lamp[lit=false]
+  # 段ごと 2gt 遅延の単発パルス (各段 2gt 幅)
+  t4 (2,1,0) observer[facing=west,powered=true]      # OB_A ON
+  t6 (2,1,0) observer[facing=west,powered=false]     # OB_A OFF (幅 2gt)
+  t6 (3,1,0) observer[facing=west,powered=true]      # OB_B ON (OB_A 変化を +2gt で観測)
+  t8 (3,1,0) observer[facing=west,powered=false]     # OB_B OFF
+  t8 (4,1,0) observer[facing=west,powered=true]      # OB_C ON (+2gt)
+  t8 (5,1,0) redstone_lamp[lit=true]                 # 末端 lamp 点灯 (OB_C の背面 NC)
+  t10 (4,1,0) observer[facing=west,powered=false]    # OB_C OFF
+  t14 (5,1,0) redstone_lamp[lit=false]               # lamp は 4gt off-delay 後に消灯
+}
