@@ -1,0 +1,59 @@
+# 通常 (非粘着) ピストンの収縮は「引かない」: 押した石 2 個は収縮しても両方その場に残る。
+# 粘着版 (sticky-retract-pulls-one = 1 個引く) との対比で「粘着だけが 1 個 pull、通常は 0 個」を
+# 固定する。基本伸縮 (basic) は石 1 個で収縮後の残置を断言していないため非重複。
+#
+# 仕様クロスチェック (02 §6 piston [確定]):
+#   (a) 導出: §6 piston — retract の pull は sticky のときだけ neighbor(head) の 1 ブロックに
+#       起きる。通常ピストンは pull せず head を撤去するだけ → 押し出した 2 石はどちらも
+#       残る (恒久変位)。伸長 t2→t3(BE)→t5、収縮 t10→t11(BE, head 即撤去)→t13(base 確定)。
+#   (b) → (c) → (d): sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ 収縮の trace に Bl(c.2) (pull) が現れず base の Pi(c.2) だけ = pull ゼロの証拠。
+meta {
+  name: 通常ピストンは引かない (押し 2 個・収縮しても両方残置)
+  ref: 02 §6 piston (retract の pull は sticky のみ / 通常は head 撤去のみ)
+}
+
+circuit {
+  (0,0,0)..(7,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) piston[extended=false,facing=east]
+  (3,1,0) stone
+  (4,1,0) stone
+}
+
+inputs {
+  t2 use (0,1,0)
+  t10 use (0,1,0)
+}
+
+ticks 16
+
+# strict: 収縮 (11gt[BE]) の ST 予約が base の Pi(c.2) 1 本のみ = Bl(c.2) (pull) が無い。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  3gt[ST]: Bl(c.2) p0
+  3gt[ST]: Bl(c.2) p0
+  3gt[ST]: Ph(c.2) p0
+  5gt[ST]: Bl{c.2}
+  5gt[ST]: Bl{c.2}
+  5gt[ST]: Ph{c.2}
+  10gt[PI]: Le{f.0}
+  10gt[BE]: Pi(r.s)
+  11gt[BE]: Pi{r.0}
+  11gt[ST]: Pi(c.2) p0
+  13gt[ST]: Pi{c.2}
+}
+
+state {
+  t5  (4,1,0) stone                                              # 伸長: 2 石が +1
+  t5  (5,1,0) stone
+  t11 (3,1,0) air                                                # 収縮開始で head 撤去 (即)
+  t13 (2,1,0) piston[extended=false,facing=east]                 # 収縮完了
+  t13 (4,1,0) stone                                              # 押した石は両方その場に残る
+  t13 (5,1,0) stone
+  t16 (4,1,0) stone                                              # 恒久変位 (pull されない)
+  t16 (5,1,0) stone
+}
