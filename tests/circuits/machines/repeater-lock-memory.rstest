@@ -1,0 +1,64 @@
+# リピーターロック・メモリ (1bit D ラッチ / メモリセル)。
+# M(main repeater) が data を通す。側面の L(lock repeater) が ON の間 M はロックされ、
+# 現在の出力を「保持」する (data が変化しても不変)。L を戻すと再評価。
+# 期待は 02 §6 repeater から先に導出:
+#   - isLocked: 側面のダイオード direct signal > 0 で LOCKED (PP 経由更新)。
+#   - tick 再評価: 「ロック中なら何もしない」→ ロック中に data を切っても M は不変。
+# 手順: t2 data ON → M 透過 (out ON) / t6 lock ON → M ロック / t10 data OFF (ロック中
+# → 保持) / t18 unlock → 再評価で OFF。
+meta {
+  name: リピーターロック・メモリ (1bit D ラッチ)
+  ref: 02 §6 repeater [isLocked / tick: ロック中は不変] / メモリセル
+}
+
+circuit {
+  (0,0,0)..(4,0,0) stone                                       # 床 (data 経路)
+  (0,0,1)..(2,0,2) stone                                       # 床 (enable 経路)
+  (0,0,3) stone                                                # プレイヤ床
+  (0,1,0) lever[face=floor,facing=north,powered=false]         # data 入力
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]          # M (main)
+  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (4,1,0) redstone_lamp[lit=false]                             # 出力観測
+  (0,1,2) lever[face=floor,facing=north,powered=false]         # enable/write 入力
+  (1,1,2) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,2) redstone_wire[east=none,north=side,power=0,south=none,west=side]
+  (2,1,1) repeater[delay=1,facing=south,locked=false,powered=false]         # L: 出力北→M 側面
+}
+
+inputs {
+  t2  use (0,1,0)                                              # data ON
+  t6  use (0,1,2)                                              # lock ON (write-disable)
+  t10 use (0,1,0)                                              # data OFF (ロック中 → 保持)
+  t18 use (0,1,2)                                              # unlock → 再評価
+}
+
+ticks 28
+
+# 部分一致。要点は「t10 で data を OFF にしても M の Re イベントが一切現れない」
+# = ロック中の M は再評価しない (= 値を保持) こと。L は M 側面(=diode)へ出力するため p-3。
+trace {
+  2gt[PI]: Le{n.0}                                             # data ON
+  4gt[ST]: Re{n.2}                                             # M on (透過)
+  6gt[PI]: Le{n.0}                                             # lock ON
+  6gt[ST]: Re(n.2) p-3                                         # L on 予約 (M 側面へ = p-3)
+  8gt[ST]: Re{n.2}                                             # L on → M ロック
+  10gt[PI]: Le{f.0}                                            # data OFF: この後 M の Re は出ない (保持)
+  18gt[PI]: Le{f.0}                                            # unlock
+  20gt[ST]: Re{f.2}                                            # L off → M ロック解除
+  22gt[ST]: Re{f.2}                                            # M 再評価 → data 無し → off
+  22gt[ST]: La(f.4) p0                                         # ランプ 4gt off-delay 予約
+  26gt[ST]: La{f.4}                                            # ランプ消灯
+}
+
+state {
+  t4  (2,1,0) repeater[delay=1,facing=west,locked=false,powered=true]    # 透過: M on
+  t4  (4,1,0) redstone_lamp[lit=true]
+  t8  (2,1,0) repeater[delay=1,facing=west,locked=true,powered=true]     # ロック確立
+  t12 (2,1,0) repeater[delay=1,facing=west,locked=true,powered=true]     # data OFF(t10) でも保持
+  t18 (2,1,0) repeater[delay=1,facing=west,locked=true,powered=true]     # 保持継続
+  t12 (4,1,0) redstone_lamp[lit=true]                          # 出力も保持
+  t20 (2,1,0) repeater[delay=1,facing=west,locked=false,powered=true]    # unlock → 再評価開始
+  t22 (2,1,0) repeater[delay=1,facing=west,locked=false,powered=false]   # data 無し → off
+  t26 (4,1,0) redstone_lamp[lit=false]                         # ランプ 4gt off-delay 後に消灯
+}

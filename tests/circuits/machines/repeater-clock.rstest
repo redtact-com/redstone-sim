@@ -1,0 +1,54 @@
+# リピータークロック: トーチ NOT + repeater(delay=3) の帰還ループ。
+# T(wall,B付) → dust → repeater(delay=3, 出力北→B) → B 充電で T off という NOT ループ。
+# 期待周期は 02 §6 torch (2gt) + repeater (delay*2 = 3*2 = 6gt) から先に導出:
+#   半周期 = torch 2gt + repeater 6gt = 8gt、full 周期 = 16gt。
+#   repeater で周期を延ばすため torch のトグルは 8gt おき → burnout(8 回/60gt)に達せず
+#   永久発振する (トーチクロック単体の 4gt 周期=burnout 有りとの対比)。
+# lever(B 上)で B を強充電し初期消灯固定、t2 で解除して発振。
+meta {
+  name: リピータークロック (16gt 周期・torch+repeater 帰還)
+  ref: 02 §6 torch [2gt] + repeater [delay*2] / 周期延長で burnout 回避
+}
+
+circuit {
+  (0,0,0)..(1,0,2) stone                                       # 床
+  (0,0,3) stone                                                # プレイヤ床
+  (0,1,0) stone                                                # B: 土台+帰還先
+  (1,1,0) redstone_wall_torch[facing=east,lit=false]           # T
+  (1,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]   # T を読む
+  (1,1,2) redstone_wire[east=none,north=side,power=0,south=none,west=side]
+  (0,1,2) redstone_wire[east=side,north=side,power=0,south=none,west=none]
+  (0,1,1) repeater[delay=3,facing=south,locked=false,powered=false]          # 出力北→B
+  (0,2,0) lever[face=floor,facing=north,powered=true]          # gate: B 上, 初期 ON で消灯
+}
+
+inputs {
+  t2 use (0,2,0)                                               # gate 解除 → 発振
+}
+
+ticks 38
+
+# 部分一致。半周期 = torch 予約 2gt + repeater 予約 6gt。T on(t4) → Re on 予約(6gt)→
+# t10 → B 充電で T off(t12) → Re off 予約(6gt)→ t18 → T on(t20)。full 周期 16gt。
+trace {
+  2gt[PI]: Le{f.0}
+  2gt[ST]: To(n.2) p0
+  4gt[ST]: To{n.2}                                             # T on
+  4gt[ST]: Re(n.6) p-1                                         # repeater 6gt(delay=3) 予約
+  10gt[ST]: Re{n.6}                                            # repeater on → B 充電
+  10gt[ST]: To(f.2) p0                                         # T 入力復帰 → OFF 予約
+  12gt[ST]: To{f.2}                                            # T off (t4 から 8gt = 半周期)
+  12gt[ST]: Re(f.6) p-2
+  18gt[ST]: Re{f.6}
+  18gt[ST]: To(n.2) p0
+  20gt[ST]: To{n.2}                                            # T on (t4 から 16gt = full 周期)
+}
+
+state {
+  t0  (1,1,0) redstone_wall_torch[facing=east,lit=false]       # gate 中は消灯
+  t4  (1,1,0) redstone_wall_torch[facing=east,lit=true]        # 発振 ON
+  t12 (1,1,0) redstone_wall_torch[facing=east,lit=false]       # 8gt 後 OFF (半周期)
+  t20 (1,1,0) redstone_wall_torch[facing=east,lit=true]        # 16gt 後 ON (full 周期)
+  t28 (1,1,0) redstone_wall_torch[facing=east,lit=false]       # burnout せず継続
+  t36 (1,1,0) redstone_wall_torch[facing=east,lit=true]
+}
