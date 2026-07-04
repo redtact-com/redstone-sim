@@ -1,0 +1,53 @@
+# ダストタワー: 階段状に登って降りる回路 + 源カット (レバー OFF) での網全域ゼロ化→再増加
+# (02 §5.4 斜め接続の連鎖 / §5.1 減衰)。
+# 形状: base(1,1,0) から 2 段登り (up ステップ) 頂上 (3,3,0)、そこから 2 段降り (down
+#   ステップ) 麓 (5,1,0)。垂直ステップは同レイヤー接続と同じ 1 本の網を成す。
+# 導出 (spec 先行):
+#   ON  → 15,14,13,12,11 (段ごと −1、登り下り問わず)。
+#   OFF → レバーを切ると源が消え、網は縦方向の先まで含め全段 0 (ゼロ化)。
+#         = 垂直ステップが独立でなく 1 つの連結網であることの実証。
+#   再 ON → 15..11 が復元 (再増加)。
+# 実行して照合 → 一致 (sim=spec)。
+meta {
+  name: ダストタワー 階段 (2 登り 2 降り) と源カットの全域ゼロ化→再増加
+  ref: 02 §5.4 (up/down ステップ連鎖) / §5.1 (減衰) / blocks/wire.getConnectedWireNeighbors
+}
+
+circuit {
+  (0,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]      # base
+  (2,1,0) stone
+  (2,2,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]      # 登り 1
+  (3,2,0) stone
+  (3,3,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]    # 頂上
+  (4,1,0) stone
+  (4,2,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]      # 降り 1
+  (5,0,0) stone
+  (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]      # 麓
+}
+
+inputs {
+  t2  use (0,1,0)   # ON
+  t10 use (0,1,0)   # OFF
+  t18 use (0,1,0)   # 再 ON
+}
+
+ticks 22
+
+state {
+  # ON: 段ごと −1 (15,14,13,12,11)。
+  t2 (1,1,0) redstone_wire[east=up,north=none,power=15,south=none,west=side]
+  t2 (2,2,0) redstone_wire[east=up,north=none,power=14,south=none,west=side]
+  t2 (3,3,0) redstone_wire[east=side,north=none,power=13,south=none,west=side]
+  t2 (4,2,0) redstone_wire[east=side,north=none,power=12,south=none,west=up]
+  t2 (5,1,0) redstone_wire[east=side,north=none,power=11,south=none,west=up]
+  # OFF: 源カットで全段ゼロ化 (縦の先 = 麓まで消灯)。
+  t10 (1,1,0) redstone_wire[east=up,north=none,power=0,south=none,west=side]
+  t10 (3,3,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  t10 (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=up]
+  # 再 ON: 15..11 が復元 (再増加)。
+  t18 (1,1,0) redstone_wire[east=up,north=none,power=15,south=none,west=side]
+  t18 (3,3,0) redstone_wire[east=side,north=none,power=13,south=none,west=side]
+  t18 (5,1,0) redstone_wire[east=side,north=none,power=11,south=none,west=up]
+}
