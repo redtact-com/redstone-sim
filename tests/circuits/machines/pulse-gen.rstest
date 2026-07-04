@@ -1,0 +1,58 @@
+# パルス生成 (コンパレーター減算モノステーブル / 立ち上がりエッジ検出器)。
+# back = lever 直結 dust (0gt 即時)、side = repeater(delay=2)=4gt 経由。
+# comparator subtract: out = back - side。
+# 期待は 02 §6 comparator (subtract=back-side, 遅延 2gt) + repeater (delay*2=4gt) から
+# 先に導出:
+#   - lever 立ち上がり(t2): back=15 が即時到達、side=0 → out=15 を 2gt 後(t4)に出力。
+#   - side は 4gt 後(t6) に 15 到達 → out=0 を 2gt 後(t8) に反映。
+#   → 立ち上がりで幅 = side 遅延(4gt) のパルス (t4..t8)。立ち下がりでは back が先に
+#     消えるため out は 0-0 のままでパルスなし。
+meta {
+  name: パルス生成 (コンパレーター減算モノステーブル)
+  ref: 02 §6 comparator [subtract=back-side, delay 2gt] / repeater [delay*2] / §2.4 エッジ
+}
+
+circuit {
+  (0,0,0)..(4,0,0) stone                                       # 床 (back 経路)
+  (1,0,1)..(2,0,2) stone                                       # 床 (side 経路)
+  (0,0,1) stone                                                # プレイヤ床の一部
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=side,west=side]   # back + 南分岐
+  (2,1,0) comparator[facing=west,mode=subtract,powered=false]
+  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (4,1,0) redstone_wire[east=none,north=none,power=0,south=none,west=side]
+  (1,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (1,1,2) redstone_wire[east=side,north=side,power=0,south=none,west=none]
+  (2,1,2) redstone_wire[east=none,north=side,power=0,south=none,west=side]
+  (2,1,1) repeater[delay=2,facing=south,locked=false,powered=false]          # side: 出力北→comp 側面
+}
+
+inputs {
+  t2  use (0,1,0)                                              # 立ち上がり → パルス
+  t12 use (0,1,0)                                              # 立ち下がり → パルスなし
+}
+
+ticks 18
+
+# 部分一致。comparator の ON 予約(t2→実行 t4) と、side repeater の 4gt 後到達(t6) による
+# OFF 予約(→実行 t8) を固定 = パルス幅 4gt。repeater は side(=diode)へ出力するため p-3。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Co(c.2) p0                                          # back=15,side=0 → out 予約
+  2gt[ST]: Re(n.4) p-3                                         # side repeater 4gt 予約
+  4gt[ST]: Co{c.2}                                             # 出力 ON (2gt 後)
+  6gt[ST]: Re{n.4}                                             # side 到達 (4gt 後)
+  6gt[ST]: Co(c.2) p0                                          # back=15,side=15 → out 0 予約
+  8gt[ST]: Co{c.2}                                             # 出力 OFF → パルス幅 = t4..t8 = 4gt
+  12gt[PI]: Le{f.0}                                            # 立ち下がりは以降パルスを出さない
+}
+
+state {
+  t2  (2,1,0) comparator[facing=west,mode=subtract,powered=false]
+  t4  (2,1,0) comparator[facing=west,mode=subtract,powered=true]    # パルス立ち上がり (back のみ)
+  t4  (3,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t6  (2,1,0) comparator[facing=west,mode=subtract,powered=true]    # side 未到達間は ON 継続
+  t8  (2,1,0) comparator[facing=west,mode=subtract,powered=false]   # side 到達 → OFF (幅 4gt)
+  t8  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  t16 (2,1,0) comparator[facing=west,mode=subtract,powered=false]   # 立ち下がりでパルス無し
+}
