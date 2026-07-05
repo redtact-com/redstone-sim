@@ -1,0 +1,39 @@
+# 粘着ピストンの短パルス収縮: observer 2gt パルスで粘着ピストンが伸長→石を押すが、
+# パルス OFF が伸長中に来る短パルスでは、押した石は引かれず (5,1,0) に残る。
+#
+# 仕様クロスチェック (#82 / 26.2 PistonBaseBlock.triggerEvent retract):
+#   収縮 BE 到達時、head の moving を finalTick で確定させてから収縮に入る。粘着の pull は
+#   twoPos (=(5,1,0)) を見るが、そこは伸長 payload の moving (extending) なので vanilla は
+#   finalTick + pistonPiece=true で pull をスキップ → 石は (5,1,0) に残置 (引かない)。
+#   実機 fixture sticky-observer-pulse で確認済み (t4 伸長・t6 石着地/head 除去・t8 base 収縮確定)。
+meta {
+  name: 粘着ピストン 短パルス収縮は引かない (石は残置)
+  ref: #82 / 26.2 PistonBaseBlock.triggerEvent (pistonPiece) / fixture sticky-observer-pulse (実機一致)
+}
+
+circuit {
+  (0,0,0)..(6,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) observer[facing=west,powered=false]
+  (3,1,0) sticky_piston[extended=false,facing=east]
+  (4,1,0) stone
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 10
+
+state {
+  t4 (3,1,0) sticky_piston[extended=true,facing=east]
+  # t6: 石が (5,1,0) 着地・head 除去、base は収縮 moving 化
+  t6 (4,1,0) air
+  t6 (5,1,0) stone
+  # t8: base 収縮確定。石は引かれず (5,1,0) 残置 (短パルス粘着の pistonPiece スキップ)
+  t8 (3,1,0) sticky_piston[extended=false,facing=east]
+  t8 (5,1,0) stone
+  t10 (3,1,0) sticky_piston[extended=false,facing=east]
+  t10 (5,1,0) stone
+}

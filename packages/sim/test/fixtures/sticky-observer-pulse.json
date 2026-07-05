@@ -1,8 +1,8 @@
 {
-  "name": "observer-piston-pulse",
-  "description": "#80 検証: observer 2gt パルス駆動ピストンが収縮するか恒久伸長か。v1 は moving セル無視ガードで収縮せず伸長維持だが vanilla を実機確認。 [#82 修正済み: 短パルス収縮の実機一致 pin]",
+  "name": "sticky-observer-pulse",
+  "description": "#82 検証(粘着): observer 2gt パルス駆動の粘着ピストンが短パルス収縮で石を引くか残すか。vanilla pistonPiece ロジックの実機確認。",
   "mcVersion": "1.21.1",
-  "ticks": 14,
+  "ticks": 10,
   "region": {
     "from": [
       0,
@@ -118,7 +118,7 @@
         1,
         0
       ],
-      "block": "piston[extended=false,facing=east]"
+      "block": "sticky_piston[extended=false,facing=east]"
     },
     {
       "pos": [
@@ -179,7 +179,7 @@
             1,
             0
           ],
-          "block": "piston[extended=true,facing=east]"
+          "block": "sticky_piston[extended=true,facing=east]"
         },
         {
           "pos": [
@@ -187,7 +187,7 @@
             1,
             0
           ],
-          "block": "moving_piston[facing=east,type=normal]"
+          "block": "moving_piston[facing=east,type=sticky]"
         },
         {
           "pos": [
@@ -216,7 +216,7 @@
             1,
             0
           ],
-          "block": "moving_piston[facing=east,type=normal]"
+          "block": "moving_piston[facing=east,type=sticky]"
         },
         {
           "pos": [
@@ -245,13 +245,13 @@
             1,
             0
           ],
-          "block": "piston[extended=false,facing=east]"
+          "block": "sticky_piston[extended=false,facing=east]"
         }
       ]
     }
   ],
   "generated": {
-    "at": "2026-07-04T23:53:41.549Z",
+    "at": "2026-07-05T00:34:08.539Z",
     "mc": "1.21.1",
     "carpet": "1.21-1.4.147+v240613"
   }

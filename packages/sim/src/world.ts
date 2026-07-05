@@ -1056,9 +1056,10 @@ export class SimWorld {
     const sticky = piston.type === 'sticky_piston'
     const headPos = neighbor(ev.pos, piston.facing)
 
-    // 伸縮中 (moving) セルが絡む再イベントは v1 では無視
-    // (vanilla の短パルス droppings は v2。10 §piston 参照)
-    if (this.getBlockAt(headPos)?.type === 'moving_piston') return []
+    // 伸長の再入は base の extended=true で (下の extend 分岐で) 弾かれる。
+    // 収縮が伸長中 (head=moving) に到達するケースは #82 で retract 分岐が finalTick
+    // 相当を行うため、ここでの一律 no-op ガードは撤去した (mid-retract の base=moving は
+    // ev.pos のブロック種チェック (block.type !== piston) で既に弾かれている)。
 
     const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
       // #80: 確定は ST 相の tile tick でなく BlockEntity 相 (finalizeDue) で行う。
@@ -1117,6 +1118,17 @@ export class SimWorld {
       if (!piston.extended) return []
       // トレース: BE 実行 (収縮)
       this.traceProcess('BE', 'Pi', 'r', 0)
+      // #82: 収縮 BE が伸長中 (head=moving) に到達したら、まず伸長を即確定させる
+      // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) — head の
+      //  PistonMovingBlockEntity.finalTick() で伸長を完了させてから収縮に入る]。
+      // head の moving を into (piston_head) へ確定させると以降の通常収縮が
+      // それを除去/引く。押された payload の moving は phase10 (tickBlockEntities)
+      // で自然に確定する (finalizeDue が同 tick)。実機 observer-piston-pulse と一致。
+      const headMoving = this.getBlockAt(headPos)
+      if (headMoving?.type === 'moving_piston') {
+        this.setBlockAt(headPos, headMoving.into)
+        changed.push(posKey(headPos))
+      }
       // head セルは即時消去
       if (this.getBlockAt(headPos)?.type === 'piston_head') {
         this.setBlockAt(headPos, { type: 'air' })
