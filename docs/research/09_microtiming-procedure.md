@@ -30,3 +30,18 @@ headless ハーネスでは採取できず**クライアント接続による手
 
 - 同 tick 内の NC 発行順 (特にダスト多段の 7 起点順) が sim の `dustUpdateOrigins` 順と一致するか
 - ExecuteTileTick の priority 表示 (`-3 (EXTREMELY_HIGH)` 等) が sim の diodeTickPriority と一致するか
+
+## 落とし穴 (2026-07-05 #52 実測)
+
+- **ログが 1 行も出ない**: `microTimingTarget` の既定は `labelled` (名札マーカー付きブロックのみ記録)。
+  回路にマーカーが無いと全イベントが抑制される → `/carpet microTimingTarget in_range`
+  (プレイヤー 32m 以内を記録) に変更する。`/log microTiming all` の "all" は log オプションで
+  あって target ではない (両方要る)。
+- **locational 順の突合は sim と実機を必ず同一絶対座標で比較する**: BE 順/NC 順は MC-11193 の
+  dust HashSet 順由来で**絶対座標に依存**する (同一形状でも平行移動で順序が変わりうる。#77 参照)。
+  実機を座標 P で観測したら sim も座標 P で走らせて比較する。異なる座標の順を突き合わせると
+  一致していても不一致に見え、誤って divergence 判定する (#52 の N→S→E vs 原点 S→E→N)。
+- **`instantBlockUpdaterReintroduced` を on にしない**: carpet-tis-addition が「ログが読みやすく
+  なる」と案内するが、1.19 以前の即時ブロックアップデータ挙動になり **1.21 の更新順が変わる**
+  (ground-truth 汚染)。読みにくくても off のまま観測する。
+- op 権限: `/carpet` `/tick freeze` は op level 2+ が要る。offline サーバは rcon `op <name>` で付与。

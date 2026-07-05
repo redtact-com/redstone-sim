@@ -419,6 +419,7 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
 - BEC: 動力判定 (NC 受信時) → block event を予約 → ブロックイベントフェーズで実移動。0-tick 系はこのフェーズ差が前提 [確定]。
 - 起動判定 `getNeighborSignal` (PistonBaseBlock, デコンパイル): **facing 面を除く 6 方向の hasSignal** ∪ **自身 down 面** ∪ **1 個上のマスの down 面を除く hasSignal** で true。QC (5.3) はこの「1 個上」判定に由来 [確定]。→ sim `shouldExtend` と一致。
 - QC 対象 (5.3) [確定]。push limit 12 [**確定**: carpet `pushLimit` ルール既定 12 (options 10/12/14/100) = カスタマイズ可能な上限。バニラ値は 12]。block entity は押せない [確定: carpet `movableTileEntities` ルール既定 false の逆読み]。
+- **短パルス収縮 (伸長中に収縮 BE が到達) [確定: 実機 #82]**: vanilla PistonBaseBlock.triggerEvent (b0=1/2) は head の PistonMovingBlockEntity.finalTick() で伸長を即完了させてから収縮する。sim も同様に head moving を確定 (into) してから収縮 (world.ts executeBlockEvent retract)。非粘着は head 除去+押した石残置、粘着は twoPos が伸長中 payload のとき pistonPiece スキップで石を引かず残置。fixture observer-piston-pulse / sticky-observer-pulse で実機一致。**真の block dropping (アイテム化) はエンティティ境界原則 (13 §2) によりスコープ外**。
 - moving BE の progress は 0 → 0.5 → 1.0 の **2 ステップ = 2 gt** で完了 [確定: PistonMovingBlockEntity.tick の `progress += 0.5F` + G4mespeed `gs_numberOfSteps = 2.0f`]。
 
 #### ピストン伸長タイムライン [確定: 1.21.1 デコンパイル + 実機 fixture piston-basic]

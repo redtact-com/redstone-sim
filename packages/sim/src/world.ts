@@ -342,13 +342,14 @@ export class SimWorld {
    * を試みる (eject が先。両方成立し得る)。いずれか成功でクールダウン 8gt 再設定。
    * コンテナ内容が変わったら CU (emitComparatorUpdate) で隣接コンパレーターへ通知。
    *
-   * **既知の抽象化 (02 §6 に注記)**: vanilla の BlockEntity tick 順は
-   * ブロックエンティティ登録順 (ロード順) で観測可能だが、sim は決定論のため
-   * 座標順 (y 降順 → x → z = 上から下) で走査する。上下チェーンで上流を先に
-   * 処理することで、受信側クールダウン設定と併せて 1 個/8gt の素直な流下になる。
-   * 転送先ホッパーのクールダウン -1 補正 (vanilla の tickedGameTime 依存) は v1 では
-   * 一律 8 に単純化する (順序依存の double-move を防ぐ目的は達成。±1gt の差は
-   * blockstate 観測 = コンパレーター 0 交差では吸収される)。
+   * **走査順 = BE 登録順 (#91)**: vanilla の BlockEntity tick 順は登録順 (= 設置順)
+   * で観測可能。sim は `this.blocks` (Map) の **挿入順 = 設置順** で走査してこれを再現する。
+   * 縦チェーンの流下は配置順で変わる: top-down 配置 (上を先に設置) は上流先処理で
+   * 1 tick 素通り、bottom-up 配置は下流先処理でバッファする — どちらも実機の設置順と
+   * 一致 (実機 rcon で両配置を採取して確認。旧実装の座標順 y↓ は top-down 相当だった)。
+   * **クールダウン -1 補正 (#89)**: 押し込み先ホッパーは受信で実効 7gt になる
+   * (vanilla HopperBlockEntity.add の setCooldown(8-k) + 自 tick の -1 が相補的)。
+   * 2 ホッパー clock の 14gt 周期はこれで実機一致する。
    */
   private tickBlockEntities(changed: Set<string>): void {
     // #80: moving_piston の確定 (phase10 PistonMovingBlockEntity.tick 相当)。
@@ -370,12 +371,13 @@ export class SimWorld {
       this.finalizeMovingPiston(pos, mp, changed)
     }
 
-    // 座標順 (y 降順 → x → z): 上流 (高 y) を先に処理して素直な流下にする
+    // #91: BE 登録順 (= 設置順 = Map 挿入順) で走査する。座標順ソートは top-down 配置
+    // 相当で、bottom-up 等の配置では実機と乖離するため、実際の設置順を反映する
+    // (this.blocks の for..of は挿入順。既存 fixture は全て座標順配置なので挙動不変)。
     const hoppers: Pos3D[] = []
     for (const [key, b] of this.blocks) {
       if (b.type === 'hopper') hoppers.push(keyToPos(key))
     }
-    hoppers.sort((a, b) => b[1] - a[1] || a[0] - b[0] || a[2] - b[2])
 
     for (const pos of hoppers) {
       let h = this.getBlockAt(pos)
@@ -394,10 +396,21 @@ export class SimWorld {
           this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
           h = { ...h, count: h.count - 1 }
           this.setBlockAt(pos, h)
-          // 受信側がホッパーでクールダウン明けなら 8gt を設定 (double-move 防止)
-          if (d.type === 'hopper' && this.currentTick >= ((d as HopperState).cooldownUntil ?? 0)) {
+          // #89/#91: 押し込み先ホッパーのクールダウンを再設定 (vanilla HopperBlockEntity.add)。
+          // vanilla は `if (bl && dest is hopper && !isOnCustomCooldown) setCooldown(8-k)`:
+          //   bl = 受信スロットが空だった / k=1: 押込先が同gt 既 tick / k=0: 未 tick。
+          //   k=0 でも押込先は自 serverTick で -1 され結局 **実効 7gt**。よって空受信時は
+          //   一律 currentTick+7 (残留クールダウン中でもリセット。旧実装は off-cooldown 時
+          //   のみ再設定で 7/8 desync→bounce/stall し 2-clock が 16gt にズレた: #89)。
+          // ★ bl 条件が要 (#91): bottom-up 縦チェーンでは受信側が先に suck して非空に
+          //   なってから push されるため bl=false → -1 を効かせず既存 cooldown(+8) を保つ。
+          //   これを怠ると bottom-up 配置で位相が 1gt ずれる。
+          if (d.type === 'hopper' && (d.count ?? 0) === 0) {  // bl: 受信スロットが空だった
             const cur = this.getBlockAt(destPos) as HopperState
-            this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN })
+            const remaining = (cur.cooldownUntil ?? 0) - this.currentTick
+            if (remaining <= HOPPER_COOLDOWN) {  // !isOnCustomCooldown (残り>8gt でない)
+              this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN - 1 })
+            }
           }
           this.emitComparatorUpdate(destPos)
           changed.add(posKey(destPos))
@@ -884,9 +897,14 @@ export class SimWorld {
       const next: ObserverState = { ...block, powered: !block.powered }
       this.setBlockAt(pos, next)
       changed.push(posKey(pos))
+      // #75: 他の STC 素子と対称に実行トレース (Ob{n.2}/Ob{f.2}) を出す。
+      // 従来は apply() を経由せず手動で setBlock していたため実行行が欠落していた。
+      this.traceProcess('ST', 'Ob', next.powered ? 'n' : 'f', 2)
+      this.traceOpenUpdate(pos)
       this.emitShapeUpdate(pos)          // setBlock flag2 → PP (連鎖先オブザーバーを起動)
       if (next.powered) this.schedule(pos, 2, 0)  // OFF tick を背面 NC より先に予約
       this.propagateChange(pos)          // 背面 1 マスへ strong 15 の NC
+      this.traceCloseUpdate('Ob', next.powered ? 'n' : 'f', 2, 'ST')
     } else if (block.type === 'dropper') {
       // vanilla DropperBlock.dispenseFrom (ST フェーズ) [確定: 26.2]:
       // ランダムスロットの 1 個を前方コンテナへ挿入。sim は種別なしなので count を移す。
@@ -1056,9 +1074,10 @@ export class SimWorld {
     const sticky = piston.type === 'sticky_piston'
     const headPos = neighbor(ev.pos, piston.facing)
 
-    // 伸縮中 (moving) セルが絡む再イベントは v1 では無視
-    // (vanilla の短パルス droppings は v2。10 §piston 参照)
-    if (this.getBlockAt(headPos)?.type === 'moving_piston') return []
+    // 伸長の再入は base の extended=true で (下の extend 分岐で) 弾かれる。
+    // 収縮が伸長中 (head=moving) に到達するケースは #82 で retract 分岐が finalTick
+    // 相当を行うため、ここでの一律 no-op ガードは撤去した (mid-retract の base=moving は
+    // ev.pos のブロック種チェック (block.type !== piston) で既に弾かれている)。
 
     const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
       // #80: 確定は ST 相の tile tick でなく BlockEntity 相 (finalizeDue) で行う。
@@ -1117,6 +1136,17 @@ export class SimWorld {
       if (!piston.extended) return []
       // トレース: BE 実行 (収縮)
       this.traceProcess('BE', 'Pi', 'r', 0)
+      // #82: 収縮 BE が伸長中 (head=moving) に到達したら、まず伸長を即確定させる
+      // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) — head の
+      //  PistonMovingBlockEntity.finalTick() で伸長を完了させてから収縮に入る]。
+      // head の moving を into (piston_head) へ確定させると以降の通常収縮が
+      // それを除去/引く。押された payload の moving は phase10 (tickBlockEntities)
+      // で自然に確定する (finalizeDue が同 tick)。実機 observer-piston-pulse と一致。
+      const headMoving = this.getBlockAt(headPos)
+      if (headMoving?.type === 'moving_piston') {
+        this.setBlockAt(headPos, headMoving.into)
+        changed.push(posKey(headPos))
+      }
       // head セルは即時消去
       if (this.getBlockAt(headPos)?.type === 'piston_head') {
         this.setBlockAt(headPos, { type: 'air' })

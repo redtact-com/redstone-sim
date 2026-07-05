@@ -2,6 +2,10 @@
 # オブザーバーが自身の OFF(2gt) を近傍更新より先に予約するため、同 tick・同 priority(0) の
 # 飲み込み順序でコンパレーター評価時にはオブザーバー出力が既に 0 に戻っている。
 # → コンパレーターは一度も powered にならず、前面ランプも点灯しない。
+# #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
+# 【#75 訂正】この配置はコンパレーターが観測面と逆を向き observer 出力を読まない
+# = 幾何学的非読取 (Co 行が出ない)。真の subtick 飲み込み (Co が予約されるが OFF が
+# seq 先で潰す) は timing/comparator-swallow-p0.rstest が検証する。
 meta {
   name: オブザーバー飲み込み (comparator swallow)
   ref: 02 §2.4 / fixture observer-comparator-swallow
@@ -14,7 +18,9 @@ fixture observer-comparator-swallow      # blocks/inputs/ticks を取込
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob{n.2}
   4gt[ST]: Ob(f.2) p0
+  6gt[ST]: Ob{f.2}
 }
 
 state {

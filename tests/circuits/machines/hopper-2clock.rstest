@@ -1,13 +1,15 @@
-# 2 ホッパー ping-pong クロック: A(east)⇄B(west) が 1 個を 8gt クールダウンごとに
-# 交換。A 背面コンパレーターが充填 (信号 1 ⇔ 0) を読み 16gt 周期でトグルする。
-# lever(A 南の block 上)で A を初期ロック (enabled=false, settled)、t2 で解除して発振。
-# 期待周期は 02 §6 hopper (setCooldown(8) = 転送 8gt) から先に導出: 1 個が A→B→A と
-# 8gt おきに移動 → A の充填は 8gt ごとに 1↔0 → コンパレーター powered は 16gt 周期。
+# 2 ホッパー ping-pong クロック: A(east)⇄B(west) が 1 個を交換。A 背面コンパレーターが
+# 充填 (信号 1 ⇔ 0) を読んでトグルする。lever(A 南の block 上)で A を初期ロック
+# (enabled=false, settled)、t2 で解除して発振。
+# ★ 周期は **7gt 半周期 (14gt)**。vanilla HopperBlockEntity.add の -1 補正 (押し込み先が
+#   同gt に既に tick 済みなら setCooldown(8-1)=7、未 tick でも自 tick で -1 され実効 7gt)
+#   により、1 個が A→B→A と **7gt おき**に移動する → コンパレーター powered は 14gt 周期。
+#   実機 microTiming/実機 fixture (hopper-2clock.json) と一致 (#89 で flat-8 の 16gt を修正)。
 # ※ trace gt は settle(flush) 2gt 分オフセット (実出力から書き写し)。検証対象は
-#   コンパレーター再計算間隔 8gt (=クールダウン) と powered の 16gt 周期。
+#   コンパレーター再計算間隔 7gt と powered の 14gt 周期。
 meta {
-  name: 2 ホッパークロック (8gt クールダウン → 16gt 周期)
-  ref: 02 §6 hopper [setCooldown(8) / eject→suck / NC ロック] / §6 comparator 充填式
+  name: 2 ホッパークロック (7gt 転送 → 14gt 周期)
+  ref: 02 §6 hopper [setCooldown(8) の -1 補正 = 実効7gt / eject→suck / NC ロック] / #89
 }
 
 circuit {
@@ -26,16 +28,16 @@ inputs {
 
 ticks 40
 
-# 部分一致 (settle 2gt オフセット済み)。Co(c.2) の予約が 8gt おきに現れる = 転送
-# クールダウン 8gt ごとに A の充填が変わりコンパレーターが再計算している証拠。
+# 部分一致 (settle 2gt オフセット済み)。Co(c.2) の予約が 7gt おきに現れる = 転送が
+# 実効 7gt ごとに A の充填を変えコンパレーターが再計算している証拠 (#89 の -1 補正)。
 trace {
   4gt[PI]: Le{f.0}                                             # gate 解除 (input t2 + settle 2gt)
   5gt[ST]: Co(c.2) p0                                          # A→B で A 空 → 再計算予約
   7gt[ST]: Co{c.2}
-  13gt[ST]: Co(c.2) p0                                         # 8gt 後: B→A で A 充填 → 再計算
-  15gt[ST]: Co{c.2}
-  21gt[ST]: Co(c.2) p0                                         # さらに 8gt 後
-  23gt[ST]: Co{c.2}
+  12gt[ST]: Co(c.2) p0                                         # 7gt 後: B→A で A 充填 → 再計算
+  14gt[ST]: Co{c.2}
+  19gt[ST]: Co(c.2) p0                                         # さらに 7gt 後
+  21gt[ST]: Co{c.2}
 }
 
 state {
@@ -43,6 +45,6 @@ state {
   t0  (1,1,0) hopper[enabled=false,facing=east]                    # A はロック (enabled=false)
   t2  (1,1,0) hopper[enabled=true,facing=east]                     # 解除
   t7  (0,1,0) comparator[facing=east,mode=compare,powered=false]   # item が B へ (A 空)
-  t15 (0,1,0) comparator[facing=east,mode=compare,powered=true]    # 8gt 後 A へ戻る
-  t23 (0,1,0) comparator[facing=east,mode=compare,powered=false]   # 16gt 周期で再び B へ
+  t14 (0,1,0) comparator[facing=east,mode=compare,powered=true]    # 7gt 後 A へ戻る
+  t21 (0,1,0) comparator[facing=east,mode=compare,powered=false]   # 14gt 周期で再び B へ
 }
