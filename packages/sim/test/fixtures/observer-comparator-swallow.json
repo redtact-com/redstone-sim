@@ -1,6 +1,6 @@
 {
   "name": "observer-comparator-swallow",
-  "description": "レバー→オブザーバー→コンパレーター→ランプ (I8 ③ / 02 §2.4 最重要回帰)。オブザーバー単体の 2gt パルスはコンパレーターを通らない: オブザーバーの tick が自身の OFF tick(2gt)を近傍更新より先に予約するため、同 tick・同 priority(0) の飲み込み順序でコンパレーターの評価時にはオブザーバー出力が既に 0 に戻っている。コンパレーターは一度も powered にならず前面ランプも点灯しない。",
+  "description": "レバー→オブザーバー(1,1,0 facing=west)→コンパレーター(2,1,0 facing=east)→ランプ(3,1,0)。【#75 訂正】この配置ではコンパレーターが観測面と逆 (back=east=lamp) を入力に読み、observer 出力 (east 面) はコンパレーターの**出力側**に当たるため読まれない = **幾何学的非読取**でランプが点かない (carpet 一致)。当初 description の『subtick 順飲み込み』は誤り。真の subtick 飲み込み (comparator が observer を back に読むがOFF が seq 先で潰す) は tests/circuits/timing/comparator-swallow-p0.rstest が検証する。本 fixture は『幾何学的にコンパレーターが observer を読まない』回帰として維持。",
   "mcVersion": "1.21.1",
   "ticks": 12,
   "region": {

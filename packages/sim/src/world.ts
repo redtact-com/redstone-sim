@@ -884,9 +884,14 @@ export class SimWorld {
       const next: ObserverState = { ...block, powered: !block.powered }
       this.setBlockAt(pos, next)
       changed.push(posKey(pos))
+      // #75: 他の STC 素子と対称に実行トレース (Ob{n.2}/Ob{f.2}) を出す。
+      // 従来は apply() を経由せず手動で setBlock していたため実行行が欠落していた。
+      this.traceProcess('ST', 'Ob', next.powered ? 'n' : 'f', 2)
+      this.traceOpenUpdate(pos)
       this.emitShapeUpdate(pos)          // setBlock flag2 → PP (連鎖先オブザーバーを起動)
       if (next.powered) this.schedule(pos, 2, 0)  // OFF tick を背面 NC より先に予約
       this.propagateChange(pos)          // 背面 1 マスへ strong 15 の NC
+      this.traceCloseUpdate('Ob', next.powered ? 'n' : 'f', 2, 'ST')
     } else if (block.type === 'dropper') {
       // vanilla DropperBlock.dispenseFrom (ST フェーズ) [確定: 26.2]:
       // ランダムスロットの 1 個を前方コンテナへ挿入。sim は種別なしなので count を移す。

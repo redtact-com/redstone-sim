@@ -18,6 +18,7 @@
 #   sim=仕様が一致 (PASS)。gt オフセット無し。
 #   ※ 対照 (飲み込み) は timing/comparator-swallow-p0: 前面ランプ → Co(c.2) p0 予約するが
 #     Co{c.2} 実行が現れない。ここは Co(c.2) p-1 かつ Co{c.2} が実行される = パルス通過の証拠。
+# #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
 meta {
   name: 飲み込みの例外 — 前面 side-facing ダイオードで priority -1、パルス通過
   ref: 02 §2.4 例外 (priority -1) / §6 comparator (shouldPrioritize) / 対照 timing/comparator-swallow-p0
@@ -41,12 +42,14 @@ ticks 12
 # (飲み込み側 timing/comparator-swallow-p0 は Co(c.2) p0 予約のみで Co{c.2} が出ない。)
 trace strict {
   2gt[PI]: Le{n.0}
-  2gt[ST]: Ob(n.2) p0     # OB が lever を PP 検知 → ON 予約
-  4gt[ST]: Ob(f.2) p0     # OB ON: 自身 OFF を予約 (パルス幅 2gt)
-  4gt[ST]: Co(c.2) p-1    # OB ON の背面 NC → CMP 予約 (前面 side-facing → priority -1)
-  6gt[ST]: Co{c.2}        # CMP 実行: OB OFF より先に走り入力 15 を読み ON (パルス通過)
-  6gt[ST]: Co(c.2) p-1    # OB OFF の NC → CMP は OFF を priority -1 再予約
-  8gt[ST]: Co{c.2}        # CMP OFF 実行 (通過パルスの立ち下がり)
+  2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob{n.2}
+  4gt[ST]: Ob(f.2) p0
+  4gt[ST]: Co(c.2) p-1
+  6gt[ST]: Co{c.2}
+  6gt[ST]: Ob{f.2}
+  6gt[ST]: Co(c.2) p-1
+  8gt[ST]: Co{c.2}
 }
 
 state {

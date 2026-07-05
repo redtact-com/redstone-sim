@@ -17,6 +17,7 @@
 #   sim=仕様が一致 (PASS)。gt オフセット無し。
 #   ※ strict trace の要点: 背面刺激 (2gt) の後に Ob 予約が一切現れず、観測面刺激 (8gt) の
 #     後にだけ Ob(n.2)/Ob(f.2) が出る = 「NC では起動しない」の直接証拠。
+# #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
 meta {
   name: PP 方向性 — 観測面のみ起動・背面 NC は無反応 (§4.1)
   ref: 02 §4.1 (PP 起動/NC 無反応) / §4.2 UPDATE_SHAPE / §6 observer
@@ -45,10 +46,12 @@ ticks 14
 # 完全一致。背面刺激 (2gt[PI]) の後に Ob 予約が無い = NC 非反応。観測面刺激 (8gt[PI]) の
 # 後にだけ Ob(n.2)/Ob(f.2) が現れる = PP 起動。この 2 事象の非対称が §4.1 の核心。
 trace strict {
-  2gt[PI]: Le{n.0}        # back lever ON — 以降に Ob 予約が無い (背面 NC は無反応)
-  8gt[PI]: Le{n.0}        # facing lever ON
-  8gt[ST]: Ob(n.2) p0     # 観測面 PP → O が ON を予約
-  10gt[ST]: Ob(f.2) p0    # ON 実行時に自身 OFF を予約 (パルス幅 2gt)
+  2gt[PI]: Le{n.0}
+  8gt[PI]: Le{n.0}
+  8gt[ST]: Ob(n.2) p0
+  10gt[ST]: Ob{n.2}
+  10gt[ST]: Ob(f.2) p0
+  12gt[ST]: Ob{f.2}
 }
 
 state {

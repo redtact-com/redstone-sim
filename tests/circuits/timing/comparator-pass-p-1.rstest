@@ -10,6 +10,7 @@
 #   はまだ ON(15) → コンパレーターが発火してパルスが通る。sim=仕様が一致 (PASS)。
 #
 # strict の要点: swallow 版に無かった Co{c.2} (実行) が priority -1 で現れる = 通過。
+# #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
 meta {
   name: コンパレーター通過 (別ダイオード向き, priority -1)
   ref: 02 §2.4 例外 / §6 observer,comparator / 08
@@ -33,11 +34,13 @@ ticks 12
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob{n.2}
   4gt[ST]: Ob(f.2) p0
-  4gt[ST]: Co(c.2) p-1      # front=別ダイオード → priority -1
-  6gt[ST]: Co{c.2}          # -1 なのでオブザーバー OFF(0) より先に実行 → パルスを掴む (通過)
-  6gt[ST]: Re(n.2) p-1      # 下流リピーターへ伝播
-  6gt[ST]: Co(c.2) p-1      # オブザーバー OFF 後に出力 0 へ戻す再予約
+  4gt[ST]: Co(c.2) p-1
+  6gt[ST]: Co{c.2}
+  6gt[ST]: Re(n.2) p-1
+  6gt[ST]: Ob{f.2}
+  6gt[ST]: Co(c.2) p-1
   8gt[ST]: Re{n.2}
   8gt[ST]: Co(c.2) p-1
   8gt[ST]: Co{c.2}
