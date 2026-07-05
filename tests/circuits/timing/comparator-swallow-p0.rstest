@@ -16,6 +16,7 @@
 # 一切現れない = 飲み込みの証拠。§2.4 のタイミング機序をトレースで直接固定する。
 # (注: 既存 comparator/observer-swallow は observer がコンパレーター出力側に来る配置で
 #  コンパレーターが observer を読まないため Co 予約自体が出ない — findings 参照)。
+# #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
 meta {
   name: コンパレーター飲み込み (背面配置, priority 0)
   ref: 02 §2.4 / §6 observer,comparator / 08
@@ -36,12 +37,14 @@ inputs {
 ticks 12
 
 trace strict {
-  2gt[PI]: Le{n.0}
-  2gt[ST]: Ob(n.2) p0       # オブザーバー ON 予約 (PP 検知)
-  4gt[ST]: Ob(f.2) p0       # ON 実行時、自身 OFF を近傍更新より先に予約
-  4gt[ST]: Co(c.2) p0       # コンパレーターは NC を受けて tick 予約 (priority 0)
   # ↑ Co{c.2} (実行) が現れない = 飲み込み: gt6 でオブザーバー OFF が先に走り
   #   コンパレーター tick 時には入力 0 → 出力不変で無反応 (トレース行なし)
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob{n.2}
+  4gt[ST]: Ob(f.2) p0
+  4gt[ST]: Co(c.2) p0
+  6gt[ST]: Ob{f.2}
 }
 
 state {

@@ -12,7 +12,9 @@ fixture observer-detects-dust
 trace {
   2gt[PI]: Le{n.0}
   2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob{n.2}     # ON 実行 (#75)
   4gt[ST]: Ob(f.2) p0
+  6gt[ST]: Ob{f.2}     # OFF 実行 (#75)
   6gt[ST]: La(f.4) p0
 }
 
