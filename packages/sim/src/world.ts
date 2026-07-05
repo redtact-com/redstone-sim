@@ -394,10 +394,19 @@ export class SimWorld {
           this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
           h = { ...h, count: h.count - 1 }
           this.setBlockAt(pos, h)
-          // 受信側がホッパーでクールダウン明けなら 8gt を設定 (double-move 防止)
-          if (d.type === 'hopper' && this.currentTick >= ((d as HopperState).cooldownUntil ?? 0)) {
+          // #89: 押し込み先ホッパーのクールダウンを再設定 (vanilla HopperBlockEntity.add)。
+          // vanilla は「custom cooldown (残り>8gt) でない限り」受信時に setCooldown(8-k) する
+          // (k=1: 押込先が同gt に既に tick 済み / k=0: 未 tick)。k=0 の場合も押込先は
+          // 自身の serverTick で -1 され、結局 **実効 7gt** で eject する (8-k と自 tick 減算が
+          // 相補的)。よって受信側は一律 currentTick+7 とする。残留クールダウン中でも
+          // リセットするのが要 (旧実装は off-cooldown 時のみ再設定していたため、7/8 の
+          // desync で bounce → stall し 2-hopper clock の周期が 8gt にズレていた: #89)。
+          if (d.type === 'hopper') {
             const cur = this.getBlockAt(destPos) as HopperState
-            this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN })
+            const remaining = (cur.cooldownUntil ?? 0) - this.currentTick
+            if (remaining <= HOPPER_COOLDOWN) {  // !isOnCustomCooldown (残り>8gt でない)
+              this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN - 1 })
+            }
           }
           this.emitComparatorUpdate(destPos)
           changed.add(posKey(destPos))

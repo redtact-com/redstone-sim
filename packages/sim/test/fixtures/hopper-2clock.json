@@ -231,7 +231,5 @@
     "at": "2026-07-05T03:28:24.057Z",
     "mc": "1.21.1",
     "carpet": "1.21-1.4.147+v240613"
-  },
-  "skipUntil": "#89",
-  "skipReason": "実機生成でホッパー2-clock発振の位相が sim≠vanilla (comparator[0,1,0] のトグル tick がズレる)。ホッパー転送/クールダウン timing の divergence。修正後 skipUntil を外す"
+  }
 }
