@@ -72,7 +72,7 @@ describe('ホッパー転送 (eject/クールダウン 8gt)', () => {
     w.tick()
     expect(getHopper(w, 0, 1, 0).count).toBe(7)
     expect(getHopper(w, 0, 0, 0).count).toBe(3)
-    // 注: 縦ペアの eject+suck 二重経路の厳密な実機一致は別途 #91 で追跡 (本テストは sim 挙動 pin)
+    // 縦ペアの eject+suck 二重経路も設置順で実機一致 (#91 で BE 登録順=挿入順を実装済み)
   })
 
   it('空ホッパーは送り込まない / 満杯は受け取らない', () => {
@@ -121,8 +121,9 @@ describe('ホッパー チェーン (吸い出し + 送り込み)', () => {
     w.setBlockAt([0, 0, 0], hopper('south', 0))  // Z 下 (受け皿)
     w.initialize()
 
-    // 上から順に処理 (y 降順) するため、先頭アイテムは 1 tick で X→Y→Z へ流れる。
-    // ※ 実機は Y がバッファし素通りしない (BE tick 順の乖離)。厳密な実機一致は #91 で追跡。
+    // top-down 配置 (X を先に setBlock = BE 登録順で上流先処理) なので先頭アイテムは
+    // 1 tick で X→Y→Z へ素通りする。実機の top-down 配置と一致 (#91)。
+    // (bottom-up 配置なら Y がバッファする — 下の placement-order テスト参照)
     w.tick()
     expect(getHopper(w, 0, 0, 0).count).toBe(1)  // Z が受領
     expect(getHopper(w, 0, 2, 0).count).toBe(2)  // X から 1 個減
@@ -131,6 +132,37 @@ describe('ホッパー チェーン (吸い出し + 送り込み)', () => {
     for (let t = 2; t <= 9; t++) w.tick()
     expect(getHopper(w, 0, 0, 0).count).toBe(2)
     expect(getHopper(w, 0, 2, 0).count).toBe(0)
+  })
+
+  // #91: 縦チェーンの流下は **設置順 (BE 登録順 = 挿入順)** で変わり、どちらも実機一致。
+  // 期待値は実機 (Fabric 1.21.1) を rcon で採取した count 系列 (X 上/Y 中/Z 下, 5 個)。
+  it('縦チェーンの流下は設置順 (BE 登録順) 依存で実機一致する (#91)', () => {
+    const build = (order: ('X' | 'Y' | 'Z')[]) => {
+      const w = new SimWorld()
+      const put = {
+        X: () => w.setBlockAt([0, 2, 0], hopper('down', 5)),
+        Y: () => w.setBlockAt([0, 1, 0], hopper('down', 0)),
+        Z: () => w.setBlockAt([0, 0, 0], hopper('south', 0)),
+      }
+      for (const k of order) put[k]()
+      w.initialize()
+      const seq: number[][] = []
+      for (let t = 0; t <= 10; t++) {
+        if (t > 0) w.tick()
+        seq.push([getHopper(w, 0, 2, 0).count, getHopper(w, 0, 1, 0).count, getHopper(w, 0, 0, 0).count])
+      }
+      return seq
+    }
+    // top-down 設置 (X 先): 上流先処理 → 先頭が 1 tick 素通り
+    expect(build(['X', 'Y', 'Z'])).toEqual([
+      [5, 0, 0], [4, 0, 1], [4, 0, 1], [4, 0, 1], [4, 0, 1], [4, 0, 1],
+      [4, 0, 1], [4, 0, 1], [3, 1, 1], [2, 1, 2], [2, 1, 2],
+    ])
+    // bottom-up 設置 (Z 先): 下流先処理 → Y がバッファ (t1 で X→Y に 2 個)
+    expect(build(['Z', 'Y', 'X'])).toEqual([
+      [5, 0, 0], [3, 2, 0], [3, 1, 1], [3, 1, 1], [3, 1, 1], [3, 1, 1],
+      [3, 1, 1], [3, 1, 1], [3, 1, 1], [1, 2, 2], [1, 1, 3],
+    ])
   })
 })
 
