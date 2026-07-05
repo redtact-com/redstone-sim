@@ -51,27 +51,28 @@ describe('container.fillSignal (充填率→信号 02 §6)', () => {
 })
 
 describe('ホッパー転送 (eject/クールダウン 8gt)', () => {
-  it('facing 先ホッパーへ 1 個/8gt を送り込む', () => {
+  it('facing 先ホッパーへ送り込む (#89 -1 補正で受信側は実効 7gt)', () => {
     const w = new SimWorld()
-    // A(上) が下の B へ送り込む。B は south 向き (行き先なし) の受け皿
+    // A(上) が下の B へ送り込む。B は south 向き (行き先なし)。B は上の A も suck する。
     w.setBlockAt([0, 1, 0], hopper('down', 10))
     w.setBlockAt([0, 0, 0], hopper('south', 0))
     w.initialize()
 
-    // tick1: A→B 1 個。以降 8gt はクールダウン
+    // tick1: A→B 1 個 (eject)。B は受信で cooldown 実効 7gt (#89 vanilla -1 補正)
     w.tick()
     expect(getHopper(w, 0, 1, 0).count).toBe(9)
     expect(getHopper(w, 0, 0, 0).count).toBe(1)
 
-    // tick2..8: 変化なし (クールダウン中)
+    // tick8: B の 7gt cooldown 明け → B が A を suck (A=8, B=2)
     for (let t = 2; t <= 8; t++) w.tick()
-    expect(getHopper(w, 0, 1, 0).count).toBe(9)
-    expect(getHopper(w, 0, 0, 0).count).toBe(1)
-
-    // tick9: 次の 1 個 (クールダウン明け)
-    w.tick()
     expect(getHopper(w, 0, 1, 0).count).toBe(8)
     expect(getHopper(w, 0, 0, 0).count).toBe(2)
+
+    // tick9: A の 8gt cooldown 明け → A→B eject (A=7, B=3)
+    w.tick()
+    expect(getHopper(w, 0, 1, 0).count).toBe(7)
+    expect(getHopper(w, 0, 0, 0).count).toBe(3)
+    // 注: 縦ペアの eject+suck 二重経路の厳密な実機一致は別途 #91 で追跡 (本テストは sim 挙動 pin)
   })
 
   it('空ホッパーは送り込まない / 満杯は受け取らない', () => {
@@ -113,22 +114,23 @@ describe('ホッパー ロック (NC 受電で enabled=false)', () => {
 })
 
 describe('ホッパー チェーン (吸い出し + 送り込み)', () => {
-  it('3 段縦チェーンで最下段へ流下する (スループット 1/8gt)', () => {
+  it('3 段縦チェーンで最下段へ流下する', () => {
     const w = new SimWorld()
     w.setBlockAt([0, 2, 0], hopper('down', 3))   // X 上
     w.setBlockAt([0, 1, 0], hopper('down', 0))   // Y 中
     w.setBlockAt([0, 0, 0], hopper('south', 0))  // Z 下 (受け皿)
     w.initialize()
 
-    // 上から順に処理 (y 降順) するため、先頭アイテムは 1 tick で X→Y→Z へ流れる
+    // 上から順に処理 (y 降順) するため、先頭アイテムは 1 tick で X→Y→Z へ流れる。
+    // ※ 実機は Y がバッファし素通りしない (BE tick 順の乖離)。厳密な実機一致は #91 で追跡。
     w.tick()
     expect(getHopper(w, 0, 0, 0).count).toBe(1)  // Z が受領
     expect(getHopper(w, 0, 2, 0).count).toBe(2)  // X から 1 個減
 
-    // 8gt 後にもう 1 個
+    // 次の 1 個 (#89 -1 補正で受信側 7gt。X は 8gt eject + Y の suck で 2 個目が流下)
     for (let t = 2; t <= 9; t++) w.tick()
     expect(getHopper(w, 0, 0, 0).count).toBe(2)
-    expect(getHopper(w, 0, 2, 0).count).toBe(1)
+    expect(getHopper(w, 0, 2, 0).count).toBe(0)
   })
 })
 
