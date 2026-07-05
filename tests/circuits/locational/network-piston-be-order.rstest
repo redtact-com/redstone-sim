@@ -1,0 +1,56 @@
+# #52: 連結ワイヤ網内の within-tick 順序を BE 順 (ピストン発火順) で観測する回路。
+# 中心ダスト (cross) から N/E/S の 3 アーム (各 1 ダスト) が伸び、各アーム端 (中心から
+# 2 マス先) に外向きピストンを置く。レバー 1 点で中心を給電すると、3 ピストンの extend BE が
+# **網内 HashSet 起点順** (MC-11193 locational) で投入される。
+#
+# 仕様クロスチェック (02 §4.2 dust locational / 11 / updates.ts dustUpdateOrigins):
+#   中心 power 変化 → 連結各ダストで dustUpdateOrigins (HashSet 順の 7 origin × 6 dir)。
+#   アーム端ピストンは中心の直隣でなく 2 マス先なので、複数 origin が競合し、どの origin が
+#   HashSet 順で先に届くかで extend BE の投入順が決まる → 座標依存。
+#   sim 予測: 中心 z=0 で **S → E → N** (branch-fanout-flip の予約順 S,E,N と一致)。
+#
+# ★ 実機一致確認済み (#52, 2026-07-05 microTiming 観測)。BE 順は locational=絶対座標依存。
+#   中心を実機と同じ (17,3,10) に置くと sim/実機とも N→S→E、原点 (0,1,0) では S→E→N。
+#   同一座標で比較すれば sim=実機 (HashSet 順エミュは座標忠実)。詳細:
+#   docs/research/09_snapshots/network-piston-order.md。BE 順自体の回帰 pin は
+#   packages/sim/test/world.test.ts の describe「連結ダスト網内の BE 投入順 locational (#52)」。
+#   #46 で「2 素子 BE 順は NC 順 (W→E) 由来で平行移動不変」と分かったが、本回路は
+#   1 信号源→分岐網の HashSet 順そのものを BE 順に写すため、locational が BE として観測できる。
+#   本 .rstest (原点配置) は収束形の状態回帰を担う (BE 順自体は state に出ないため上記 unit で pin)。
+meta {
+  name: 連結ダスト網の BE 順 (locational, 3 ピストン S→E→N)
+  ref: 02 §4.2 / 11 / updates.ts / #46 / #52 (実機観察待ち)
+}
+
+circuit {
+  (-2,0,-3)..(3,0,3) stone
+  (-1,1,0) lever[face=floor,facing=north,powered=false]
+  (0,1,0) redstone_wire[east=side,north=side,power=0,south=side,west=side]
+  (0,1,-1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (1,1,0)  redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (0,1,1)  redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (0,1,-2) piston[extended=false,facing=north]
+  (0,1,-3) stone
+  (2,1,0)  piston[extended=false,facing=east]
+  (3,1,0)  stone
+  (0,1,2)  piston[extended=false,facing=south]
+  (0,1,3)  stone
+}
+
+inputs {
+  t2 use (-1,1,0)
+}
+
+ticks 8
+
+# sim 予測: レバー ON の同 tick に 3 ピストンの extend BE が S→E→N 順で投入され、
+# 翌 tick (t3) の BE 実行で S=(0,1,2)→E=(2,1,0)→N=(0,1,-2) の順に伸長開始。
+# 収束形 (t6): 3 ピストンとも伸長し石を外へ押す。BE 順の locational は #52 の実機観察で確定。
+state {
+  t6 (0,1,-2) piston[extended=true,facing=north]
+  t6 (2,1,0)  piston[extended=true,facing=east]
+  t6 (0,1,2)  piston[extended=true,facing=south]
+  t6 (0,1,-4) stone
+  t6 (4,1,0)  stone
+  t6 (0,1,4)  stone
+}

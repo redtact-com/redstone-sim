@@ -663,3 +663,62 @@ describe('SimWorld: BE 投入順 locational (#46)', () => {
     ])
   })
 })
+
+describe('SimWorld: 連結ダスト網内の BE 投入順 locational (#52)', () => {
+  // 中心 cross ダスト → N/E/S 3 アーム (各 1 ダスト) → 各端 (中心+2) に外向きピストン、
+  // レバー 1 点駆動。連結網内の within-tick 更新順が 3 ピストンの BE 投入順に写る。
+  // これは #46 の「独立網間の NC 順 (平行移動不変)」とは別メカニズムで、1 信号源→分岐網の
+  // dust HashSet 多段送信順 (MC-11193) が順序を決めるため **絶対座標に依存** する。
+  //
+  // ★ 実機 microTiming 観測 (2026-07-05, docs/research/09_snapshots/network-piston-order.md):
+  //   中心を (17,3,10) に置いた配置で ExecuteBlockEvent 順 = N(17,3,8) → S(17,3,12) → E(19,3,10)。
+  //   sim を **同一絶対座標** で走らせると同順を再現 = 実機一致 (座標忠実な HashSet 順エミュ)。
+  //   (中心を原点 (0,1,0) に置くと順序は S→E→N になる。座標で変わるのが locational の核心。)
+  function wire(conn: Partial<import('../src/types.js').WireConnections> = {}): BlockState {
+    return { type: 'wire', connections: { north: false, south: false, east: false, west: false, ...conn }, power: 0 }
+  }
+  function buildNetworkRig(cx: number, cy: number, cz: number): SimWorld {
+    // 中心 (cx,cy,cz)。床は cy-1、素子は cy。
+    const world = new SimWorld()
+    for (let x = cx - 3; x <= cx + 3; x++) {
+      for (let z = cz - 4; z <= cz + 4; z++) place3d(world, x, cy - 1, z, { type: 'solid' })
+    }
+    place3d(world, cx - 1, cy, cz, lever(false))
+    place3d(world, cx, cy, cz, wire({ north: true, south: true, east: true, west: true }))
+    place3d(world, cx, cy, cz - 1, wire({ north: true, south: true }))  // N アーム
+    place3d(world, cx + 1, cy, cz, wire({ east: true, west: true }))    // E アーム
+    place3d(world, cx, cy, cz + 1, wire({ north: true, south: true }))  // S アーム
+    place3d(world, cx, cy, cz - 2, { type: 'piston', facing: 'north', extended: false })
+    place3d(world, cx, cy, cz - 3, { type: 'solid' })
+    place3d(world, cx + 2, cy, cz, { type: 'piston', facing: 'east', extended: false })
+    place3d(world, cx + 3, cy, cz, { type: 'solid' })
+    place3d(world, cx, cy, cz + 2, { type: 'piston', facing: 'south', extended: false })
+    place3d(world, cx, cy, cz + 3, { type: 'solid' })
+    world.initialize()
+    world.flush(64)
+    return world
+  }
+
+  it('実機観測座標 (中心 17,3,10) で BE 順 = N→S→E (2026-07-05 実機一致)', () => {
+    const world = buildNetworkRig(17, 3, 10)
+    world.activateBlock(16, 3, 10)  // lever ON
+    const events = world.getBlockEvents()
+    expect(events.map(e => ({ pos: e.pos, param: e.param }))).toEqual([
+      { pos: [17, 3, 8], param: 'extend' },   // N
+      { pos: [17, 3, 12], param: 'extend' },  // S
+      { pos: [19, 3, 10], param: 'extend' },  // E
+    ])
+  })
+
+  it('locational: 中心を原点 (0,1,0) に置くと順序が変わる (S→E→N)', () => {
+    // 同一形状でも絶対座標が変われば HashSet 順が変わる = locational であることの確認。
+    const world = buildNetworkRig(0, 1, 0)
+    world.activateBlock(-1, 1, 0)
+    const events = world.getBlockEvents()
+    expect(events.map(e => ({ pos: e.pos, param: e.param }))).toEqual([
+      { pos: [0, 1, 2], param: 'extend' },    // S
+      { pos: [2, 1, 0], param: 'extend' },    // E
+      { pos: [0, 1, -2], param: 'extend' },   // N
+    ])
+  })
+})
