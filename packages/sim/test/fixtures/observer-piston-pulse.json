@@ -1,8 +1,10 @@
 {
-  "name": "rblock-piston-chain",
-  "description": "#79 zerotick 最前線: ピストン A が redstone_block を押し確定させ、下流ピストン B を直接起動。B が extended になる tick が と vanilla(t6, BlockEntity相) で食い違うかを実機一致 pin (#80 修正済み)。02 §6 piston line 448。",
+  "name": "observer-piston-pulse",
+  "description": "#80 検証: observer 2gt パルス駆動ピストンが収縮するか恒久伸長か。v1 は moving セル無視ガードで収縮せず伸長維持だが vanilla を実機確認。 [実機=t6収縮/sim=恒久伸長。#82 で解消]",
+  "skipUntil": "#82",
+  "skipReason": "短パルス収縮の v1 限界 (moving 窓中の収縮 no-op)。実機系列 (t6収縮) を保持し #82 修正で anchor 化",
   "mcVersion": "1.21.1",
-  "ticks": 12,
+  "ticks": 14,
   "region": {
     "from": [
       0,
@@ -10,7 +12,7 @@
       0
     ],
     "to": [
-      7,
+      6,
       1,
       2
     ]
@@ -74,14 +76,6 @@
     },
     {
       "pos": [
-        7,
-        0,
-        0
-      ],
-      "block": "stone"
-    },
-    {
-      "pos": [
         0,
         0,
         1
@@ -118,7 +112,7 @@
         1,
         0
       ],
-      "block": "piston[extended=false,facing=east]"
+      "block": "observer[facing=west,powered=false]"
     },
     {
       "pos": [
@@ -126,19 +120,11 @@
         1,
         0
       ],
-      "block": "redstone_block"
-    },
-    {
-      "pos": [
-        5,
-        1,
-        0
-      ],
       "block": "piston[extended=false,facing=east]"
     },
     {
       "pos": [
-        6,
+        4,
         1,
         0
       ],
@@ -179,7 +165,7 @@
       ]
     },
     {
-      "tick": 3,
+      "tick": 4,
       "changes": [
         {
           "pos": [
@@ -187,11 +173,19 @@
             1,
             0
           ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
           "block": "piston[extended=true,facing=east]"
         },
         {
           "pos": [
-            3,
+            4,
             1,
             0
           ],
@@ -199,32 +193,11 @@
         },
         {
           "pos": [
-            4,
+            5,
             1,
             0
           ],
           "block": "moving_piston[facing=east,type=normal]"
-        }
-      ]
-    },
-    {
-      "tick": 5,
-      "changes": [
-        {
-          "pos": [
-            3,
-            1,
-            0
-          ],
-          "block": "piston_head[facing=east,short=false,type=normal]"
-        },
-        {
-          "pos": [
-            4,
-            1,
-            0
-          ],
-          "block": "redstone_block"
         }
       ]
     },
@@ -233,27 +206,35 @@
       "changes": [
         {
           "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "observer[facing=west,powered=false]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
             5,
             1,
             0
           ],
-          "block": "piston[extended=true,facing=east]"
-        },
-        {
-          "pos": [
-            6,
-            1,
-            0
-          ],
-          "block": "moving_piston[facing=east,type=normal]"
-        },
-        {
-          "pos": [
-            7,
-            1,
-            0
-          ],
-          "block": "moving_piston[facing=east,type=normal]"
+          "block": "stone"
         }
       ]
     },
@@ -262,25 +243,17 @@
       "changes": [
         {
           "pos": [
-            6,
+            3,
             1,
             0
           ],
-          "block": "piston_head[facing=east,short=false,type=normal]"
-        },
-        {
-          "pos": [
-            7,
-            1,
-            0
-          ],
-          "block": "stone"
+          "block": "piston[extended=false,facing=east]"
         }
       ]
     }
   ],
   "generated": {
-    "at": "2026-07-04T17:55:42.130Z",
+    "at": "2026-07-04T23:53:41.549Z",
     "mc": "1.21.1",
     "carpet": "1.21-1.4.147+v240613"
   }

@@ -31,10 +31,11 @@ inputs {
 
 # piston は BEC: 予約 (p.s) → 実行 (p) → rblock 確定 (c.2) を +2gt。rblock 確定 (t5) と同 tick で
 # ダストが接続を張り替え給電される (within-tick)。gt は settle オフセット込みの実出力。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (rblock 確定 5gt[ST]→5gt[TE])。
 trace {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
-  5gt[ST]: Rb{c.2}      # rblock 確定 = この tick で形状遷移 + 給電が成立
+  5gt[TE]: Rb{c.2}      # rblock 確定 (BlockEntity 相) = この tick で形状遷移 + 給電が成立
 }
 
 state {

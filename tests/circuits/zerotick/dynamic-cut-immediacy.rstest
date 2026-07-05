@@ -9,7 +9,7 @@
 #   §5.4 [確定]: 上りダスト (1,1,0) は水平隣接 (2,1,0)=導体 かつ 自分の直上 (1,2,0)=非導体 の
 #     とき斜め上のワイヤ (2,2,0)=15 を読む → power 14 (減衰 1)。直上が導体化すると斜め上読みが
 #     断たれる。
-#   §6 piston [確定]: 押された solid の確定は BE 予約 (t3) → +2gt の ST tick (t5)。
+#   §6 piston [確定]: 押された solid の確定は BE 予約 (t3) → +2gt の BlockEntity (TE) 相 (t5)。
 #     transit 中 (t3-t4 は moving_piston) は直上がまだ導体でないため上りダストは 14 のまま
 #     = 切断は「確定 tick」に起きる (transit では起きない)。
 #   #51 動的接続: 確定 (t5) と同 tick で refreshWireShapesAround が (1,1,0) を cross 化し
@@ -18,18 +18,19 @@
 #   ※ 過渡状態 (moving_piston) は断言せず、確定後の最終形のみ断言 (品質規律)。
 meta {
   name: 0-tick 動的接続 切断の同 tick 即時性 (上りステップ斜め上読みを solid 押込で断つ)
-  ref: 02 §5.4 斜め上読み / §6 piston (+2gt ST 確定) / #51 / fixture dynamic-step-cut (実機 ground truth)
+  ref: 02 §5.4 斜め上読み / §6 piston (+2gt TE 確定) / #51 / fixture dynamic-step-cut (実機 ground truth)
 }
 
 fixture dynamic-step-cut
 
 # 安全なトレース (A 側の押し出しのみ)。extend BE 予約 (2gt) → 実行 (3gt, start delay 1gt) →
 # 押した solid の +2gt 確定 (5gt)。この Bl{c.2} と同 tick (t5) で下の state の切断が成立する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (solid 確定 5gt[ST]→5gt[TE])。
 trace {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   3gt[BE]: Pi{p.0}
-  5gt[ST]: Bl{c.2}
+  5gt[TE]: Bl{c.2}
 }
 
 state {

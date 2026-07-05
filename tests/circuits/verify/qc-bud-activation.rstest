@@ -17,13 +17,13 @@ meta {
 
 fixture qc-bud
 
-# 部分一致。piston 単体の BE→ST 系列を抜粋 (BEC 素子: block event で駆動)。
+# 部分一致。piston 単体の BE→TE 系列を抜粋 (BEC 素子: block event で駆動)。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・head 確定は TE 相)。
 trace {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   3gt[BE]: Pi{p.0}
-  3gt[ST]: Ph(c.2) p0
-  5gt[ST]: Ph{c.2}
+  5gt[TE]: Ph{c.2}
 }
 
 state {

@@ -54,6 +54,7 @@ ticks 24
 # 部分一致。BUD 分離の核: (1) R の NC 送信形状に piston が含まれない (QC 確立が piston を
 # NC しない)、(2) torch 点灯の NC (ST 相由来) が同 tick で piston BE を起こす (start delay 0)。
 # gt オフセット無し (初期 settle で tile tick が動かないため input gt = 反応 gt)。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・head 確定は TE 相)。
 trace {
   8gt[ST]: Re(n.2) p-1                # LR on → R on を予約 (delay=1 → 2gt)
   10gt[ST]: Re{n.2}                   # R on → S 強充電 → quasi 受電 = QC 確立
@@ -61,7 +62,7 @@ trace {
   16gt[ST]: To{n.2}                   # LT off → T 点灯 (torch 2gt)
   16gt[BE]: Pi(p.s)                   # T の NC (ST 相由来) が同 tick で piston BE を予約 (start delay 0)
   16gt[BE]: Pi{p.0}                   # 伸長実行 = QC を live 読みして初めて活性化 (BUD)
-  16gt[ST]: Ph(c.2) p0                # head 確定を +2gt 予約 (extension 2gt)
+  18gt[TE]: Ph{c.2}                   # head 確定 (extension 2gt、BlockEntity 相で確定)
 }
 
 state {

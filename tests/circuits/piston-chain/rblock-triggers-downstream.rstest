@@ -1,24 +1,25 @@
-# 連鎖起動 (実機突合候補): ピストン A が redstone_block を押し、確定した rblock が下流の
-# ピストン B を直接起動する (rblock 押し玉突きの核)。**02 §6 の既知抽象化が効く最前線**。
+# 連鎖起動: ピストン A が redstone_block を押し、確定した rblock が下流のピストン B を
+# 直接起動する (rblock 押し玉突きの核)。**#80 で実機一致に解決した最前線**。
 #
-# 【断言方針 — 過渡/相差は断言しない】
-#   02 §6 [確定: microTiming 2026-07-03]: moving_piston の確定を sim は ST フェーズ (phase4)、
-#   vanilla は BlockEntity フェーズ (phase10) で行う。ST は runBlockEvents (phase8) の前、
-#   BlockEntity は後。よって「確定した rblock が下流ピストンを直接起動する連鎖」では、
-#   B の BE が sim では rblock 確定と同 tick (t5) / vanilla では翌 tick (t6) に発火する
-#   = A 起動→B 伸長の間隔が sim 2gt / vanilla 3gt でズレうる。
-#   → **B の伸長タイミングは断言しない** (sim 出力は下記コメントに記録し、実機で決着させる)。
-#   実測 sim trace (参考): 5gt[ST]: Rb{c.2} の直後に 5gt[BE]: Pi(p.s)/Pi{p.0} (B が同 tick 発火)。
+# 【#80: 確定を BlockEntity 相へ移し sim=vanilla 一致 (旧「相差」は解消)】
+#   旧 sim は moving_piston の確定を ST フェーズ (phase4) で行い、ST は runBlockEvents
+#   (phase8) の前なので「確定 rblock が下流ピストンを直接起動する連鎖」では B の BE が
+#   同 tick (t5) に発火し、vanilla (BlockEntity phase10 確定 → B は翌 tick t6) と 1tick ズレて
+#   いた。#80 で確定を BlockEntity 相 (finalizeMovingPiston, phase10) へ移したため、
+#   確定 rblock の NC を受けた B の伸長 BE は翌 tick に発火する = vanilla 一致。
+#   → **B の伸長タイミングも断言できるようになった** (下記 trace/state で固定)。
+#   実測 sim trace: 5gt[TE]: Rb{c.2} → 同 tick に 5gt[BE]: Pi(p.s) 予約 → 6gt[BE]: Pi{p.0} 実行。
 #
-# 【断言する非分岐部分 — 仕様クロスチェック (02 §6 piston)】
-#   (a) A の伸長は player-action 起動の基本形と同一 (非分岐): t2→t3(BE)→t5 rblock 確定。
-#       rblock は (1,1,0)→(2,1,0) へ +1 (A の押し)。この dump 断面は sim/vanilla 一致。
-#   (b) 最終収束形は timing に依らず一意: レバーは押しっぱなし → rblock は B の側面を給電し
-#       続け、B は 1 度伸長したら維持。よって十分後 (t14) には A 伸長 + rblock(2,1,0) +
-#       B 伸長 + head(3,1,1) + 石(4,1,1) に収束 (sim/vanilla 共通)。この収束形のみ断言する。
+# 【仕様クロスチェック (02 §6 piston)】
+#   (a) A の伸長は player-action 起動の基本形と同一: t2→t3(BE)→t5 rblock 確定 (TE 相)。
+#       rblock は (1,1,0)→(2,1,0) へ +1 (A の押し)。
+#   (b) B は確定 rblock (t5) の NC を受けて t6 で伸長 (下流 +1tick、vanilla 一致)。
+#   (c) 最終収束形: レバーは押しっぱなし → rblock は B の側面を給電し続け B は伸長維持。
+#       t14 で A 伸長 + rblock(2,1,0) + B 伸長 + head(3,1,1) + 石(4,1,1) に収束。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 meta {
-  name: 連鎖起動 rblock 押しが下流ピストンを起動 (実機突合候補・収束形のみ断言)
-  ref: 02 §6 piston (既知抽象化: 確定=sim ST 相/vanilla BE 相 → 下流 piston 直接起動で 2gt vs 3gt)
+  name: 連鎖起動 rblock 押しが下流ピストンを起動 (#80 で実機一致・B の伸長 tick も断言)
+  ref: 02 §6 piston (#80: 確定を BlockEntity 相へ移し下流 piston 直接起動が vanilla 一致)
 }
 
 circuit {
@@ -40,24 +41,28 @@ inputs {
 
 ticks 14
 
-# 部分一致 (verbose)。断言は A の押し (非分岐) と rblock 確定までに限定し、B の BE 発火行は
-# 敢えて含めない (それが sim ST 相 vs vanilla BE 相で相違しうる箇所のため)。
+# 部分一致 (verbose)。A の押し → rblock 確定 (TE 相) → B の伸長 (翌 tick、vanilla 一致) まで
+# 一貫して固定する。#80 で確定を BlockEntity 相へ移したため B の BE は t6 に発火する。
 trace {
   2gt[BE]: Pi(p.s)        # A 伸長予約 (player-action → start delay 1gt)
   3gt[BE]: Pi{p.0}        # A 伸長実行
-  3gt[ST]: Rb(c.2) p0     # 押された rblock の moving 確定を +2gt 予約
-  5gt[ST]: Rb{c.2}        # rblock 確定 ((2,1,0) に着地。state t5 と同時成立)
+  5gt[TE]: Rb{c.2}        # rblock 確定 (BlockEntity 相。(2,1,0) に着地。state t5 と同時成立)
+  5gt[BE]: Pi(p.s)        # 確定 rblock の NC で B の伸長を予約 (同 tick 予約)
+  6gt[BE]: Pi{p.0}        # B 伸長実行は翌 tick (下流 +1tick = vanilla 一致)
 }
 
 state {
-  # --- A の押し (非分岐: 基本伸縮と同一) ---
+  # --- A の押し (基本伸縮と同一) ---
   t3 (0,1,0) piston[extended=true,facing=east]                   # A 伸長開始
   t5 (1,1,0) piston_head[facing=east,short=false,type=normal]    # A の head 確定
   t5 (2,1,0) redstone_block                                      # rblock が B 側面 (北) へ着地
-  # --- 収束形 (timing 非依存。B の伸長 tick 自体は断言しない) ---
+  # --- B の伸長 (#80 で t6 に確定、vanilla 一致) ---
+  t5 (2,1,1) piston[extended=false,facing=east]                  # 確定 tick はまだ非伸長 (下流 +1tick)
+  t6 (2,1,1) piston[extended=true,facing=east]                   # 翌 tick で伸長発火
+  # --- 収束形 ---
   t14 (0,1,0) piston[extended=true,facing=east]
   t14 (2,1,0) redstone_block
-  t14 (2,1,1) piston[extended=true,facing=east]                  # B は最終的に伸長 (rblock 給電)
+  t14 (2,1,1) piston[extended=true,facing=east]                  # B は伸長維持 (rblock 給電)
   t14 (3,1,1) piston_head[facing=east,short=false,type=normal]   # B の head
   t14 (4,1,1) stone                                             # B が押した石の最終位置
 }

@@ -1,16 +1,14 @@
 # trace snapshot: piston-basic
-# ピストン基本伸縮。BE 予約(p.s/r.s)→BE 実行(p.0/r.0)→moving_piston 確定は [ST] 扱い
+# ピストン基本伸縮。BE 予約(p.s/r.s)→BE 実行(p.0/r.0)→moving_piston 確定は [TE] 扱い
+# #80: moving_piston 確定を ST 相 tile tick から BlockEntity (TE) 相へ移行 (予約行消滅・実行 ST→TE)
 # 記法: docs/research/08_trace-notation.md / 生成: traceFixtureOnSim (verbose=false)
 # '#' 始まりと空行は比較時に無視される
 2gt[PI]: Le{n.0}
 2gt[BE]: Pi(p.s)
 3gt[BE]: Pi{p.0}
-3gt[ST]: Bl(c.2) p0
-3gt[ST]: Ph(c.2) p0
-5gt[ST]: Bl{c.2}
-5gt[ST]: Ph{c.2}
+5gt[TE]: Bl{c.2}
+5gt[TE]: Ph{c.2}
 10gt[PI]: Le{f.0}
 10gt[BE]: Pi(r.s)
 11gt[BE]: Pi{r.0}
-11gt[ST]: Pi(c.2) p0
-13gt[ST]: Pi{c.2}
+13gt[TE]: Pi{c.2}

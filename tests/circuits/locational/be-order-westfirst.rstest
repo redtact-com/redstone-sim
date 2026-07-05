@@ -13,8 +13,8 @@
 #    = 順序は座標=西/東の別で決まる、という意味の locational。dust の HashSet 順とは
 #    別機構。)
 #
-# 観測: レバー中心、片アーム端にピストン (BE=extend → Pi(p.s) / Pi{p.0} + head の
-#   Ph(c.2))、他端に音符ブロック (BE=play → Nb(n.s) / Nb{n.0})。
+# 観測: レバー中心、片アーム端にピストン (BE=extend → Pi(p.s) / Pi{p.0} + head 確定は
+#   TE 相 Ph{c.2})、他端に音符ブロック (BE=play → Nb(n.s) / Nb{n.0})。
 #   レイアウト A (ピストン西・音符東): Pi が先 → Pi(p.s), Nb(n.s)。
 #   レイアウト B (音符西・ピストン東): Nb が先 → Nb(n.s), Pi(p.s)  ← 入替で反転。
 #   sim=仕様(西→東) が一致 (PASS)。**検証対象は 2 BE の ORDER**であり gt 絶対値でない。
@@ -51,23 +51,22 @@ inputs {
 ticks 16
 
 # strict: 各レイアウトの同 gt 内 2 BE 行の ORDER が西→東 観測点。
-#   A: Pi(p.s) → Nb(n.s) / 実行 Pi{p.0}(+Ph) → Nb{n.0}
-#   B: Nb(n.s) → Pi(p.s) / 実行 Nb{n.0} → Pi{p.0}(+Ph)  ← 位置入替で反転
+#   A: Pi(p.s) → Nb(n.s) / 実行 Pi{p.0} → Nb{n.0}、head 確定は TE 相 Ph{c.2}
+#   B: Nb(n.s) → Pi(p.s) / 実行 Nb{n.0} → Pi{p.0}、head 確定は TE 相 Ph{c.2}  ← 位置入替で反転
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   2gt[BE]: Nb(n.s)
   3gt[BE]: Pi{p.0}
-  3gt[ST]: Ph(c.2) p0
   3gt[BE]: Nb{n.0}
-  5gt[ST]: Ph{c.2}
+  5gt[TE]: Ph{c.2}
   10gt[PI]: Le{n.0}
   10gt[BE]: Nb(n.s)
   10gt[BE]: Pi(p.s)
   11gt[BE]: Nb{n.0}
   11gt[BE]: Pi{p.0}
-  11gt[ST]: Ph(c.2) p0
-  13gt[ST]: Ph{c.2}
+  13gt[TE]: Ph{c.2}
 }
 
 state {

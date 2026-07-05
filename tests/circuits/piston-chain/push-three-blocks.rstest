@@ -9,8 +9,9 @@
 #       tick 境界適用 → 翌 tick の BE フェーズで発火)、extension 2gt (moving_piston が
 #       t3・t4 に在位 → t5 で確定)。3 石は各 +1 マス変位。
 #   (b) 期待 .rstest → (c) 実行採取 → (d) 照合: sim=仕様が一致 (PASS)。gt オフセット無し。
-#   ※ t3・t4 の (3..6,1,0) は過渡 moving_piston のため state 断言せず、trace の Bl(c.2)×3 +
-#     Ph(c.2) の予約 → t5 確定 と最終形 state で担保する。
+#   ※ t3・t4 の (3..6,1,0) は過渡 moving_piston のため state 断言せず、trace の Bl{c.2}×3 +
+#     Ph{c.2} の t5 確定 と最終形 state で担保する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
 meta {
   name: ブロック押し列 (石 3 個をまとめて 1 マス押す)
   ref: 02 §6 piston (getNeighborSignal / resolvePushStructure toPush 連鎖 / 2gt extension)
@@ -32,19 +33,15 @@ inputs {
 
 ticks 8
 
-# strict: 3 石の moving 予約 (Bl(c.2)×3) + head 予約 (Ph(c.2)) が 1 BE で並び、+2gt で確定。
+# strict: 3 石 + head の moving_piston が +2gt 後に BlockEntity (TE) 相でまとめて確定する。
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
   3gt[BE]: Pi{p.0}
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Bl(c.2) p0
-  3gt[ST]: Ph(c.2) p0
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Bl{c.2}
-  5gt[ST]: Ph{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Ph{c.2}
 }
 
 state {

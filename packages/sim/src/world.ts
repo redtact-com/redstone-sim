@@ -1,7 +1,7 @@
 import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
-  ObserverState, PressurePlateState, WeightedPressurePlateState,
+  ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
 } from './types.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
 import {
@@ -351,6 +351,25 @@ export class SimWorld {
    * blockstate 観測 = コンパレーター 0 交差では吸収される)。
    */
   private tickBlockEntities(changed: Set<string>): void {
+    // #80: moving_piston の確定 (phase10 PistonMovingBlockEntity.tick 相当)。
+    // BE フェーズ (phase8) の後に確定するため、確定ブロックが下流ピストンを
+    // 起動する連鎖の下流 BE は翌 tick 発火する (vanilla 一致、rblock-piston-chain)。
+    // 単独ピストンなど下流 BEC の無い場合は確定 gt が変わらないので観測不変。
+    const dueMoving: Pos3D[] = []
+    for (const [key, b] of this.blocks) {
+      if (b.type === 'moving_piston' && b.finalizeDue <= this.currentTick) {
+        dueMoving.push(keyToPos(key))
+      }
+    }
+    // 同 tick 確定は seq 順 (旧 ST 相 tile tick の予約順を再現)
+    dueMoving.sort((a, b) =>
+      (this.getBlockAt(a) as MovingPistonState).seq - (this.getBlockAt(b) as MovingPistonState).seq)
+    for (const pos of dueMoving) {
+      const mp = this.getBlockAt(pos)
+      if (mp?.type !== 'moving_piston') continue
+      this.finalizeMovingPiston(pos, mp, changed)
+    }
+
     // 座標順 (y 降順 → x → z): 上流 (高 y) を先に処理して素直な流下にする
     const hoppers: Pos3D[] = []
     for (const [key, b] of this.blocks) {
@@ -407,6 +426,22 @@ export class SimWorld {
         changed.add(key)
       }
     }
+  }
+
+  /**
+   * moving_piston を into へ確定させる (#80、旧 executeScheduledTick の moving_piston 分岐)。
+   * BlockEntity 相 (phase10) で呼ぶ。setBlock 相当の PP (観測面オブザーバー起動) +
+   * NC 伝播を行う。トレースは確定先の abbr で TE (TileEntity) フェーズとして記録。
+   */
+  private finalizeMovingPiston(pos: Pos3D, mp: MovingPistonState, changed: Set<string>): void {
+    const into = mp.into
+    this.setBlockAt(pos, into)
+    changed.add(posKey(pos))
+    this.traceProcess('TE', abbrOf(into), 'c', 2)
+    this.traceOpenUpdate(pos)
+    if (observableChanged(mp, into)) this.emitShapeUpdate(pos)
+    this.propagateChange(pos)
+    this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
 
   /**
@@ -834,9 +869,6 @@ export class SimWorld {
       // getSignalStrength を再評価する。手動モデルは entity を持たないため
       // 再評価値は常に 0 = OFF (isPressed false → reschedule なし)。ボタンと同型
       if (block.powered) apply({ ...block, powered: false }, 'f')
-    } else if (block.type === 'moving_piston') {
-      // 2gt の移動完了: into のブロックに確定 (08 §6: moving_piston 確定は [ST] 扱い)
-      apply(block.into, 'c')
     } else if (block.type === 'target') {
       // vanilla TargetBlock.tick: OUTPUT_POWER != 0 なら 0 に戻す (消灯)
       if (block.outputPower !== 0) apply({ ...block, outputPower: 0 }, 'f')
@@ -1029,8 +1061,14 @@ export class SimWorld {
     if (this.getBlockAt(headPos)?.type === 'moving_piston') return []
 
     const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
-      this.setBlockAt(pos, { type: 'moving_piston', facing: piston.facing, kind, into })
-      this.schedule(pos, 2, 0)  // 2gt 後に into へ確定 (executeScheduledTick)
+      // #80: 確定は ST 相の tile tick でなく BlockEntity 相 (finalizeDue) で行う。
+      // ST (phase4) は BE (phase8) の前なので、旧実装では確定ブロックが同 tick 内で
+      // 下流ピストンを起動していた (実機と 1tick ズレ)。vanilla は
+      // PistonMovingBlockEntity.tick (phase10) で確定するため下流 BE は翌 tick 発火。
+      this.setBlockAt(pos, {
+        type: 'moving_piston', facing: piston.facing, kind, into,
+        finalizeDue: this.currentTick + 2, seq: this.seqCounter++,
+      })
       changed.push(posKey(pos))
     }
 
