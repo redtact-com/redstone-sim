@@ -1,0 +1,769 @@
+{
+  "name": "network-piston-be-order",
+  "description": "#52 連結ダスト網内の within-tick 更新順を 3 ピストンの BE 発火順で観測する回路。中心 cross から N/E/S 3 アーム→各端に外向きピストン、レバー1点駆動。within-tick の BE 順 (MC-11193 locational) は sub-tick かつ microTiming チャット限定のため状態系列では現れない。本 fixture は実機 ground-truth 観察待ちの placeholder (skipUntil)。demo 再生 (live sim) で回路の生存を可視化する。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      8,
+      1,
+      8
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "lever[face=floor,facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        4
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        4
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        2
+      ],
+      "block": "piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        4
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        6
+      ],
+      "block": "piston[extended=false,facing=south]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        7
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "action": "use"
+    }
+  ],
+  "skipUntil": "#52",
+  "skipReason": "連結網内 BE 順の実機観察待ち (within-tick 順は microTiming 限定。観察一致後に実機 expect を投入して skipUntil を外す)"
+}
