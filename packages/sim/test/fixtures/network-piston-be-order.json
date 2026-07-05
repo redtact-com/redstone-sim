@@ -765,5 +765,5 @@
     }
   ],
   "skipUntil": "#52",
-  "skipReason": "連結網内 BE 順の実機観察待ち (within-tick 順は microTiming 限定。観察一致後に実機 expect を投入して skipUntil を外す)"
+  "skipReason": "demo 専用 placeholder。within-tick BE 順は microTiming で実機一致確認済み (2026-07-05, world.test.ts の describe #52 と 09_snapshots/network-piston-order.md で pin)。状態系列アンカー化は任意 (BE 順は state に出ないため優先度低)"
 }

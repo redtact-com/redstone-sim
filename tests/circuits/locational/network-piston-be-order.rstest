@@ -9,10 +9,14 @@
 #   HashSet 順で先に届くかで extend BE の投入順が決まる → 座標依存。
 #   sim 予測: 中心 z=0 で **S → E → N** (branch-fanout-flip の予約順 S,E,N と一致)。
 #
-# ★ 実機順は未観測 (#52)。microTiming の ExecuteBlockEvent 順で S→E→N か確認する。
+# ★ 実機一致確認済み (#52, 2026-07-05 microTiming 観測)。BE 順は locational=絶対座標依存。
+#   中心を実機と同じ (17,3,10) に置くと sim/実機とも N→S→E、原点 (0,1,0) では S→E→N。
+#   同一座標で比較すれば sim=実機 (HashSet 順エミュは座標忠実)。詳細:
+#   docs/research/09_snapshots/network-piston-order.md。BE 順自体の回帰 pin は
+#   packages/sim/test/world.test.ts の describe「連結ダスト網内の BE 投入順 locational (#52)」。
 #   #46 で「2 素子 BE 順は NC 順 (W→E) 由来で平行移動不変」と分かったが、本回路は
 #   1 信号源→分岐網の HashSet 順そのものを BE 順に写すため、locational が BE として観測できる。
-#   本テストは sim の予測順を strict で固定 (回帰)。実機一致は #52 の観察で確定する。
+#   本 .rstest (原点配置) は収束形の状態回帰を担う (BE 順自体は state に出ないため上記 unit で pin)。
 meta {
   name: 連結ダスト網の BE 順 (locational, 3 ピストン S→E→N)
   ref: 02 §4.2 / 11 / updates.ts / #46 / #52 (実機観察待ち)
