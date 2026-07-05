@@ -1,0 +1,159 @@
+{
+  "name": "sticky-observer-pulse",
+  "description": "#82 検証(粘着): observer 2gt パルス駆動の粘着ピストンが短パルス収縮で石を引くか残すか。vanilla pistonPiece ロジックの実機確認。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "player": {
+    "spawn": [
+      0.5,
+      1.0,
+      2.5
+    ],
+    "facing": [
+      180,
+      45
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      0.5
+    ]
+  },
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      1,
+      2
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}
