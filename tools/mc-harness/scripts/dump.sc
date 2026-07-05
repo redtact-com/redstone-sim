@@ -57,11 +57,15 @@ fx_setup() -> (
   global_region = fx:'region';
   from = global_region:'from';
   to   = global_region:'to';
-  // 領域クリア (更新抑制。前回 fixture の残骸を消す)
+  // 領域クリア (更新抑制。前回 fixture の残骸を消す)。
+  // ★ 領域を +8(x,z)/+6(y) パディングして掃除する。region ちょうどしか消さないと、
+  //   直前に生成した大領域 fixture の残骸 (領域外) が残り、ダスト接続形状を汚染する
+  //   (例: pulse-gen(z<=2)→comparator-compare(z<=1) で [1,1,2] 残留 dust に south 接続)。
+  pad = 8; pady = 6;
   without_updates(
-    c_for(x = from:0, x <= to:0, x += 1,
-      c_for(y = from:1, y <= to:1, y += 1,
-        c_for(z = from:2, z <= to:2, z += 1,
+    c_for(x = from:0 - pad, x <= to:0 + pad, x += 1,
+      c_for(y = from:1, y <= to:1 + pady, y += 1,
+        c_for(z = from:2 - pad, z <= to:2 + pad, z += 1,
           set([x, y, z], 'air')
         )
       )
