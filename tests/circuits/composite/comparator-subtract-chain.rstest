@@ -1,0 +1,63 @@
+# コンパレーター減算チェーン: subtract モードのコンパレーターを直列につなぎ、側面入力で
+# 信号を段階的に減らす。各段でアナログ値が保持されて次段へ渡ること (リピーターのように
+# 15 へリセットされないこと) と、各段の出力 = back - side を検証する。
+#
+# 仕様クロスチェック (02 §6 comparator [確定] / §5.1 アナログ保持):
+#   subtract: out = back - side (side = max(側面_L, 側面_R))。遅延 2gt 固定・priority 0
+#   (出力先が非ダイオード=dust のため)。back がコンパレーター/ダストなら値はアナログ保持
+#   (§5.1: アナログを保持するのはダストとコンパレーターのみ)。
+#   側面入力 7 は feeder の redstone_block → 8 マス dust 減衰で作る (§5.1 減衰 1/マス)。
+#   導出: 段1 back=15,side=7 → out=8 / 段2 back=8(段1 出力を直読),side=7 → out=1。
+#   sim=仕様が一致 (PASS)。※ gt オフセット無し。検証対象は out=back-side の連鎖と 2gt/段。
+#   ※ sim は comparator の facing を反転取り込み: facing=west → sim 出力=東・back=西。
+meta {
+  name: コンパレーター減算チェーン (15→8→1・段階的 subtract)
+  ref: 02 §6 comparator (subtract=back-side, delay 2gt, priority 0) / §5.1 アナログ保持・減衰
+}
+
+circuit {
+  (0,0,0)..(6,0,10) stone
+  # 主 back 線: lever → C1 → dust → C2 → 出力 dust
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) comparator[facing=west,mode=subtract,powered=false]   # C1: back=西(15), 出力=東
+  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # C1 出力を C2 へ中継
+  (4,1,0) comparator[facing=west,mode=subtract,powered=false]   # C2: back=C1 出力(8)
+  (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (6,1,0) redstone_wire[east=none,north=none,power=0,south=none,west=side]
+  # C1 側面 feeder (南へ垂直): redstone_block → 8 マス減衰 → side=7 (z=1)
+  (2,1,10) redstone_block
+  (2,1,1)..(2,1,9) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  # C2 側面 feeder: side=7 (z=1)。C1 feeder と x=2 離し merge を回避
+  (4,1,10) redstone_block
+  (4,1,1)..(4,1,9) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 16
+
+# 部分一致。段ごとに 2gt (Co(c.2) → Co{c.2}) で伝播。priority 0 (出力先 dust)。
+# C1 完了(4gt)後に C2 が新 back で再予約(4gt)→ 完了(6gt) = 直列 2 段 4gt。
+trace {
+  2gt[ST]: Co(c.2) p0     # C1: subtract 予約 (2gt, priority 0)
+  4gt[ST]: Co{c.2}        # C1 出力確定 (= 15-7 = 8)
+  4gt[ST]: Co(c.2) p0     # C2: back=8 に変化 → 再予約
+  6gt[ST]: Co{c.2}        # C2 出力確定 (= 8-7 = 1)
+}
+
+state {
+  t0 (2,1,0) comparator[facing=west,mode=subtract,powered=false]   # 初期 back=0 → out=0
+  # 側面入力 = 7 (feeder の減衰値)。両段とも同値。
+  t4 (2,1,1) redstone_wire[east=none,north=side,power=7,south=side,west=none]
+  # 段1: back=15, side=7 → out=8 (2gt)。アナログ 8 を保持 (15 にリセットしない)
+  t4 (2,1,0) comparator[facing=west,mode=subtract,powered=true]
+  t4 (3,1,0) redstone_wire[east=side,north=none,power=8,south=none,west=side]
+  t4 (5,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # 段2 未確定
+  # 段2: back=8, side=7 → out=1 (さらに 2gt)。段階的に減衰した
+  t6 (4,1,0) comparator[facing=west,mode=subtract,powered=true]
+  t6 (5,1,0) redstone_wire[east=side,north=none,power=1,south=none,west=side]
+  t6 (6,1,0) redstone_wire[east=none,north=none,power=0,south=none,west=side]   # 1 が dust で 0 に減衰
+}

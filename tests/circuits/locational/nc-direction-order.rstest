@@ -1,0 +1,80 @@
+# NC (neighborChanged) の送信方向順 W→E→(D,U)→N→S を、1 つの multi-NC が
+# 別々のリピーターへ届く順で固定する。**平行移動しても不変** = 方向配列由来で
+# あって locational ではないことを 2 アームで示す (dust HashSet 順との対比)。
+#
+# 仕様クロスチェック (02 §4.2 [確定: 1.21.1/26.2 デコンパイル]):
+#   NC は隣接 6 マスへ NeighborUpdater.UPDATE_ORDER = {WEST, EAST, DOWN, UP,
+#   NORTH, SOUTH} 順で送られる。sim は NC_UPDATE_ORDER = [west,east,down,up,
+#   north,south] (updates.ts)。レバー ON の自身 multi-NC (emitOutputShape の
+#   submitMultiNC(pos)) がこの順で 6 隣接を訪れる。
+#   → 西/東/北/南の隣に置いたリピーターの予約順は W,E,N,S (D=取付面・U=空気は
+#     ダイオード無しでスキップ)。
+#
+# 観測の作り方: 予約行は素の並びだと "Re(n.2) p-1" で見分けられないため、
+#   W→delay1 / E→delay2 / N→delay3 / S→delay4 と遅延を変え、Re(n.2)/Re(n.4)/
+#   Re(n.6)/Re(n.8) の並びで方向順を可視化する。
+#   ※ bu(...) トークンは multi-NC の**中心**を表す (submitMultiNC は 1 中心=1 bu)。
+#     方向配列 W,E,D,U,N,S は bu トークン列ではなく**下流予約の順**に現れる。
+#
+# アーム A (x=0) と +9x 平行移動のアーム B は**同じ W,E,N,S 順**を出す
+#   → 方向順は座標非依存 (固定)。sim=仕様が一致 (PASS)。
+#   **検証対象は方向順**であり gt 絶対値ではない。
+meta {
+  name: NC 送信方向順 W,E,N,S (平行移動不変・方向配列由来)
+  ref: 02 §4.2 NC / 26.2 NeighborUpdater.UPDATE_ORDER / updates.ts NC_UPDATE_ORDER
+}
+
+circuit {
+  # アーム A (x=0)
+  (-1,0,-1)..(1,0,1) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (-1,1,0) repeater[delay=1,facing=east,locked=false,powered=false]    # W → delay1
+  (1,1,0)  repeater[delay=2,facing=west,locked=false,powered=false]    # E → delay2
+  (0,1,-1) repeater[delay=3,facing=south,locked=false,powered=false]   # N → delay3
+  (0,1,1)  repeater[delay=4,facing=north,locked=false,powered=false]   # S → delay4
+  # アーム B (+9x 平行移動。同一形状)
+  (8,0,-1)..(10,0,1) stone
+  (9,1,0) lever[face=floor,facing=north,powered=false]
+  (8,1,0)  repeater[delay=1,facing=east,locked=false,powered=false]    # W → delay1
+  (10,1,0) repeater[delay=2,facing=west,locked=false,powered=false]    # E → delay2
+  (9,1,-1) repeater[delay=3,facing=south,locked=false,powered=false]   # N → delay3
+  (9,1,1)  repeater[delay=4,facing=north,locked=false,powered=false]   # S → delay4
+}
+
+inputs {
+  t2 use (0,1,0)
+  t14 use (9,1,0)
+}
+
+ticks 24
+
+# strict: 両アームとも予約順 Re(n.2),Re(n.4),Re(n.6),Re(n.8) = W,E,N,S (不変)。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.2) p-1
+  2gt[ST]: Re(n.4) p-1
+  2gt[ST]: Re(n.6) p-1
+  2gt[ST]: Re(n.8) p-1
+  4gt[ST]: Re{n.2}
+  6gt[ST]: Re{n.4}
+  8gt[ST]: Re{n.6}
+  10gt[ST]: Re{n.8}
+  14gt[PI]: Le{n.0}
+  14gt[ST]: Re(n.2) p-1
+  14gt[ST]: Re(n.4) p-1
+  14gt[ST]: Re(n.6) p-1
+  14gt[ST]: Re(n.8) p-1
+  16gt[ST]: Re{n.2}
+  18gt[ST]: Re{n.4}
+  20gt[ST]: Re{n.6}
+  22gt[ST]: Re{n.8}
+}
+
+state {
+  # 各リピーターは自身の遅延ぶん遅れて powered=true になる (順序は state に出ない)
+  t0  (-1,1,0) repeater[delay=1,facing=east,locked=false,powered=false]
+  t4  (-1,1,0) repeater[delay=1,facing=east,locked=false,powered=true]   # W delay1
+  t6  (1,1,0)  repeater[delay=2,facing=west,locked=false,powered=true]   # E delay2
+  t8  (0,1,-1) repeater[delay=3,facing=south,locked=false,powered=true]  # N delay3
+  t10 (0,1,1)  repeater[delay=4,facing=north,locked=false,powered=true]  # S delay4
+}

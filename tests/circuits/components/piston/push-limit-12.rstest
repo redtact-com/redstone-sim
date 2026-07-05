@@ -1,0 +1,23 @@
+# ピストンの押し出し上限 12 (02 §6 piston [確定: push limit 12])。
+# 仕様: ピストンが一度に押せるブロックは最大 12 個。13 個以上は PistonStructureResolver.resolve()
+#       が false を返し、block event が予約されない → ピストンは伸長しない (受電していても)。
+# fixture piston-limit-12: piston(2,1,2) の前方に石 13 個。給電されている (背面ダスト 1,1,2 = 13) が
+#       上限超過で伸長しない = extended=false のまま。BE トレースが一切出ないことが証拠。
+meta {
+  name: ピストン 押し 12 制限 (13 個は伸長しない)
+  ref: 02 §6 piston (push limit 12, resolve 失敗で BE 予約なし) / fixture piston-limit-12
+}
+
+fixture piston-limit-12
+
+state {
+  t2  (1,1,2) redstone_wire[east=side,north=side,power=13,south=none,west=none]  # ピストンは受電済 (13)
+  t4  (2,1,2) piston[extended=false,facing=east]   # 13 個 > 12 → 伸長しない
+  t10 (2,1,2) piston[extended=false,facing=east]   # 最後まで伸びない
+}
+
+# strict: 完全一致。piston の push BE (Pi(p.s)) が一切現れない = resolve 失敗の証拠。
+# (レバー入力の PI 行のみ。伸長すれば piston-basic の 2gt[BE]: Pi(p.s) が出るはず。)
+trace strict {
+  2gt[PI]: Le{n.0}
+}

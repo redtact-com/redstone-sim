@@ -1,0 +1,39 @@
+# 対称 2 ピストン回路 (piston W | dust | lever | dust | piston E)。
+# within-tick の BlockEvent 順を strict トレースで固定する (#15 microTiming / #46 で
+# sim を実機順=西→東 に修正済み)。BE 予約(p.s) → 次 gt で BE 実行(p.0) → 2gt 後に
+# BlockEntity (TE) 相で head 確定、の 2 素子ぶんが 1 tick 内に 2 行ずつ並ぶ。
+# ※ 2 台とも略号は Pi/Ph なので行文字列は同一。西→東 の tile 順そのものは #46 の
+#   fixture 状態系列で担保し、ここでは BE→TE の相対順と gt を固定する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
+meta {
+  name: 2 ピストン BE 順 (locational)
+  ref: 02 §1 phase / #46 / fixture two-piston-locational
+}
+
+fixture two-piston-locational
+
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  3gt[BE]: Pi{p.0}
+  5gt[TE]: Ph{c.2}
+  5gt[TE]: Ph{c.2}
+  9gt[PI]: Le{f.0}
+  9gt[BE]: Pi(r.s)
+  9gt[BE]: Pi(r.s)
+  10gt[BE]: Pi{r.0}
+  10gt[BE]: Pi{r.0}
+  12gt[TE]: Pi{c.2}
+  12gt[TE]: Pi{c.2}
+}
+
+state {
+  t3  (1,1,0) piston[extended=true,facing=west]      # 両ピストン伸長
+  t3  (5,1,0) piston[extended=true,facing=east]
+  t5  (0,1,0) piston_head[facing=west,short=false,type=normal]   # 2gt 後にヘッド確定
+  t5  (6,1,0) piston_head[facing=east,short=false,type=normal]
+  t12 (1,1,0) piston[extended=false,facing=west]      # 収縮完了
+  t12 (5,1,0) piston[extended=false,facing=east]
+}

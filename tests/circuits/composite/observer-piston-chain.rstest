@@ -1,0 +1,58 @@
+# 観測でピストンを起動する連鎖: オブザーバーがダストの変化を検知し、その出力 (背面 strong 15)
+# がピストンの背面を給電して伸長させ、石を 1 マス押す。
+#
+# 仕様クロスチェック (02 §6 observer / §6 piston / §4.1 PP [確定]):
+#   §6 observer: PP (updateShape) を観測面 (facing=west) から受けて 2gt tile tick を予約 →
+#     ON→2gt後OFF の 2gt パルス。出力は背面 (OPPOSITE[facing]=east) 1 マスに strong 15。
+#   §6 piston: オブザーバー ON の NC は ST 相由来 → start delay 0 で同 tick に BE 発火 → 伸長。
+#   導出: t2 lever→dust 通電 (PP) → t4 OB on → piston 伸長・石を (4,1,0)→(5,1,0) へ押す →
+#     伸長 moving_piston は +2gt 後の t6 に BlockEntity (TE) 相 (#80) で確定 → 石は (5,1,0) に着地。
+#
+# 【短パルス収縮は v1 限界 (#82)・実機は t6 収縮】
+#   OB off (t6) の収縮 BE が伸長 moving 窓の最中に到達するため、sim v1 は moving セル無視
+#   ガード (world.ts:1061) で収縮を落とし恒久伸長になる。**実機は t6 で収縮する**
+#   (fixture observer-piston-pulse で確認・#82 で解消予定)。よって本テストは sim/実機が
+#   一致する部分 = 伸長 (t4) と石の変位 (t6 に (5,1,0)=stone) のみを断言し、
+#   収縮の有無 (t8 以降の piston 状態) は #82 まで断言しない。
+meta {
+  name: 観測でピストン起動 (オブザーバー 2gt パルス → 伸長・石を押す。収縮は #82)
+  ref: 02 §6 observer (PP 起動・2gt パルス・背面 strong) / §6 piston (start delay 0) / §4.1 PP / #80 / #82
+}
+
+circuit {
+  (0,0,0)..(6,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) observer[facing=west,powered=false]
+  (3,1,0) piston[extended=false,facing=east]
+  (4,1,0) stone
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 8
+
+# 部分一致 (verbose)。OB の PP 起動 → piston 伸長 (start delay 0) → 伸長 moving の TE 相確定 (t6)。
+# 収縮 (Pi(r.s)) は予約されるが v1 では moving セル無視で落ちる (#82)。実機一致部分のみ。
+trace {
+  2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob(f.2) p0
+  4gt[BE]: Pi(p.s)
+  4gt[BE]: Pi{p.0}
+  6gt[TE]: Ph{c.2}
+}
+
+state {
+  t0 (2,1,0) observer[facing=west,powered=false]
+  t0 (4,1,0) stone
+  t0 (5,1,0) air
+  # t4: OB パルス ON → piston 伸長開始 (sim/実機一致)
+  t4 (2,1,0) observer[facing=west,powered=true]
+  t4 (3,1,0) piston[extended=true,facing=east]
+  # t6: OB パルス OFF (2gt 幅) + 伸長 moving が TE 相確定 → 石が (5,1,0) に着地 (sim/実機一致)
+  t6 (2,1,0) observer[facing=west,powered=false]
+  t6 (5,1,0) stone
+  # 収縮の有無 (t8+ の (3,1,0)/(4,1,0)) は v1 限界 #82 のため断言しない (実機は t6 収縮)
+}

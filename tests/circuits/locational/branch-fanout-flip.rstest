@@ -1,0 +1,81 @@
+# 多分岐ダスト網: 1 信号源から中心ダストが N/E/S の 3 アームへ分岐し、各アーム端の
+# リピーターへ NC を送る。3 リピーターの ST 予約順は dust の HashSet 起点順で決まり、
+# 同一形状を **+6z 平行移動すると順序が反転** (S,E,N → N,S,E) = locational。
+#
+# 仕様クロスチェック (02 §4.2 [確定] / 11 / updates.ts):
+#   中心ダスト power 変化 → 連結各ダストで dustUpdateOrigins → 各 origin から
+#   多段 NC。アーム端リピーターは中心の直隣ではなく **2 マス先** にあり、複数の
+#   origin (アームダスト自身 + 中心の隣接 origin) が競合して届く。どの origin が
+#   HashSet 順で先に届くかで予約順が決まる → 座標依存 (MC-11193)。
+#   (リピーターを中心の直隣に置くと origin=中心の W,E,D,U,N,S 固定順に潰れてしまう
+#    ため、アームで 2 マス離して locational を露出させる。)
+#
+# 観測: N→delay1 / E→delay2 / S→delay3 の遅延で予約順を可視化。
+#   アーム A (中心 z=0): 予約順 Re(n.6),Re(n.4),Re(n.2) = S,E,N。
+#   アーム B (中心 z=6): 予約順 Re(n.2),Re(n.6),Re(n.4) = N,S,E ← +6z で反転。
+#   (純 x 平行移動では大半が不変で、反転は z 方向の移動で顕在化する — HashSet の
+#    バケットは spread(hash)&15 で非線形なため軸により効き方が違う。)
+#   sim=仕様(locational) が一致 (PASS)。**検証対象は 3 予約行の ORDER**。
+#
+# locational は sim の実装順を固定するもので、実機一致は #46 fixture が担保。
+meta {
+  name: 多分岐ダスト網の予約順 (locational, +z 平行移動で反転)
+  ref: 02 §4.2 dust locational / 11 / updates.ts dustUpdateOrigins / #46
+}
+
+circuit {
+  # ---- アーム A (中心 z=0): S,E,N 順 ----
+  (-1,0,-2)..(2,0,2) stone
+  (-1,1,0) lever[face=floor,facing=north,powered=false]
+  (0,1,0) redstone_wire[east=side,north=side,power=0,south=side,west=side]      # 中心 (cross)
+  (0,1,-1) redstone_wire[east=none,north=side,power=0,south=side,west=none]     # N アーム
+  (1,1,0)  redstone_wire[east=side,north=none,power=0,south=none,west=side]     # E アーム
+  (0,1,1)  redstone_wire[east=none,north=side,power=0,south=side,west=none]     # S アーム
+  (0,1,-2) repeater[delay=1,facing=south,locked=false,powered=false]           # N 端 delay1
+  (2,1,0)  repeater[delay=2,facing=west,locked=false,powered=false]            # E 端 delay2
+  (0,1,2)  repeater[delay=3,facing=north,locked=false,powered=false]           # S 端 delay3
+  # ---- アーム B (中心 z=6, +6z 平行移動): N,S,E 順 (反転) ----
+  (-1,0,4)..(2,0,8) stone
+  (-1,1,6) lever[face=floor,facing=north,powered=false]
+  (0,1,6) redstone_wire[east=side,north=side,power=0,south=side,west=side]
+  (0,1,5) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (1,1,6)  redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (0,1,7)  redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (0,1,4) repeater[delay=1,facing=south,locked=false,powered=false]
+  (2,1,6)  repeater[delay=2,facing=west,locked=false,powered=false]
+  (0,1,8)  repeater[delay=3,facing=north,locked=false,powered=false]
+}
+
+inputs {
+  t2 use (-1,1,0)
+  t12 use (-1,1,6)
+}
+
+ticks 24
+
+# strict: 駆動 tick の 3 予約行の ORDER が locational 観測点。
+#   A(z=0) = Re(n.6),Re(n.4),Re(n.2) [S,E,N]  ⇄  B(z=6) = Re(n.2),Re(n.6),Re(n.4) [N,S,E]
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Re(n.6) p-1
+  2gt[ST]: Re(n.4) p-1
+  2gt[ST]: Re(n.2) p-1
+  4gt[ST]: Re{n.2}
+  6gt[ST]: Re{n.4}
+  8gt[ST]: Re{n.6}
+  12gt[PI]: Le{n.0}
+  12gt[ST]: Re(n.2) p-1
+  12gt[ST]: Re(n.6) p-1
+  12gt[ST]: Re(n.4) p-1
+  14gt[ST]: Re{n.2}
+  16gt[ST]: Re{n.4}
+  18gt[ST]: Re{n.6}
+}
+
+state {
+  # 両アームとも最終的に 3 リピーターが powered=true (確定は遅延順・順序は state に出ない)
+  t4 (0,1,-2) repeater[delay=1,facing=south,locked=false,powered=true]
+  t8 (0,1,2)  repeater[delay=3,facing=north,locked=false,powered=true]
+  t14 (0,1,4) repeater[delay=1,facing=south,locked=false,powered=true]
+  t18 (0,1,8) repeater[delay=3,facing=north,locked=false,powered=true]
+}

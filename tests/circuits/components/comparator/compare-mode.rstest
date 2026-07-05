@@ -1,0 +1,17 @@
+# コンパレーター compare モード (02 §6 comparator [確定])。
+# 仕様: back==0→0 / side>back→0 / compare は出力=back (side<=back のとき)。遅延 2gt 固定。
+# 構成: 背面 (メインライン) = 13、側面 (ダストループ) = 11。side(11) <= back(13) なので
+#       compare は back=13 をそのまま通す → 出力 13 (出力ダスト 13→12)。
+meta {
+  name: コンパレーター compare (出力=back=13)
+  ref: 02 §6 comparator (compare=back, 遅延 2gt) / fixture comparator-compare
+}
+
+fixture comparator-compare
+
+state {
+  t2 (4,1,0) comparator[facing=west,mode=compare,powered=false]  # 入力直後 (2gt 予約中)
+  t4 (4,1,0) comparator[facing=west,mode=compare,powered=true]   # 2gt 後に点灯
+  t4 (5,1,0) redstone_wire[east=side,north=none,power=13,south=none,west=side]  # 出力 = back(13)
+  t4 (6,1,0) redstone_wire[east=side,north=none,power=12,south=none,west=side]  # 1 減衰
+}

@@ -1,0 +1,45 @@
+# トーチクロック: 単一トーチの NOT 自己ループ (奇数=1 段)。lever で B を強充電し
+# 初期消灯固定 (settled)、t2 で解除して発振開始。
+# 期待周期は 02 §6 torch (TOGGLE_DELAY=2gt) から先に導出: NOT 自己ループの半周期 =
+# トーチ遅延 2gt、full 周期 = 4gt。よって解除後、トーチは 2gt おきに反転 (lit true↔false)
+# するはず。burnout (§6: MAX_RECENT_TOGGLES=8) 前の窓 (ticks=22) で周期のみ観測する。
+# ※ 自励発振の geometry は実機検証済みの torch-burnout と同型 (B/T/S/D)。
+meta {
+  name: トーチクロック (4gt 周期・奇数段 NOT ループ)
+  ref: 02 §6 torch [TOGGLE_DELAY=2] / 発振=奇数段ループ / burnout 定数
+}
+
+circuit {
+  (0,0,0)..(1,0,2) stone                                       # 床
+  (0,1,0) stone                                                # B: 土台+帰還先
+  (1,1,0) redstone_wall_torch[facing=east,lit=false]           # T: B(西)付
+  (1,2,0) stone                                                # S: T 直上=強充電
+  (0,2,0) redstone_wire[east=none,north=none,power=15,south=none,west=none]  # D: dot, S を読み B を弱充電
+  (0,1,1) lever[face=wall,facing=south,powered=true]           # gate: B(北)付, 初期 ON で消灯固定
+}
+
+inputs {
+  t2 use (0,1,1)                                               # gate 解除 → 発振開始
+}
+
+ticks 22
+
+# 部分一致。トーチ遅延 2gt (予約 To(*.2)) が交互に n/f を予約 = 2gt おき反転 = 4gt 周期。
+trace {
+  2gt[PI]: Le{f.0}                                             # gate 解除
+  2gt[ST]: To(n.2) p0                                          # 入力消失 → 2gt 後 ON 予約
+  4gt[ST]: To{n.2}                                             # ON 実行
+  4gt[ST]: To(f.2) p0                                          # 帰還で入力復帰 → 2gt 後 OFF 予約
+  6gt[ST]: To{f.2}                                             # OFF 実行
+  6gt[ST]: To(n.2) p0
+  8gt[ST]: To{n.2}                                             # 再び ON (前 ON=t4 から 4gt)
+}
+
+state {
+  t0  (1,1,0) redstone_wall_torch[facing=east,lit=false]       # gate 中は消灯
+  t4  (1,1,0) redstone_wall_torch[facing=east,lit=true]        # 発振: ON
+  t6  (1,1,0) redstone_wall_torch[facing=east,lit=false]       #       OFF (2gt 後)
+  t8  (1,1,0) redstone_wall_torch[facing=east,lit=true]        #       ON  (t4 から 4gt 周期)
+  t10 (1,1,0) redstone_wall_torch[facing=east,lit=false]
+  t12 (1,1,0) redstone_wall_torch[facing=east,lit=true]
+}

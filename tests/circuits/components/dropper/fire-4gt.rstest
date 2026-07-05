@@ -1,0 +1,26 @@
+# ドロッパーの発火 (4gt) と挿入 → コンパレーターの充填読み
+# (02 §6 dropper/container [確定: 26.2 DropperBlock])。
+# 仕様: neighborChanged で受電 (QC 含む) の立ち上がりに TRIGGERED を立て scheduleTick(4) を予約。
+#       発火は ST フェーズ (4gt 後)。前方コンテナへ 1 個挿入。
+# fixture dropper-insert: レバー ON → t2 triggered=true → 4gt 後 (t6) に発火して隣ホッパーへ 1 個挿入 →
+#       ホッパー充填 (count=1) を背面コンパレーターが CU 経由で読み、t8 で powered=true (信号 1)。
+meta {
+  name: ドロッパー 4gt 発火 + 挿入 → コンパレーター読み
+  ref: 02 §6 dropper (scheduleTick 4gt) + container 充填読み / fixture dropper-insert
+}
+
+fixture dropper-insert
+
+state {
+  t2 (1,1,0) dropper[facing=east,triggered=true]                     # 受電立ち上がりで triggered
+  t6 (3,1,0) comparator[facing=west,mode=compare,powered=false]      # 発火前 (挿入まだ) は 0
+  t8 (2,1,0) hopper[enabled=true,facing=south]                       # 受け皿ホッパー (blockstate は不変)
+  t8 (3,1,0) comparator[facing=west,mode=compare,powered=true]       # 挿入後の充填 (count=1) を読み点灯
+}
+
+# triggered → 4gt の ST 予約 (Dr(c.4))。挿入で充填変化 → コンパレーター再計算 (Co(c.2))。
+trace {
+  2gt[ST]: Dr(c.4) p0     # 4gt 後の発火を予約
+  6gt[ST]: Co(c.2) p0     # 挿入 (t6) でコンパレーター再計算予約 (CU)
+  8gt[ST]: Co{c.2}        # 2gt 後にコンパレーター確定 (powered=true)
+}

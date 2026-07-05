@@ -1,0 +1,47 @@
+# 玉突き: ピストン A が「別のピストン B (非伸長)」を可動ブロックとして 1 マス押す。
+# 非伸長ピストンは PushReaction NORMAL で可動 (02 §6 / isMovable) — B は facing を保ったまま
+# 平行移動する。押される側が単なる石でなくピストンでも押し構造に乗ることを検証する。
+#
+# 仕様クロスチェック (02 §6 piston [確定: 26.2 — 非伸長ピストンは可動]):
+#   (a) 導出: B(2,1,0 の東=3,1,0) は extended=false のピストン → resolvePushStructure は
+#       可動として toPush に収集 (石と同格)。A 伸長で B が (3,1,0)→(4,1,0) へ +1、facing=north
+#       は保存 (blockstate はそのまま移動)、extended=false のまま (押しても起動しない)。
+#       head は (3,1,0) に確定。player-action なので t2→t3(BE)→t5(確定)。
+#   (b) → (c) → (d): sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ trace の Pi{c.2} は押された B の moving 確定、Ph{c.2} は A の head。過渡 moving_piston
+#     は断言せず、t5 の確定形を断言する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
+meta {
+  name: 玉突き ピストンがピストンを押す (非伸長ピストンは可動・facing 保存)
+  ref: 02 §6 piston (isMovable: 非伸長 piston は PushReaction NORMAL)
+}
+
+circuit {
+  (0,0,0)..(6,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) piston[extended=false,facing=east]
+  (3,1,0) piston[extended=false,facing=north]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 8
+
+# strict: 押された B の moving 確定 (Pi{c.2}) + A の head (Ph{c.2}) が +2gt 後に TE 相で確定。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  5gt[TE]: Pi{c.2}
+  5gt[TE]: Ph{c.2}
+}
+
+state {
+  t3 (2,1,0) piston[extended=true,facing=east]                   # A 伸長開始
+  t5 (3,1,0) piston_head[facing=east,short=false,type=normal]    # A の head 確定
+  t5 (4,1,0) piston[extended=false,facing=north]                 # B が +1 移動・facing/非伸長を保存
+  t8 (4,1,0) piston[extended=false,facing=north]                 # 押された B は保持 (起動しない)
+}

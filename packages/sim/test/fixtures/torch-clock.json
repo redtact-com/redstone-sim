@@ -1,0 +1,357 @@
+{
+  "name": "torch-clock",
+  "description": "トーチクロック: 単一トーチの NOT 自己ループ (奇数 1 段)。lever で初期消灯固定、t2 解除で 4gt 周期発振 (トーチ遅延 2gt × ON/OFF)。burnout 前の窓で周期観測。02 §6 torch [TOGGLE_DELAY=2]。",
+  "mcVersion": "1.21.1",
+  "ticks": 22,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      1,
+      2,
+      2
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "lever[face=wall,facing=south,powered=true]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "lever[face=wall,facing=south,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        }
+      ]
+    },
+    {
+      "tick": 16,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 18,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        }
+      ]
+    },
+    {
+      "tick": 20,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 22,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-07-04T15:46:30.027Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

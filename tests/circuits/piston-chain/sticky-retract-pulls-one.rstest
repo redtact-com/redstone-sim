@@ -1,0 +1,60 @@
+# 粘着ピストンの引き: 石 2 個を押し出したあと収縮すると、引かれるのは head に接する 1 個だけ。
+# 遠い側の石は置き去りになる (= 引き連鎖は無い / 引きは常に 1 ブロック)。
+# 既存 fixture sticky-pull (石 1 個) と非重複で「押しは連鎖するが引きは 1 個」を対比する。
+#
+# 仕様クロスチェック (02 §6 piston [確定]):
+#   (a) 導出: §6 piston — 伸長は接触する可動ブロックを連鎖収集して押す (石 2 個 → 各 +1)。
+#       収縮 (sticky) は head セルの 1 個先 (neighbor(head)) の 1 ブロックのみを head セルへ
+#       引き戻す — vanilla PistonBaseBlock は retract で「1 ブロックだけ」を pull する
+#       (連鎖 pull は無い)。よって押した 2 個のうち近い方だけ戻り、遠い方は変位したまま。
+#       player-action 起動なので伸長 t2→t3(BE)→t5(確定)、収縮 t10→t11(BE)→t13(確定)。
+#   (b) → (c) → (d): sim=仕様が一致 (PASS)。gt オフセット無し。
+#   ※ 過渡 moving_piston は断言せず、確定後 (t5 伸長形 / t13 収縮形) を断言する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
+meta {
+  name: 粘着ピストン 引きは 1 個 (押し 2 個・引き 1 個で片方置き去り)
+  ref: 02 §6 piston (retract は neighbor(head) の 1 ブロックのみ pull / 連鎖 pull 無し)
+}
+
+circuit {
+  (0,0,0)..(7,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) sticky_piston[extended=false,facing=east]
+  (3,1,0) stone
+  (4,1,0) stone
+}
+
+inputs {
+  t2 use (0,1,0)
+  t10 use (0,1,0)
+}
+
+ticks 16
+
+# strict: 収縮で pull されるのは 1 個 (13gt の確定に Bl{c.2} が 1 つだけ + base の Pi{c.2})。
+# 押し (伸長) は Bl{c.2}×2 だが、収縮は Bl{c.2}×1 = 引きが 1 個であることの証拠。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Bl{c.2}
+  5gt[TE]: Ph{c.2}
+  10gt[PI]: Le{f.0}
+  10gt[BE]: Pi(r.s)
+  11gt[BE]: Pi{r.0}
+  13gt[TE]: Bl{c.2}
+  13gt[TE]: Pi{c.2}
+}
+
+state {
+  t5  (3,1,0) piston_head[facing=east,short=false,type=sticky]   # 伸長: head + 2 石が +1
+  t5  (4,1,0) stone
+  t5  (5,1,0) stone
+  t13 (2,1,0) sticky_piston[extended=false,facing=east]          # 収縮完了
+  t13 (3,1,0) stone                                              # 近い石が引き戻る (head セルへ)
+  t13 (4,1,0) air                                                # 引き跡は空 (連鎖 pull は無い)
+  t13 (5,1,0) stone                                              # 遠い石は置き去り
+  t16 (5,1,0) stone                                              # 恒久変位 (引かれない)
+}

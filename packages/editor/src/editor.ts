@@ -14,6 +14,8 @@ export interface PlaceOptions {
   pressedPower?: number
   /** コンテナがコンパレーター背面から読まれる実効出力 (0-15)。既定 0 */
   signal?: number
+  /** ホッパー/ドロッパーの内容個数。既定 0 */
+  count?: number
 }
 
 type ChangeHandler = (snapshot: WorldSnapshot) => void
@@ -199,6 +201,13 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
     case 'container':
       // コンパレーター背面から読まれる実効出力 (0-15) を editor で設定する (#54)。
       return { type: 'container', signal: opts.signal ?? 0 }
+    case 'hopper':
+      // 物流ホッパー (#65)。facing = 送り込み方向 (editor は水平のみ。既定 down)。
+      // count = 内容個数 (容量 320)。enabled は initialize で受電から確定
+      return { type: 'hopper', facing: opts.facing ?? 'down', count: opts.count ?? 0, enabled: true }
+    case 'dropper':
+      // 物流ドロッパー (#65)。facing = 出力方向。count = 内容個数 (容量 576)
+      return { type: 'dropper', facing: opts.facing ?? 'north', count: opts.count ?? 0, triggered: false }
     default:
       return null
   }

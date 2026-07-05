@@ -1,0 +1,51 @@
+# 0-tick 動的接続 (切断側): 粘着ピストンが上りステップ (A→B) の直上へ solid を押し込み、
+# 上りダストの斜め上読み (§5.4) を断つ。ダストが網から外れて 14→0 に落ちる tick と、
+# 押した solid が確定する tick が **同一 tick (t5)** であることを固定する
+# (接続張り替え・給電反映に遅延なし = 0-tick 回路の前提。切断は #51 push-immediacy の対)。
+# fixture dynamic-step-cut は実機 (Fabric+carpet) の ground truth。sim=実機一致は
+# fixtures.test.ts が別途担保し、本ケースは「同 tick 内即時性」を state+trace で固定する。
+#
+# 仕様クロスチェック (先に導出 → sim で照合):
+#   §5.4 [確定]: 上りダスト (1,1,0) は水平隣接 (2,1,0)=導体 かつ 自分の直上 (1,2,0)=非導体 の
+#     とき斜め上のワイヤ (2,2,0)=15 を読む → power 14 (減衰 1)。直上が導体化すると斜め上読みが
+#     断たれる。
+#   §6 piston [確定]: 押された solid の確定は BE 予約 (t3) → +2gt の BlockEntity (TE) 相 (t5)。
+#     transit 中 (t3-t4 は moving_piston) は直上がまだ導体でないため上りダストは 14 のまま
+#     = 切断は「確定 tick」に起きる (transit では起きない)。
+#   #51 動的接続: 確定 (t5) と同 tick で refreshWireShapesAround が (1,1,0) を cross 化し
+#     斜め上読みを失って 0 に落ちる。引き抜き (t15) の復帰も同 tick。
+#   → 導出値: t0/t3 は 14 (up-step)、t5 は cross+0、t15 は 14 復帰。sim=仕様が一致 (PASS)。
+#   ※ 過渡状態 (moving_piston) は断言せず、確定後の最終形のみ断言 (品質規律)。
+meta {
+  name: 0-tick 動的接続 切断の同 tick 即時性 (上りステップ斜め上読みを solid 押込で断つ)
+  ref: 02 §5.4 斜め上読み / §6 piston (+2gt TE 確定) / #51 / fixture dynamic-step-cut (実機 ground truth)
+}
+
+fixture dynamic-step-cut
+
+# 安全なトレース (A 側の押し出しのみ)。extend BE 予約 (2gt) → 実行 (3gt, start delay 1gt) →
+# 押した solid の +2gt 確定 (5gt)。この Bl{c.2} と同 tick (t5) で下の state の切断が成立する。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (solid 確定 5gt[ST]→5gt[TE])。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  5gt[TE]: Bl{c.2}
+}
+
+state {
+  # 初期: 上りステップ (east=up) で斜め上の 15 を読み power=14
+  t0 (1,1,0) redstone_wire[east=up,north=none,power=14,south=none,west=side]
+  # transit 中 (t3 は直上 (1,2,0)=moving_piston): 直上がまだ導体化していないため 14 のまま
+  # = 切断は transit では起きず「確定 tick」に起きることを固定
+  t3 (1,1,0) redstone_wire[east=up,north=none,power=14,south=none,west=side]
+  # 確定 tick t5: solid が (1,2,0) に着地 (Bl{c.2}) と同一 tick で、上りダストが cross 化 + 0 に落ちる
+  t5 (1,2,0) stone
+  t5 (1,2,1) piston_head[facing=north,short=false,type=sticky]
+  t5 (1,1,0) redstone_wire[east=side,north=side,power=0,south=side,west=side]
+  t5 (2,2,0) redstone_wire[east=side,north=side,power=15,south=side,west=side]
+  # 引き抜き: solid が (1,2,0) から抜けた確定 tick t15 で、上り接続と 14 が同 tick 復帰
+  t15 (1,1,0) redstone_wire[east=up,north=none,power=14,south=none,west=side]
+  t17 (1,2,1) stone
+  t17 (1,2,2) sticky_piston[extended=false,facing=north]
+}

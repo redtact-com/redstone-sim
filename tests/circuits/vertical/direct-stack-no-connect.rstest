@@ -1,0 +1,30 @@
+# 直上直下に直結したダストは接続しない (02 §5.4 / blocks/wire.getConnectedWireNeighbors)。
+# 仕様: ダストの給電/接続は「足元・接続方向の水平隣接・斜め上下 (ステップ)」のみ。
+#   真上/真下に重ねたダストは接続対象に含まれない (vanilla では支持要件で発生し得ない配置)。
+# 導出 (spec 先行): base(1,1,0) はレバー直結で 15。その真上 (1,2,0) は物理接続 0 本
+#   → 自動拡張で cross、かつ base とは非接続なので網から孤立し power=0。
+#   (真上への給電も無い: RedStoneWireBlock.getSignal は DOWN 方向 = 真上へ 0。11 §2)。
+# 実行して照合 → 一致 (sim=spec)。真上ダストは cross・0。
+meta {
+  name: 直上に重ねたダストは非接続 (真上ダストは cross・0)
+  ref: 02 §5.4 (斜めのみ接続, 真上非給電) / 11 §2 (cross の up 列 = 非給電)
+}
+
+circuit {
+  (0,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # base
+  (1,2,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # base の真上
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 6
+
+state {
+  # レバー ON。base は 15、真上ダストは接続されず 0 のまま (孤立 → cross 化)。
+  t6 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t6 (1,2,0) redstone_wire[east=side,north=side,power=0,south=side,west=side]
+}

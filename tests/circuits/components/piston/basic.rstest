@@ -1,0 +1,30 @@
+# ピストンの基本伸縮タイムライン (02 §6 piston [確定: fixture piston-basic])。
+# 仕様: BEC。player 入力起動は start delay 1gt (入力は tick 境界適用 → 翌 tick の BE フェーズで発火)、
+#       extension は moving_piston が 2gt 在位して確定。
+# t2 レバー ON → t3 piston extended=true + moving_piston 生成 → t5 head/押出先が最終形に確定。
+# t10 OFF → t11 収縮開始 (head→air) → t13 piston extended=false。
+meta {
+  name: ピストン 基本伸縮 (start delay 1gt / extension 2gt)
+  ref: 02 §6 piston (BEC, moving_piston 2gt) / fixture piston-basic
+}
+
+fixture piston-basic
+
+state {
+  t2  (2,1,0) piston[extended=false,facing=east]                   # 入力適用直後、BE 未発火
+  t3  (2,1,0) piston[extended=true,facing=east]                    # 翌 tick の BE で伸長開始
+  # ※ t3 の (3,1,0)/(4,1,0) は過渡の moving_piston (authored 不可のため state 断言せず、
+  #    伸長中→確定は下の trace BE 系列と t5 の最終形で担保する)
+  t5  (3,1,0) piston_head[facing=east,short=false,type=normal]     # 2gt 後に head 確定
+  t5  (4,1,0) stone                                                # 押された石が最終位置に確定
+  t11 (3,1,0) air                                                  # 収縮: head 撤去
+  t13 (2,1,0) piston[extended=false,facing=east]                   # 収縮完了
+}
+
+# BE フェーズでの伸長 (push) / 収縮 (retract) の予約 (p.s / r.s) → 実行 (p.0 / r.0) を検証。
+trace {
+  2gt[BE]: Pi(p.s)        # 伸長を BE 予約 (start delay で翌 tick 発火)
+  3gt[BE]: Pi{p.0}        # BE 実行 (moving 化)
+  10gt[BE]: Pi(r.s)       # 収縮を BE 予約
+  11gt[BE]: Pi{r.0}
+}

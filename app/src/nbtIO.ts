@@ -202,6 +202,17 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'container':
       // コンテナは barrel として書き出す (signal は NBT に現れないため破棄)
       return ['minecraft:barrel', {}]
+    case 'hopper':
+      // facing = 送り込み方向 = vanilla FACING (非反転)。count は NBT の中身依存で破棄
+      return ['minecraft:hopper', {
+        enabled: String((block as any).enabled ?? true),
+        facing: (block as any).facing ?? 'down',
+      }]
+    case 'dropper':
+      return ['minecraft:dropper', {
+        facing: (block as any).facing ?? 'north',
+        triggered: String((block as any).triggered ?? false),
+      }]
     case 'lever':
       return ['minecraft:lever', {
         face:    'floor',
@@ -361,6 +372,24 @@ function minecraftToBlockState(
     name.endsWith('shulker_box')
   ) {
     return { type: 'container', signal: 0 } as BlockState
+  }
+
+  if (name === 'minecraft:hopper') {
+    return {
+      type: 'hopper',
+      facing: (props.facing ?? 'down') as any,
+      count: 0,
+      enabled: props.enabled !== 'false',
+    } as BlockState
+  }
+
+  if (name === 'minecraft:dropper') {
+    return {
+      type: 'dropper',
+      facing: (props.facing ?? 'north') as any,
+      count: 0,
+      triggered: props.triggered === 'true',
+    } as BlockState
   }
 
   if (name === 'minecraft:lever') {

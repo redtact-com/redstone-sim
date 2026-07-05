@@ -1,0 +1,45 @@
+# 下側ダストの直上に導体があると上りステップが切断される
+# (02 §5.4 / 11 §1.2 [確定: 26.2 — getConnectionState は自分の直上が導体だと up を張らない])。
+# カット対象は isRedstoneConductor=true のブロック = solid / lamp / target / note_block。
+# (redstone_block は isRedstoneConductor(never) = 非導体なので切らない。02 §6 redstone_block)。
+#
+# 導出 (spec 先行): base(X,1,0) の直上 (X,2,0) に導体キャップを置くと、base の
+#   その方向への up ステップが消える → 1 段上の target(X,2,-1) は網から切り離され 0。
+#   base 側は源から通電し続ける (15→14→13→12 の E-W 減衰) ので、target=0 は
+#   「源が死んだ」ではなく「段が切れた」ことを示す。target は孤立 → 直線化 (E-W 隣接同士)。
+# 実行して照合 → 4 材 (solid/lamp/target/note) すべてで target=0 (sim=spec)。
+meta {
+  name: 上りステップは直上の導体 (solid/lamp/target/note) で切断される
+  ref: 02 §5.4 (上の遮蔽が導体なら斜め上受信を切断) / 11 §1.2 / blocks/wire.isWireCutBlock
+}
+
+circuit {
+  (0,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0)..(4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # base 線 (E-W)
+  # 各 base の直上キャップ (すべて導体 → up ステップを切る)
+  (1,2,0) stone
+  (2,2,0) redstone_lamp[lit=false]
+  (3,2,0) target[power=0]
+  (4,2,0) note_block
+  # 段の壁 (target ダストの土台) と、北 (-z) へ登るはずだった target ダスト
+  (1,1,-1)..(4,1,-1) stone
+  (1,2,-1)..(4,2,-1) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 6
+
+state {
+  # base 線は通電 (源は生きている): E-W に 15,14,13,12。
+  t6 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t6 (4,1,0) redstone_wire[east=side,north=none,power=12,south=none,west=side]
+  # 直上キャップが導体なので up ステップが張られず、target は 4 材すべて 0 (段カット)。
+  t6 (1,2,-1) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # solid キャップ
+  t6 (2,2,-1) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # lamp キャップ
+  t6 (3,2,-1) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # target キャップ
+  t6 (4,2,-1) redstone_wire[east=side,north=none,power=0,south=none,west=side]   # note_block キャップ
+}

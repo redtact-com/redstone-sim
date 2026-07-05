@@ -9,6 +9,11 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 §4.2 送信方向順 / §6 の DiodeBlock 再評価・burnout・ボタン持続・コンパレーター遅延・コンテナ式 / §1.4 入力位相を [確定] 化。
 本文中の「デコンパイル」の典拠バージョンは断りがなければ **1.21.1 と 26.2 の両方で一致確認済み** を意味する。
 
+v2 更新 (2026-07-03, #65): アイテム物流 (ホッパー・ドロッパー) を「コンテナ内の数値」モデルで実装
+(13 §4.2 スコープ入り)。§6 に hopper/dropper/container 節を追加 (転送クールダウン 8gt / ドロッパー発火 4gt /
+eject→suck 順 / NC ロック / CU 連動 / 容量抽象・BE フェーズ順の既知抽象化)。典拠 26.2 HopperBlockEntity /
+DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
+
 ---
 
 ## 1. ゲームティック構造
@@ -49,7 +54,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - **PLC** (Phaseless): 遅延なし即時伝播 — RS ダスト
 - **STC** (Scheduled Tick): tile tick で駆動 — リピーター/コンパレーター/トーチ/オブザーバー
 - **BEC** (Block Event): ブロックイベントで駆動 — ピストン
-- 出典: ArcFrout chap2 草稿 (git 履歴復元) [要検証: 分類自体は実装対応が確認できるが素子割当の網羅は未執筆]
+- 出典: ArcFrout chap2 草稿 (git 履歴復元)。sim 実装素子の割当は [確定: 26.2 — dust=RedStoneWireBlock.neighborChanged→updatePowerStrength を即時実行 (scheduleTick 経由せず) = PLC / リピーター・コンパレーター・トーチ・オブザーバー=neighborChanged (or updateShape)→scheduleTick 駆動 = STC / ピストン=checkIfExtend→level.blockEvent 駆動 = BEC]。ArcFrout 草稿側の全素子網羅は未執筆だが、概念フレーム自体は上記デコンパイルで実装対応を確認。
 
 ### 1.4 プレイヤー入力の適用位相 [確定] (1.21.1 デコンパイル、批評#9 解消)
 
@@ -110,7 +115,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - 非 ticking チャンクのイベントは退避して次 tick へ再スケジュール [確定]。
 - 実行時検証: getBlockState(pos).isOf(event.block) が不一致なら no-op [確定]。
 - **BED (block event delay)**: フェーズ開始時 (または前レイヤー処理後) のキュー内容を 1 層とする BFS 的レイヤー概念。現行実装は単一 FIFO だが観測順序は層状と等価 (1.12 以前は文字通り 2 リストスワップ) [確定]。
-- 使用ブロック: ピストン (伸縮)、音符ブロック、チェスト/シュルカーボックス (蓋)、鐘、エンドゲートウェイ、スポナー [要検証: techmcdocs 単一源]。
+- 使用ブロック: ピストン (伸縮)、音符ブロック、チェスト/シュルカーボックス (蓋)、鐘、エンドゲートウェイ、スポナー [確定: 26.2 — `level.blockEvent` を呼ぶクラス悉皆 grep: PistonBaseBlock / NoteBlock / ChestBlockEntity / ShulkerBoxBlockEntity / BellBlockEntity / TheEndGatewayBlockEntity / SpawnerBlockEntity。26.2 では EnderChestBlockEntity・DecoratedPotBlockEntity・PotentSulfurBlock も追加で使用 (元リストの拡張)。sim 実装分はピストンのみ (10 §)]。
 - 出典: 1.21.1/1.18 デコンパイル (ServerLevel.runBlockEvents)、SubTick BlockEventWorldMixin、https://techmcdocs.github.io/pages/GameTick/
 
 ---
@@ -163,6 +168,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   - wiki の「隣接 6 マス (下→上→北→南→西→東) を基準に…」という記述は集合**構築**順 (Direction.values() 順) であり、
     **送信順は HashSet 順で座標依存** — wiki 記述はここが不正確 (訂正)。
   - 接続形状変化時は `updateNeighborsOfNeighboringWires`/`checkCornerChangeAt` により水平隣接と斜め上下のワイヤにも同型の多段送信を行う。
+  - **2 素子の within-tick BE 順との機構差 [確定: #77 検証]**: 「2 ピストンのどちらが先に BE を投入するか」(#46) は上記 dust HashSet 順ではなく、**更新元 (レバー等) の NC 送信順 (W,E,D,U,N,S) が collectAdjacentWires→changedWires→blockEvents FIFO へ伝播する固定順**由来で、純平行移動では不変 (西→東 固定)。dust HashSet 順 (MC-11193 本体) は分岐ダスト網の予約順に効き、こちらは +z 平行移動で反転しうる (別機構)。tests/circuits/locational/ 参照。
 
 補足事実:
 - 更新機構は 1.19+ で NeighborUpdater 化。26.2 の実装は `CollectingNeighborUpdater` / `InstantNeighborUpdater` の 2 種で、
@@ -177,8 +183,9 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 - ダスト更新は**決定的だが locational (座標依存)**。上記の通りコード根拠まで確定。carpet fastRedstoneDust / TIS-Addition
   redstoneDustRandomUpdateOrder の存在とも整合。
 
-### 4.3 動力源化と活性化の分離 (BUD の原理) [要検証: ArcFrout 草稿単一源だが実装上重要]
+### 4.3 動力源化と活性化の分離 (BUD の原理) [確定: 26.2 デコンパイル]
 - 「動力源化 (powered)」に隣接更新は不要、「活性化 (状態変化)」は隣接更新を受けて初めて再評価される。→ powered なのに activated でない BUD 状態が生じる。
+- **典拠 [確定: 26.2]**: (a) 出力/被動力の**読み**は保持 state を即読みし更新を要さない — DiodeBlock.ownSignal=`POWERED?getOutputSignal:0` / RedStoneWireBlock.ownSignal=`POWER` / RedstoneTorchBlock.ownSignal=`LIT?15:0` / ObserverBlock.ownSignal=`POWERED?15:0` で、各 getSignal はこれを即返す。(b) **状態遷移 (activation)** は `tick()` でのみ起き、その tile tick 予約は近傍更新契機のみ — DiodeBlock.checkTickOnNeighbor / RedstoneTorchBlock.neighborChanged (LIT==入力 の不整合時)→scheduleTick、ObserverBlock は updateShape(PP)→startSignal。(c) PistonBaseBlock.getNeighborSignal は quasi 位置 (`pos.above()`) の下面以外の hasSignal を **live** で読み、checkIfExtend は neighborChanged 契機で呼ばれる → 「1 個上が受電 (powered) しても NC が来るまで伸長 (activated) しない」= BUD の実体。sim 観測: tests/circuits/verify/qc-bud-activation (facing 直背面でなく quasi 位置の通電で伸長)。
 - **設計指針: powered フラグ更新と neighbor update 受信時の状態再評価を別レイヤに分ける。**
 
 ---
@@ -188,13 +195,13 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
 ### 5.1 信号強度 [確定]
 - 0〜15 の 16 段階。動力部品は基本 15 を供給、ダストは 1 ブロックごとに 1 減衰 (最大 15 マス)。
 - 複数信号源の合流は **max 合成** [確定: HLPtool 実装 + techmcdocs]。
-- アナログ値を保持するのはダストとコンパレーターのみ。リピーターは 15 にリセット [要検証: ArcFrout 草稿]。
+- アナログ値を保持するのはダストとコンパレーターのみ。リピーターは 15 にリセット [確定: 26.2 — DiodeBlock.getOutputSignal は定数 15、RepeaterBlock は非 override (ownSignal=POWERED?getOutputSignal:0)。アナログ保持は RedStoneWireBlock.ownSignal=POWER と ComparatorBlock.getOutputSignal(ComparatorBlockEntity に保存した calculateOutputSignal) のみ。sim 観測: tests/circuits/verify/{repeater-resets-to-15,comparator-holds-analog} — 入力 10 でもリピーター出力 15/コンパレーター出力 10]。
 - 出典: https://ja.minecraft.wiki/w/レッドストーン回路、ArcFrout chap1
 
 ### 5.2 強/弱動力 (strong/hard・weak/soft powering) [確定]
 - リピーター/コンパレーター/トーチ (直上)/レバー等 (取り付け面) から直接給電された導体 = **強動力源化** → 起動素子にもダストにも伝える。
 - ダストから給電された導体 = **弱動力源化** → 起動素子には伝えるが**別のダストには伝えない**。
-- 動力源化した導体が他の導体をさらに動力源化することはない。信号強度は動力源化を経ても維持 [要検証: 強度維持は ArcFrout 単一源]。
+- 動力源化した導体が他の導体をさらに動力源化することはない。信号強度は動力源化を経ても維持 [確定: 26.2 — SignalGetter.getSignal = isRedstoneConductor ? max(state.getSignal, getDirectSignalTo(pos)) : state.getSignal。getDirectSignalTo は隣接 6 方向の getDirectSignal を **減衰なし** で max 集約するため、強充電された導体は源の強度をそのまま再放出する。−1 減衰はダスト間 (RedStoneWireBlock.calculateTargetStrength = 隣接ワイヤ最大 −1) のみで発生。sim 観測: tests/circuits/verify/strength-through-conductor — コンパレーター出力 12 が石を経て 12 のまま、その先のダストで初めて 11]。
 - 出典: https://ja.minecraft.wiki/w/レッドストーン回路 + ArcFrout chap1 の 2 源一致。
 
 ### 5.3 準接続 (QC) [確定 — デコンパイル悉皆確認済み]
@@ -249,6 +256,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   [確定: getSignal は取り付けブロックからの問い合わせのみ 0 (他 5 方向 15)、getDirectSignal は直上ブロックからの問い合わせのみ 15]。
 - NC 受信時: 「LIT == 入力あり」という**不整合状態のときだけ** 2 gt 後の tick を予約 (willTickThisTick ガード付き) [確定]。
 - **burnout** [確定: 未解明 #4 解消]: 定数 `RECENT_TOGGLE_TIMER=60` / `MAX_RECENT_TOGGLES=8` / `RESTART_DELAY=160`。
+- **自励クロックは焼き切れ後 160gt でも復帰しない** [確定: 実機 200tick 一致 #74 finding1]。RESTART_DELAY=160 の復帰 tile tick は、消灯遷移で走る自 NC の 2gt 再予約に (pos,block) dedup され消えるため、2gt 自励トーチクロックは一度焼き切れると恒久停止する。vanilla RedstoneTorchBlock.tick でも同 dedup が対称に成立 (fixture torch-burnout-recovery で実機確認)。
   tick 時に 60 gt より古いトグル記録を破棄 → 消灯のたびに記録を追加し、**同一 pos の記録が 8 件に達すると焼き切れ**
   (煙エフェクト levelEvent 1502) → **160 gt 後の tick で再点灯を試みる** (その時点でも 8 件あれば再点灯しない)。
   記録はワールド単位の WeakHashMap (`RECENT_TOGGLES`)。
@@ -355,6 +363,58 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   コンテナ読みも isRedstoneConductor 判定のため target 越しに可)。
   → sim は power.ts の導体判定 (isConductor = solid | target) / computeWirePower / readComparatorBack に実装済み。
 
+### hopper / dropper / container — アイテム物流 (C6' #65 実装済み)
+
+**方針 (13 §4.2 / エンティティ境界原則)**: アイテムは「コンテナ内の数値 `count`」としてのみ
+存在する。ワールドへのドロップ・吸い取り・射出 (アイテムエンティティ) は実装しない。
+スタック種別・スロット配置は持たず、コンテナごとに 1 本の個数で表す。典拠クラス:
+`HopperBlockEntity` / `HopperBlock` / `DropperBlock` / `DispenserBlock` / `Level.tickBlockEntities`
+(out/26.2、確度 [確定: 26.2])。sim 実装は `packages/sim/src/blocks/container.ts` +
+`world.ts` (`tickBlockEntities` / `emitComparatorUpdate` / dropper は `executeScheduledTick`)。
+
+- **容量の抽象化 (設計判断)**: sim は個数 1 本しか持たないため、アイテムが「スロット 0 から順に
+  スタックされる」(= ホッパー/ドロッパーの実挿入順) と仮定する。この下では per-slot の充填率式
+  (§6 comparator) と厳密一致し、`f = count / (スロット数×64)` になる。容量 = ホッパー **320**
+  (5×64) / ドロッパー **576** (9×64) / 汎用コンテナ **1728** (27×64)。信号は
+  `fillSignal(count, 容量) = floor(f*14) + (count>0?1:0)`。異種アイテムを別スロットに散らす配置は
+  表現しない (単一種前提)。
+- **コンテナの 2 モード (移行方法)**: 既存 `ContainerState` は `signal` 直接指定の「手動計測モード」
+  (C6/#13。樽/チェストを充填率ダミーとして使う) を維持しつつ、`count` を持つと「物流モード」
+  (信号は count から導出、ホッパー/ドロッパーの転送元/先になれる) に切り替わる。nbtIO/blockstate は
+  count を持たない (BE 内容) ため import 直後は手動モード (signal=0)。`count` は authored fixture
+  (`items` フィールド) / editor UI / 転送でのみ付く。
+- **ホッパー転送 [確定: 26.2 HopperBlockEntity]**:
+  - **BlockEntity フェーズ (§1.2 phase10)** で毎 gt 駆動。転送クールダウン **8gt** (`setCooldown(8)`)。
+    1 回の転送で **1 個**。
+  - `tryMoveItems`: **送り込み (facing 先コンテナへ eject) が先**、続いて **吸い出し (直上コンテナから
+    suck)**。両方が同 gt に成立し得る (それぞれ 1 個)。いずれか成功でクールダウン 8gt 再設定。
+  - **ロック**: `HopperBlock.neighborChanged` で `enabled = !hasNeighborSignal(pos)`。受電中は
+    `enabled=false` = 転送停止 (NC で再評価、blockstate プロパティ)。ロックは自分の能動転送のみを
+    止め、下段ホッパーが上段を吸い出すのは止めない (vanilla 準拠)。
+  - コンテナ内容が変わると **CU** (`updateNeighbourForOutputSignal`) で水平隣接 (北→東→南→西) の
+    コンパレーターへ通知 (直接隣接 or 導体 1 個越し)。
+- **ドロッパー [確定: 26.2 DropperBlock / DispenserBlock]**:
+  - `neighborChanged` で `hasNeighborSignal(pos) || hasNeighborSignal(pos.above())` (QC。§5.3 の 3
+    クラス) の立ち上がりで `TRIGGERED` を立て **`scheduleTick(pos, this, 4)`** (4gt) を予約、
+    立ち下がりで `TRIGGERED` 解除。発火は **ST フェーズ** の tile tick (STC 系。ホッパーと違い毎 gt
+    ではない)。
+  - `dispenseFrom`: 前方がコンテナなら 1 個挿入 (`HopperBlockEntity.addItem`)。前方が満杯コンテナは
+    挿入失敗で no-op (アイテムは残る)。**前方が非コンテナ** (vanilla は発射=アイテムエンティティ生成)
+    は、境界原則により **1 個消費して何も出さない** (consume-and-vanish。13 §4.2 に採否根拠)。
+  - ディスペンサーは射出/設置がエンティティ・ワールド作用のため **非実装** (13 §3 マトリクス)。
+- **既知の抽象化 (v1 制限)**: vanilla の BlockEntity tick 順は BE 登録順 (ロード順) で観測可能だが、
+  sim は決定論のため **座標順 (y 降順 → x → z = 上流から)** で走査する。転送先ホッパーの
+  クールダウン −1 補正 (vanilla `tickedGameTime` 依存) は v1 では一律 8 に単純化する (順序依存の
+  double-move を防ぐ目的は達成)。この差は blockstate 観測 (コンパレーター 0 交差 / hopper enabled /
+  dropper triggered) では ±1gt に収まり吸収される。moving_piston の ST 相確定 (下記 piston §) と同型の
+  抽象化で、厳密な BE 順の忠実化は必要になった時点で別 issue とする。
+- **実機 fixture (authored, docker 後段)**: `tools/mc-harness/fixtures/` に hopper-lock (enabled トグル・
+  アイテム不要) / dropper-insert (triggered エッジ + 挿入先ホッパーの充填をコンパレーターで読む) /
+  hopper-clock (ロック解除後 8gt 周期でドレインし充填コンパレーターの立ち下がりで周期を観測)。
+  アイテムは blockstate に現れないため fixture に `items` フィールドで初期個数を与える (実機側は
+  ハーネスの `inventory_set` で充填する想定)。settle 安定性のため各回路は初期ロック/無電源で
+  組み、入力で駆動する。
+
 ### piston (I7 実装済み)
 - BEC: 動力判定 (NC 受信時) → block event を予約 → ブロックイベントフェーズで実移動。0-tick 系はこのフェーズ差が前提 [確定]。
 - 起動判定 `getNeighborSignal` (PistonBaseBlock, デコンパイル): **facing 面を除く 6 方向の hasSignal** ∪ **自身 down 面** ∪ **1 個上のマスの down 面を除く hasSignal** で true。QC (5.3) はこの「1 個上」判定に由来 [確定]。→ sim `shouldExtend` と一致。
@@ -385,7 +445,7 @@ v1 更新 (2026-07-02): tools/decompile/fetch-and-decompile.sh による 1.21.1 
   - **トリガ→完了 = t2→t5 = 3 gt = 1.5 rt** ← ユーザ指摘の「3 gt かけて伸びる」はこの区間 (player-action 起動時)。BE 発火 (t3) からの計数だと 2 gt (extension のみ)。両者は同一系列の別区間で、食い違いではない。
   - sim は上記の各 tick を dump 粒度で一致再現 (fixture `piston-basic` t3 moving / t5 確定 が green)。**start delay** はアーキテクチャで自然成立: 入力は tick 境界適用 → 翌 tick の BE フェーズで発火 (1 gt)、scheduled tick 起動なら同 tick の BE フェーズで発火 (0 gt)。
 
-- **既知の抽象化 (v1 制限) [確定: microTiming 実機観測 2026-07-03]**: sim は moving_piston の確定を **ST フェーズ**の tile tick (`schedule(pos,2gt)`) で行うが、vanilla は **block entity フェーズ** (phase10) の `PistonMovingBlockEntity.tick` で行う (microTiming で `Moving Piston→Piston Head` が **@ TileEntity**、実行 +2gt で発火するのを観測。retract 側 `Moving Piston→Piston` も同相。docs/research/09_snapshots/two-piston-locational.md)。ST (phase4) は runBlockEvents (phase8) の**前**、block entity (phase10) は**後**なので、確定したブロックが下流のピストンを起動する連鎖 (redstone block を押し合う等) では、下流 BE が sim では同 tick・vanilla では翌 tick に発火し **2 tick 間隔 vs 3 tick 間隔**の差が出る。**#51 で redstone_block / target / note_block を可動化** (vanilla PushReaction NORMAL 準拠、0-tick 系の前提) したため、この経路は到達可能になった。差が出るのは「rblock 等の確定ブロックが下流ピストンを**直接**起動する連鎖」のみで、既存 fixture にこの構成は無い (dust 給電経由の dynamic-connect-push 等は dump 粒度で一致)。該当連鎖の忠実化 (BlockEntity 相の tile tick 化) は必要になった時点で別 issue とする。
+- **既知の抽象化 (v1 制限) [確定: microTiming 実機観測 2026-07-03]**: sim は moving_piston の確定を **ST フェーズ**の tile tick (`schedule(pos,2gt)`) で行うが、vanilla は **block entity フェーズ** (phase10) の `PistonMovingBlockEntity.tick` で行う (microTiming で `Moving Piston→Piston Head` が **@ TileEntity**、実行 +2gt で発火するのを観測。retract 側 `Moving Piston→Piston` も同相。docs/research/09_snapshots/two-piston-locational.md)。ST (phase4) は runBlockEvents (phase8) の**前**、block entity (phase10) は**後**なので、確定したブロックが下流のピストンを起動する連鎖 (redstone block を押し合う等) では、下流 BE が sim では同 tick・vanilla では翌 tick に発火し **2 tick 間隔 vs 3 tick 間隔**の差が出る。**#51 で redstone_block / target / note_block を可動化** (vanilla PushReaction NORMAL 準拠、0-tick 系の前提) したため、この経路は到達可能になった。差が出るのは「rblock 等の確定ブロックが下流ピストンを**直接**起動する連鎖」のみで、既存 fixture にこの構成は無い (dust 給電経由の dynamic-connect-push 等は dump 粒度で一致)。**#79/#80 で実機実証済み**: fixture rblock-piston-chain (lever→A→rblock→B) で B 伸長=実機 t6/sim t5・head 確定=実機 t8/sim t7 の 1tick 差を確認 (sim が早い)。該当連鎖の忠実化 (BlockEntity 相の確定へ移行) は **#80** で対応 (fixture は skipUntil=#80 で実機系列を保持、修正で回帰 anchor 化)。
 
 ### observer (実装済み: I8 / issue #16)
 - PP/SU 更新で起動、NC では起動しない [確定: 4.1、ObserverBlock は neighborChanged 非 override]。

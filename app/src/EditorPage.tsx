@@ -31,6 +31,26 @@ import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
 
+/**
+ * E2E テスト用の命令的フック (issue #70)。
+ * パレット/コントロールは data-testid で実クリックする一方、canvas 上のグリッド
+ * 配置 (ピクセル校正が脆弱) と sim 状態読み取りだけをこの API 経由にして再現性を担保する。
+ */
+export interface EditorTestApi {
+  placeAt: (x: number, y: number, z: number, type: PlaceableType, opts?: PlaceOptions) => void
+  removeAt: (x: number, y: number, z: number) => void
+  clearAll: () => void
+  getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
+  getSimStateAt: (x: number, y: number, z: number) => BlockState | null
+  getMode: () => 'edit' | 'sim'
+}
+
+declare global {
+  interface Window {
+    __editorTest?: EditorTestApi
+  }
+}
+
 // ── 定数 ──────────────────────────────────────────────────────────────────────
 
 const GRID_W = 16
@@ -83,6 +103,8 @@ interface BlockMeta {
   hasPressedPower?: boolean
   /** コンテナの背面読み信号 (0-15) セレクタを表示するか */
   hasSignal?: boolean
+  /** ホッパー/ドロッパーの内容個数セレクタを表示するか (#65) */
+  hasCount?: boolean
 }
 
 const BLOCK_PALETTE: BlockMeta[] = [
@@ -110,6 +132,8 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'redstone_block', label: 'レッドストーンブロック', texture: 'block/redstone_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'container',  label: 'コンテナ',      texture: 'block/barrel_side',     hasFacing: false, hasDelay: false, hasMode: false, hasSignal: true },
+  { type: 'hopper',     label: 'ホッパー',      texture: 'block/hopper_outside',  hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
+  { type: 'dropper',    label: 'ドロッパー',    texture: 'block/dropper_front',   hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },
@@ -167,6 +191,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // 重量感圧板の踏まれ信号 (1-15, 既定 15) / コンテナの背面読み信号 (0-15, 既定 0)
   const [pressedPower, setPressedPower] = useState(15)
   const [signal, setSignal] = useState(0)
+  // ホッパー/ドロッパーの内容個数 (既定 0) (#65)
+  const [count, setCount] = useState(0)
 
   // グリッド上の選択セル (x, z)
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null)
@@ -291,6 +317,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const barSignal: number =
     gridBlock?.type === 'container' ? gridBlock.signal : signal
 
+  const barCount: number =
+    (gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper') ? gridBlock.count : count
+
   // 向き・遅延バーを表示するか
   const gridBlockHasFacing = !!gridBlock && 'facing' in gridBlock &&
     H_DIRS.some(([d]) => d === (gridBlock as unknown as Record<string, unknown>).facing)
@@ -302,22 +331,25 @@ export function EditorPage({ onBack }: EditorPageProps) {
     !!(selectedMeta?.hasMode) ||
     !!(selectedMeta?.hasPressedPower) ||
     !!(selectedMeta?.hasSignal) ||
+    !!(selectedMeta?.hasCount) ||
     gridBlockHasFacing ||
     gridBlock?.type === 'repeater' ||
     gridBlock?.type === 'comparator' ||
     gridBlock?.type === 'weighted_pressure_plate_light' ||
     gridBlock?.type === 'weighted_pressure_plate_heavy' ||
-    gridBlock?.type === 'container'
+    gridBlock?.type === 'container' ||
+    gridBlock?.type === 'hopper' ||
+    gridBlock?.type === 'dropper'
   )
 
   // ── ブロッククリック（edit + sim 共通） ─────────────────────────────────
 
   // useCallback の deps を最小化して IsometricView への参照を安定させる
-  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal })
-  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal }
+  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count })
+  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count }
 
   const handleBlockClick = useCallback((pos: Pos3D, button: 'left' | 'right') => {
-    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal } = stateRef.current
+    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count } = stateRef.current
     const [x, , z] = pos
 
     // ── シミュレーションモード: レバーのみ操作 ──────────────────────────
@@ -397,6 +429,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (existing.type === 'container') {
         setSignal(existing.signal)
       }
+      if (existing.type === 'hopper' || existing.type === 'dropper') {
+        setCount(existing.count)
+      }
       addLog(`選択: ${existing.type} (${x}, ${z})`)
     } else {
       // 空セルをクリック → 新規配置
@@ -407,6 +442,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (meta?.hasMode)   opts.mode   = comparatorMode
       if (meta?.hasPressedPower) opts.pressedPower = pressedPower
       if (meta?.hasSignal)       opts.signal       = signal
+      if (meta?.hasCount)        opts.count        = count
       editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
       setSelectedPos([x, z])
       addLog(`${meta?.label ?? selectedType} を配置 (${x}, ${z})`)
@@ -487,6 +523,23 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'container') {
           editorRef.current.placeBlock(prev[0], prev[1], 'container', { signal: newSignal })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
+  // ── 内容個数変更（ホッパー/ドロッパー #65） ─────────────────────────
+
+  const handleCountChange = useCallback((newCount: number) => {
+    setCount(newCount)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'hopper' || block?.type === 'dropper') {
+          const f = (block as unknown as Record<string, unknown>).facing as HDir
+          editorRef.current.placeBlock(prev[0], prev[1], block.type, { facing: f, count: newCount })
           rerender()
         }
       }
@@ -706,6 +759,34 @@ export function EditorPage({ onBack }: EditorPageProps) {
     setSelectedPos(null)  // 選択解除（次の配置設定モードへ）
   }, [])
 
+  // ── E2E テスト用フック (issue #70) ────────────────────────────────────
+  const simWorldRef = useRef<SimWorld | null>(null)
+  simWorldRef.current = simWorld
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+
+  useEffect(() => {
+    window.__editorTest = {
+      placeAt(x, y, z, type, opts) {
+        const ed = editorRef.current
+        const prev = ed.activeLayer
+        ed.setActiveLayer(y)
+        ed.placeBlock(x, z, type, opts ?? {})
+        ed.setActiveLayer(prev)
+        rerender()
+      },
+      removeAt(x, y, z) {
+        editorRef.current.removeBlock3(x, y, z)
+        rerender()
+      },
+      clearAll() { handleClear() },
+      getEditorBlockAt: (x, y, z) => editorRef.current.getBlock3(x, y, z),
+      getSimStateAt: (x, y, z) => simWorldRef.current?.getBlockAt([x, y, z]) ?? null,
+      getMode: () => modeRef.current,
+    }
+    return () => { delete window.__editorTest }
+  }, [handleClear, rerender])
+
   // ── render ───────────────────────────────────────────────────────────
 
   // ── シミュレーションモード ──────────────────────────────────────────────
@@ -716,7 +797,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
         {/* プライマリヘッダー */}
         <div className="shrink-0 flex items-center gap-2 px-2 py-2" style={{ background: '#2d2d2d', borderBottom: '2px solid #444' }}>
           {/* 編集に戻る */}
-          <button onClick={handleBackToEdit} title="編集に戻る" className="mc-btn w-10 h-10 text-base">
+          <button onClick={handleBackToEdit} title="編集に戻る" data-testid="btn-edit"
+                  className="mc-btn w-10 h-10 text-base">
             ✏
           </button>
 
@@ -725,7 +807,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
           {/* ティックカウンター */}
           <div className="flex items-center gap-2 px-3 h-10" style={{ background: '#1a1a1a', border: '2px solid #333' }}>
             <span className="font-pixel" style={{ fontSize: 11, color: '#666', letterSpacing: 2 }}>TICK</span>
-            <span className="font-pixel" style={{ fontSize: 18, color: '#ff9900', letterSpacing: 3, textShadow: '0 0 10px #cc6600' }}>
+            <span data-testid="tick-counter" className="font-pixel" style={{ fontSize: 18, color: '#ff9900', letterSpacing: 3, textShadow: '0 0 10px #cc6600' }}>
               {String(tick).padStart(4, '0')}
             </span>
           </div>
@@ -747,13 +829,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
           <div className="flex-1" />
 
           {/* +1 ティック */}
-          <button onClick={doTick} disabled={running || !simWorld}
+          <button onClick={doTick} disabled={running || !simWorld} data-testid="btn-tick"
                   className="mc-btn w-10 h-10 font-mono text-sm font-bold">
             +1
           </button>
 
           {/* 連続/停止 */}
-          <button onClick={handleToggleRun} disabled={!simWorld}
+          <button onClick={handleToggleRun} disabled={!simWorld} data-testid="btn-run"
                   className="mc-btn h-10 px-5 font-bold text-xl"
                   style={{
                     background: !simWorld ? '#2a2a2a' : running ? '#7a3300' : '#1a4a1a',
@@ -796,6 +878,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
               const abbr = TRIGGER_META[type]?.abbr ?? '?'
               return (
                 <button key={`${x},${y},${z}`} onClick={() => handleTrigger(x, y, z)} disabled={!simWorld}
+                        data-testid={`trigger-${x}-${y}-${z}`}
                         title={TRIGGER_META[type]?.log}
                         className="mc-btn shrink-0 h-10 px-3 flex items-center gap-2"
                         style={{
@@ -877,23 +960,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
         {/* ⋯ サブメニュー */}
         <div className="relative">
-          <button onClick={() => setShowMenu(m => !m)} className="mc-btn w-10 h-10 text-lg">⋯</button>
+          <button onClick={() => setShowMenu(m => !m)} data-testid="btn-menu" className="mc-btn w-10 h-10 text-lg">⋯</button>
           {showMenu && (
             <div className="absolute left-0 top-full mt-1 z-50 flex flex-col py-1"
                  style={{ background: '#2d2d2d', border: '2px solid #555', minWidth: 164 }}>
-              <McMenuBtn onClick={() => { handleClear(); setShowMenu(false) }} danger>クリア</McMenuBtn>
-              <McMenuBtn onClick={() => { handleExportNbt(); setShowMenu(false) }}>↓ NBT 保存</McMenuBtn>
-              <McMenuBtn onClick={() => { importInputRef.current?.click(); setShowMenu(false) }}>↑ NBT 読込</McMenuBtn>
+              <McMenuBtn onClick={() => { handleClear(); setShowMenu(false) }} danger testid="menu-clear">クリア</McMenuBtn>
+              <McMenuBtn onClick={() => { handleExportNbt(); setShowMenu(false) }} testid="menu-nbt-save">↓ NBT 保存</McMenuBtn>
+              <McMenuBtn onClick={() => { importInputRef.current?.click(); setShowMenu(false) }} testid="menu-nbt-load">↑ NBT 読込</McMenuBtn>
             </div>
           )}
         </div>
 
         <input ref={importInputRef} type="file" accept=".nbt,.litematic,.schem" className="hidden"
+          data-testid="nbt-file-input"
           onChange={e => { const f = e.target.files?.[0]; if (f) { handleImportNbt(f); e.target.value = '' } }} />
 
         <div className="flex-1" />
 
-        <button onClick={handleStart}
+        <button onClick={handleStart} data-testid="btn-start"
                 className="mc-btn h-10 px-4 font-pixel"
                 style={{ background: '#1a4a1a', borderColor: '#4a8a4a #0a2a0a #0a2a0a #4a8a4a', fontSize: 15, letterSpacing: 2 }}>
           ▶ START
@@ -942,11 +1026,13 @@ export function EditorPage({ onBack }: EditorPageProps) {
           barMode={barMode}
           barPressedPower={barPressedPower}
           barSignal={barSignal}
+          barCount={barCount}
           onFacingChange={handleFacingChange}
           onDelayChange={handleDelayChange}
           onModeChange={handleModeChange}
           onPressedPowerChange={handlePressedPowerChange}
           onSignalChange={handleSignalChange}
+          onCountChange={handleCountChange}
         />
       )}
 
@@ -977,17 +1063,19 @@ interface FacingBarProps {
   barMode:            'compare' | 'subtract'
   barPressedPower:    number
   barSignal:          number
+  barCount:           number
   onFacingChange:     (f: HDir) => void
   onDelayChange:      (d: 1 | 2 | 3 | 4) => void
   onModeChange:       (m: 'compare' | 'subtract') => void
   onPressedPowerChange: (p: number) => void
   onSignalChange:     (s: number) => void
+  onCountChange:      (c: number) => void
 }
 
 function FacingBar({
   gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
-  barFacing, barDelay, barMode, barPressedPower, barSignal,
-  onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange,
+  barFacing, barDelay, barMode, barPressedPower, barSignal, barCount,
+  onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange, onCountChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
 
@@ -998,6 +1086,9 @@ function FacingBar({
     gridBlock?.type === 'weighted_pressure_plate_light' ||
     gridBlock?.type === 'weighted_pressure_plate_heavy'
   const showSignal = !!(meta?.hasSignal) || gridBlock?.type === 'container'
+  const showCount = !!(meta?.hasCount) ||
+    gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper'
+  const countMax = (gridBlock?.type === 'dropper' || selectedType === 'dropper') ? 576 : 320
 
   const label = selectedPos
     ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
@@ -1091,6 +1182,11 @@ function FacingBar({
         <PowerSelect label="SIGNAL" min={0} max={15} value={barSignal} onChange={onSignalChange} />
       )}
 
+      {/* 内容個数（ホッパー/ドロッパー #65。範囲が広いため数値入力） */}
+      {showCount && (
+        <CountInput label="個数" max={countMax} value={barCount} onChange={onCountChange} />
+      )}
+
       <div className="flex-1" />
       <span className="font-pixel shrink-0" style={{ fontSize: 11, color: '#444' }}>{label}</span>
     </div>
@@ -1117,6 +1213,7 @@ function EditorPalette({ selected, onSelect }: {
               key={type}
               onClick={() => onSelect(type)}
               title={label}
+              data-testid={`palette-${type}`}
               className="mc-slot shrink-0 flex flex-col items-center justify-center"
               style={{
                 width: 58, height: 66, padding: '4px 2px 2px',
@@ -1319,6 +1416,39 @@ function PowerSelect({ label, min, max, value, onChange }: {
   )
 }
 
+// ── CountInput ──────────────────────────────────────────────────────────────
+
+/**
+ * ホッパー/ドロッパーの内容個数入力 (#65)。値域が広い (0..576) ため
+ * PowerSelect のボタングリッドではなく数値入力にする (SIGNAL セレクタの前例に倣い
+ * ラベル + 入力を FacingBar に置く)。
+ */
+function CountInput({ label, max, value, onChange }: {
+  label:    string
+  max:      number
+  value:    number
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 shrink-0">
+      <span className="font-pixel text-center" style={{ fontSize: 11, color: '#555' }}>{label}</span>
+      <input
+        type="number" min={0} max={max} value={value}
+        onChange={e => {
+          const n = Math.max(0, Math.min(max, Math.floor(Number(e.target.value) || 0)))
+          onChange(n)
+        }}
+        className="mc-btn font-bold text-center"
+        style={{
+          width: 72, height: 28, fontSize: 12,
+          background: '#3a3a3a', color: '#ddd',
+          borderColor: '#666 #222 #222 #666',
+        }}
+      />
+    </div>
+  )
+}
+
 // ── DPadBtn ───────────────────────────────────────────────────────────────────
 
 function DPadBtn({ active, onClick, children }: {
@@ -1346,14 +1476,16 @@ function DPadBtn({ active, onClick, children }: {
 
 // ── McMenuBtn ─────────────────────────────────────────────────────────────────
 
-function McMenuBtn({ onClick, danger, children }: {
+function McMenuBtn({ onClick, danger, testid, children }: {
   onClick: () => void
   danger?: boolean
+  testid?: string
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      data-testid={testid}
       className="w-full text-left px-4 py-2.5 font-mono text-sm"
       style={{ color: danger ? '#ff8888' : '#d0d0d0' }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = danger ? '#4a1010' : '#3a3a3a' }}

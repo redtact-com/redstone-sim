@@ -1,0 +1,45 @@
+# 強充電された固体を経た垂直方向の給電 (02 §5.2 [確定: 26.2])。
+# 仕様: リピーター/コンパレーター等の direct signal で「強充電」された導体は、
+#   その上に載ったダストにも給電する (強度は減衰なしで再放出)。一方、ダストやレバーの
+#   weak 信号で「弱充電」された導体は、隣接機構には効くが別のダストには給電しない。
+# 導出 (spec 先行):
+#   強レーン: レバー→リピーター(east 出力)→石(2,1,0) を強充電 15 → その真上ダスト
+#             (2,2,0) は足元の強充電を読み 15。
+#   弱レーン: レバーが石(1,1,4) を weak 充電するのみ (取り付け面=直下しか強充電しない) →
+#             その真上ダスト (1,2,4) は強充電が無く 0 (弱充電はダストに見えない)。
+# 実行して照合 → 一致 (sim=spec)。強 15 / 弱 0 の対比で §5.2 を縦方向に確認。
+meta {
+  name: 強充電した固体の真上ダストは 15・弱充電では 0 (垂直 §5.2)
+  ref: 02 §5.2 (strong=減衰なし再放出 / weak はダスト非給電) / blocks/wire.computeWirePower(getStrongPower)
+}
+
+circuit {
+  # 強レーン: repeater が石を強充電、真上ダスト = 15
+  (0,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) repeater[facing=west,delay=1,locked=false,powered=false]   # MC facing=west → 入力=west(レバー)/出力=east
+  (2,1,0) stone                                                      # 強充電される導体
+  (2,2,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # 弱レーン: lever が石を weak 充電するのみ、真上ダスト = 0
+  (0,0,4) stone
+  (0,1,4) lever[face=floor,facing=north,powered=false]
+  (1,1,4) stone                                                      # weak のみ (強充電されない)
+  (1,2,4) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+inputs {
+  t2 use (0,1,0)
+  t2 use (0,1,4)
+}
+
+ticks 8
+
+state {
+  # 初期は両レーンとも 0。
+  t0 (2,2,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  t0 (1,2,4) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  # 定常: リピーター ON (delay=1 → 2gt 後)。強レーンの真上ダスト = 15、弱レーン = 0。
+  t6 (1,1,0) repeater[delay=1,facing=west,locked=false,powered=true]
+  t6 (2,2,0) redstone_wire[east=side,north=side,power=15,south=side,west=side]   # 強充電 → 真上ダスト 15 (cross)
+  t6 (1,2,4) redstone_wire[east=side,north=side,power=0,south=side,west=side]    # 弱充電 → 真上ダスト 0 (cross)
+}

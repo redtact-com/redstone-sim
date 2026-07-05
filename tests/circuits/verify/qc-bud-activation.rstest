@@ -1,0 +1,34 @@
+# 動力源化と活性化の分離 = BUD の原理 (02 §4.3 [要検証]→確定)。
+# 典拠 (26.2 デコンパイル): PistonBaseBlock.getNeighborSignal は「1 個上のマス (quasi 位置)
+# の下面以外の hasSignal」を live で読む。ピストンの facing 面に直接配線されていない
+# 位置 (斜め上) の動力を「検知」して活性化する = 動力源化が更新なしの live 読み、
+# 活性化 (伸長) は近傍更新 (checkIfExtend) 契機、という分離の具体例。
+# 補足: 導体・素子側の「動力源化 (getSignal/ownSignal) は保持 state の即読み、状態遷移は
+# neighborChanged→scheduleTick の tick() でのみ」も DiodeBlock/RedStoneWireBlock/
+# RedstoneTorchBlock/ObserverBlock のデコンパイルで一致確認済み (findings/confirmedFacts 参照)。
+#
+# 導出 (spec 先行): レバー ON → ワイヤが piston(2,1,1) の 1 個上斜め (2,2,0=quasi 隣接) を通電
+#   → getNeighborSignal(QC) true → BE 予約 → 翌 gt で伸長 → 2gt 後にヘッド確定。
+# 実行して照合 → 一致 (sim=spec)。piston の facing (south) 直背面ではなく quasi 位置での起動。
+meta {
+  name: BUD/QC 原理 — quasi 位置の動力で活性化
+  ref: 02 §4.3 §5.3 / 26.2 PistonBaseBlock.getNeighborSignal(above の live hasSignal) / fixture qc-bud
+}
+
+fixture qc-bud
+
+# 部分一致。piston 単体の BE→TE 系列を抜粋 (BEC 素子: block event で駆動)。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・head 確定は TE 相)。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  5gt[TE]: Ph{c.2}
+}
+
+state {
+  t0 (2,1,1) piston[extended=false,facing=south]                         # 起動前
+  t2 (2,2,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]   # quasi 位置隣を通電
+  t3 (2,1,1) piston[extended=true,facing=south]                          # QC 検知で活性化 (伸長)
+  t5 (2,1,2) piston_head[facing=south,short=false,type=normal]           # 2gt 後にヘッド確定
+}

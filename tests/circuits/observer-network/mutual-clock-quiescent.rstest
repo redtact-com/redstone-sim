@@ -1,0 +1,51 @@
+# 向かい合う 2 個のオブザーバー (互いの状態変化を観測) は、外部トリガ無しでは発振しない
+# (#79 領域4)。オブザーバークロックの解析と、sim で表現できる決定的な性質 (静止) を固定する。
+#
+# 配置: A=(0,1,0) facing=east (B を観測)、B=(1,1,0) facing=west (A を観測)。互いの背面出力は
+#   外側 (A の背面=西、B の背面=東) を向くため、A/B の観測面には「相手の powered 変化」しか
+#   刺激源が無い。
+#
+# クロック周期の導出 (02 §6 observer の 2gt から先に計算 [確定]):
+#   もし何らかの契機で A が 1 度 ON になると (実機では設置更新が担う)、以降 §2.4 の subtick 順で
+#   次の 6gt 周期の発振になる (sim で初期 tile tick を注入した実験で確認):
+#     T   : A ON   (A は自身 OFF@T+2 を予約、B は A の PP で ON@T+2 を予約)
+#     T+2 : B ON, A OFF  (B は powered 中の A への PP を guard で無視 → 再予約なし)
+#     T+4 : B OFF        (B OFF の PP を非 powered の A が観測 → A ON@T+6 を予約)
+#     T+6 : A ON …(周期 6gt、各オブザーバーは 2gt ON パルス、位相差 2gt)。
+#   → 周期 6gt。ただしこの発振の「起点」を作る契機が sim/DSL には無い (下記)。
+#
+# 仕様クロスチェック (02 §4.1/§6 observer [確定]):
+#   オブザーバーは PP でのみ起動し (§4.1)、A/B の観測面の刺激源は「相手の powered 変化」だけ。
+#   どちらも先に変化しない限り永久に静止する = 純 2 個相互クロックは自己始動しない。
+#   実機は「2 個目の設置」の block update で 1 発目を注入して発振を開始するが、sim の
+#   ObserverBlock は onPlace で powered=false へリセットし、設置更新契機を持たない。
+#   → 定常ロード済み構造 (fixture が表す状態) では両者静止が正。sim=この定常状態で一致 (PASS)。
+#
+#   [実機 docker 突合候補]: 「生 (ライブ) 設置」時の発振開始は placement update 由来で、
+#   本 sim には該当経路が無い。設置起点の 6gt 発振の始動と位相 (§2.4 subtick 依存) は
+#   実機で決着すべき (親が docker で突合)。ここでは自己始動しない静止のみを断言する。
+meta {
+  name: 相互オブザーバークロック — 外部トリガ無しでは静止 (発振周期 6gt は導出のみ)
+  ref: 02 §6 observer (2gt→周期 6gt 導出) / §4.1 (PP のみ起動) / §2.4 (subtick 位相)
+}
+
+circuit {
+  (0,0,0) stone
+  (1,0,0) stone
+  (0,1,0) observer[facing=east,powered=false]     # A: B を観測、背面=西
+  (1,1,0) observer[facing=west,powered=false]     # B: A を観測、背面=東
+}
+
+ticks 24
+
+# トリガ無しでは全 tick 静止 (self-start しない)。長い地平で発振が始まらないことを固定。
+state {
+  t0 (0,1,0) observer[facing=east,powered=false]
+  t0 (1,1,0) observer[facing=west,powered=false]
+  t6 (0,1,0) observer[facing=east,powered=false]
+  t6 (1,1,0) observer[facing=west,powered=false]
+  t12 (0,1,0) observer[facing=east,powered=false]
+  t12 (1,1,0) observer[facing=west,powered=false]
+  t18 (0,1,0) observer[facing=east,powered=false]
+  t24 (1,1,0) observer[facing=west,powered=false]
+}

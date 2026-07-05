@@ -1,0 +1,58 @@
+# 0-tick: ピストンが redstone_block を押し、確定した動力源を **後続 (ランプ) が同 tick で読む**。
+# ダウンストリームが「活性化に BE を要さない素子 (ランプ = NC 即時点灯)」の場合、
+# 確定 tick と点灯 tick が一致する = sim と実機のどちらでも t5 で点灯する (相の別が state に出ない)。
+# これは対となる pushed-rblock-piston-chain.rstest (ダウンストリームがピストン = BEC) との
+# 境界を切り分けるためのケース。非 BEC 下流 (ランプ = NC 即時) はもともと sim=実機一致で、
+# #80 で確定を BlockEntity (TE) 相へ移した後もそのまま一致 (このケースは相の別が state に出ない)。
+# 対の BEC 下流 (ピストン) は旧 sim では ST 相確定で 1tick ズレていたが #80 で解消済み。
+#
+# 仕様クロスチェック (先に導出 → sim で照合):
+#   §6 piston [確定]: player 起動 → start delay 1gt → BE 実行 (t3) → moving_piston (transit t3-t4) →
+#     +2gt の BlockEntity (TE) 相で確定 (t5)。moving_piston は信号を出さない → transit 中 (t3,t4)
+#     はランプ消灯のまま。
+#   §6 lamp [確定]: 点灯は NC 受信で即時 (遅延なし)。確定 (t5) の redstone_block が隣接ランプへ
+#     NC → 同 tick 点灯。
+#   実機相との一致: vanilla は確定を BlockEntity 相 (phase10) で行い、#80 後の sim も同 TE 相
+#     (phase10) で確定 → ランプ点灯も同 phase の NC で即時 → state[t5] (tick 末) で両者点灯。
+#     ∴ t5 点灯は両者一致 (PASS)。
+#   → 導出値: t0/t3/t4 消灯、t5 で (4,1,0)=redstone_block 確定 + (5,1,0) 点灯。sim=仕様が一致。
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (rblock 確定 5gt[ST]→5gt[TE])。
+meta {
+  name: 0-tick 押込 redstone_block を後続ランプが同 tick で読む (非 BEC 下流は相差なし)
+  ref: 02 §6 piston (+2gt TE 確定) / §6 lamp (NC 即時点灯) / #80 (確定を BlockEntity 相へ)
+}
+
+circuit {
+  (0,0,0)..(5,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) piston[extended=false,facing=east]
+  (3,1,0) redstone_block
+  (5,1,0) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 10
+
+# 安全なトレース: 押し出し (2gt 予約 → 3gt 実行) → +2gt で redstone_block 確定 (5gt TE 相)。
+# Rb{c.2} と同 tick (t5) で下の state のランプ点灯が成立する。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)
+  3gt[BE]: Pi{p.0}
+  5gt[TE]: Rb{c.2}
+}
+
+state {
+  t0 (5,1,0) redstone_lamp[lit=false]
+  # transit 中 (redstone_block は moving_piston = 無信号): ランプは消灯のまま
+  t3 (5,1,0) redstone_lamp[lit=false]
+  t4 (5,1,0) redstone_lamp[lit=false]
+  # 確定 tick t5: redstone_block が (4,1,0) に着地 = 同 tick でランプ点灯 (NC 即時)
+  t5 (4,1,0) redstone_block
+  t5 (5,1,0) redstone_lamp[lit=true]
+  t8 (5,1,0) redstone_lamp[lit=true]
+}

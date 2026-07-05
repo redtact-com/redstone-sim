@@ -1,0 +1,25 @@
+# トーチ = NOT ゲート (02 §6 torch [確定])。
+# 仕様: 取り付けブロックが給電されると 2gt (TOGGLE_DELAY) 後に消灯、無給電になると
+#       2gt 後に点灯。tile tick priority = 0。
+# レバー→ダスト→(ダストが強充電する)石→上のトーチ。入力 ON→トーチ消灯 / OFF→点灯 を
+# 2gt 遅延で確認する。trace で遅延 2gt と priority 0 を pin (gt 絶対値ではなく遅延・priority を検証)。
+meta {
+  name: トーチ NOT ゲート (入力 ON→消灯 / OFF→点灯・2gt 遅延)
+  ref: 02 §6 torch (TOGGLE_DELAY=2, priority 0) / fixture torch-not-floor
+}
+
+fixture torch-not-floor
+
+state {
+  t0  (3,2,0) redstone_torch[lit=true]    # 無入力 → トーチ点灯
+  t4  (3,2,0) redstone_torch[lit=false]   # 入力 ON (t2) → 2gt 後に消灯
+  t12 (3,2,0) redstone_torch[lit=true]    # 入力 OFF (t10) → 2gt 後に再点灯
+}
+
+# 部分一致。予約 (n/f) の delay=2gt と priority=0 を検証する (gt はオフセット注意・実出力どおり)。
+trace {
+  2gt[ST]: To(f.2) p0     # 入力 ON → OFF を 2gt 後に予約 (priority 0)
+  4gt[ST]: To{f.2}        # 2gt 後に OFF 実行
+  10gt[ST]: To(n.2) p0    # 入力 OFF → ON を 2gt 後に予約
+  12gt[ST]: To{n.2}       # 2gt 後に ON 実行
+}

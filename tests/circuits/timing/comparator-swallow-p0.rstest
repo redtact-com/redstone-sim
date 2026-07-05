@@ -1,0 +1,52 @@
+# オブザーバー単体パルスのコンパレーター飲み込み (02 §2.4 最重要回帰) を、
+# **オブザーバーがコンパレーターの背面に出力する正しい配置**で固定する。
+#   lever - observer(facing=west, lever を観測) - comparator(facing=west, back=observer)
+#         - lamp(front=非ダイオード)
+# comparator の front がランプ(非ダイオード)なので priority 0。オブザーバーの tick は
+# 自身の OFF(2gt, priority 0)を近傍更新より先に予約する → 同 gt・同 priority では
+# seq 順でオブザーバー OFF がコンパレーター評価より先に実行され、コンパレーターの
+# tick 時には入力が既に 0 → コンパレーターは点かない (飲み込み)。
+#
+# 仕様クロスチェック (02 §2.4 [確定]):
+#   ObserverBlock.tick は OFF tick(NORMAL) を近傍更新より先に登録、ComparatorBlock も
+#   NORMAL(0) で登録 → 同 tick・同 priority の subTickOrder でオブザーバー OFF が先。
+#   → コンパレーターはオブザーバー単体パルスを通せない。sim=仕様が一致 (PASS)。
+#
+# strict の要点: コンパレーターは tick を「予約」する (Co(c.2) p0) が、実行 (Co{c.2}) が
+# 一切現れない = 飲み込みの証拠。§2.4 のタイミング機序をトレースで直接固定する。
+# (注: 既存 comparator/observer-swallow は observer がコンパレーター出力側に来る配置で
+#  コンパレーターが observer を読まないため Co 予約自体が出ない — findings 参照)。
+meta {
+  name: コンパレーター飲み込み (背面配置, priority 0)
+  ref: 02 §2.4 / §6 observer,comparator / 08
+}
+
+circuit {
+  (0,0,0)..(3,0,0) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) observer[facing=west,powered=false]
+  (2,1,0) comparator[facing=west,mode=compare,powered=false]     # back=observer, front=lamp
+  (3,1,0) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 12
+
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Ob(n.2) p0       # オブザーバー ON 予約 (PP 検知)
+  4gt[ST]: Ob(f.2) p0       # ON 実行時、自身 OFF を近傍更新より先に予約
+  4gt[ST]: Co(c.2) p0       # コンパレーターは NC を受けて tick 予約 (priority 0)
+  # ↑ Co{c.2} (実行) が現れない = 飲み込み: gt6 でオブザーバー OFF が先に走り
+  #   コンパレーター tick 時には入力 0 → 出力不変で無反応 (トレース行なし)
+}
+
+state {
+  t4 (1,1,0) observer[facing=west,powered=true]     # オブザーバー 2gt パルス立ち上がり
+  t6 (1,1,0) observer[facing=west,powered=false]     # 2gt 後に立ち下がり
+  t6 (2,1,0) comparator[facing=west,mode=compare,powered=false]   # 点かない (飲み込み)
+  t8 (3,1,0) redstone_lamp[lit=false]                # ランプも点かない
+}

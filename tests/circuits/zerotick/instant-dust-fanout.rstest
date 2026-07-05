@@ -1,0 +1,59 @@
+# 0-tick インスタントワイヤ (分岐版): dust は PLC (遅延なし)。1 本のレバーから東へ伸びる spine と
+# (3,1,0) の T 分岐 (北) が、lever ON と **同一 tick (t2)** で spine 端ランプ・分岐端ランプの両方を
+# 点灯させる。tile tick を 1 件も予約しない (trace strict = PI 1 行のみ) ことで、分岐トポロジー全体の
+# power 確定 + 両端ランプ点灯が 0 遅延で完結することを固定する。
+# machines/instant-wire (直線) と非重複: 分岐 (T) + 延長端給電 (§5.4) + 複数終端の同 tick 到達を扱う。
+#
+# 仕様クロスチェック (先に導出 → sim で照合):
+#   §1.3 PLC / §6 wire [確定]: dust は scheduleTick を経ず即時伝播。
+#   §5.1 [確定]: 減衰 1/マス。lever 隣接 (1,1,0)=15、以降 14,13,12。分岐 (3,1,1)=13-1=12。
+#   §5.4 [確定]: 物理接続 1 本のダストは直線に拡張し「延長端」へ給電する。spine 端 (4,1,0)=east=side は
+#     隣の非結線ランプ (5,1,0) を、分岐端 (3,1,1)=north=side はランプ (3,1,2) を延長端給電で点灯させる。
+#   §6 lamp [確定]: 点灯は NC 即時 (tile tick 不要) → strict トレースに ST 行は出ない。
+#   → 導出値: t1 は全 0/消灯、t2 で spine 15/14/13/12・分岐 12・両ランプ点灯が同一 tick 成立。
+#     sim=仕様が一致 (PASS)。0-tick 回路が成立する PLC 即時性の証拠。
+meta {
+  name: 0-tick インスタントワイヤ 分岐 (spine+T 分岐が両端ランプを同 tick 点灯・tile tick 0 件)
+  ref: 02 §1.3 PLC / §5.1 減衰 / §5.4 延長端給電 / §6 wire (即時伝播) / §6 lamp (NC 即時)
+}
+
+circuit {
+  (0,0,0)..(5,0,0) stone
+  (3,0,1) stone
+  (3,0,2) stone
+  (0,1,0) lever[face=floor,facing=north,powered=false]
+  (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (3,1,0) redstone_wire[east=side,north=side,power=0,south=none,west=side]
+  (4,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  (5,1,0) redstone_lamp[lit=false]
+  (3,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
+  (3,1,2) redstone_lamp[lit=false]
+}
+
+inputs {
+  t2 use (0,1,0)
+}
+
+ticks 4
+
+# strict: verbose=false の全 process 行。PI (レバー) 1 行のみ = 分岐網全体の power 確定と
+# 両端ランプ点灯が lever 押下と同一 tick で完結し、ST を一切予約しない証拠。
+trace strict {
+  2gt[PI]: Le{n.0}
+}
+
+state {
+  # 直前 (t1): 全 dust 0・両ランプ消灯
+  t1 (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+  t1 (5,1,0) redstone_lamp[lit=false]
+  t1 (3,1,2) redstone_lamp[lit=false]
+  # lever ON の tick t2 で spine + 分岐 + 両ランプが同一 tick で最終状態に到達 (減衰 1/マス):
+  t2 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t2 (2,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+  t2 (3,1,0) redstone_wire[east=side,north=side,power=13,south=none,west=side]
+  t2 (4,1,0) redstone_wire[east=side,north=none,power=12,south=none,west=side]
+  t2 (3,1,1) redstone_wire[east=none,north=side,power=12,south=side,west=none]
+  t2 (5,1,0) redstone_lamp[lit=true]     # spine 延長端給電で点灯
+  t2 (3,1,2) redstone_lamp[lit=true]     # 分岐延長端給電で点灯
+}

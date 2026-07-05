@@ -135,6 +135,18 @@ async function generateFixture(name: string): Promise<void> {
   rcon('tick', 'freeze')
   scarpet('fx_setup()')
   scarpet('fx_settle()')
+  // コンテナ (hopper/dropper/barrel 等) の初期アイテム充填 (#65)。
+  // items は blockstate に現れない BE 内容のため item replace で slot 0 に入れる
+  // (数値モデルの count に対応。settle dump より前に行い、コンパレーター読み等の
+  // 初期安定状態へ反映させる)
+  for (const b of def.blocks) {
+    if (b.items && b.items > 0) {
+      rcon('item', 'replace', 'block',
+        String(b.pos[0]), String(b.pos[1]), String(b.pos[2]),
+        'container.0', 'with', 'minecraft:cobblestone', String(b.items))
+      await sleep(80)
+    }
+  }
   rcon('tick', 'step', '8')
   await sleep(600)
 
@@ -233,7 +245,10 @@ async function generateFixture(name: string): Promise<void> {
   const { player: _player, ...defRest } = def
   const fixture: Fixture = {
     ...defRest,
-    blocks: def.blocks.map(b => ({ pos: b.pos, block: canonicalize(b.block) })),
+    blocks: def.blocks.map(b => ({
+      pos: b.pos, block: canonicalize(b.block),
+      ...(b.items !== undefined ? { items: b.items } : {}),
+    })),
     expect,
     generated: {
       at: new Date().toISOString(),

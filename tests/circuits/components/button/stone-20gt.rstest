@@ -1,0 +1,23 @@
+# 石ボタンは 20gt で自動 OFF (02 §6 button [確定: 石系 20gt / 木系 30gt])。
+# 仕様: ボタンは押下で ON、tile tick (priority NORMAL=0) で持続後に自動 OFF。石系 = 20gt。
+# t2 押下 → t22 (20gt 後) に自動 OFF。t21 まで ON 保持 (レバーとの違い)。
+meta {
+  name: 石ボタン 20gt 自動 OFF
+  ref: 02 §6 button (石系 ticksToStayPressed=20) / fixture stone-button
+}
+
+fixture stone-button
+
+state {
+  t2  (0,1,0) stone_button[face=floor,facing=north,powered=true]   # 押下で即 ON
+  t2  (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t21 (0,1,0) stone_button[face=floor,facing=north,powered=true]   # 20gt 未満はまだ ON
+  t22 (0,1,0) stone_button[face=floor,facing=north,powered=false]  # 20gt 後に自動 OFF
+  t22 (1,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
+}
+
+# 押下時に OFF を 20gt 後に予約 (priority 0)、20gt 後に実行。
+trace {
+  2gt[ST]: Bu(f.20) p0
+  22gt[ST]: Bu{f.20}
+}

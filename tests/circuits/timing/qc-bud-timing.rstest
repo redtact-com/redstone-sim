@@ -1,0 +1,36 @@
+# QC/BUD のタイミング (fixture qc-bud 土台)。ピストンは面給電されておらず、1 マス上の
+# QC セルの受電で「動力源化」する。だが動力源化だけでは活性化せず、NC を受けて初めて
+# 反応する (BUD)。qc-bud では dust 給電の多段送信がその NC を同 tick に届けるため、
+# ピストンは t2 の NC を受けて BE を予約 → t3 で伸長 → t5 で head 確定する。
+#
+# 仕様クロスチェック (02 §4.3 BUD / §5.3 QC / §6 piston):
+#   - shouldExtend は NC/BE 実行時にしか走らない → 「powered だが activated でない」
+#     BUD 状態が成立 (02 §4.3)。QC 対象は PistonBaseBlock (§5.3 の 3 クラスの 1 つ)。
+#   - player-action 起動なので start delay 1gt (t2→t3 BE)、extension 2gt (t3→t5)。
+#   - **BUD の要点を strict で固定**: t8/t14 の別レバー(3,1,1) トグルは shouldExtend を
+#     変えない (QC が lever0 で保たれる) ため、NC を受けても piston BE は再発火しない
+#     → gt8/gt14 に BE 行が一切現れない。sim=仕様が一致 (PASS)。gt オフセット無し。
+meta {
+  name: QC/BUD ピストン起動タイミング
+  ref: 02 §4.3 / §5.3 / §6 piston / fixture qc-bud
+}
+
+fixture qc-bud
+
+# #80: moving_piston 確定を TE 相へ移行したことによる更新 (ST 相 tile tick の予約行消滅・実行行 ST→TE)。
+trace strict {
+  2gt[PI]: Le{n.0}
+  2gt[BE]: Pi(p.s)         # t2 の QC 給電 NC を受けて伸長 BE を予約 (BUD 反応点)
+  3gt[BE]: Pi{p.0}         # 翌 tick の BE フェーズで伸長実行 (start delay 1gt)
+  5gt[TE]: Ph{c.2}         # head 確定 (extension 2gt、BlockEntity 相で確定)
+  8gt[PI]: Le{n.0}         # 別レバー ON → NC は来るが BE 無し (shouldExtend 不変)
+  14gt[PI]: Le{f.0}        # 別レバー OFF → 同上。QC は lever0 が保つので縮まない
+}
+
+state {
+  t2  (2,1,1) piston[extended=false,facing=south]         # QC 動力源化済みだが未活性 (BE は翌 tick)
+  t3  (2,1,1) piston[extended=true,facing=south]          # 伸長 (moving_piston は過渡状態のため state 断言不可)
+  t5  (2,1,2) piston_head[facing=south,short=false,type=normal]   # head 確定
+  t9  (2,1,1) piston[extended=true,facing=south]          # 別レバー ON でも変化なし (BUD)
+  t20 (2,1,1) piston[extended=true,facing=south]          # 別レバー OFF でも伸長維持
+}

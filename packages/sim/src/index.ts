@@ -6,7 +6,8 @@ export type {
   TorchState, WallTorchState,
   RepeaterState, ComparatorState,
   LeverState, ButtonState,
-  LampState, NoteBlockState, ContainerState, RedstoneBlockState, TargetState, SolidState,
+  LampState, NoteBlockState, ContainerState, HopperState, DropperState,
+  RedstoneBlockState, TargetState, SolidState,
   PressurePlateState, WeightedPressurePlateState,
   ObserverState, AirState,
   WorldSnapshot,
@@ -57,3 +58,19 @@ export {
   pruneToggles, RECENT_TOGGLE_TIMER, MAX_RECENT_TOGGLES, RESTART_DELAY,
 } from './blocks/torch.js'
 export { getRepeaterOutputFacing, isInputFaceOfRepeater, getRepeaterLockDirs } from './blocks/repeater.js'
+export {
+  HOPPER_COOLDOWN, DROPPER_TICK_DELAY, STACK_SIZE,
+  HOPPER_SLOTS, DROPPER_SLOTS, CONTAINER_SLOTS,
+  isContainerType, containerSlots, containerCapacity, fillSignal,
+  containerCount, containerParticipates, canContainerAccept, effectiveContainerSignal,
+} from './blocks/container.js'
+
+// fixture 再生ドライバ (CI 回帰 fixture-runner とデモページ ?demo= の共通基盤)
+export {
+  buildFixtureWorld, fixtureInputsAt, applyFixtureInputsAt,
+  snapshotFixtureRegion, runFixtureOnSim, FixtureRunner,
+} from './fixture-driver.js'
+export type {
+  Fixture, FixtureInput, FixtureChange, FixtureExpectEntry,
+  StateMap, FixtureRunnerOptions,
+} from './fixture-driver.js'

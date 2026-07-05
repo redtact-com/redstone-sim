@@ -1,0 +1,24 @@
+# ホッパー 8gt クールダウン (#65)。西隣レバーで初期ロックされたホッパー H1 (items=2,
+# east 向き) を t2 で解除すると、8gt ごとに 1 個ずつ受け皿 H2 へ送る。H1 背面の
+# コンパレーターが充填 (信号 1) を読み、2 個送り終えて H1 が空になると 8gt 周期のあとに
+# powered=false へ落ちる → 転送クールダウン 8gt が blockstate で観測できる。
+# ※ トレース gt は settle(flush) 分だけオフセットする (実出力から書き写し)。
+meta {
+  name: ホッパー 8gt クロック
+  ref: 02 §6 comparator / 26.2 setCooldown(8) / fixture hopper-clock
+}
+
+fixture hopper-clock
+
+trace {
+  4gt[PI]: Le{f.0}                         # レバー OFF でロック解除 (settle 2gt ぶんオフセット)
+  13gt[ST]: Co(c.2) p0                      # H1 が空 → コンパレーター再計算予約
+  15gt[ST]: Co{c.2}
+}
+
+state {
+  t2  (0,1,0) lever[face=floor,facing=north,powered=false]
+  t2  (1,1,0) hopper[enabled=true,facing=east]                          # ロック解除
+  t12 (1,1,1) comparator[facing=north,mode=compare,powered=true]        # まだ充填あり
+  t13 (1,1,1) comparator[facing=north,mode=compare,powered=false]       # 8gt 周期で空 → 落ちる
+}

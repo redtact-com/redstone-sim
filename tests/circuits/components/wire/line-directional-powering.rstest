@@ -1,0 +1,19 @@
+# 直線ダストは接続軸 (延長端) のみ給電し、垂直方向 (90°) には給電しない
+# (02 §5.4 / 11 §2 [確定: 26.2] / #44 の核心)。
+# 直線 E-W ダスト (3,1,0) を repeater で駆動し、延長端 east のランプ (4,1,0) は点灯、
+# 垂直 north/south のランプ (3,1,-1)/(3,1,1) は消灯 を state で pin する。
+# ※ これは実装バグではなく vanilla 仕様 (getConnectionState が 1 接続を直線拡張する)。
+meta {
+  name: 直線ダストは延長端のみ給電・垂直は非給電
+  ref: 02 §5.4 / 11 §2 (直線 E-W 行) / #44 / fixture dust-line-powering
+}
+
+fixture dust-line-powering
+
+# repeater(delay=1) 経由なので t2 入力→t6 で直線ダストが 15 に確定する。
+state {
+  t6 (3,1,0)  redstone_wire[east=side,north=none,power=15,south=none,west=side]   # 直線 E-W ダスト
+  t6 (4,1,0)  redstone_lamp[lit=true]     # 延長端 (east) = 給電 → 点灯
+  t6 (3,1,-1) redstone_lamp[lit=false]    # 垂直 (north) = 非給電 → 消灯
+  t6 (3,1,1)  redstone_lamp[lit=false]    # 垂直 (south) = 非給電 → 消灯
+}

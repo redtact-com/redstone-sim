@@ -1,0 +1,24 @@
+# オブザーバーの 2gt パルス (I8 ①)。レバー→ダスト→ダストを観測面に持つオブザーバー→
+# 背面ランプ。ダストの power 変化 (shape update) を検知して 2gt 遅延で 2gt 幅のパルスを出し、
+# 背面ランプを点灯させる。ON 予約(n.2) と OFF 予約(f.2) が 2gt 離れる = パルス幅 2gt。
+meta {
+  name: オブザーバー 2gt パルス
+  ref: I8 ① / fixture observer-detects-dust
+}
+
+fixture observer-detects-dust
+
+# 部分一致。オブザーバーの ON→2gt後 OFF 予約 (2gt パルス) と後段ランプ予約を抜粋。
+trace {
+  2gt[PI]: Le{n.0}
+  2gt[ST]: Ob(n.2) p0
+  4gt[ST]: Ob(f.2) p0
+  6gt[ST]: La(f.4) p0
+}
+
+state {
+  t4  (3,1,0) observer[facing=west,powered=true]     # パルス立ち上がり
+  t4  (4,1,0) redstone_lamp[lit=true]
+  t6  (3,1,0) observer[facing=west,powered=false]     # 2gt 後に立ち下がり (パルス幅 2gt)
+  t10 (4,1,0) redstone_lamp[lit=false]                # ランプは 4gt off-delay 後に消灯
+}

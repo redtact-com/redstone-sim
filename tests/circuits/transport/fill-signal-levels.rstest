@@ -1,0 +1,58 @@
+# コンテナ充填率 → コンパレーター信号の量子化 (#79 領域1 複合物流)。
+# 仕様の正 [確定: 02 §6 comparator — AbstractContainerMenu.getRedstoneSignalFromContainer]:
+#   f = (Σ count/maxStackSize) / スロット数、signal = Mth.lerpDiscrete(f,0,15)
+#     = floor(f*14) + (f>0 ? 1 : 0)。単一種前提 (13 §4.2 容量抽象) では
+#   f = count / (スロット数×64)。ホッパー容量 = 5×64 = 320。
+# ∴ fillSignal(N,320) = floor(N*14/320) + 1 を先に導出:
+#   N=1  → floor(14/320)=0   → 1      (非空は最低 1)
+#   N=22 → floor(308/320)=0  → 1      (量子化境界の下端: まだ 1)
+#   N=23 → floor(322/320)=1  → 2      (境界を跨いで 2 へ段階変化)
+#   N=160→ floor(2240/320)=7 → 8      (半充填 ≈ 中央値)
+#   N=320→ floor(4480/320)=14→ 15     (満杯 = 15)
+# 各ホッパーは facing=down で床(石)へ向くため転送できず count を保持 (settle でドレインしない)。
+# 背面(west)コンパレーターがアナログ値を読み、前方(east)ダストの power で観測する。
+# セルは z=0,2,4,6,8 に分離しダストを孤立 (単一 west 接続 → MC 仕様どおり east/west の直線形)。
+meta {
+  name: 物流 コンテナ充填率→信号の量子化 (fill formula)
+  ref: 02 §6 comparator (getRedstoneSignalFromContainer / lerpDiscrete) / 13 §4.2 容量抽象 / container.ts fillSignal
+}
+
+circuit {
+  # N=1 → signal 1
+  (0,0,0)..(2,0,0) stone
+  (0,1,0) hopper[enabled=true,facing=down] items=1
+  (1,1,0) comparator[facing=west,mode=compare,powered=false]
+  (2,1,0) redstone_wire
+  # N=22 → signal 1 (境界下端)
+  (0,0,2)..(2,0,2) stone
+  (0,1,2) hopper[enabled=true,facing=down] items=22
+  (1,1,2) comparator[facing=west,mode=compare,powered=false]
+  (2,1,2) redstone_wire
+  # N=23 → signal 2 (境界を跨ぐ)
+  (0,0,4)..(2,0,4) stone
+  (0,1,4) hopper[enabled=true,facing=down] items=23
+  (1,1,4) comparator[facing=west,mode=compare,powered=false]
+  (2,1,4) redstone_wire
+  # N=160 → signal 8 (半充填)
+  (0,0,6)..(2,0,6) stone
+  (0,1,6) hopper[enabled=true,facing=down] items=160
+  (1,1,6) comparator[facing=west,mode=compare,powered=false]
+  (2,1,6) redstone_wire
+  # N=320 → signal 15 (満杯)
+  (0,0,8)..(2,0,8) stone
+  (0,1,8) hopper[enabled=true,facing=down] items=320
+  (1,1,8) comparator[facing=west,mode=compare,powered=false]
+  (2,1,8) redstone_wire
+}
+
+ticks 4
+
+state {
+  # 非空はすべて powered=true (0 交差)。アナログ値はダスト power で段階変化を観測。
+  t4 (1,1,0) comparator[facing=west,mode=compare,powered=true]
+  t4 (2,1,0) redstone_wire[east=side,north=none,power=1,south=none,west=side]
+  t4 (2,1,2) redstone_wire[east=side,north=none,power=1,south=none,west=side]
+  t4 (2,1,4) redstone_wire[east=side,north=none,power=2,south=none,west=side]
+  t4 (2,1,6) redstone_wire[east=side,north=none,power=8,south=none,west=side]
+  t4 (2,1,8) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+}

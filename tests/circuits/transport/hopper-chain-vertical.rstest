@@ -1,0 +1,36 @@
+# 垂直ホッパー3段連鎖のルーティング (#79 領域1 複合物流)。
+# 仕様 [確定: 02 §6 hopper]: ホッパーは BlockEntity フェーズ毎 gt 駆動、転送 8gt
+#   クールダウン (setCooldown(8))、1 回 1 個。eject(facing 先) が先、続けて suck(直上)。
+#   下段が上段を吸い出すのは上段のロックに関係なく成立する (能動転送のみロック対象)。
+# 3 段 (top/mid/bot, すべて facing=down) + sink barrel(items=0 で物流参加)。
+#   top に items=3。suck+eject のパススルーで上流→下流へ流下し、sink が受け取る。
+# ※ sink barrel は items=0 を与えないと「手動計測モード」(count 未定義) になり
+#   物流の受け皿にならない (13 §4.2 の 2 モード設計)。ここでは items=0 で物流モードに。
+#
+# 【断言する堅牢な部分】: 3 段を跨いで sink に届く (ルーティングが成立する) こと。
+#   t2 時点では未到達 (sink 空) → comparator 消灯。全量到達後は点灯。
+# 【断言しない = realMachineCandidate】: sink への初到達 tick と 8gt ステディ周期の
+#   絶対値。sim は BlockEntity 走査を座標順 (y 降順) + クールダウン一律 8 に単純化する
+#   (02 §6「既知の抽象化」/ 領域4 の -1 補正・BE tick 順)。中間段の個数分布・初到達
+#   位相は vanilla の tickedGameTime 依存 -1 補正と差が出うるため断言しない。
+#   sim 実測 (参考): sink は t9/t17/t25 に 1 個ずつ着 (8gt 周期)、comparator は t11 点灯。
+meta {
+  name: 物流 垂直ホッパー3段連鎖 (suck+eject パススルーで sink へ流下)
+  ref: 02 §6 hopper (setCooldown(8) / eject→suck / BE フェーズ) / 13 §4.2 (BE tick 順 既知抽象化) / container 2 モード
+}
+
+circuit {
+  (-1,-1,0) stone
+  (0,0,0) barrel items=0
+  (0,1,0) hopper[enabled=true,facing=down]
+  (0,2,0) hopper[enabled=true,facing=down]
+  (0,3,0) hopper[enabled=true,facing=down] items=3
+  (-1,0,0) comparator[facing=east,mode=compare,powered=false]
+}
+
+ticks 36
+
+state {
+  t2  (-1,0,0) comparator[facing=east,mode=compare,powered=false]   # まだ 3 段を通過中 (sink 空)
+  t36 (-1,0,0) comparator[facing=east,mode=compare,powered=true]    # 全量が sink へ到達済み (ルーティング成立)
+}
