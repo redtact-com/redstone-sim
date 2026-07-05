@@ -1,0 +1,237 @@
+{
+  "name": "hopper-2clock",
+  "description": "2 ホッパー ping-pong クロック: A(east)↔B(west) が 1 個を 8gt クールダウンごとに交換。A 背面コンパレーターが 16gt 周期でトグル。lever で A を初期ロック、t2 解除で発振。02 §6 hopper [setCooldown(8)]。 [fake-player 照準 rework 要: 実機で fake player のレバークリックが外れ未生成 (#74)。.rstest (machines/) が sim 単体で挙動を担保]",
+  "mcVersion": "1.21.1",
+  "ticks": 40,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      2,
+      2,
+      2
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "comparator[facing=east,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "hopper[enabled=false,facing=east]",
+      "items": 1
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        1
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "hopper[enabled=true,facing=west]",
+      "items": 0
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        2,
+        1
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "hopper[enabled=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            1
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "comparator[facing=east,mode=compare,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "comparator[facing=east,mode=compare,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 19,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "comparator[facing=east,mode=compare,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 26,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "comparator[facing=east,mode=compare,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 33,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "comparator[facing=east,mode=compare,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 40,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "comparator[facing=east,mode=compare,powered=true]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-07-05T03:28:24.057Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  },
+  "skipUntil": "#89",
+  "skipReason": "実機生成でホッパー2-clock発振の位相が sim≠vanilla (comparator[0,1,0] のトグル tick がズレる)。ホッパー転送/クールダウン timing の divergence。修正後 skipUntil を外す"
+}
