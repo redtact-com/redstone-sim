@@ -591,7 +591,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleImportNbt = useCallback(async (file: File) => {
     try {
       const bytes = await readFileAsUint8Array(file)
-      const { blocks, warnings } = importFromNbtBytes(bytes, GRID_LAYERS)
+      const { blocks, warnings } = importFromNbtBytes(bytes, { gridW: GRID_W, gridH: GRID_H, maxLayers: GRID_LAYERS })
       editorRef.current.resetToBlocks(blocks)
       setSelectedPos(null)
       rerender()
