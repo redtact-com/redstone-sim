@@ -167,4 +167,13 @@ describe('nbtIO: bounds 検証と warnings 集約 (#97)', () => {
     expect(blocks.size).toBe(0)
     expect(size).toEqual([0, 0, 0])
   })
+
+  it('air 亜種 (cave_air / void_air) は空セル扱いで無警告', () => {
+    for (const air of ['minecraft:cave_air', 'minecraft:void_air']) {
+      const bytes = buildStructure(air, [[0, 0, 0]])
+      const { blocks, warnings } = importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 8 })
+      expect(blocks.size).toBe(0)
+      expect(warnings).toHaveLength(0) // 未対応ブロック警告を出さない
+    }
+  })
 })

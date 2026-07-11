@@ -163,6 +163,7 @@ export function EmbedPage() {
   }, [simWorld, rerender, postToParent])
 
   const doReset = useCallback(() => {
+    if (!loaded) return // load 前の reset は無視 (空 world を作らない)
     setRunning(false)
     // editor は元の配置を保持しているので再ビルドで初期状態に戻す
     const world = editorRef.current.buildSimWorld()
@@ -171,7 +172,7 @@ export function EmbedPage() {
     setTick(0)
     setError(null)
     postToParent({ v: 1, type: 'rdsim:tick', tick: 0 })
-  }, [postToParent])
+  }, [loaded, postToParent])
 
   const doTrigger = useCallback((x: number, y: number, z: number) => {
     if (!simWorld) return

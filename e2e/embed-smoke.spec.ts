@@ -109,3 +109,18 @@ test('embed: 許可外 origin からの postMessage は無視される', async (
   await page.waitForTimeout(200)
   expect(await page.evaluate(() => window.__embed!.getMode())).toBe('interact')
 })
+
+test('embed: load 前の reset は無視され空 world を作らない', async ({ page }) => {
+  await page.goto('/?embed=1')
+  await page.waitForFunction(() => !!window.__embed)
+
+  // load 前は未ロード & 再生ボタンは無効
+  await expect(page.getByTestId('embed-root')).toHaveAttribute('data-embed-loaded', 'false')
+  await expect(page.getByTestId('embed-run-btn')).toBeDisabled()
+
+  // reset を先に送っても無視される (空 world を合成しない → run は無効のまま)
+  await page.evaluate(() => window.postMessage({ v: 1, type: 'rdsim:reset' }, '*'))
+  await page.waitForTimeout(200)
+  expect(await page.evaluate(() => window.__embed!.isLoaded())).toBe(false)
+  await expect(page.getByTestId('embed-run-btn')).toBeDisabled()
+})

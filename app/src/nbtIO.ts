@@ -169,7 +169,9 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
 
     const block = minecraftToBlockState(name, props)
     if (!block) {
-      if (name !== 'minecraft:air') unsupported.set(name, (unsupported.get(name) ?? 0) + 1)
+      // air 亜種 (cave_air / void_air) は空セル扱いで無警告 (通常の air と同様)
+      const isAir = name === 'minecraft:air' || name.endsWith('_air')
+      if (!isAir) unsupported.set(name, (unsupported.get(name) ?? 0) + 1)
       continue
     }
     resultBlocks.set(`${bx},${by},${bz}`, block)
