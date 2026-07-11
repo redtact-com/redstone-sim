@@ -30,6 +30,7 @@ import { IsometricView } from '@redstone/viewer'
 import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
+import { decideCellTap } from './editorTap'
 
 /**
  * E2E テスト用の命令的フック (issue #70)。
@@ -43,6 +44,10 @@ export interface EditorTestApi {
   getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
   getSimStateAt: (x: number, y: number, z: number) => BlockState | null
   getMode: () => 'edit' | 'sim'
+  /** アクティブレイヤーのセルを左クリック相当で叩く (canvas ピクセル校正を避けた #99 検証用) */
+  tapCell: (x: number, z: number) => void
+  /** パレット選択を切り替える (tapCell 前のツール指定用) */
+  selectTool: (type: PaletteType) => void
 }
 
 declare global {
@@ -397,10 +402,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
       return
     }
 
-    // 左クリック（消しゴム以外）
+    // 左クリック（消しゴム以外）。別種ツール × 既存ブロックは「置き換え」= place (#99)
     const existing = editorRef.current.getBlock(x, z)
+    const action = decideCellTap(existing, selectedType)
+
     // ワイヤーツールで既存ワイヤーをクリック → dot ⇄ cross 形状トグル (C8)
-    if (existing?.type === 'wire' && selectedType === 'wire') {
+    if (action === 'wire-toggle') {
       if (editorRef.current.toggleWireDot(x, z)) {
         setSelectedPos([x, z])
         addLog(`ワイヤー形状トグル (${x}, ${z})`)
@@ -408,8 +415,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
       }
       return
     }
-    if (existing && existing.type !== 'air') {
-      // 既存ブロックをクリック → 選択して向き・遅延・モードを読み込む
+
+    if (action === 'select' && existing) {
+      // 同種ツールで既存ブロックをクリック → 選択して向き・遅延・モードを読み込む
       setSelectedPos([x, z])
       setSelectedType(existing.type as PlaceableType)
       if ('facing' in existing) {
@@ -433,21 +441,22 @@ export function EditorPage({ onBack }: EditorPageProps) {
         setCount(existing.count)
       }
       addLog(`選択: ${existing.type} (${x}, ${z})`)
-    } else {
-      // 空セルをクリック → 新規配置
-      const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
-      const opts: PlaceOptions = {}
-      if (meta?.hasFacing) opts.facing = facing
-      if (meta?.hasDelay)  opts.delay  = delay
-      if (meta?.hasMode)   opts.mode   = comparatorMode
-      if (meta?.hasPressedPower) opts.pressedPower = pressedPower
-      if (meta?.hasSignal)       opts.signal       = signal
-      if (meta?.hasCount)        opts.count        = count
-      editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
-      setSelectedPos([x, z])
-      addLog(`${meta?.label ?? selectedType} を配置 (${x}, ${z})`)
-      rerender()
+      return
     }
+
+    // action === 'place': 空セル or 別種ブロック (別種は置き換え)
+    const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
+    const opts: PlaceOptions = {}
+    if (meta?.hasFacing) opts.facing = facing
+    if (meta?.hasDelay)  opts.delay  = delay
+    if (meta?.hasMode)   opts.mode   = comparatorMode
+    if (meta?.hasPressedPower) opts.pressedPower = pressedPower
+    if (meta?.hasSignal)       opts.signal       = signal
+    if (meta?.hasCount)        opts.count        = count
+    editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
+    setSelectedPos([x, z])
+    addLog(`${meta?.label ?? selectedType}${existing && existing.type !== 'air' ? ' で置き換え' : ' を配置'} (${x}, ${z})`)
+    rerender()
   }, [addLog, rerender])
 
   // ── 向き変更 ────────────────────────────────────────────────────────
@@ -783,9 +792,11 @@ export function EditorPage({ onBack }: EditorPageProps) {
       getEditorBlockAt: (x, y, z) => editorRef.current.getBlock3(x, y, z),
       getSimStateAt: (x, y, z) => simWorldRef.current?.getBlockAt([x, y, z]) ?? null,
       getMode: () => modeRef.current,
+      tapCell: (x, z) => handleBlockClick([x, editorRef.current.activeLayer, z], 'left'),
+      selectTool: (type) => handleSelectType(type),
     }
     return () => { delete window.__editorTest }
-  }, [handleClear, rerender])
+  }, [handleClear, handleBlockClick, handleSelectType, rerender])
 
   // ── render ───────────────────────────────────────────────────────────
 
