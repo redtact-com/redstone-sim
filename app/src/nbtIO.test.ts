@@ -19,7 +19,7 @@ const GRID = 16
 function roundTrip(block: BlockState): BlockState | undefined {
   const src = new Map<string, BlockState>([['0,0,0', block]])
   const bytes = exportToNbtBytes(src, GRID, GRID)
-  return importFromNbtBytes(bytes, 8).blocks.get('0,0,0')
+  return importFromNbtBytes(bytes, { maxLayers: 8 }).blocks.get('0,0,0')
 }
 
 /** 任意の vanilla ブロック名 + props を持つ最小構造 NBT を組み立てて import する */
@@ -41,7 +41,33 @@ function importVanilla(name: string, props: Record<string, string> = {}): BlockS
     .set('blocks', new NbtList<NbtCompound>([blockEntry]))
     .set('entities', new NbtList<NbtCompound>([]))
   const bytes = new NbtFile('', root, 'gzip', false, undefined).write()
-  return importFromNbtBytes(bytes, 8).blocks.get('0,0,0')
+  return importFromNbtBytes(bytes, { maxLayers: 8 }).blocks.get('0,0,0')
+}
+
+/**
+ * palette[1] のブロックを pos 群に配置した構造 NBT を組み立てる。
+ * size は内容を収める最小値を自動計算する (deepslate は size 外の pos を弾くため)。
+ */
+function buildStructure(name: string, positions: Array<[number, number, number]>): Uint8Array {
+  const air = new NbtCompound().set('Name', new NbtString('minecraft:air'))
+  const target = new NbtCompound().set('Name', new NbtString(name))
+  const palette = new NbtList<NbtCompound>([air, target])
+  const blocks = new NbtList<NbtCompound>(
+    positions.map(([x, y, z]) =>
+      new NbtCompound()
+        .set('state', new NbtInt(1))
+        .set('pos', new NbtList<NbtInt>([new NbtInt(x), new NbtInt(y), new NbtInt(z)]))
+    )
+  )
+  const sx = Math.max(1, ...positions.map((p) => p[0] + 1))
+  const sy = Math.max(1, ...positions.map((p) => p[1] + 1))
+  const sz = Math.max(1, ...positions.map((p) => p[2] + 1))
+  const root = new NbtCompound()
+    .set('size', new NbtList<NbtInt>([new NbtInt(sx), new NbtInt(sy), new NbtInt(sz)]))
+    .set('palette', palette)
+    .set('blocks', blocks)
+    .set('entities', new NbtList<NbtCompound>([]))
+  return new NbtFile('', root, 'gzip', false, undefined).write()
 }
 
 describe('nbtIO: ボタン専用型の往復', () => {
@@ -104,5 +130,50 @@ describe('nbtIO: ホッパー / ドロッパーの往復 (#65)', () => {
   it('vanilla dropper[facing=north,triggered=false] → dropper 型 import', () => {
     expect(importVanilla('minecraft:dropper', { facing: 'north', triggered: 'false' }))
       .toMatchObject({ type: 'dropper', facing: 'north', triggered: false })
+  })
+})
+
+describe('nbtIO: bounds 検証と warnings 集約 (#97)', () => {
+  it('盤面範囲外 (x/z) のブロックは省略され警告を返す', () => {
+    // 16×16 グリッド外 (x=16, z=16) を含む 17×1×17 構造
+    const bytes = buildStructure('minecraft:redstone_lamp', [
+      [0, 0, 0], [15, 0, 15], [16, 0, 0], [0, 0, 16],
+    ])
+    const { blocks, warnings, size } = importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 8 })
+    expect(blocks.size).toBe(2) // (0,0,0) と (15,0,15) のみ
+    expect(warnings.some((w) => w.includes('盤面範囲外') && w.includes('2'))).toBe(true)
+    expect(size).toEqual([16, 1, 16]) // 取り込めた分の bounding box
+  })
+
+  it('高さ上限超過 (Y≥maxLayers) は省略され警告を返す', () => {
+    const bytes = buildStructure('minecraft:redstone_lamp', [[0, 0, 0], [0, 8, 0], [0, 20, 0]])
+    const { blocks, warnings } = importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 8 })
+    expect(blocks.size).toBe(1)
+    expect(warnings.some((w) => w.includes('高さ上限') && w.includes('2'))).toBe(true)
+  })
+
+  it('非対応ブロックは種類ごとに集約して 1 警告にまとめる', () => {
+    const bytes = buildStructure('minecraft:tnt', [[0, 0, 0], [1, 0, 0], [2, 0, 0]])
+    const { blocks, warnings } = importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 8 })
+    expect(blocks.size).toBe(0)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('未対応ブロック 3 個')
+    expect(warnings[0]).toContain('tnt')
+  })
+
+  it('全て範囲外/非対応なら blocks は空・size は [0,0,0]', () => {
+    const bytes = buildStructure('minecraft:tnt', [[0, 0, 0]])
+    const { blocks, size } = importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 8 })
+    expect(blocks.size).toBe(0)
+    expect(size).toEqual([0, 0, 0])
+  })
+
+  it('air 亜種 (cave_air / void_air) は空セル扱いで無警告', () => {
+    for (const air of ['minecraft:cave_air', 'minecraft:void_air']) {
+      const bytes = buildStructure(air, [[0, 0, 0]])
+      const { blocks, warnings } = importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 8 })
+      expect(blocks.size).toBe(0)
+      expect(warnings).toHaveLength(0) // 未対応ブロック警告を出さない
+    }
   })
 })
