@@ -1,0 +1,191 @@
+{
+  "name": "powered-rail-flat-step-live",
+  "description": "#129 平坦段差を**電源を入れた状態で**組み立てる。powered-rail-flat-step-build は 完成後にレバーを入れる順序だったため斜め上に更新が届かず点かなかったが、組み立て中に既に動力が 入っていれば、レールを置いた時点で onPlace → updateState が走って評価される [確定: 26.2 BaseRailBlock.onPlace]。手順は同じ (①(5,1,5) z 方向 ②(5,1,4) 一瞬置いて壊す ③(6,2,6) x 方向 ④(5,2,6) x 方向 ⑤(6,2,6) 壊す ⑥(5,2,7) z 方向に置いてすぐ壊す) で、レバーを先に ON にする。",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": {
+    "from": [
+      3,
+      0,
+      3
+    ],
+    "to": [
+      8,
+      3,
+      8
+    ]
+  },
+  "player": {
+    "spawn": [
+      4.5,
+      1.0,
+      4.5
+    ],
+    "facing": [
+      0,
+      20
+    ],
+    "lookAt": [
+      4.5,
+      1.35,
+      5.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        4,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        7
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        5,
+        1,
+        5
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        5,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        5,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        6,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 12,
+      "pos": [
+        5,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 14,
+      "pos": [
+        6,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 16,
+      "pos": [
+        5,
+        2,
+        7
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 18,
+      "pos": [
+        5,
+        2,
+        7
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ]
+}
