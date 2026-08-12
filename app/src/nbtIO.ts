@@ -108,25 +108,59 @@ export function exportToNbtBytes(
 
 // ── インポート ─────────────────────────────────────────────────────────────
 
+/** インポート時に構造を収める盤面の範囲 (省略した軸は無制限) */
+export interface ImportBounds {
+  /** X 幅 (0 .. gridW-1)。範囲外の x は省略 */
+  gridW?: number
+  /** Z 幅 (0 .. gridH-1)。範囲外の z は省略 */
+  gridH?: number
+  /** レイヤー数 (0 .. maxLayers-1)。以上の y は省略 */
+  maxLayers?: number
+}
+
 export interface ImportResult {
   /** エディタ用ブロックマップ (key: "x,y,z") */
   blocks: Map<string, BlockState>
+  /** 省略・非対応など、利用者へ伝える警告 (種類ごとに集約済み) */
   warnings: string[]
+  /** 取り込めたブロックのバウンディングボックスサイズ [sx, sy, sz]。0 個なら [0,0,0] */
+  size: [number, number, number]
 }
 
-/** バニラ構造 NBT バイト列 → エディタブロックマップ（全レイヤー） */
-export function importFromNbtBytes(bytes: Uint8Array, maxLayers?: number): ImportResult {
+/**
+ * バニラ構造 NBT バイト列 → エディタブロックマップ。
+ *
+ * bounds を渡すと盤面 (gridW×gridH×maxLayers) に収まらないブロックを省略し、
+ * 省略数・非対応ブロックを種類ごとに集約した警告を返す。埋め込み表示 (#97) では
+ * この警告を親ページへ渡し、「n 個を簡略化しました」と提示する。
+ */
+export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {}): ImportResult {
+  const { gridW, gridH, maxLayers } = bounds
   const nbt = NbtFile.read(bytes)
   const structure = Structure.fromNbt(nbt.root)
 
   const resultBlocks = new Map<string, BlockState>()
   const warnings: string[] = []
   let skippedAbove = 0
+  let skippedOutOfBounds = 0
+  // 非対応ブロックは種類ごとに件数を集約する (1 個ずつ列挙すると警告が溢れるため)
+  const unsupported = new Map<string, number>()
+
+  let minX = Infinity, minY = Infinity, minZ = Infinity
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
 
   for (const placed of structure.getBlocks()) {
     const [bx, by, bz] = placed.pos as [number, number, number]
     if (maxLayers !== undefined && by >= maxLayers) {
       skippedAbove++
+      continue
+    }
+    if (
+      by < 0 ||
+      (gridW !== undefined && (bx < 0 || bx >= gridW)) ||
+      (gridH !== undefined && (bz < 0 || bz >= gridH))
+    ) {
+      skippedOutOfBounds++
       continue
     }
 
@@ -135,15 +169,35 @@ export function importFromNbtBytes(bytes: Uint8Array, maxLayers?: number): Impor
 
     const block = minecraftToBlockState(name, props)
     if (!block) {
-      if (name !== 'minecraft:air') warnings.push(`未対応ブロック: ${name}`)
+      // air 亜種 (cave_air / void_air) は空セル扱いで無警告 (通常の air と同様)
+      const isAir = name === 'minecraft:air' || name.endsWith('_air')
+      if (!isAir) unsupported.set(name, (unsupported.get(name) ?? 0) + 1)
       continue
     }
     resultBlocks.set(`${bx},${by},${bz}`, block)
+    if (bx < minX) minX = bx
+    if (by < minY) minY = by
+    if (bz < minZ) minZ = bz
+    if (bx > maxX) maxX = bx
+    if (by > maxY) maxY = by
+    if (bz > maxZ) maxZ = bz
   }
 
-  if (skippedAbove > 0) warnings.push(`高さ上限超過で ${skippedAbove} ブロックを省略`)
+  if (unsupported.size > 0) {
+    const total = [...unsupported.values()].reduce((a, b) => a + b, 0)
+    const kinds = [...unsupported.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
+    warnings.push(`未対応ブロック ${total} 個 (${unsupported.size} 種: ${kinds}) を省略`)
+  }
+  if (skippedAbove > 0) warnings.push(`高さ上限 (Y≥${maxLayers}) 超過で ${skippedAbove} ブロックを省略`)
+  if (skippedOutOfBounds > 0) {
+    warnings.push(`盤面範囲外 (${gridW ?? '∞'}×${gridH ?? '∞'}) の ${skippedOutOfBounds} ブロックを省略`)
+  }
 
-  return { blocks: resultBlocks, warnings }
+  const size: [number, number, number] = resultBlocks.size > 0
+    ? [maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1]
+    : [0, 0, 0]
+
+  return { blocks: resultBlocks, warnings, size }
 }
 
 // ── BlockState → Minecraft 変換 ─────────────────────────────────────────────
