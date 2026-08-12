@@ -21,7 +21,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { CircuitEditor } from '@redstone/editor'
+import { CircuitEditor, decideCellTap } from '@redstone/editor'
 import type { PlaceableType, PlaceOptions } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState } from '@redstone/sim'
@@ -30,7 +30,6 @@ import { IsometricView } from '@redstone/viewer'
 import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
-import { decideCellTap } from './editorTap'
 import { saveCircuit, loadCircuit, clearCircuit } from './circuitStorage'
 
 /**
