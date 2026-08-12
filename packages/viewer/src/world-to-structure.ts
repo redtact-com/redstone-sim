@@ -120,6 +120,8 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'piston_head':
       return `minecraft:piston_head[facing=${block.facing},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
+    case 'slime_block':  return 'minecraft:slime_block'
+    case 'honey_block':  return 'minecraft:honey_block'
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -172,6 +174,8 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:glass',
   'minecraft:smooth_stone',
   'minecraft:target',
+  'minecraft:slime_block',
+  'minecraft:honey_block',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

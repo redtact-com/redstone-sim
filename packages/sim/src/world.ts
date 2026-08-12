@@ -3,7 +3,7 @@ import type {
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
 } from './types.js'
-import { OPPOSITE, ALL_DIRS } from './types.js'
+import { OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther } from './types.js'
 import {
   isBasePowered as isTorchBasePowered,
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
@@ -60,6 +60,13 @@ function neighbor(pos: Pos3D, dir: Dir6): Pos3D {
     case 'up':    return [x, y + 1, z]
     case 'down':  return [x, y - 1, z]
   }
+}
+
+/** pos から dir へ n マス進んだ座標 (n=0 は pos 自身) */
+function offset(pos: Pos3D, dir: Dir6, n: number): Pos3D {
+  let cur = pos
+  for (let i = 0; i < n; i++) cur = neighbor(cur, dir)
+  return cur
 }
 
 // NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)
@@ -1045,6 +1052,9 @@ export class SimWorld {
     // オブザーバーは vanilla どおり可動 (PushReaction NORMAL) [確定: 26.2 + 実機 fixture
     // observer-pushed]。着地時に自分で 1 回発火する — finalizeMovingPiston を参照 (#119)
     if (block.type === 'observer') return true
+    // スライム/蜂蜜も可動 (PushReaction STICKY)。くっついた塊の収集は
+    // resolvePushStructure が担当する (#121)
+    if (isStickyBlock(block)) return true
     return false
   }
 
@@ -1084,23 +1094,112 @@ export class SimWorld {
    * extending 時のみ。sticky は引かずに置き去りにする = 既存挙動)。
    */
   private resolvePushStructure(
-    pos: Pos3D, facing: Dir6,
+    pos: Pos3D, facing: Dir6, startAt?: Pos3D,
   ): { toPush: Pos3D[]; toDestroy: Pos3D[] } | null {
     const toPush: Pos3D[] = []
     const toDestroy: Pos3D[] = []
-    let cur = neighbor(pos, facing)
-    for (;;) {
-      const b = this.getBlockAt(cur)
-      if (!b) return { toPush, toDestroy }   // 空きに到達 → 押せる
-      if (this.isPushDestroy(b)) {
-        toDestroy.push(cur)                  // 破壊して終端 (連鎖はここまで)
+    const key = (p: Pos3D): string => posKey(p)
+    const inPush = (p: Pos3D): number => toPush.findIndex(q => key(q) === key(p))
+
+    /** 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可 */
+    const pushable = (p: Pos3D, allowDestroy: boolean): boolean => {
+      const b = this.getBlockAt(p)
+      if (!b) return true                                   // 空気
+      if (b.type === 'piston' || b.type === 'sticky_piston') return !b.extended
+      if (this.isPushDestroy(b)) return allowDestroy
+      return this.isMovable(b)                              // それ以外は BLOCK 扱い
+    }
+
+    /** 26.2 PistonStructureResolver.addBlockLine */
+    const addBlockLine = (start: Pos3D): boolean => {
+      const first = this.getBlockAt(start)
+      if (!first) return true                               // 空気 → 何も足さない
+      if (!pushable(start, false)) return true
+      if (key(start) === key(pos)) return true
+      if (inPush(start) > -1) return true
+
+      // 粘着ブロックは「後ろ (押し方向の逆)」に繋がっている塊も連れていく
+      let count = 1
+      if (count + toPush.length > MAX_PUSH_DEPTH) return false
+      let cur = first
+      while (isStickyBlock(cur)) {
+        const back = offset(start, OPPOSITE[facing], count)
+        const prev = cur
+        const next = this.getBlockAt(back)
+        if (!next
+            || !canStickToEachOther(prev, next)
+            || !pushable(back, false)
+            || key(back) === key(pos)) break
+        cur = next
+        if (++count + toPush.length > MAX_PUSH_DEPTH) return false
+      }
+
+      let added = 0
+      for (let i = count - 1; i >= 0; i--) {
+        toPush.push(offset(start, OPPOSITE[facing], i))
+        added++
+      }
+
+      // 前方へ伸ばす
+      for (let i = 1; ; i++) {
+        const p = offset(start, facing, i)
+        const collision = inPush(p)
+        if (collision > -1) {
+          reorderAtCollision(added, collision)
+          for (let j = 0; j <= collision + added; j++) {
+            const b = this.getBlockAt(toPush[j])
+            if (b && isStickyBlock(b) && !addBranchingBlocks(toPush[j])) return false
+          }
+          return true
+        }
+        const b = this.getBlockAt(p)
+        if (!b) return true                                 // 空気に到達 → 押せる
+        if (!pushable(p, true) || key(p) === key(pos)) return false
+        if (this.isPushDestroy(b)) { toDestroy.push(p); return true }
+        if (toPush.length >= MAX_PUSH_DEPTH) return false
+        toPush.push(p)
+        added++
+      }
+    }
+
+    /** 26.2 reorderListAtCollision — 衝突した行を先頭側へ並べ替える */
+    const reorderAtCollision = (added: number, collision: number): void => {
+      const head = toPush.slice(0, collision)
+      const lastLine = toPush.slice(toPush.length - added)
+      const collisionToLine = toPush.slice(collision, toPush.length - added)
+      toPush.length = 0
+      toPush.push(...head, ...lastLine, ...collisionToLine)
+    }
+
+    /** 26.2 addBranchingBlocks — 押し方向と直交する 4 方向の「くっついている」塊を足す */
+    const addBranchingBlocks = (from: Pos3D): boolean => {
+      const fromState = this.getBlockAt(from)
+      if (!fromState) return true
+      for (const dir of ALL_DIRS) {
+        if (dir === facing || dir === OPPOSITE[facing]) continue   // 押し軸は対象外
+        const nPos = neighbor(from, dir)
+        const nb = this.getBlockAt(nPos)
+        if (nb && canStickToEachOther(nb, fromState) && !addBlockLine(nPos)) return false
+      }
+      return true
+    }
+
+    const start = startAt ?? neighbor(pos, facing)
+    const startBlock = this.getBlockAt(start)
+    if (!pushable(start, false)) {
+      // 直前が壊れ物なら破壊して終端 (26.2 resolve の DESTROY 分岐)
+      if (startBlock && this.isPushDestroy(startBlock)) {
+        toDestroy.push(start)
         return { toPush, toDestroy }
       }
-      if (!this.isMovable(b)) return null
-      if (toPush.length >= 12) return null   // 13 個目 = 押せない
-      toPush.push(cur)
-      cur = neighbor(cur, facing)
+      return startBlock ? null : { toPush, toDestroy }
     }
+    if (!addBlockLine(start)) return null
+    for (let i = 0; i < toPush.length; i++) {
+      const b = this.getBlockAt(toPush[i])
+      if (b && isStickyBlock(b) && !addBranchingBlocks(toPush[i])) return null
+    }
+    return { toPush, toDestroy }
   }
 
   private executeBlockEvent(ev: BlockEvent): string[] {
@@ -1168,6 +1267,15 @@ export class SimWorld {
       for (let i = pushList.length - 1; i >= 0; i--) {
         setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i])
       }
+      // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
+      // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
+      const destKeys = new Set(pushList.map(q => posKey(neighbor(q, piston.facing))))
+      for (const src of pushList) {
+        const k = posKey(src)
+        if (destKeys.has(k) || k === posKey(headPos)) continue
+        this.setBlockAt(src, { type: 'air' })
+        changed.push(k)
+      }
       // head セル (= 最近接 src と同座標) を head 行きの moving に
       setMoving(headPos, sticky ? 'sticky' : 'normal', {
         type: 'piston_head', facing: piston.facing, sticky,
@@ -1204,14 +1312,27 @@ export class SimWorld {
       }
       const affected: Pos3D[] = [ev.pos, headPos]
       if (sticky) {
+        // 引き戻しも vanilla は PistonStructureResolver を通る (extending=false)。
+        // 押し方向は facing の逆、開始位置は piston+facing*2 = head の 1 つ先 (#121)。
+        // これでスライム/蜂蜜にくっついた塊ごと引き戻せる
+        const pullDir = OPPOSITE[piston.facing]
         const pullFrom = neighbor(headPos, piston.facing)
-        const target = this.getBlockAt(pullFrom)
-        if (target && this.isMovable(target)) {
-          // 引かれるブロック: src 即時 air、head セルに moving(into=ブロック)
-          this.setBlockAt(pullFrom, { type: 'air' })
-          changed.push(posKey(pullFrom))
-          setMoving(headPos, 'normal', target)
-          affected.push(pullFrom)
+        const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom)
+        const pullList = pulled ? pulled.toPush : []
+        if (pullList.length > 0) {
+          const payloads = pullList.map(q => this.getBlockAt(q)!)
+          // 近い順に行き先 (piston 側) へ moving を置く
+          for (let i = 0; i < pullList.length; i++) {
+            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i])
+          }
+          const destKeys = new Set(pullList.map(q => posKey(neighbor(q, pullDir))))
+          for (const src of pullList) {
+            const k = posKey(src)
+            if (destKeys.has(k)) continue
+            this.setBlockAt(src, { type: 'air' })
+            changed.push(k)
+          }
+          affected.push(...pullList, ...pullList.map(q => neighbor(q, pullDir)))
         }
       }
       // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)

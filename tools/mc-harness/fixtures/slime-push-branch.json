@@ -1,0 +1,207 @@
+{
+  "name": "slime-push-branch",
+  "description": "#121 スライムブロックの塊移動。lever(0,1,0) → dust(1,1,0) → piston(2,1,0,facing=east) の前にスライム(3,1,0)を置き、その横 (3,1,1) と上 (3,2,0) に固体をくっつける。vanilla の PushReaction STICKY では押し軸と直交する方向にくっついたブロックも一緒に動く (PistonStructureResolver.addBranchingBlocks)。さらに (4,1,1) に蜂蜜ブロックを置き、スライムと蜂蜜が互いにくっつかないことも同時に確認する。",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      7,
+      2,
+      3
+    ]
+  },
+  "player": {
+    "spawn": [
+      2.5,
+      1.0,
+      3.5
+    ],
+    "facing": [
+      180,
+      35
+    ],
+    "lookAt": [
+      2.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "slime_block"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        1
+      ],
+      "block": "honey_block"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}

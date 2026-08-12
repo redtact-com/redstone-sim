@@ -175,6 +175,10 @@ export function mcToSim(state: string): BlockState | null {
       throw new Error('moving_piston は authored に使えません (過渡状態)')
     case 'redstone_block':
       return { type: 'redstone_block' }
+    case 'slime_block':
+      return { type: 'slime_block' }
+    case 'honey_block':
+      return { type: 'honey_block' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -250,6 +254,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'redstone_block':
         // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
         return 'redstone_block'
+      case 'slime_block':
+        return 'slime_block'
+      case 'honey_block':
+        return 'honey_block'
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':

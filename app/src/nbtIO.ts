@@ -275,6 +275,10 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         note: String((block as any).note ?? 0),
         powered: String((block as any).powered ?? false),
       }]
+    case 'slime_block':
+      return ['minecraft:slime_block', {}]
+    case 'honey_block':
+      return ['minecraft:honey_block', {}]
     case 'redstone_block':
       return ['minecraft:redstone_block', {}]
     case 'target':
@@ -427,6 +431,8 @@ function minecraftToBlockState(
     } as BlockState
   }
 
+  if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
+  if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
   if (name === 'minecraft:redstone_block') {
     return { type: 'redstone_block' } as BlockState
   }

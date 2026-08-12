@@ -1,0 +1,216 @@
+{
+  "name": "slime-pull-sticky",
+  "description": "#121 粘着ピストンでスライムの塊を引き戻す。伸長で押した塊を、収縮で引き戻せるか (引き戻しも PistonStructureResolver を通り、くっついた塊ごと戻るか) を実機で確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 30,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      7,
+      2,
+      3
+    ]
+  },
+  "player": {
+    "spawn": [
+      2.5,
+      1.0,
+      3.5
+    ],
+    "facing": [
+      180,
+      35
+    ],
+    "lookAt": [
+      2.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "slime_block"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        1
+      ],
+      "block": "honey_block"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 14,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}
