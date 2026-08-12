@@ -1480,8 +1480,12 @@ export class SimWorld {
     //   連結成分の一部がまだゼロ化されたままの過渡状態で updateBlock を呼ぶと、
     //   リピーターが「入力が消えた」と誤認して偽の turn_off を予約し
     //   発振する (実機 fixture repeater-delay-1/2/3 で検出したバグ)。
+    // [#104] visited でセルを「1 度きり」にしてはいけない。シード走査は Set の反復順に
+    // 値を書くため、弱い直結源から先に走ると低い値のまま凍結され、後から届く強い spread で
+    // 昇圧されなくなる (実機 fixture dust-weak-source-mix: 15/14/13 が 15/11/12 に転落した)。
+    // 代わりに「値が増えたときだけ再伝播する」単調緩和にする。power は 0..15 で単調増加
+    // なので、再キューは高々 15×|connected| 回で必ず停止する。
     const increaseQueue: Pos3D[] = []
-    const visited = new Set<string>()
 
     for (const key of connected) {
       const pos = keyToPos(key)
@@ -1489,28 +1493,24 @@ export class SimWorld {
       if (power > 0) {
         const block = this.getBlockAt(pos) as WireState
         this.setBlockAt(pos, { ...block, power })
-        if (!visited.has(key)) {
-          visited.add(key)
-          increaseQueue.push(pos)
-        }
+        increaseQueue.push(pos)
       }
     }
 
     while (increaseQueue.length > 0) {
       const pos = increaseQueue.shift()!
-      const block = this.getBlockAt(pos) as WireState
+      const block = this.getBlockAt(pos)
       if (!block || block.type !== 'wire') continue
 
       for (const nPos of getConnectedWireNeighbors(pos, this)) {
         const nKey = posKey(nPos)
-        if (!connected.has(nKey) || visited.has(nKey)) continue
+        if (!connected.has(nKey)) continue
         const nBlock = this.getBlockAt(nPos)
         if (nBlock?.type !== 'wire') continue
 
         const newPower = computeWirePower(nPos, this)
         if (newPower > (nBlock as WireState).power) {
           this.setBlockAt(nPos, { ...nBlock, power: newPower })
-          visited.add(nKey)
           increaseQueue.push(nPos)
         }
       }

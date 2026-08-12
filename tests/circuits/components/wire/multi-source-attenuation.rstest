@@ -1,0 +1,32 @@
+# 強さの違う直結源が同一のダスト連結成分にある場合の定常値 (#104)。
+# 仕様: 各ダストの power = max(源の強さ − 距離)。弱い源は強い源の減衰値を下回る限り無視される。
+# ∴ レバー(15) 直結の A(1,1,0)=15 / B(2,1,0)=14 / C(3,1,0)=13 に対し、C の隣へ 12 を出す
+#   コンパレータを足しても 13 > 12 なので 15/14/13 のまま変わらない。
+# 旧実装は propagateWireBFS の Phase2 が「シード走査中に >0 になったセル」を visited で
+# 凍結していたため、後から変化した C 側を起点に走ると 15/11/12 に転落していた。
+# 期待値は実機 (fixture dust-weak-source-mix) が正。
+meta {
+  name: 複数直結源 — 弱い源は強い源の減衰値を下回る限り無視される
+  ref: #104 / fixture dust-weak-source-mix / 02 §5.1 (減衰 1/block)
+}
+
+fixture dust-weak-source-mix
+
+# t2 でレバー1 (0,1,0) ON → 対象の線が 15/14/13。
+state {
+  t8 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t8 (2,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+  t8 (3,1,0) redstone_wire[east=side,north=none,power=13,south=none,west=side]
+}
+
+# t12 でレバー2 (5,1,4) ON → 減衰済みの線がコンパレータ背面へ入り、出力 12 が C の隣に立つ。
+# ここで対象の線の値が変わってはいけない (13 > 12)。
+state {
+  t20 (1,1,0) redstone_wire[east=side,north=none,power=15,south=none,west=side]
+  t20 (2,1,0) redstone_wire[east=side,north=none,power=14,south=none,west=side]
+  t20 (3,1,0) redstone_wire[east=side,north=none,power=13,south=none,west=side]
+  t20 (5,1,0) redstone_wire[east=none,north=none,power=12,south=side,west=side]
+  t20 (5,1,1) redstone_wire[east=none,north=side,power=13,south=side,west=none]
+  t20 (5,1,2) redstone_wire[east=none,north=side,power=14,south=side,west=none]
+  t20 (5,1,3) redstone_wire[east=none,north=side,power=15,south=side,west=none]
+}
