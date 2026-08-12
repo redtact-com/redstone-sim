@@ -1,0 +1,143 @@
+{
+  "name": "flying-machine-honey-bud",
+  "description": "#125 ②ハチミツ版フライングマシン (BUD/QC 利用)。ハチミツは非導体なのでスライムと同じ配置ではオブザーバーの出力がピストンへ届かない (= flying-machine-honey-flat)。そこでオブザーバーをハチミツの**上** (y=2) に置き、その出力が斜め下のピストンの1個上のマス (quasi 位置・空気) へ入るようにする。ピストンは空気マス越しに QC で動力源化し、動きによる更新でのみ発火する = BUD の利用。オブザーバーはハチミツに吸着して一緒に運ばれ、着地時に再発火して周期が続く。起動は西側の別トリガ (レバー→オブザーバー→P2 の quasi マス)。",
+  "mcVersion": "1.21.1",
+  "ticks": 40,
+  "region": {
+    "from": [
+      0,
+      0,
+      4
+    ],
+    "to": [
+      16,
+      3,
+      8
+    ]
+  },
+  "player": {
+    "spawn": [
+      2.5,
+      2.0,
+      7.5
+    ],
+    "facing": [
+      180,
+      20
+    ],
+    "lookAt": [
+      2.5,
+      2.35,
+      6.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        1,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        6
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "honey_block"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        5
+      ],
+      "block": "sticky_piston[extended=false,facing=west]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        6
+      ],
+      "block": "honey_block"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        5
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        5,
+        2,
+        6
+      ],
+      "block": "observer[facing=south,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        2,
+        6
+      ],
+      "action": "use"
+    }
+  ]
+}
