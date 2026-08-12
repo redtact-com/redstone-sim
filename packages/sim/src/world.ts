@@ -498,6 +498,47 @@ export class SimWorld {
   }
 
   /**
+   * これ以上「自力で」変化しない状態か (#113)。
+   *
+   * flush() が見ている予約 tick だけでは足りない。ピストンの押し出し確定は
+   * tile tick でなく BlockEntity 相 (moving_piston の finalizeDue) で進むため、
+   * 予約が尽きた瞬間に止めると押し出し途中の世界を「安定」と誤判定する。
+   *
+   * 対象外: ホッパー/ドロッパーの物流は BE 相のクールダウンで動き続けるため
+   * ここでは見ない (アイテムが流れている限り静止しないのが正しいが、
+   * settle の停止条件としては maxTicks で切る)。
+   */
+  isQuiescent(): boolean {
+    if (this.scheduledTicks.length > 0) return false
+    if (this.blockEvents.length > 0) return false
+    for (const block of this.blocks.values()) {
+      if (block.type === 'moving_piston') return false
+    }
+    return true
+  }
+
+  /**
+   * 安定するまで進める (#113)。flush より安全側で、押し出し中のピストンも確定させる。
+   *
+   * @param maxTicks 上限。発振回路はここで打ち切られる
+   * @param quietTicks 静止と判定するのに必要な連続 tick 数。既定 1
+   * @returns 進めた tick 数と、静止して終わったか (false = 発振または打ち切り)
+   */
+  settle(maxTicks = 4096, quietTicks = 1): { ticks: number; quiescent: boolean } {
+    let quiet = 0
+    for (let i = 0; i < maxTicks; i++) {
+      if (this.isQuiescent()) {
+        quiet++
+        if (quiet >= quietTicks) return { ticks: i, quiescent: true }
+      } else {
+        quiet = 0
+      }
+      this.tick()
+    }
+    return { ticks: maxTicks, quiescent: this.isQuiescent() }
+  }
+
+  /**
    * 現在のブロック配置から初期の安定状態を計算する。
    * buildSimWorld() 後に一度呼ぶことで、最初から置いてあるトーチや
    * 電源が入った回路の初期状態を正しく反映させる。
