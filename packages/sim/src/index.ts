@@ -10,6 +10,7 @@ export type {
   RedstoneBlockState, TargetState, SolidState,
   PressurePlateState, WeightedPressurePlateState,
   ObserverState, AirState,
+  PoweredRailState, RailShape,
   WorldSnapshot,
   ScheduledTick,
   TickResult,
@@ -20,7 +21,16 @@ export {
   H_DIRS,
   ALL_DIRS,
   H_DIR_VEC,
+  RAIL_SHAPES_STRAIGHT,
+  isRailSlope,
 } from './types.js'
+
+// レール (#127)
+export {
+  isRail, railConnections, planRailPlacement,
+  findPoweredRailSignal, shouldRailBePowered, MAX_RAIL_SEARCH_DEPTH,
+} from './rail.js'
+export type { RailGrid } from './rail.js'
 
 // World
 export { SimWorld, posKey, keyToPos } from './world.js'

@@ -122,6 +122,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:piston_head[facing=${block.facing},short=false,type=${block.sticky ? 'sticky' : 'normal'}]`
     case 'slime_block':  return 'minecraft:slime_block'
     case 'honey_block':  return 'minecraft:honey_block'
+    case 'powered_rail':
+      // shape は軸/坂を表すだけなので flipDir 不要 (north_south / east_west は対称、
+      // ascending_* は構造座標と同じ向きで描画される)
+      return `minecraft:powered_rail[powered=${block.powered},shape=${block.shape},waterlogged=false]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -176,6 +180,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:target',
   'minecraft:slime_block',
   'minecraft:honey_block',
+  'minecraft:powered_rail',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

@@ -1,0 +1,26 @@
+{
+  "name": "powered-rail-slope",
+  "description": "#127 坂を含むパワードレールの連鎖。findPoweredRailSignal は坂のとき進行方向の片側だけ 1 段上がり、その側では「1 段下」を見ない (checkBelow=false) [確定: 26.2]。平地→坂→1 段上の平地 と繋いで、段差を越えて動力が伝わることを実機で確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "region": { "from": [0, 0, 2], "to": [9, 3, 4] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+    { "pos": [1, 0, 3], "block": "stone" },
+    { "pos": [2, 0, 3], "block": "stone" }, { "pos": [3, 0, 3], "block": "stone" },
+    { "pos": [4, 1, 3], "block": "stone" }, { "pos": [5, 1, 3], "block": "stone" },
+    { "pos": [6, 1, 3], "block": "stone" },
+
+    { "pos": [1, 1, 3], "block": "lever[face=floor,facing=north,powered=false]" },
+
+    { "pos": [2, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "powered_rail[shape=ascending_east,powered=false,waterlogged=false]" },
+    { "pos": [4, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [5, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [6, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 1, 3], "action": "use" }
+  ]
+}

@@ -97,6 +97,7 @@ export function abbrOf(b: BlockState): string {
     case 'sticky_piston':  return 'Pi'
     case 'piston_head':    return 'Ph'
     case 'observer':       return 'Ob'
+    case 'powered_rail':   return 'Pr'
     case 'moving_piston':  return abbrOf(b.into)
     case 'air':            return 'Ai'
   }

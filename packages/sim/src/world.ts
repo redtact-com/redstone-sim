@@ -3,7 +3,10 @@ import type {
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
 } from './types.js'
-import { OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther } from './types.js'
+import {
+  OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
+} from './types.js'
+import { shouldRailBePowered } from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
@@ -611,6 +614,12 @@ export class SimWorld {
         // authored の powered/POWER>0 (乗った状態) は初期安定状態では entity 不在の
         // ため OFF から始める (target/observer の onPlace リセットと同趣旨。決定論)
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
+      } else if (block.type === 'powered_rail') {
+        // 連鎖伝播 (isSameRailWithPower) は「隣が powered であること」を条件に
+        // するため、authored 値から始めると根拠のない powered が自己維持し得る。
+        // 一旦 false に落とし、Step 3 の収束ループで単調増加として組み直す。
+        // shape は authored のまま (ワイヤーの接続形状と同じ方針。#51 注記)
+        if (block.powered) this.blocks.set(key, { ...block, powered: false })
       }
     }
 
@@ -664,6 +673,24 @@ export class SimWorld {
         // authored 安定状態は「既に発火済み」相当。runtime の立ち上がりでのみ発火)。
         const powered = this.isDropperPowered(pos)
         if (block.triggered !== powered) this.blocks.set(key, { ...block, triggered: powered })
+      }
+    }
+
+    // Step 3b: パワードレールの powered を収束するまで繰り返し計算。
+    // 連鎖は「隣接レールが powered」を条件にするため 1 パスでは広がらない。
+    // Step 1 で false に落としてあるので単調増加として収束する (ワイヤーと同趣旨)。
+    let railChanged = true
+    let railPass = 0
+    while (railChanged && railPass < 100) {
+      railChanged = false
+      railPass++
+      for (const [key, block] of this.blocks) {
+        if (block.type !== 'powered_rail') continue
+        const powered = shouldRailBePowered(this, keyToPos(key), block.shape)
+        if (block.powered !== powered) {
+          this.blocks.set(key, { ...block, powered })
+          railChanged = true
+        }
       }
     }
 
@@ -1830,6 +1857,26 @@ export class SimWorld {
         } else if (!powered && block.triggered) {
           this.setBlockAt(pos, { ...block, triggered: false })
           this.emitShapeUpdate(pos)
+        }
+        break
+      }
+      case 'powered_rail': {
+        // vanilla PoweredRailBlock.updateState [確定: 26.2]:
+        //   shouldPower = hasNeighborSignal(pos) || 前方向の連鎖 || 後方向の連鎖
+        //   変化したら setBlock(flag3) + updateNeighborsAt(pos.below())
+        //                              + 坂なら updateNeighborsAt(pos.above())
+        // レール自身は信号を出さない (power.ts に case を持たない) ため、
+        // 「真下のブロックへ更新を配る」ことがレッドストーン的な唯一の出力になる。
+        const should = shouldRailBePowered(this, pos, block.shape)
+        if (should !== block.powered) {
+          this.setBlockAt(pos, { ...block, powered: should })
+          this.emitShapeUpdate(pos)               // blockstate 変化 → PP (オブザーバー起動)
+          // flag3 の UPDATE_NEIGHBORS = 自身の周囲 6 方向。隣のパワードレールが
+          // NC を受けて再評価することで、連鎖 (最大 8) が伝わっていく
+          this.submitMultiNC(pos)
+          // 明示の updateNeighborsAt(pos.below()) — 真下ブロックの「周囲」へ更新を配る
+          this.submitMultiNC([pos[0], pos[1] - 1, pos[2]])
+          if (isRailSlope(block.shape)) this.submitMultiNC([pos[0], pos[1] + 1, pos[2]])
         }
         break
       }
