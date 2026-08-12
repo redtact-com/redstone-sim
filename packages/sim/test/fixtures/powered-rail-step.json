@@ -1,0 +1,287 @@
+{
+  "name": "powered-rail-step",
+  "description": "#129 坂形状にせず段差だけを作った配置での動力伝播。findPoweredRailSignal は「同じ高さ」と**1 段下**しか見ない (坂のときだけ進行方向側が 1 段上がり、その側では 1 段下を見ない) [確定: 26.2 PoweredRailBlock.findPoweredRailSignal の `checkBelow && isSameRailWithPower(pos.below())`]。∴ 上のレールは下のレールを根として見つけられるが、下のレールは上のレールを見つけられない = **斜め上には伝わり、斜め下は通らない**はず。上りライン (z=3) と下りライン (z=5) を並べて 1 回で確認する。 なお段差の相手には近隣更新が届かない (斜めのセルは 6 方向に入らない) ため、レバーを入れただけでは判定し直されない。そこで各段差レールの真上にブロックを置いて更新を送り、**上りは on になる / 下りは off のまま**を確かめる。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "region": {
+    "from": [
+      0,
+      0,
+      2
+    ],
+    "to": [
+      6,
+      3,
+      6
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        5
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        5
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        5
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        1,
+        2,
+        5
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        3,
+        3,
+        3
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        3,
+        2,
+        5
+      ],
+      "action": "setblock",
+      "block": "stone"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            1,
+            2,
+            5
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            2,
+            5
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            3,
+            2,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            3,
+            3,
+            3
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            4,
+            2,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            3,
+            2,
+            5
+          ],
+          "block": "stone"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-12T11:24:52.471Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
