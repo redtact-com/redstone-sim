@@ -19,7 +19,7 @@
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
 // ============================================================
 
-import type { BlockState, HDir, Dir6, WireConnectionValue } from './types.js'
+import type { BlockState, HDir, Dir6, WireConnectionValue, RailShape } from './types.js'
 import { OPPOSITE } from './types.js'
 
 export interface ParsedMcState {
@@ -179,6 +179,10 @@ export function mcToSim(state: string): BlockState | null {
       return { type: 'slime_block' }
     case 'honey_block':
       return { type: 'honey_block' }
+    case 'powered_rail':
+      // SHAPE は RAIL_SHAPE_STRAIGHT (直線2+坂4)。曲線は取らない [確定: 26.2]
+      return { type: 'powered_rail', shape: (props.shape ?? 'north_south') as RailShape,
+               powered: props.powered === 'true' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -258,6 +262,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return 'slime_block'
       case 'honey_block':
         return 'honey_block'
+      case 'powered_rail':
+        return formatMcState('powered_rail', {
+          powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
+        })
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':
@@ -345,6 +353,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'observer':
       props.powered = String(sim.powered)
+      break
+    case 'powered_rail':
+      // shape は設置時に自動決定され実行中も張り替わり得る (rail.ts) ため
+      // authored ではなく sim 状態から直列化する (wire の接続形状と同趣旨)
+      props.powered = String(sim.powered)
+      props.shape = sim.shape
       break
     case 'container':
       break // signal/count は blockstate に現れない (authored 名 barrel/chest を保持)

@@ -5,7 +5,7 @@
  */
 
 import type { BlockState, Dir6, WireConnections, WorldSnapshot } from '@redstone/sim'
-import { posKey } from '@redstone/sim'
+import { posKey, planRailPlacement } from '@redstone/sim'
 import { isFacingAllowed } from './facing.js'
 import {
   computeWireConnections, computeRawWireConnections, collectWireConnectionUpdates,
@@ -76,6 +76,22 @@ export class EditorGrid {
       const updatedSelf: BlockState = { ...block, connections: conn }
       this.setRaw(x, y, z, updatedSelf)
       changes[0].after = updatedSelf
+    }
+
+    // レールを配置した場合: 隣接レールに合わせて自分と相手の形状を張り替える (#127)。
+    // vanilla も設置時にだけ形状が決まる (壊しても隣の形状は戻らない) ので、
+    // removeBlock3 側には対応する処理を置かない [確定: 26.2 BaseRailBlock]
+    if (block.type === 'powered_rail') {
+      for (const c of planRailPlacement(this, [x, y, z], block.shape)) {
+        const [cx, cy, cz] = c.pos
+        const cur = this.getBlock3(cx, cy, cz)
+        if (cur?.type !== 'powered_rail' || cur.shape === c.shape) continue
+        const after: BlockState = { ...cur, shape: c.shape }
+        this.setRaw(cx, cy, cz, after)
+        // 同じ 1 操作として履歴に積む (undo 1 回で元に戻る)
+        if (cx === x && cy === y && cz === z) changes[0].after = after
+        else changes.push({ pos: [cx, cy, cz], before: cur, after })
+      }
     }
 
     // 周辺ワイヤー（同レイヤー・上下ステップ範囲）の接続を更新

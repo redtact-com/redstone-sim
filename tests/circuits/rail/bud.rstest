@@ -1,0 +1,51 @@
+# パワードレールの powered は live read ではなく **更新を受けたときだけ** 再評価される
+# = BUD であることの回帰ガード (#127)。
+#
+# 鍵は「既に on のレールは値が変わらないので近隣更新を再送しない」こと
+# [確定: 26.2 PoweredRailBlock.updateState — shouldPower != isPowered のときだけ
+#  setBlock(flag3) するので、変化しないレールは下流へ更新を流さない]。
+#
+# ① レバー ON → 10 本中 9 本が on。10 本目 (x=11) は 8 連鎖の限界で届かない
+# ② 2 本目の隣にレッドストーンブロックを置く → 探索の起点がずれて 10 本目は
+#    **本来 on になるべき**状態になる。しかし 2 本目は既に on で変化しないため
+#    更新が下流へ流れず、10 本目は off のまま = BUD
+# ③ 10 本目の隣にブロックを置いて更新を送ると、そこで初めて on になる
+# ④ レッドストーンブロックを撤去しても更新が届かないので on のまま
+#    = **信号源が無いのにレールだけ on** の状態が作れる
+# ⑤ 10 本目の隣を触って更新を送ると off に戻る
+#
+# 期待値は実機 (fixture powered-rail-bud) が正。
+meta {
+  name: パワードレールは更新を受けたときだけ再評価される (BUD)
+  ref: #127 / fixture powered-rail-bud / 26.2 PoweredRailBlock.updateState
+}
+
+fixture powered-rail-bud
+
+state {
+  # ① 9 本目までは届き、10 本目は届かない
+  t2 (10,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+  t2 (11,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}
+
+state {
+  # ② 条件は満たされたのに更新が来ないので off のまま
+  t4 (3,1,2) redstone_block
+  t4 (11,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}
+
+state {
+  # ③ 隣にブロックを置いて更新を送ると on になる
+  t6 (11,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+}
+
+state {
+  # ④ 根を撤去しても更新が届かないので on のまま残る
+  t8 (3,1,2) air
+  t8 (11,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+}
+
+state {
+  # ⑤ 更新を送ると正しい値 (off) に戻る
+  t10 (11,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}

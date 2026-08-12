@@ -359,6 +359,42 @@ export interface MovingPistonState {
   seq: number
 }
 
+/**
+ * レール形状 (#127)。powered_rail が取るのは **直線 2 + 坂 4 の 6 種のみ**で、
+ * 通常レールの曲線 4 種 (north_east 等) は持たない
+ * [確定: 26.2 PoweredRailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE_STRAIGHT]。
+ */
+export type RailShape =
+  | 'north_south' | 'east_west'
+  | 'ascending_north' | 'ascending_south' | 'ascending_east' | 'ascending_west'
+
+export const RAIL_SHAPES_STRAIGHT: RailShape[] = [
+  'north_south', 'east_west',
+  'ascending_north', 'ascending_south', 'ascending_east', 'ascending_west',
+]
+
+/** 坂形状か [確定: 26.2 RailShape.isSlope] */
+export function isRailSlope(shape: RailShape): boolean {
+  return shape !== 'north_south' && shape !== 'east_west'
+}
+
+/**
+ * パワードレール (#127)。トロッコを持たないためエンティティ側の加速効果は
+ * 実装せず、**レッドストーン素子としての側面のみ**を扱う (13 §2 エンティティ境界原則):
+ *   - powered = 自身6面の受電 (hasNeighborSignal) **または**
+ *     繋がった powered_rail を前後方向に最大 8 個たどった先での受電
+ *     [確定: 26.2 PoweredRailBlock.findPoweredRailSignal — searchDepth >= 8 で打ち切り]
+ *   - powered が変化したら**真下のブロック**へ近隣更新を出す (坂なら真上へも)
+ *     [確定: 26.2 PoweredRailBlock.updateState]
+ *   - 自身は信号を出さず (getSignal 非 override)、導体でもない (非フルブロック)
+ * shape は設置時に隣接レールから自動決定される (RailState.place。rail.ts)。
+ */
+export interface PoweredRailState {
+  type: 'powered_rail'
+  shape: RailShape
+  powered: boolean
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -387,6 +423,7 @@ export type BlockState =
   | PistonState
   | PistonHeadState
   | MovingPistonState
+  | PoweredRailState
   | AirState
 
 export type BlockType = BlockState['type']

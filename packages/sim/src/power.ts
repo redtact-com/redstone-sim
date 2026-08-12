@@ -38,6 +38,11 @@ export function isConductor(block: BlockState | null): boolean {
   // フルブロック]。一方 **honey_block は非導体** (HoneyBlock.SHAPE = column(14,0,15) で
   // フルブロックでない)。フライングマシンはオブザーバーの出力がスライム越しに
   // ピストンへ届くことで動くため、ここを取り違えると動かない (#123)。
+  //
+  // powered_rail は**非導体かつ非信号源**。powered=true でも周囲へ weak/strong は
+  // 出さない (getSignal / getDirectSignal とも非 override) [確定: 26.2
+  // PoweredRailBlock]。動力を「受ける」だけの素子で、出力に相当するのは
+  // powered 変化時に真下のブロックへ配る近隣更新のみ (world.ts の neighborChanged)。
   return !!block && (
     block.type === 'solid' || block.type === 'target' ||
     block.type === 'note_block' || block.type === 'slime_block'

@@ -1,0 +1,23 @@
+{
+  "name": "powered-rail-observer",
+  "description": "#127 パワードレールの powered 変化が blockstate 変化として観測されるか。vanilla は setBlock(flag 3) で更新するため UPDATE_KNOWN_SHAPE (16) が立たず updateShape が飛ぶ = 真上のオブザーバーが発火するはず [確定: 26.2 PoweredRailBlock.updateState]。レール自身は信号を出さないので、この経路とレール真下への近隣更新がレールの唯一の「出力」になる。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": { "from": [0, 0, 2], "to": [6, 4, 4] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+    { "pos": [1, 0, 3], "block": "stone" },
+    { "pos": [2, 0, 3], "block": "stone" }, { "pos": [3, 0, 3], "block": "stone" },
+
+    { "pos": [1, 1, 3], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [2, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+
+    { "pos": [3, 2, 3], "block": "observer[facing=down,powered=false]" },
+    { "pos": [3, 3, 3], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 1, 3], "action": "use" }
+  ]
+}

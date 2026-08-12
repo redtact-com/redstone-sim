@@ -279,6 +279,12 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:slime_block', {}]
     case 'honey_block':
       return ['minecraft:honey_block', {}]
+    case 'powered_rail':
+      return ['minecraft:powered_rail', {
+        powered: String(block.powered),
+        shape: block.shape,
+        waterlogged: 'false',
+      }]
     case 'redstone_block':
       return ['minecraft:redstone_block', {}]
     case 'target':
@@ -433,6 +439,14 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
   if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
+  if (name === 'minecraft:powered_rail') {
+    // SHAPE は RAIL_SHAPE_STRAIGHT (直線2+坂4)。曲線は powered_rail には無い
+    return {
+      type: 'powered_rail',
+      shape: (props.shape ?? 'north_south'),
+      powered: props.powered === 'true',
+    } as BlockState
+  }
   if (name === 'minecraft:redstone_block') {
     return { type: 'redstone_block' } as BlockState
   }

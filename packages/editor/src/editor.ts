@@ -200,6 +200,14 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       return { type: 'slime_block' }
     case 'honey_block':
       return { type: 'honey_block' }
+    case 'powered_rail':
+      // facing は「置いた向き」= 孤立して置いたときの既定形状にだけ効く。
+      // 隣にレールがあれば grid.placeBlock3 の自動接続が形状を上書きする (#127)
+      return {
+        type: 'powered_rail',
+        shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
+        powered: false,
+      }
     case 'redstone_block':
       // 定数動力源。石と同列にパレットへ追加 (常時通電)
       return { type: 'redstone_block' }
