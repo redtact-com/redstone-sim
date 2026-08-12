@@ -25,7 +25,7 @@ import { CircuitEditor } from '@redstone/editor'
 import type { PlaceableType, PlaceOptions } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState } from '@redstone/sim'
-import type { HDir, Pos3D } from '@redstone/sim'
+import type { Dir6, HDir, Pos3D } from '@redstone/sim'
 import { IsometricView } from '@redstone/viewer'
 import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
@@ -119,9 +119,9 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'wire',       label: 'ワイヤー',      texture: 'block/redstone_dust_dot',
     cssFilter: 'sepia(1) saturate(10) hue-rotate(320deg) brightness(0.8)',
     hasFacing: false, hasDelay: false, hasMode: false },
-  { type: 'lever',      label: 'レバー',        texture: 'block/lever',           hasFacing: false, hasDelay: false, hasMode: false },
-  { type: 'button_stone', label: 'ボタン(石)',  texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
-  { type: 'button_wood',  label: 'ボタン(木)',  texture: 'block/oak_planks',      hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'lever',      label: 'レバー',        texture: 'block/lever',           hasFacing: true,  hasDelay: false, hasMode: false },
+  { type: 'button_stone', label: 'ボタン(石)',  texture: 'block/stone',           hasFacing: true,  hasDelay: false, hasMode: false },
+  { type: 'button_wood',  label: 'ボタン(木)',  texture: 'block/oak_planks',      hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'torch',      label: 'トーチ(床)',    texture: 'block/redstone_torch',  hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'wall_torch', label: 'トーチ(壁)',    texture: 'block/redstone_torch',  hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'repeater',   label: 'リピーター',    texture: 'block/repeater',        hasFacing: true,  hasDelay: true,  hasMode: false },
@@ -147,6 +147,13 @@ const BLOCK_PALETTE: BlockMeta[] = [
 
 const PLACEHOLDER_IMG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' fill='%23555'/%3E%3C/svg%3E"
+
+/** 取付面 (床/壁/天井) を選べる素子 (#111)。許容向きの正は @redstone/editor の allowedFacings */
+const DIR6_TYPES = new Set<string>(['lever', 'button_stone', 'button_wood'])
+const isDir6Type = (t: string | undefined): boolean => !!t && DIR6_TYPES.has(t)
+/** Dir6 ⇄ 取付面。壁のときだけ水平 4 方向を持つ */
+const faceOf = (d: Dir6): 'floor' | 'wall' | 'ceiling' =>
+  d === 'up' ? 'floor' : d === 'down' ? 'ceiling' : 'wall'
 
 const H_DIRS: [HDir, string][] = [
   ['north', '↑北'],
@@ -191,7 +198,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   // 選択・デフォルト設定
   const [selectedType, setSelectedType] = useState<PaletteType>('wire')
-  const [facing, setFacing] = useState<HDir>('east')
+  const [facing, setFacing] = useState<Dir6>('east')
+  // 取付面つき素子 (レバー・ボタン) の面。水平向きは facing 側を使い回す (#111)
+  const [mountFace, setMountFace] = useState<'floor' | 'wall' | 'ceiling'>('floor')
   const [delay, setDelay]   = useState<1 | 2 | 3 | 4>(1)
   const [comparatorMode, setComparatorMode] = useState<'compare' | 'subtract'>('compare')
   // 重量感圧板の踏まれ信号 (1-15, 既定 15) / コンテナの背面読み信号 (0-15, 既定 0)
@@ -304,10 +313,20 @@ export function EditorPage({ onBack }: EditorPageProps) {
     : null
 
   // バーに表示する向き・遅延（選択ブロック優先、なければデフォルト）
-  const barFacing: HDir = (
-    gridBlock && 'facing' in gridBlock &&
-    H_DIRS.some(([d]) => d === (gridBlock as unknown as Record<string, unknown>).facing)
-  ) ? (gridBlock as unknown as Record<string, unknown>).facing as HDir : facing
+  // 取付面つき素子を置くときの実効向き。床=up / 天井=down / 壁=水平向き
+  const mountDir: Dir6 =
+    mountFace === 'floor' ? 'up'
+    : mountFace === 'ceiling' ? 'down'
+    : (H_DIRS.some(([d]) => d === facing) ? facing : 'north')
+
+  const gridFacing = gridBlock && 'facing' in gridBlock
+    ? (gridBlock as unknown as Record<string, unknown>).facing as Dir6 | undefined
+    : undefined
+  // 取付面つき素子は up/down も「向きあり」として扱う (#111)
+  const gridFacingUsable = !!gridFacing && (
+    H_DIRS.some(([d]) => d === gridFacing) || (isDir6Type(gridBlock?.type) && (gridFacing === 'up' || gridFacing === 'down'))
+  )
+  const barFacing: Dir6 = gridFacingUsable ? gridFacing! : (isDir6Type(selectedType) ? mountDir : facing)
 
   const barDelay: 1 | 2 | 3 | 4 =
     gridBlock?.type === 'repeater' ? gridBlock.delay : delay
@@ -327,8 +346,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     (gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper') ? gridBlock.count : count
 
   // 向き・遅延バーを表示するか
-  const gridBlockHasFacing = !!gridBlock && 'facing' in gridBlock &&
-    H_DIRS.some(([d]) => d === (gridBlock as unknown as Record<string, unknown>).facing)
+  const gridBlockHasFacing = gridFacingUsable
 
   const selectedMeta = BLOCK_PALETTE.find(b => b.type === selectedType)
   const showFacingBar = mode === 'edit' && selectedType !== 'eraser' && (
@@ -422,8 +440,14 @@ export function EditorPage({ onBack }: EditorPageProps) {
       setSelectedPos([x, z])
       setSelectedType(existing.type as PlaceableType)
       if ('facing' in existing) {
-        const f = (existing as unknown as Record<string, unknown>).facing as HDir
-        if (H_DIRS.some(([d]) => d === f)) setFacing(f)
+        const f = (existing as unknown as Record<string, unknown>).facing as Dir6
+        if (H_DIRS.some(([d]) => d === f)) {
+          setFacing(f)
+          if (isDir6Type(existing.type)) setMountFace('wall')
+        } else if (isDir6Type(existing.type)) {
+          // 取付面つき素子を選んだら面もバーへ反映する (#111)
+          setMountFace(f === 'down' ? 'ceiling' : 'floor')
+        }
       }
       if ('delay' in existing) {
         setDelay((existing as unknown as Record<string, unknown>).delay as 1 | 2 | 3 | 4)
@@ -448,7 +472,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     // action === 'place': 空セル or 別種ブロック (別種は置き換え)
     const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
     const opts: PlaceOptions = {}
-    if (meta?.hasFacing) opts.facing = facing
+    if (meta?.hasFacing) opts.facing = isDir6Type(selectedType) ? mountDir : facing
     if (meta?.hasDelay)  opts.delay  = delay
     if (meta?.hasMode)   opts.mode   = comparatorMode
     if (meta?.hasPressedPower) opts.pressedPower = pressedPower
@@ -462,8 +486,10 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   // ── 向き変更 ────────────────────────────────────────────────────────
 
-  const handleFacingChange = useCallback((newFacing: HDir) => {
-    setFacing(newFacing)
+  const handleFacingChange = useCallback((newFacing: Dir6) => {
+    if (newFacing === 'up') setMountFace('floor')
+    else if (newFacing === 'down') setMountFace('ceiling')
+    else { setMountFace('wall'); setFacing(newFacing) }
     setSelectedPos(prev => {
       if (prev) {
         editorRef.current.rotateBlock(prev[0], prev[1], newFacing)
@@ -1077,6 +1103,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
           selectedPos={selectedPos}
           activeLayer={activeLayer}
           barFacing={barFacing}
+          facingKind={isDir6Type(gridBlock ? gridBlock.type : selectedType) ? 'dir6' : 'h'}
           barDelay={barDelay}
           barMode={barMode}
           barPressedPower={barPressedPower}
@@ -1113,13 +1140,14 @@ interface FacingBarProps {
   selectedType:       PaletteType
   selectedPos:        [number, number] | null
   activeLayer:        number
-  barFacing:          HDir
+  barFacing:          Dir6
+  facingKind:         'h' | 'dir6'
   barDelay:           1 | 2 | 3 | 4
   barMode:            'compare' | 'subtract'
   barPressedPower:    number
   barSignal:          number
   barCount:           number
-  onFacingChange:     (f: HDir) => void
+  onFacingChange:     (f: Dir6) => void
   onDelayChange:      (d: 1 | 2 | 3 | 4) => void
   onModeChange:       (m: 'compare' | 'subtract') => void
   onPressedPowerChange: (p: number) => void
@@ -1129,7 +1157,7 @@ interface FacingBarProps {
 
 function FacingBar({
   gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
-  barFacing, barDelay, barMode, barPressedPower, barSignal, barCount,
+  barFacing, facingKind, barDelay, barMode, barPressedPower, barSignal, barCount,
   onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange, onCountChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
@@ -1149,13 +1177,38 @@ function FacingBar({
     ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
     : `次の配置 Y=${activeLayer}`
 
-  const dirLabel: Record<HDir, string> = { north: '北', south: '南', east: '東', west: '西' }
+  const dirLabel: Record<Dir6, string> = { north: '北', south: '南', east: '東', west: '西', up: '床', down: '天' }
 
   return (
     <div className="shrink-0 flex items-center gap-5 px-4 py-2"
          style={{ background: '#1e1e1e', borderTop: '2px solid #3a3a3a' }}>
-      {/* D-pad */}
-      {showFacing && (
+      {/* 取付面 (床/壁/天井) — レバー・ボタンのみ (#111) */}
+      {showFacing && facingKind === 'dir6' && (
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <span className="font-pixel text-center" style={{ fontSize: 11, color: '#555' }}>FACE</span>
+          <div className="flex gap-1">
+            {([['floor', '床', 'up'], ['wall', '壁', null], ['ceiling', '天井', 'down']] as const).map(([f, label, dir]) => {
+              const active = faceOf(barFacing) === f
+              return (
+                <button key={f}
+                        onClick={() => onFacingChange(dir ?? (H_DIRS.some(([d]) => d === barFacing) ? barFacing as Dir6 : 'north'))}
+                        className="mc-btn px-3 h-10 font-pixel text-xs"
+                        style={{
+                          background: active ? '#6b0000' : '#3a3a3a',
+                          borderColor: active ? '#ff4444 #440000 #440000 #ff4444' : '#666 #222 #222 #666',
+                          color: active ? '#ff8888' : '#aaa',
+                          boxShadow: active ? '0 0 8px #cc2222' : 'none',
+                        }}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* D-pad (取付面が壁のときだけ意味を持つ) */}
+      {showFacing && (facingKind !== 'dir6' || faceOf(barFacing) === 'wall') && (
         <div className="grid grid-cols-3 shrink-0" style={{ gap: 3 }}>
           <div />
           <DPadBtn active={barFacing === 'north'} onClick={() => onFacingChange('north')}>↑</DPadBtn>
