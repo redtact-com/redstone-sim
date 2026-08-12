@@ -1,0 +1,22 @@
+{
+  "name": "powered-rail-slope-update",
+  "description": "#129 斜め上への伝播が BUD なしで届くかは「手前のレールが坂かどうか」で決まる。PoweredRailBlock.updateState は変化時に真下へ近隣更新を配るが、**坂のときだけ真上にも配る** [確定: 26.2 `if (state.getValue(SHAPE).isSlope()) level.updateNeighborsAt(pos.above(), this)`]。真上 (2,2,3) の周囲 6 方向には斜め上のレール (3,2,3) が入るので、坂なら更新が届いて即座に点く。平坦なままだと届かず更新を送るまで点かない (powered-rail-step)。この差を実機で確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": { "from": [0, 0, 2], "to": [6, 3, 4] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [180, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+    { "pos": [1, 0, 3], "block": "stone" },
+    { "pos": [1, 1, 3], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [2, 0, 3], "block": "stone" },
+    { "pos": [2, 1, 3], "block": "powered_rail[shape=ascending_east,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "stone" },
+    { "pos": [3, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [4, 1, 3], "block": "stone" },
+    { "pos": [4, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 1, 3], "action": "use" }
+  ]
+}
