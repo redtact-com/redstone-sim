@@ -1,0 +1,169 @@
+{
+  "name": "powered-rail-step-place",
+  "description": "#129 繋がっていない斜め上 (平坦レール同士の段差) は、**後から置けば** BUD なしで点くのか。BaseRailBlock.onPlace は種が変わる設置で updateState を走らせる = 置いた本人はその場で判定される [確定: 26.2]。既にあるレールに後から給電した powered-rail-step とは別のシナリオで、こちらは「動力が入っている状態にレールを置く」。置いた 1 本が点くか、さらにその先へ連鎖するかを実機で確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": {
+    "from": [
+      0,
+      0,
+      2
+    ],
+    "to": [
+      6,
+      3,
+      4
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        2,
+        3
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        4,
+        2,
+        3
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=ascending_east,waterlogged=false]"
+        },
+        {
+          "pos": [
+            3,
+            2,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            4,
+            2,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-12T11:42:40.989Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

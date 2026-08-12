@@ -1,0 +1,47 @@
+# 補助レールの置き壊しで「平坦のまま段差」を実プレイの手順で組み立てられる (#129)。
+#
+# 手順 (最終的に残るのは 2 本だけ):
+#   ① (5,1,5) を z 方向に置く
+#   ② (5,1,4) に一瞬置いて向きを合わせ、壊す
+#   ③ (6,2,6) を x 方向に置く
+#   ④ (5,2,6) を x 方向に置く   ← ここが鍵。x 方向なので手前 (5,1,5) と繋がらず坂にならない
+#   ⑤ (6,2,6) を壊す           ← 壊しても形状は戻らないので east_west のまま
+#   ⑥ (5,2,7) を z 方向に置いてすぐ壊す ← (5,2,6) だけが north_south へ揃う
+#
+# 完成形は 2 本とも north_south の平坦で、(5,2,6) は (5,1,5) の進行方向 (z) と平行な
+# **斜め上**。手前が坂にならないので rail/step-updown.rstest と同じ状態を実プレイで作れる。
+#
+# その状態でレバーを入れても斜め上は点かない (斜めのセルは近隣更新の 6 方向に入らない) が、
+# 真上にブロックを置いて更新を送ると on になる = **探索そのものは到達可能**
+# [確定: 26.2 findPoweredRailSignal は同じ高さと 1 段下を見る]。
+#
+# 期待値は実機 (fixture powered-rail-flat-step-build) が正。
+meta {
+  name: 補助レールの置き壊しで平坦段差を作れる (実プレイ手順)
+  ref: #129 / fixture powered-rail-flat-step-build / 26.2 RailState.place
+}
+
+fixture powered-rail-flat-step-build
+
+state {
+  # ④ x 方向に置いた時点では手前は north_south のまま (坂にならない)
+  t10 (5,1,5) powered_rail[powered=false,shape=north_south,waterlogged=false]
+  t10 (5,2,6) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}
+
+state {
+  # ⑥ 完成。2 本とも平坦な north_south で、手前は坂になっていない
+  t16 (5,1,5) powered_rail[powered=false,shape=north_south,waterlogged=false]
+  t16 (5,2,6) powered_rail[powered=false,shape=north_south,waterlogged=false]
+}
+
+state {
+  # レバーを入れても斜め上には更新が届かないので点かない
+  t18 (5,1,5) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t18 (5,2,6) powered_rail[powered=false,shape=north_south,waterlogged=false]
+}
+
+state {
+  # 真上に石を置いて更新を送ると on になる = 探索は到達している
+  t20 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}

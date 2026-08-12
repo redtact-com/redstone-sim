@@ -70,3 +70,45 @@ describe('CircuitEditor: パワードレールの形状', () => {
     expect(shapeAt(editor, 5, 5)).toBe('east_west')
   })
 })
+
+/**
+ * #129 形状決定の優先度。期待値は実機 (fixture powered-rail-priority) が正。
+ *   - 南北と東西の両方に接続があれば「置いた向き」(defaultShape) が勝つ
+ *   - 坂の判定は north→south / east→west の順に上書きするので **後勝ち**
+ *     (南北の取り合いは ascending_south、東西の取り合いは ascending_west)
+ * [確定: 26.2 RailState.place]
+ */
+describe('CircuitEditor: 形状決定の優先度 (#129)', () => {
+  const place = (e: CircuitEditor, x: number, y: number, z: number, facing: 'north' | 'east') => {
+    const prev = e.activeLayer
+    e.setActiveLayer(y)
+    e.placeBlock(x, z, 'powered_rail', { facing })
+    e.setActiveLayer(prev)
+  }
+  const shapeAt3 = (e: CircuitEditor, x: number, y: number, z: number): string | null => {
+    const b = e.getBlock3(x, y, z)
+    return b?.type === 'powered_rail' ? b.shape : null
+  }
+
+  it('南北と東西の両方に接続があれば「置いた向き」が勝つ', () => {
+    const e = new CircuitEditor(1)
+    place(e, 2, 1, 3, 'east'); place(e, 4, 1, 3, 'east')
+    place(e, 3, 1, 2, 'north'); place(e, 3, 1, 4, 'north')
+    place(e, 3, 1, 3, 'north')          // 中心を最後に、南北向きで置く
+    expect(shapeAt3(e, 3, 1, 3)).toBe('north_south')
+  })
+
+  it('南北の坂が取り合うと ascending_south (後勝ち)', () => {
+    const e = new CircuitEditor(2)
+    place(e, 8, 2, 2, 'north'); place(e, 8, 2, 4, 'north')
+    place(e, 8, 1, 3, 'north')          // 北隣の 1 段上・南隣の 1 段上 の両方にレール
+    expect(shapeAt3(e, 8, 1, 3)).toBe('ascending_south')
+  })
+
+  it('東西の坂が取り合うと ascending_west (後勝ち)', () => {
+    const e = new CircuitEditor(2)
+    place(e, 12, 2, 3, 'east'); place(e, 14, 2, 3, 'east')
+    place(e, 13, 1, 3, 'east')
+    expect(shapeAt3(e, 13, 1, 3)).toBe('ascending_west')
+  })
+})
