@@ -1,8 +1,8 @@
 {
   "name": "powered-rail-flat-step-live",
-  "description": "#129 平坦段差を**電源を入れた状態で**組み立てる。powered-rail-flat-step-build は 完成後にレバーを入れる順序だったため斜め上に更新が届かず点かなかったが、組み立て中に既に動力が 入っていれば、レールを置いた時点で onPlace → updateState が走って評価される [確定: 26.2 BaseRailBlock.onPlace]。手順は同じ (①(5,1,5) z 方向 ②(5,1,4) 一瞬置いて壊す ③(6,2,6) x 方向 ④(5,2,6) x 方向 ⑤(6,2,6) 壊す ⑥(5,2,7) z 方向に置いてすぐ壊す) で、レバーを先に ON にする。",
+  "description": "#129 平坦段差を**電源を入れた状態で**組み立てる。powered-rail-flat-step-build は 完成後にレバーを入れる順序だったため斜め上に更新が届かず点かなかったが、組み立て中に既に動力が 入っていれば、レールを置いた時点で onPlace → updateState が走って評価される [確定: 26.2 BaseRailBlock.onPlace]。手順は同じ (①(5,1,5) z 方向 ②(5,1,4) 一瞬置いて壊す ③(6,2,6) x 方向 ④(5,2,6) x 方向 ⑤(6,2,6) 壊す ⑥(5,2,7) z 方向に置いてすぐ壊す) で、レバーを先に ON にする。 完成後にレバーを OFF (t=20) → ON (t=24) して、斜め上が追従するかを確定させる。",
   "mcVersion": "1.21.1",
-  "ticks": 20,
+  "ticks": 26,
   "region": {
     "from": [
       3,
@@ -186,6 +186,24 @@
       ],
       "action": "setblock",
       "block": "air"
+    },
+    {
+      "tick": 20,
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 24,
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "action": "use"
     }
   ]
 }

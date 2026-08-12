@@ -7,6 +7,8 @@
 #
 # ∴ 実際にプレイヤーが敷くときは電源が入った状態で組むので、平坦段差でも
 # **斜め上には普通に伝わり、BUD を意識する必要はない**。
+# ただし **一度組み上がった後にレバーを切っても斜め上は追従しない** (更新が届かないため)。
+# 手前が off になっても斜め上は on のまま残る = #127 の「信号源が無いのにレールだけ on」。
 # 一方 **斜め下は更新を送っても伝わらない** (rail/step-updown.rstest の t=8) —
 # こちらは探索そのものが到達しないため。
 #
@@ -35,4 +37,17 @@ state {
   # 補助レールを壊しても on のまま。手前は坂になっていない
   t18 (5,1,5) powered_rail[powered=true,shape=north_south,waterlogged=false]
   t18 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}
+
+state {
+  # ただし完成後にレバーを切っても斜め上は **追従しない** (更新が届かないため)。
+  # 手前は off になるのに斜め上は on のまま = 信号源が無いのにレールだけ on
+  t20 (5,1,5) powered_rail[powered=false,shape=north_south,waterlogged=false]
+  t20 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}
+
+state {
+  # 入れ直しても斜め上は変わらない (もともと on のまま)
+  t24 (5,1,5) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t24 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
 }
