@@ -282,6 +282,22 @@ export interface TargetState {
 }
 
 /** 信号を充電・遮断する不透過ブロック（石・丸石など） */
+/**
+ * スライムブロック / 蜂蜜ブロック (#121)。ピストンで動かすと**くっついている塊も一緒に動く**
+ * (PushReaction STICKY)。互いにはくっつかない [確定: 26.2 PistonStructureResolver]。
+ *
+ * 既知の抽象化: 導体ではない (信号を通さない) ところまでを表現し、
+ * 落下ダメージ無効化・跳ね返り・移動速度低下といったエンティティ側の効果は持たない
+ * (13 §2 エンティティ境界原則)。
+ */
+export interface SlimeBlockState {
+  type: 'slime_block'
+}
+
+export interface HoneyBlockState {
+  type: 'honey_block'
+}
+
 export interface SolidState {
   type: 'solid'
   /**
@@ -361,6 +377,8 @@ export type BlockState =
   | RedstoneBlockState
   | TargetState
   | SolidState
+  | SlimeBlockState
+  | HoneyBlockState
   | ObserverState
   | PistonState
   | PistonHeadState
@@ -424,4 +442,22 @@ export interface BlockEvent {
 export interface TickResult {
   changedPositions: Pos3D[]
   currentTick: number
+}
+
+/** ピストンが動かせるブロック数の上限 [確定: 26.2 PistonStructureResolver.MAX_PUSH_DEPTH] */
+export const MAX_PUSH_DEPTH = 12
+
+/** スライム/蜂蜜ブロックか (26.2 PistonStructureResolver.isSticky) */
+export function isStickyBlock(block: BlockState): boolean {
+  return block.type === 'slime_block' || block.type === 'honey_block'
+}
+
+/**
+ * 互いにくっつくか (26.2 canStickToEachOther)。
+ * **蜂蜜とスライムは互いにくっつかない**のが要点。
+ */
+export function canStickToEachOther(a: BlockState, b: BlockState): boolean {
+  if (a.type === 'honey_block' && b.type === 'slime_block') return false
+  if (a.type === 'slime_block' && b.type === 'honey_block') return false
+  return isStickyBlock(a) || isStickyBlock(b)
 }

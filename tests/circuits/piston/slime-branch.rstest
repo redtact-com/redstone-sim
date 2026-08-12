@@ -1,0 +1,25 @@
+# スライムブロックの塊移動 (#121)。
+# 仕様: PushReaction STICKY のブロックは、押し方向と直交する方向にくっついたブロックも
+#       一緒に動く (26.2 PistonStructureResolver.addBranchingBlocks)。
+#       スライムと蜂蜜は互いにくっつかない (canStickToEachOther)。
+# ∴ ピストンがスライムを押すと、その横・上・下の固体も 1 マス東へ動く。
+# 期待値は実機 (fixture slime-push-branch) が正。
+meta {
+  name: スライムは横・上・下にくっついた塊ごと動く
+  ref: #121 / fixture slime-push-branch / 26.2 PistonStructureResolver
+}
+
+fixture slime-push-branch
+
+state {
+  # 押し出し完了後 (t5): スライム本体と、くっついていた 3 つの固体が 1 マス東へ
+  t8 (4,1,0) slime_block
+  t8 (4,1,1) stone
+  t8 (4,2,0) stone
+  t8 (4,0,0) stone
+  # 元の位置は空になっている (取り残されない)
+  t8 (3,1,1) air
+  t8 (3,2,0) air
+  # 蜂蜜はスライムにくっつかないが、押された固体に押されて動く
+  t8 (5,1,1) honey_block
+}

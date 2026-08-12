@@ -196,6 +196,10 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
     case 'piston_head':
     case 'moving_piston':
       return null  // head / 移動中ブロックは sim が管理する (直接配置不可)
+    case 'slime_block':
+      return { type: 'slime_block' }
+    case 'honey_block':
+      return { type: 'honey_block' }
     case 'redstone_block':
       // 定数動力源。石と同列にパレットへ追加 (常時通電)
       return { type: 'redstone_block' }
