@@ -4,6 +4,7 @@ import type {
 import { SimWorld } from '@redstone/sim'
 import { EditorGrid } from './grid.js'
 import { defaultFacing, isFacingAllowed, toHDir } from './facing.js'
+import { normalizePlaceOptions } from './placeable.js'
 
 export type PlaceableType = Exclude<BlockType, 'air'>
 
@@ -150,7 +151,10 @@ export class CircuitEditor {
 
 // ── ブロック状態の初期値を生成 ──────────────────────────────
 
-function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | null {
+function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState | null {
+  // 型が持たないオプションを落とし、数値を範囲へ丸める (#115)。
+  // 壊れた保存データや外部入力をそのまま BlockState にしないための関所
+  const opts = normalizePlaceOptions(type, rawOpts)
   // 素子ごとに許される向きが違う。許されない向きが来たら既定へ落とす (#111)
   const want = opts.facing
   const dir: Dir6 = want !== undefined && isFacingAllowed(type, want) ? want : defaultFacing(type)
