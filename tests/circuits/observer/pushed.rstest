@@ -1,0 +1,19 @@
+# ピストンで押されたオブザーバーは、着地した時点で 1 回発火する (#119)。
+# 仕様: オブザーバーは PushReaction NORMAL で可動。起動条件は「監視先が変わったか」
+#       ではなく「置かれたこと」(vanilla ObserverBlock.onPlace) なので、監視先が
+#       空気のまま移動しても発火する。
+# ∴ 押し出し着地 (t5) の 2gt 後 t7 に powered=true、その 2gt 後 t9 に false へ戻る。
+# 期待値は実機 (fixture observer-pushed) が正。
+meta {
+  name: 押されたオブザーバーは着地で 1 回発火する
+  ref: #119 / fixture observer-pushed / 13 §4.1
+}
+
+fixture observer-pushed
+
+state {
+  # (moving_piston は過渡状態のため .rstest では断言できない — fixture 側で担保)
+  t5 (4,1,0) observer[facing=east,powered=false]
+  t7 (4,1,0) observer[facing=east,powered=true]
+  t9 (4,1,0) observer[facing=east,powered=false]
+}
