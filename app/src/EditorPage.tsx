@@ -31,6 +31,7 @@ import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
 import { decideCellTap } from './editorTap'
+import { saveCircuit, loadCircuit, clearCircuit } from './circuitStorage'
 
 /**
  * E2E テスト用の命令的フック (issue #70)。
@@ -580,6 +581,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
       editorRef.current.removeBlock3(x, y, z)
     }
     setSelectedPos(null)
+    clearCircuit()   // 保存も一緒に消す (#109。消したのに次回復活すると驚く)
     addLog('クリア（全レイヤー）')
     rerender()
   }, [addLog, rerender])
@@ -608,6 +610,45 @@ export function EditorPage({ onBack }: EditorPageProps) {
       else addLog(`インポート完了 (${blocks.size} ブロック)`)
     } catch (e) {
       addLog(`インポートエラー: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }, [addLog, rerender])
+
+  // ── ブラウザ内オートセーブ (#109) ──────────────────────────────────────
+  // リロードやタブを閉じても編集中の回路が消えないようにする。
+  // 復元 → 購読の順に行う (先に購読すると、復元前の空の状態を保存で潰してしまう)。
+  useEffect(() => {
+    const editor = editorRef.current
+    const restored = loadCircuit()
+    if (restored && restored.blocks.size > 0) {
+      // resetToBlocks 自体が change を発火するので、購読前のここで済ませる。
+      // 描画とログ更新は次のフレームへ逃がす (effect 内の同期 setState を避ける)
+      editor.resetToBlocks(restored.blocks)
+      queueMicrotask(() => {
+        rerender()
+        addLog(`前回の回路を復元しました (${restored.blocks.size} ブロック)`)
+      })
+    }
+
+    // 連続配置のたびに書くと重いので debounce。値は「手を止めたら保存される」体感優先
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const flush = () => {
+      if (timer) { clearTimeout(timer); timer = null }
+      saveCircuit(editor.getAllBlocks())
+    }
+    const unsubscribe = editor.on('change', () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(flush, 400)
+    })
+    // タブを閉じる/バックグラウンドへ回る瞬間は debounce を待たずに書く
+    const onHide = () => { if (document.visibilityState === 'hidden') flush() }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onHide)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onHide)
+      if (timer) clearTimeout(timer)
     }
   }, [addLog, rerender])
 
@@ -930,6 +971,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
             topDown={false}
             placementY={activeLayer}
             onBlockClick={handleBlockClick}
+            onReady={rerender}
           />
           {running && (
             <div className="rs-border-pulse" style={{
@@ -1004,6 +1046,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
           onBlockClick={selectedType === 'move' ? undefined : handleBlockClick}
           cameraStateRef={cameraStateRef}
           panMode={selectedType === 'move'}
+          // ビューアの初回描画完了前に加えた変更 (復元回路など) を取りこぼさない (#109)
+          onReady={rerender}
         />
         <canvas
           ref={gridCanvasRef}
