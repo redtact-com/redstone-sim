@@ -32,7 +32,16 @@ import { deriveWireConnections } from './wire-shape.js'
 export function isConductor(block: BlockState | null): boolean {
   // note_block は既定フルキューブで isRedstoneConductor=true (solid 同等)。
   // 直接充電されると隣を活性化しうる (10 §C5)。信号は出さない [確定: 26.2]。
-  return !!block && (block.type === 'solid' || block.type === 'target' || block.type === 'note_block')
+  //
+  // slime_block も導体 [確定: 26.2 — isRedstoneConductor の既定は
+  // isCollisionShapeFullBlock で、SLIME_BLOCK は noOcclusion() のみ = 当たり判定は
+  // フルブロック]。一方 **honey_block は非導体** (HoneyBlock.SHAPE = column(14,0,15) で
+  // フルブロックでない)。フライングマシンはオブザーバーの出力がスライム越しに
+  // ピストンへ届くことで動くため、ここを取り違えると動かない (#123)。
+  return !!block && (
+    block.type === 'solid' || block.type === 'target' ||
+    block.type === 'note_block' || block.type === 'slime_block'
+  )
 }
 
 /** pos から dir 方向に 1 進んだ座標 */
