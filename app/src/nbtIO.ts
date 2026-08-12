@@ -9,7 +9,7 @@ import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
 } from 'deepslate/nbt'
 import { Structure } from 'deepslate'
-import type { BlockState } from '@redstone/sim'
+import type { BlockState, Dir6 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
   north: 'south', south: 'north', east: 'west', west: 'east',
@@ -202,6 +202,38 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
 
 // ── BlockState → Minecraft 変換 ─────────────────────────────────────────────
 
+/**
+ * レバー・ボタンの取付面 (#111)。
+ *
+ * sim の facing は「レバーが向く方向 (壁から離れる方向)」で、vanilla の
+ * face(floor|wall|ceiling) + facing の組と 1:1 に対応する:
+ *   up → face=floor / down → face=ceiling / 水平 → face=wall, facing=そのまま
+ *
+ * **flipFacingForVanillaNbt は掛けない**。反転が要るのは repeater / comparator /
+ * wall_torch だけで、レバー・ボタンは vanilla と sim で向きの意味が一致している
+ * (packages/sim/src/mcstate.ts と packages/viewer/src/world-to-structure.ts が同じ規約)。
+ */
+function dir6ToFaceFacing(dir: unknown): { face: string; facing: string } {
+  if (dir === 'up') return { face: 'floor', facing: 'north' }
+  if (dir === 'down') return { face: 'ceiling', facing: 'north' }
+  if (dir === 'north' || dir === 'south' || dir === 'east' || dir === 'west') {
+    return { face: 'wall', facing: dir }
+  }
+  return { face: 'floor', facing: 'north' }
+}
+
+function faceFacingToDir6(face: string | undefined, facing: string | undefined): Dir6 {
+  // face 未指定は床置き扱い。vanilla の既定は wall だが、面情報を持たない古い
+  // 保存データ (facing='up' 時代) を素直に床へ寄せる方が事故が少ない
+  if (face === 'ceiling') return 'down'
+  if (face === 'wall') {
+    return facing === 'north' || facing === 'south' || facing === 'east' || facing === 'west'
+      ? facing
+      : 'north'
+  }
+  return 'up'
+}
+
 function blockStateToMinecraft(block: BlockState): [string, Record<string, string>] {
   switch (block.type) {
     case 'wire': {
@@ -267,25 +299,19 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing: (block as any).facing ?? 'north',
         triggered: String((block as any).triggered ?? false),
       }]
-    case 'lever':
-      return ['minecraft:lever', {
-        face:    'floor',
-        facing:  'south',
-        powered: String((block as any).powered ?? false),
-      }]
-    case 'button_stone':
-      // 床ボタン固定 (face=floor)。感圧板と同様に専用型で往復する (#54)
-      return ['minecraft:stone_button', {
-        face:    'floor',
-        facing:  'south',
-        powered: String(block.powered),
-      }]
-    case 'button_wood':
-      return ['minecraft:oak_button', {
-        face:    'floor',
-        facing:  'south',
-        powered: String(block.powered),
-      }]
+    case 'lever': {
+      const { face, facing } = dir6ToFaceFacing((block as any).facing)
+      return ['minecraft:lever', { face, facing, powered: String((block as any).powered ?? false) }]
+    }
+    case 'button_stone': {
+      // 取付面つきで往復する (#111)。感圧板と同様に専用型で往復する (#54)
+      const { face, facing } = dir6ToFaceFacing((block as any).facing)
+      return ['minecraft:stone_button', { face, facing, powered: String(block.powered) }]
+    }
+    case 'button_wood': {
+      const { face, facing } = dir6ToFaceFacing((block as any).facing)
+      return ['minecraft:oak_button', { face, facing, powered: String(block.powered) }]
+    }
     case 'pressure_plate_wood':
       return ['minecraft:oak_pressure_plate', { powered: String((block as any).powered ?? false) }]
     case 'pressure_plate_stone':
@@ -447,18 +473,22 @@ function minecraftToBlockState(
   }
 
   if (name === 'minecraft:lever') {
-    return { type: 'lever', facing: 'up', powered: props.powered === 'true' } as BlockState
+    return {
+      type: 'lever',
+      facing: faceFacingToDir6(props.face, props.facing),
+      powered: props.powered === 'true',
+    } as BlockState
   }
 
   // ボタン類 → 専用型 (石系 = stone_button / polished_blackstone_button、
-  // その他木材系 = button_wood)。editor は床ボタンのみ扱うため facing='up' 固定
-  // (踏まれ状態は entity 由来のため常に OFF で取り込む)。
+  // その他木材系 = button_wood)。取付面は face/facing から復元する (#111)。
+  // 押下状態は momentary で entity 由来のため常に OFF で取り込む。
   if (name.endsWith('_button')) {
     const isStone =
       name === 'minecraft:stone_button' || name === 'minecraft:polished_blackstone_button'
     return {
       type: isStone ? 'button_stone' : 'button_wood',
-      facing: 'up',
+      facing: faceFacingToDir6(props.face, props.facing),
       powered: false,
     } as BlockState
   }

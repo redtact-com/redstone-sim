@@ -4,8 +4,9 @@
  * activeLayer に対する操作として扱う。
  */
 
-import type { BlockState, HDir, WireConnections, WorldSnapshot } from '@redstone/sim'
+import type { BlockState, Dir6, WireConnections, WorldSnapshot } from '@redstone/sim'
 import { posKey } from '@redstone/sim'
+import { isFacingAllowed } from './facing.js'
 import {
   computeWireConnections, computeRawWireConnections, collectWireConnectionUpdates,
 } from './wire-connect.js'
@@ -99,11 +100,14 @@ export class EditorGrid {
     this.pushHistory(changes)
   }
 
-  rotateBlock(x: number, z: number, dir: HDir): void {
+  rotateBlock(x: number, z: number, dir: Dir6): void {
     const y = this.activeLayer
     const block = this.getBlock3(x, y, z)
     if (!block) return
     if (!('facing' in block)) return
+    // 素子が取れない向き (リピーターに up 等) は無視する。ここで弾かないと
+    // `as BlockState` が型検査を潰しているぶん、静かに無出力の素子が生まれる (#111)
+    if (!isFacingAllowed(block.type, dir)) return
 
     const before = block
     const after: BlockState = { ...block, facing: dir } as BlockState
