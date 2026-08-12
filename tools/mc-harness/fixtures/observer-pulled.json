@@ -1,0 +1,160 @@
+{
+  "name": "observer-pulled",
+  "description": "#119 粘着ピストンで押して引いたオブザーバー。lever(0,1,0) → dust → sticky_piston(2,1,0,facing=east) の前に observer(3,1,0,facing=east)。レバー ON で押し出し、OFF で引き戻す。伸長と収縮は別経路なので、引き戻し着地でも発火するかを実機で確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 26,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      1,
+      2
+    ]
+  },
+  "player": {
+    "spawn": [
+      2.5,
+      1.0,
+      2.5
+    ],
+    "facing": [
+      180,
+      35
+    ],
+    "lookAt": [
+      2.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "observer[facing=east,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 12,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ]
+}

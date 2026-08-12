@@ -453,6 +453,12 @@ export class SimWorld {
     this.traceProcess('TE', abbrOf(into), 'c', 2)
     this.traceOpenUpdate(pos)
     if (observableChanged(mp, into)) this.emitShapeUpdate(pos)
+    // 設置されたオブザーバーは 1 回発火する [確定: 26.2 ObserverBlock.onPlace +
+    // 実機 fixture observer-pushed — 着地 (t5) の 2gt 後 t7 に powered=true]。
+    // 監視先が変わったかではなく「置かれたこと」が起動条件なので、ここで予約する (#119)
+    if (into.type === 'observer' && !into.powered && !this.hasScheduledTick(pos, 'observer')) {
+      this.schedule(pos, 2, 0)
+    }
     this.propagateChange(pos)
     this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
@@ -1036,6 +1042,9 @@ export class SimWorld {
     if (block.type === 'solid' || block.type === 'lamp') return true
     if (block.type === 'redstone_block' || block.type === 'target' || block.type === 'note_block') return true
     if ((block.type === 'piston' || block.type === 'sticky_piston') && !block.extended) return true
+    // オブザーバーは vanilla どおり可動 (PushReaction NORMAL) [確定: 26.2 + 実機 fixture
+    // observer-pushed]。着地時に自分で 1 回発火する — finalizeMovingPiston を参照 (#119)
+    if (block.type === 'observer') return true
     return false
   }
 

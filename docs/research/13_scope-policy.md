@@ -68,9 +68,12 @@ redstone-sim は **Web 上で動くレッドストーン回路シミュレータ
   - sim の PushReaction 対応: DESTROY = wire / torch / wall_torch / lever / button 2 種 / 感圧板 4 種 /
     repeater / comparator (いずれも vanilla DESTROY)。
     MOVE = solid / lamp / redstone_block / target / note_block / 非伸長 piston。
-    障害物 (押し不可) = extended piston / piston_head / moving_piston / container /
-    **observer (vanilla は MOVE だが、移動時のパルス発火の意味論が別途必要なため
-    当面障害物のまま — 必要になったら別 issue で可動化)**
+    障害物 (押し不可) = extended piston / piston_head / moving_piston / container。
+    **observer は #119 で可動化した** (vanilla どおり MOVE)。移動時の意味論は
+    「着地した時点で 1 回発火する」= vanilla の ObserverBlock.onPlace 相当で、
+    監視先が変わったかではなく**置かれたこと**が起動条件。実機 fixture
+    observer-pushed / observer-pulled で確定 (押し出し着地 t5 → 発火 t7、
+    引き戻し着地 t15 → 発火 t17。伸長・収縮とも同じ規則)
 
 ### 4.2 ホッパー・ドロッパー物流 (数値モデル)
 
