@@ -20,10 +20,14 @@ export interface FixtureInput {
   tick: number
   pos: Pos3D
   /**
-   * 'use'  … 右クリック相当 (レバー/ボタン/ターゲット)。
-   * 'step' … 感圧板を踏む相当。sim の手動モデルでは activateBlock で 'use' と同一に扱う。
+   * 'use'      … 右クリック相当 (レバー/ボタン/ターゲット)。
+   * 'step'     … 感圧板を踏む相当。sim の手動モデルでは activateBlock で 'use' と同一に扱う。
+   * 'setblock' … `/setblock` 相当のブロック差し替え (#127)。近隣更新を伴わない書き換えを
+   *              作れるので BUD の検証に使う。`block` に blockstate 文字列が要る。
    */
-  action: 'use' | 'step'
+  action: 'use' | 'step' | 'setblock'
+  /** action='setblock' で置く blockstate 文字列 ('air' 可) */
+  block?: string
 }
 
 export interface FixtureChange {
@@ -88,11 +92,16 @@ export function fixtureInputsAt(fx: Fixture, t: number): FixtureInput[] {
   return fx.inputs.filter(i => i.tick === t)
 }
 
-/** その tick の入力を world へ適用する (activateBlock。'use'/'step' 共通) */
+/** その tick の入力を world へ適用する ('use'/'step' は activateBlock、'setblock' は差し替え) */
 export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): FixtureInput[] {
   const inputs = fixtureInputsAt(fx, t)
   for (const input of inputs) {
-    world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
+    if (input.action === 'setblock') {
+      if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
+      world.setBlockCommand(input.pos, mcToSim(input.block) ?? { type: 'air' })
+    } else {
+      world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
+    }
   }
   return inputs
 }

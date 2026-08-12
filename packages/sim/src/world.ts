@@ -6,7 +6,7 @@ import type {
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
 } from './types.js'
-import { shouldRailBePowered } from './rail.js'
+import { shouldRailBePowered, planRailPlacement } from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
@@ -719,6 +719,47 @@ export class SimWorld {
 
     // 初期組み立て完了。以降 (tick / flush / activateBlock) の状態変化は PP を発行する
     this.suppressPP = false
+  }
+
+  /**
+   * `/setblock` 相当のブロック差し替え (#127)。**BUD の検証に使う**。
+   *
+   * vanilla の SetBlockCommand は `block.place(level, pos, 2 | 256)` で置く。
+   * flag に **UPDATE_NEIGHBORS (1) が立っていない**ので置いた瞬間は近隣更新を出さず、
+   * そのあと `updateNeighboursOnBlockSet` → `updateNeighborsAt(pos)` で
+   * **周囲 6 方向にだけ**更新を配る (自分自身には配らない)
+   * [確定: 26.2 SetBlockCommand.setBlock / ServerLevel.updateNeighboursOnBlockSet]。
+   *
+   * **置いた位置自身も再評価する**。`BaseRailBlock.onPlace` は
+   * `if (!oldState.is(state.getBlock()))` で「同じブロック種の上書きなら updateState を
+   * 呼ばない」ように読めるが、**実機 1.21.1 で試すと同種上書きでも powered は保持されず
+   * 即座に再計算される** (リピーターの powered / ランプの lit も同様に落ちる)。
+   * `/setblock ... strict` (onPlace を飛ばす flag 512) は 1.21.1 には無く、carpet の
+   * scarpet `set()` でも同じだった。実機の観測に合わせてここでも自身を再評価する。
+   * [実測: 2026-08-12 / 26.2 のデコンパイルとは読みが食い違うため要追調査]
+   *
+   * ∴ 実機ハーネスでは「更新を伴わないブロック差し替え」は作れない。BUD の検証は
+   * 「既に on のレールは値が変わらないので近隣更新を再送しない」性質を使って行う
+   * (fixture powered-rail-bud)。
+   *
+   * 既知の限定: onPlace の形状決定はレールのみ再現。他の素子を setblock する fixture を
+   * 書くときはここに追加すること。
+   */
+  setBlockCommand(pos: Pos3D, block: BlockState): void {
+    const old = this.getBlockAt(pos)
+    this.setBlockAt(pos, block)
+
+    // 形状の決め直しは「種が変わったとき」だけ (BaseRailBlock.updateState の updateDir 相当)
+    if (block.type === 'powered_rail' && old?.type !== 'powered_rail') {
+      for (const c of planRailPlacement(this, pos, block.shape)) {
+        const b = this.getBlockAt(c.pos)
+        if (b?.type === 'powered_rail') this.setBlockAt(c.pos, { ...b, shape: c.shape })
+      }
+    }
+
+    this.neighborChanged(pos)   // 置いた位置自身の再評価 (上記の実測に合わせる)
+    this.emitShapeUpdate(pos)   // flag に UPDATE_KNOWN_SHAPE(16) が無い → updateShape は飛ぶ
+    this.submitMultiNC(pos)     // updateNeighborsAt(pos) — 周囲 6 方向のみ
   }
 
   // ── プレイヤー操作（PIフェーズ相当） ────────────────────

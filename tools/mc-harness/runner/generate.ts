@@ -189,6 +189,15 @@ async function generateFixture(name: string): Promise<void> {
         await sleep(200)
         rcon('player', PLAYER_NAME, 'use', 'once')
         await sleep(200)
+      } else if (input.action === 'setblock') {
+        // `/setblock` は flag 2|256 で置くので近隣更新を伴わず、そのあと
+        // updateNeighboursOnBlockSet が **周囲6方向にだけ** 更新を配る。
+        // 同じブロック種の上書きなら onPlace の再評価も走らないため、
+        // 「本来ありえない状態」を実機に作れる (BUD 検証用。#127)
+        if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
+        rcon('setblock', String(input.pos[0]), String(input.pos[1]), String(input.pos[2]),
+          input.block)
+        await sleep(200)
       } else if (input.action === 'step') {
         // 感圧板を踏む: fake player を板の中心へ tp して entityInside を発火させ、
         // 直後に spawn へ戻して離れる (手動 sim モデルは単発 = getPressedTime 後 auto-off の
