@@ -286,9 +286,13 @@ export interface TargetState {
  * スライムブロック / 蜂蜜ブロック (#121)。ピストンで動かすと**くっついている塊も一緒に動く**
  * (PushReaction STICKY)。互いにはくっつかない [確定: 26.2 PistonStructureResolver]。
  *
- * 既知の抽象化: 導体ではない (信号を通さない) ところまでを表現し、
- * 落下ダメージ無効化・跳ね返り・移動速度低下といったエンティティ側の効果は持たない
- * (13 §2 エンティティ境界原則)。
+ * **スライムは導体、蜂蜜は非導体** [確定: 26.2 — isRedstoneConductor の既定は
+ * isCollisionShapeFullBlock。SLIME_BLOCK は noOcclusion() のみで当たり判定はフルブロック、
+ * HoneyBlock.SHAPE = column(14,0,15) はフルブロックでない]。フライングマシンは
+ * オブザーバーの出力がスライム越しにピストンへ届くことで動く (#123)。
+ *
+ * 既知の抽象化: 落下ダメージ無効化・跳ね返り・移動速度低下といったエンティティ側の効果は
+ * 持たない (13 §2 エンティティ境界原則)。
  */
 export interface SlimeBlockState {
   type: 'slime_block'
