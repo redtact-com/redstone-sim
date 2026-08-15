@@ -379,18 +379,32 @@ export function isRailSlope(shape: RailShape): boolean {
 }
 
 /**
- * パワードレール (#127)。トロッコを持たないためエンティティ側の加速効果は
- * 実装せず、**レッドストーン素子としての側面のみ**を扱う (13 §2 エンティティ境界原則):
+ * 動力を持つレールの種別 (#138)。26.2 に ActivatorRailBlock は**存在せず**、
+ * activator_rail は powered_rail と同じ PoweredRailBlock を別インスタンスとして
+ * 登録しているだけ [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock::new]。
+ * レッドストーン挙動の差は**連鎖が同種のレール間でしか繋がらない**ことだけで
+ * [確定: 26.2 PoweredRailBlock.isSameRailWithPower の `!state.is(this)` ガード]、
+ * activator = トロッコを起動する側面はエンティティなのでスコープ外 (13 §2)。
+ */
+export type PoweredRailType = 'powered_rail' | 'activator_rail'
+
+export const POWERED_RAIL_TYPES: PoweredRailType[] = ['powered_rail', 'activator_rail']
+
+/**
+ * パワードレール / アクティベーターレール (#127, #138)。トロッコを持たないため
+ * エンティティ側の加速・起動効果は実装せず、**レッドストーン素子としての側面のみ**を
+ * 扱う (13 §2 エンティティ境界原則):
  *   - powered = 自身6面の受電 (hasNeighborSignal) **または**
- *     繋がった powered_rail を前後方向に最大 8 個たどった先での受電
+ *     繋がった**同種の**レールを前後方向に最大 8 個たどった先での受電
  *     [確定: 26.2 PoweredRailBlock.findPoweredRailSignal — searchDepth >= 8 で打ち切り]
  *   - powered が変化したら**真下のブロック**へ近隣更新を出す (坂なら真上へも)
  *     [確定: 26.2 PoweredRailBlock.updateState]
  *   - 自身は信号を出さず (getSignal 非 override)、導体でもない (非フルブロック)
  * shape は設置時に隣接レールから自動決定される (RailState.place。rail.ts)。
+ * 形状の接続は種別をまたぐ (BlockTags.RAILS) が、**動力の連鎖はまたがない**。
  */
 export interface PoweredRailState {
-  type: 'powered_rail'
+  type: PoweredRailType
   shape: RailShape
   powered: boolean
 }

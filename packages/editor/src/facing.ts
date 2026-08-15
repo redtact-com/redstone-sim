@@ -18,12 +18,13 @@ const DIR6_TYPES = new Set<BlockType>([
 ])
 /**
  * 水平のみ。上下を入れると出力方向が消える。
- * powered_rail の facing は「出力方向」ではなく**置いた向き** — 孤立して置いたときの
+ * レールの facing は「出力方向」ではなく**置いた向き** — 孤立して置いたときの
  * 既定形状 (north/south → north_south、east/west → east_west) を決めるためだけに使う。
  * 隣にレールがあれば形状は自動接続で上書きされる (rail.ts の planRailPlacement)。
  */
 const HDIR_TYPES = new Set<BlockType>([
-  'repeater', 'comparator', 'wall_torch', 'dropper', 'powered_rail',
+  'repeater', 'comparator', 'wall_torch', 'dropper',
+  'powered_rail', 'activator_rail',
 ])
 
 export function allowedFacings(type: BlockType): Dir6[] {
