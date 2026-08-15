@@ -216,3 +216,73 @@ describe('nbtIO: レバー/ボタンの取付面 (#111)', () => {
       .toMatchObject({ type: 'lever', facing: 'north' })
   })
 })
+
+// ============================================================
+// 固体ブロック (redstone conductor) の取り込み (#170)
+//
+// 実在の回路 (Runa.S_1wide.nbt) で 73 ブロックが落ちていた。固定リスト方式で
+// 羊毛 16 色・smooth_quartz などが漏れており、**導体が消える = 回路の導通が
+// 変わる**ため実害があった。素材の違いはレッドストーン挙動に影響しないので
+// 全部 solid 1 種に集約する。
+//
+// 一方**フルブロックでも非導体**のもの (ガラス系) は solid にすると誤って
+// 導通するので、sim に型ができるまでは拾わない。ここでその線引きを固定する。
+// ============================================================
+
+describe('固体ブロックの取り込み (#170)', () => {
+  const solid = { type: 'solid' }
+
+  it.each([
+    'minecraft:white_wool', 'minecraft:light_blue_wool', 'minecraft:black_wool',
+  ])('羊毛は導体なので solid になる: %s', (name) => {
+    expect(importVanilla(name)).toMatchObject(solid)
+  })
+
+  it.each([
+    'minecraft:smooth_quartz', 'minecraft:quartz_bricks', 'minecraft:chiseled_quartz_block',
+  ])('石英の各バリアントも solid: %s', (name) => {
+    expect(importVanilla(name)).toMatchObject(solid)
+  })
+
+  it.each([
+    'minecraft:stone_bricks', 'minecraft:deepslate_bricks', 'minecraft:end_stone_bricks',
+    'minecraft:red_sandstone', 'minecraft:smooth_sandstone',
+    'minecraft:oak_log', 'minecraft:stripped_birch_wood', 'minecraft:crimson_stem',
+    'minecraft:iron_ore', 'minecraft:deepslate_redstone_ore',
+    'minecraft:oxidized_copper', 'minecraft:waxed_exposed_cut_copper',
+    'minecraft:glowstone', 'minecraft:hay_block', 'minecraft:packed_ice',
+  ])('その他の導体フルブロックも solid: %s', (name) => {
+    expect(importVanilla(name)).toMatchObject(solid)
+  })
+
+  it('従来から solid だったものは維持される', () => {
+    for (const name of ['minecraft:stone', 'minecraft:oak_planks', 'minecraft:white_concrete',
+                        'minecraft:obsidian', 'minecraft:quartz_block']) {
+      expect(importVanilla(name), name).toMatchObject(solid)
+    }
+  })
+
+  it.each([
+    'minecraft:glass', 'minecraft:white_stained_glass', 'minecraft:tinted_glass',
+  ])('ガラスは**非導体**なので solid にしない (省略される): %s', (name) => {
+    expect(importVanilla(name)).toBeUndefined()
+  })
+
+  it.each([
+    'minecraft:melon_stem', 'minecraft:attached_pumpkin_stem',
+  ])('_stem の接尾辞に引っかかる作物は solid にしない: %s', (name) => {
+    expect(importVanilla(name)).toBeUndefined()
+  })
+
+  it('専用型を持つブロックは接尾辞判定より優先される', () => {
+    // slime_block / honey_block は上流で専用型に落ちる (固体一覧には入れない)
+    expect(importVanilla('minecraft:slime_block')).toMatchObject({ type: 'slime_block' })
+    expect(importVanilla('minecraft:honey_block')).toMatchObject({ type: 'honey_block' })
+    // redstone_block は信号源。_block を接尾辞で拾わないことの回帰テスト
+    expect(importVanilla('minecraft:redstone_block')).toMatchObject({ type: 'redstone_block' })
+  })
+
+  it('装飾ブロックは従来どおり省略される', () => {
+    expect(importVanilla('minecraft:oak_wall_sign', { facing: 'north' })).toBeUndefined()
+  })
+})
