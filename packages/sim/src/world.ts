@@ -749,11 +749,27 @@ export class SimWorld {
     const old = this.getBlockAt(pos)
     this.setBlockAt(pos, block)
 
-    // 形状の決め直しは「種が変わったとき」だけ (BaseRailBlock.updateState の updateDir 相当)
+    // 形状の決め直しは「種が変わったとき」だけ (BaseRailBlock.updateState の updateDir 相当)。
+    //
+    // **形状を書いた各レールが更新源になる** (#132)。vanilla は RailState.place も
+    // connectTo も `level.setBlock(pos, state, 3)` で書く [確定: 26.2 RailState.java:205,333]。
+    // flag 3 = UPDATE_NEIGHBORS(1) | UPDATE_CLIENTS(2) なので
+    //   - flag 1  → そのレールが周囲 6 方向へ近隣更新を配る
+    //   - 16 が無い → updateNeighbourShapes が走り隣接オブザーバーが発火する
+    // [実機 fixture rail-shape-update: 張り替わった隣レールの近隣にある BUD ピストンが
+    //  伸び、真上のオブザーバーも発火する。置いた本人以外が更新源になることの直接証拠]
+    //
+    // 書き込みと発行は **1 件ずつ交互に** 行う。vanilla も自分の setBlock を済ませてから
+    // 隣の connectTo に入るので、自分の近隣更新が走る時点では隣はまだ旧形状のままになる。
+    // planRailPlacement は副作用を持たない (計算結果を返すだけ) 設計を維持し、
+    // 更新の発行は適用側であるここが担う。
     if (block.type === 'powered_rail' && old?.type !== 'powered_rail') {
       for (const c of planRailPlacement(this, pos, block.shape)) {
         const b = this.getBlockAt(c.pos)
-        if (b?.type === 'powered_rail') this.setBlockAt(c.pos, { ...b, shape: c.shape })
+        if (b?.type !== 'powered_rail') continue
+        this.setBlockAt(c.pos, { ...b, shape: c.shape })
+        this.emitShapeUpdate(c.pos)
+        this.submitMultiNC(c.pos)
       }
     }
 

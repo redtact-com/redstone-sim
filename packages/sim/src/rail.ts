@@ -230,6 +230,11 @@ class RailConnector {
  * [確定: 26.2 BaseRailBlock.updateDir → new RailState(...).place(...)]。
  * 副作用は持たず、書き換えるべき (pos, shape) の一覧を返すので、
  * 呼び出し側が SimWorld / EditorGrid それぞれの方法で適用する。
+ *
+ * 返す一覧は vanilla が `setBlock(pos, state, 3)` を呼ぶ座標と 1 対 1 に対応する
+ * (形状が結果的に変わらなかった座標も含む — vanilla も first=true / connectTo では
+ * 値の異同に関係なく setBlock する)。**flag 3 に伴う近隣更新とオブザーバー通知の
+ * 発行は適用側の責務** で、SimWorld ではこの一覧の順に 1 件ずつ書いて発行する (#132)。
  */
 export function planRailPlacement(
   grid: RailGrid, pos: Pos3D, defaultShape: RailShape,
