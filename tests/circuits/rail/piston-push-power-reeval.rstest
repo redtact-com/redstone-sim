@@ -1,0 +1,21 @@
+# 電源から押し離されたレールは着地の時点で off になる (#134)。
+#
+# レールの真下がレッドストーンブロックなので powered=true。ピストンで東へ 1 マス送ると
+# 移動先の真下は石で受電が無くなる。着地時に onPlace → updateState → (isStraight なので)
+# 自分自身への neighborChanged が走るため、**着地と同じ tick で** powered が落ちる
+# [確定: 26.2 BaseRailBlock.java:70-77]。
+# レールは近隣更新を待つ (BUD) 素子なので、この onPlace 経路が無いと
+# 「動力源が無いのに powered のまま」という状態が残ってしまう。
+#
+# 期待値は実機 (fixture rail-piston-push-powered) が正。
+meta {
+  name: 押し離されたレールは着地の時点で powered を落とす
+  ref: #134 / fixture rail-piston-push-powered / 26.2 BaseRailBlock.onPlace
+}
+
+fixture rail-piston-push-powered
+
+state {
+  # 着地と同 tick で off (遅延なし)
+  t5 (4,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}

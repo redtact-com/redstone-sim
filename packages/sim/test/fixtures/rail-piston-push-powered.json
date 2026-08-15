@@ -1,0 +1,165 @@
+{
+  "name": "rail-piston-push-powered",
+  "description": "#134 押されて着地したレールの powered が再評価されるか。レール (3,1,3) は真下がレッドストーンブロック (3,0,3) なので powered=true。ピストンで東へ 1 マス送ると移動先 (4,1,3) の真下は石なので受電が無くなる。BaseRailBlock.onPlace は movedByPiston でも走り、!oldState.is(block) (直前は moving_piston) なので updateState → updateDir → isStraight なら自分自身に neighborChanged [確定: 26.2 BaseRailBlock.java:64-77] → PoweredRailBlock.updateState で powered が再計算されるはず。電源はピストンの quasi セル (2,2,3) に触れない位置 (レールの真下) に置いてあるので、ピストン自身は authored の時点では通電していない。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      0,
+      0,
+      2
+    ],
+    "to": [
+      6,
+      3,
+      4
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 3,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            3
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "piston_head[facing=east,short=false,type=normal]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T10:51:40.989Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
