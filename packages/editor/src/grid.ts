@@ -100,6 +100,15 @@ export class EditorGrid {
       }
     }
 
+    // ドアを配置した場合: 上半分も同じ 1 操作で置く (#159)。
+    // vanilla のドアは 2 マス 1 組で、片方だけの状態は存在しない
+    if ((block.type === 'door_wood' || block.type === 'door_iron') && block.half === 'lower') {
+      const upperBefore = this.getBlock3(x, y + 1, z)
+      const upper: BlockState = { ...block, half: 'upper' }
+      this.setRaw(x, y + 1, z, upper)
+      changes.push({ pos: [x, y + 1, z], before: upperBefore, after: upper })
+    }
+
     // 周辺ワイヤー（同レイヤー・上下ステップ範囲）の接続を更新
     this.applyNeighborWireUpdates(x, y, z, changes)
 
@@ -116,6 +125,18 @@ export class EditorGrid {
 
     const changes: EditAction[] = [{ pos: [x, y, z], before, after: null }]
     this.setRaw(x, y, z, null)
+
+    // ドアはどちらの半分を消しても相方が消える (#159)。vanilla と同じく
+    // 片方だけ残った状態を作らない
+    if (before.type === 'door_wood' || before.type === 'door_iron') {
+      const oy = before.half === 'lower' ? y + 1 : y - 1
+      const other = this.getBlock3(x, oy, z)
+      if ((other?.type === 'door_wood' || other?.type === 'door_iron')
+          && other.half !== before.half) {
+        this.setRaw(x, oy, z, null)
+        changes.push({ pos: [x, oy, z], before: other, after: null })
+      }
+    }
 
     this.applyNeighborWireUpdates(x, y, z, changes)
 

@@ -246,8 +246,18 @@ export interface HopperState {
  *     HopperBlockEntity.addItem で挿入 (sim は種別なしなので count を 1 移す)。
  * facing = vanilla FACING = 出力方向 (6 方向。既定 north。非反転)。
  */
+/**
+ * ドロッパー / ディスペンサー (#65, #161)。26.2 で `DropperBlock extends DispenserBlock`
+ * [確定: DropperBlock.java:23] なので**レッドストーン側は完全に共通**:
+ * 疑似接続 (自分 または 直上) の立ち上がりで 4gt の tile tick を予約し TRIGGERED を立てる。
+ *
+ * 差は `dispenseFrom` だけで、**ドロッパーだけが前方コンテナへ挿入する** [確定: :48]。
+ * ディスペンサーは override しないので常にワールドへ射出する = **前方がコンテナでも
+ * 入れない** [実機 fixture dispenser-no-insert]。sim では射出をエンティティ境界原則で
+ * 「1 個消費して何も出さない」に丸めるので、この違いだけが残る。
+ */
 export interface DropperState {
-  type: 'dropper'
+  type: 'dropper' | 'dispenser'
   facing: Dir6
   /** 内容個数 (0..576) */
   count: number
@@ -472,6 +482,109 @@ export interface DetectorRailState {
   powered: boolean
 }
 
+/**
+ * 銅の電球 (#155)。**1 ブロックで T フリップフロップ**になる素子。
+ *   - 近隣更新のたびに hasNeighborSignal を見て、`signal != powered` なら
+ *     **立ち上がり (powered=false → signal=true) のときだけ lit を反転**し、
+ *     powered を signal に追随させる [確定: 26.2 CopperBulbBlock.checkAndFlip]
+ *   - **tile tick を持たない** = 遅延 0gt。近隣更新の処理中に同期確定する
+ *     [実機 fixture copper-bulb-toggle: レバーと同じ tick で確定]
+ *   - コンパレーターは **lit** を読む (powered ではない)。lit ? 15 : 0
+ *     [確定: 26.2 getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+ *   - **非導体** (.isRedstoneConductor(Blocks::never) [確定: 26.2 Blocks.java:5272])。
+ *     フルブロックだが強充電を通さないので、給電の仕切りとして使える
+ *   - 自身は信号を出さない (getSignal 非 override)
+ *
+ * 酸化 8 バリアント (素/exposed/weathered/oxidized × waxed) は
+ * **レッドストーン挙動が完全に同一**で、違うのは明るさ (15/12/8/4) と
+ * ランダムティックの酸化だけ。どちらも sim は非モデルなので 1 種に集約している。
+ */
+export interface CopperBulbState {
+  type: 'copper_bulb'
+  /** 点灯状態。立ち上がりでのみ反転する = 記憶ビット */
+  lit: boolean
+  /** 直前に見た入力。エッジ判定のために保持する */
+  powered: boolean
+}
+
+/**
+ * トラップドア / フェンスゲート (#157)。**受電で開閉する出力素子**。
+ *
+ * どちらも挙動はほぼ同一 [確定: 26.2 TrapDoorBlock.java:125-144 /
+ * FenceGateBlock.java:182-201]:
+ *   `signal != powered` のとき `open = signal` にして `powered` を追随させる。
+ *
+ * **書き込みは flag 2** (UPDATE_CLIENTS のみ) なのが要点で、
+ *   - `UPDATE_NEIGHBORS` が無い → **近隣更新を出さない**
+ *   - `UPDATE_KNOWN_SHAPE(16)` も無い → updateNeighbourShapes は走り
+ *     **オブザーバーには見える**
+ * [実機 fixture trapdoor-redstone: 開閉では隣の BUD ピストンが伸びず、
+ *  真上のオブザーバーは発火する]。銅の電球 (flag 3) との対比になる。
+ *
+ * 木製は素手で開閉でき (`canOpenByHand`)、そのとき **open だけが動いて powered は
+ * 据え置かれる**。信号が変わるまで補正されないので、意図的なデシンクを作れる。
+ * **鉄のトラップドアは素手で開かない** = レッドストーン専用の出力素子。
+ */
+export interface DoorLikeState {
+  type: 'trapdoor_wood' | 'trapdoor_iron' | 'fence_gate'
+  /** 描画用。回路挙動には影響しない */
+  facing: HDir
+  open: boolean
+  powered: boolean
+}
+
+/**
+ * ドア (#159)。**上下 2 マスにまたがる素子**で、sim では half を持つ独立した
+ * 2 ブロックとして表現する (ピストン + ピストンヘッドと同じ前例)。
+ *
+ *   - 受電判定は **自分の位置 または 相方の半分** の OR
+ *     [確定: 26.2 DoorBlock.java:228-229]。ピストン・ディスペンサー以外で唯一の
+ *     疑似接続の変種で、下半分だけに給電しても両方が開く
+ *     [実機 fixture door-redstone]
+ *   - **更新元が同じドアブロックなら無視する** [確定: :230 の
+ *     `!this.defaultBlockState().is(block)`]。2 つの半分が更新を往復しないためのガード
+ *   - 2 つの半分は updateShape で常に同期する [確定: :104-106 — 相手の状態を
+ *     そのままコピーして HALF だけ自分のものにする] ので、sim では状態変化時に
+ *     相方へミラーする
+ *   - 書き込みは **flag 2** なので近隣更新を出さない (トラップドアと同じ)
+ *   - 木製は素手で開閉でき、そのとき open だけが動く。**鉄のドアは素手で開かない**
+ */
+export interface DoorState {
+  type: 'door_wood' | 'door_iron'
+  half: 'lower' | 'upper'
+  /** 描画用。回路挙動には影響しない */
+  facing: HDir
+  open: boolean
+  powered: boolean
+}
+
+/**
+ * クラフター (#163)。**受電部分だけを実装し、レシピは非対応**。
+ *
+ *   - `triggered` は `hasNeighborSignal(pos)` の立ち上がりで立ち、4gt の tile tick を
+ *     予約する [確定: 26.2 CrafterBlock.java:73-88]
+ *   - **疑似接続を持たない**。ディスペンサーが `pos.above()` も見る [確定:
+ *     DispenserBlock.java:131] のに対し、クラフターは自分の位置しか見ない
+ *     [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
+ *   - コンパレーターは **「空でない or 無効化されたスロット数」0-9** を読む
+ *     [確定: 26.2 CrafterBlockEntity.getRedstoneSignal:251-262]。コンテナの
+ *     充填率とは**別系統**の読み方
+ *
+ * **レシピ体系はアイテム種別を要求するのでスコープ外** (13 §2 の物流モデルは
+ * 「コンテナ内の数値」までしか持たない)。したがって:
+ *   - `crafting=true` の成功パルスは**出ない**
+ *   - 9 スロットの中身・無効化スロットは持たず、`occupiedSlots` を手動指定の
+ *     折衷値として扱う (コンテナの手動 `signal` と同じ前例。10 C6)
+ */
+export interface CrafterState {
+  type: 'crafter'
+  /** ORIENTATION の front。描画用で回路挙動には影響しない */
+  facing: Dir6
+  triggered: boolean
+  /** コンパレーターが読む「埋まっているスロット数」0-9 (手動指定の折衷) */
+  occupiedSlots: number
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -503,6 +616,10 @@ export type BlockState =
   | PoweredRailState
   | PlainRailState
   | DetectorRailState
+  | CopperBulbState
+  | DoorLikeState
+  | DoorState
+  | CrafterState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -580,4 +697,69 @@ export function canStickToEachOther(a: BlockState, b: BlockState): boolean {
   if (a.type === 'honey_block' && b.type === 'slime_block') return false
   if (a.type === 'slime_block' && b.type === 'honey_block') return false
   return isStickyBlock(a) || isStickyBlock(b)
+}
+
+/**
+ * 手動トリガ (`SimWorld.activateBlock`) を受け付けるブロックか (#153)。
+ *
+ * **Record<BlockType, boolean> にしてあるのは網羅を型で強制するため**。
+ * 新しいブロック種を BlockState union に足すと、ここを埋めるまでビルドが通らない
+ * = 「トリガできる素子なのに UI から触れない」という追加漏れが起きなくなる。
+ *
+ * 実体は world.ts の activateBlock の分岐と 1 対 1 で、`app/src/palette.ts` の
+ * TRIGGER_META もこの一覧と一致することをテストで突き合わせている
+ * (#146 detector_rail で実際に取りこぼしたのがきっかけ)。
+ */
+const IS_TRIGGERABLE: Record<BlockType, boolean> = {
+  // 手動トリガできる素子
+  lever: true,
+  button_stone: true,
+  button_wood: true,
+  pressure_plate_wood: true,
+  pressure_plate_stone: true,
+  weighted_pressure_plate_light: true,
+  weighted_pressure_plate_heavy: true,
+  target: true,          // 投射物命中の折衷
+  detector_rail: true,   // トロッコ検出の折衷 (#146)
+
+  // 受電・観測でしか動かない素子
+  wire: false,
+  torch: false,
+  wall_torch: false,
+  repeater: false,
+  comparator: false,
+  lamp: false,
+  note_block: false,
+  copper_bulb: false,   // 受電で反転するだけで手動トリガは無い
+  trapdoor_wood: true,  // 素手で開閉できる (open だけ動く)
+  fence_gate: true,
+  trapdoor_iron: false, // レッドストーン専用。素手では開かない
+  door_wood: true,      // 素手で開閉できる (open だけ動く)
+  door_iron: false,     // レッドストーン専用
+  observer: false,
+  redstone_block: false,
+  piston: false,
+  sticky_piston: false,
+  piston_head: false,
+  moving_piston: false,
+  rail: false,
+  powered_rail: false,
+  activator_rail: false,
+  container: false,
+  hopper: false,
+  dropper: false,
+  dispenser: false,
+  crafter: false,
+  solid: false,
+  slime_block: false,
+  honey_block: false,
+  air: false,
+}
+
+/** 手動トリガできるブロック種の一覧 (#153)。UI 側のリストはこれと一致させる */
+export const TRIGGERABLE_TYPES: BlockType[] =
+  (Object.keys(IS_TRIGGERABLE) as BlockType[]).filter(t => IS_TRIGGERABLE[t])
+
+export function isTriggerableType(type: BlockType): boolean {
+  return IS_TRIGGERABLE[type]
 }

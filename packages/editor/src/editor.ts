@@ -206,6 +206,29 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
         type: 'rail',
         shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
       }
+    case 'door_wood':
+    case 'door_iron':
+      // 置いたマスが下半分。上半分は grid.placeBlock3 が同じ操作で足す (#159)
+      return {
+        type,
+        half: 'lower',
+        facing: facing === 'east' || facing === 'west' || facing === 'south' ? facing : 'north',
+        open: false,
+        powered: false,
+      }
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+    case 'fence_gate':
+      // 受電で開閉する出力素子。facing は描画用で回路挙動には影響しない (#157)
+      return {
+        type,
+        facing: facing === 'east' || facing === 'west' || facing === 'south' ? facing : 'north',
+        open: false,
+        powered: false,
+      }
+    case 'copper_bulb':
+      // 立ち上がりでのみ lit が反転する記憶素子。初期は消灯 (#155)
+      return { type: 'copper_bulb', lit: false, powered: false }
     case 'detector_rail':
       // カート検出の折衷モデル。初期は非通電 (#146)
       return {
@@ -240,9 +263,14 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       // 物流ホッパー (#65)。facing = 送り込み方向 (editor は水平のみ。既定 down)。
       // count = 内容個数 (容量 320)。enabled は initialize で受電から確定
       return { type: 'hopper', facing: dir, count: opts.count ?? 0, enabled: true }
+    case 'crafter':
+      // 受電部分のみ実装。occupiedSlots はコンパレーターが読む手動値 (#163)
+      return { type: 'crafter', facing: dir, triggered: false, occupiedSlots: opts.count ?? 0 }
     case 'dropper':
-      // 物流ドロッパー (#65)。facing = 出力方向。count = 内容個数 (容量 576)
-      return { type: 'dropper', facing: dir, count: opts.count ?? 0, triggered: false }
+    case 'dispenser':
+      // 物流ドロッパー (#65) / ディスペンサー (#161)。facing = 出力方向。
+      // count = 内容個数 (容量 576)。差は「前方コンテナへ挿入するか」だけ
+      return { type, facing: dir, count: opts.count ?? 0, triggered: false }
     default:
       return null
   }

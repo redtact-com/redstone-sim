@@ -93,6 +93,8 @@ export function abbrOf(b: BlockState): string {
     case 'container':      return 'Cn'
     case 'hopper':         return 'Ho'
     case 'dropper':        return 'Dr'
+    case 'dispenser':      return 'Di'
+    case 'crafter':        return 'Cr'
     case 'piston':
     case 'sticky_piston':  return 'Pi'
     case 'piston_head':    return 'Ph'
@@ -101,6 +103,12 @@ export function abbrOf(b: BlockState): string {
     case 'activator_rail': return 'Ar'
     case 'rail':           return 'Ra'
     case 'detector_rail':  return 'Dt'
+    case 'copper_bulb':    return 'Cb'
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':  return 'Td'
+    case 'fence_gate':     return 'Fg'
+    case 'door_wood':
+    case 'door_iron':      return 'Do'
     case 'moving_piston':  return abbrOf(b.into)
     case 'air':            return 'Ai'
   }

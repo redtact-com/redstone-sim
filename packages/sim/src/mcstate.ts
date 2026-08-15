@@ -194,6 +194,65 @@ export function mcToSim(state: string): BlockState | null {
       // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
       return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
                powered: props.powered === 'true' }
+    case 'oak_door':
+    case 'spruce_door':
+    case 'birch_door':
+    case 'jungle_door':
+    case 'acacia_door':
+    case 'dark_oak_door':
+    case 'mangrove_door':
+    case 'cherry_door':
+    case 'bamboo_door':
+    case 'crimson_door':
+    case 'warped_door':
+    case 'iron_door':
+      // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#159)
+      return {
+        type: name === 'iron_door' ? 'door_iron' : 'door_wood',
+        half: (props.half === 'upper' ? 'upper' : 'lower'),
+        facing: (props.facing ?? 'north') as HDir,
+        open: props.open === 'true', powered: props.powered === 'true',
+      }
+    case 'oak_trapdoor':
+    case 'spruce_trapdoor':
+    case 'birch_trapdoor':
+    case 'jungle_trapdoor':
+    case 'acacia_trapdoor':
+    case 'dark_oak_trapdoor':
+    case 'mangrove_trapdoor':
+    case 'cherry_trapdoor':
+    case 'bamboo_trapdoor':
+    case 'crimson_trapdoor':
+    case 'warped_trapdoor':
+      // 木のトラップドアは樹種を問わず挙動が同じなので 1 種に集約する (#157)
+      return { type: 'trapdoor_wood', facing: (props.facing ?? 'north') as HDir,
+               open: props.open === 'true', powered: props.powered === 'true' }
+    case 'iron_trapdoor':
+      return { type: 'trapdoor_iron', facing: (props.facing ?? 'north') as HDir,
+               open: props.open === 'true', powered: props.powered === 'true' }
+    case 'oak_fence_gate':
+    case 'spruce_fence_gate':
+    case 'birch_fence_gate':
+    case 'jungle_fence_gate':
+    case 'acacia_fence_gate':
+    case 'dark_oak_fence_gate':
+    case 'mangrove_fence_gate':
+    case 'cherry_fence_gate':
+    case 'bamboo_fence_gate':
+    case 'crimson_fence_gate':
+    case 'warped_fence_gate':
+      return { type: 'fence_gate', facing: (props.facing ?? 'north') as HDir,
+               open: props.open === 'true', powered: props.powered === 'true' }
+    case 'copper_bulb':
+    case 'exposed_copper_bulb':
+    case 'weathered_copper_bulb':
+    case 'oxidized_copper_bulb':
+    case 'waxed_copper_bulb':
+    case 'waxed_exposed_copper_bulb':
+    case 'waxed_weathered_copper_bulb':
+    case 'waxed_oxidized_copper_bulb':
+      // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
+      return { type: 'copper_bulb', lit: props.lit === 'true', powered: props.powered === 'true' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -213,10 +272,20 @@ export function mcToSim(state: string): BlockState | null {
         enabled: props.enabled !== 'false',
         cooldownUntil: 0,
       }
+    case 'crafter':
+      // orientation は "front_top" の組。sim は front だけを持つ (#163)。
+      // 中身はレシピ非対応なので occupiedSlots は 0 から始め、items で上書きする
+      return {
+        type: 'crafter',
+        facing: ((props.orientation ?? 'north_up').split('_')[0]) as Dir6,
+        triggered: props.triggered === 'true',
+        occupiedSlots: 0,
+      }
     case 'dropper':
+    case 'dispenser':
       // vanilla の facing = 出力方向 (6 方向) = sim と同一 (非反転)。
       return {
-        type: 'dropper',
+        type: name,
         facing: (props.facing ?? 'north') as Dir6,
         count: 0,
         triggered: props.triggered === 'true',
@@ -285,12 +354,38 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('detector_rail', {
           powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
         })
+      case 'door_wood':
+      case 'door_iron':
+        return formatMcState(sim.type === 'door_iron' ? 'iron_door' : 'oak_door', {
+          facing: sim.facing, half: sim.half, hinge: 'left',
+          open: String(sim.open), powered: String(sim.powered),
+        })
+      case 'trapdoor_wood':
+      case 'trapdoor_iron':
+        return formatMcState(sim.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor', {
+          facing: sim.facing, half: 'bottom', open: String(sim.open),
+          powered: String(sim.powered), waterlogged: 'false',
+        })
+      case 'fence_gate':
+        return formatMcState('oak_fence_gate', {
+          facing: sim.facing, in_wall: 'false',
+          open: String(sim.open), powered: String(sim.powered),
+        })
+      case 'copper_bulb':
+        return formatMcState('copper_bulb', {
+          lit: String(sim.lit), powered: String(sim.powered),
+        })
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':
         return formatMcState('hopper', { enabled: String(sim.enabled), facing: sim.facing })
+      case 'crafter':
+        return formatMcState('crafter', {
+          crafting: 'false', orientation: `${sim.facing}_up`, triggered: String(sim.triggered),
+        })
       case 'dropper':
-        return formatMcState('dropper', { facing: sim.facing, triggered: String(sim.triggered) })
+      case 'dispenser':
+        return formatMcState(sim.type, { facing: sim.facing, triggered: String(sim.triggered) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'note_block':
@@ -388,13 +483,33 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.powered = String(sim.powered)
       props.shape = sim.shape
       break
+    case 'door_wood':
+    case 'door_iron':
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+    case 'fence_gate':
+      // facing / half / hinge / in_wall は authored の値を保持し、動的な 2 つだけ差し替える
+      props.open = String(sim.open)
+      props.powered = String(sim.powered)
+      break
+    case 'copper_bulb':
+      // authored が酸化バリアントでもプロパティだけ差し替える (名前は保持)
+      props.lit = String(sim.lit)
+      props.powered = String(sim.powered)
+      break
     case 'container':
       break // signal/count は blockstate に現れない (authored 名 barrel/chest を保持)
     case 'hopper':
       // count は BE で blockstate に無い。enabled のみ動的に上書き
       props.enabled = String(sim.enabled)
       break
+    case 'crafter':
+      // orientation は authored の値を保持する。crafting はレシピ非対応で常に false
+      props.triggered = String(sim.triggered)
+      props.crafting = 'false'
+      break
     case 'dropper':
+    case 'dispenser':
       props.triggered = String(sim.triggered)
       break
     case 'solid':

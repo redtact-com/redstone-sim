@@ -1,0 +1,155 @@
+{
+  "name": "dispenser-no-insert",
+  "description": "#161 ディスペンサーは前方がコンテナでも挿入しない。26.2 で DropperBlock extends DispenserBlock [確定: DropperBlock.java:23] でレッドストーン側は完全に共通だが、DropperBlock だけが dispenseFrom を override して「前方コンテナへ挿入」にしている [確定: :48]。ディスペンサーは override しないので常にワールドへ射出する。同じ配置を 2 組並べて比較する: 上段 (z=1) がドロッパー、下段 (z=3) がディスペンサー。どちらも中身 3 個で東隣のバレルへ向き、レバーで同時に起動する。ドロッパー側だけバレルのコンパレーターが反応すれば差が確定する。射出されたアイテムはエンティティとして残るので、ハーネスの掃除フェーズで毎回消すようにした (同 PR)。",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      6,
+      3,
+      6
+    ]
+  },
+  "player": {
+    "spawn": [
+      0.5,
+      1.0,
+      2.5
+    ],
+    "facing": [
+      0,
+      20
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      3.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "dropper[facing=east,triggered=false]",
+      "items": 3
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "barrel[facing=up,open=false]",
+      "items": 0
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        1
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "dispenser[facing=east,triggered=false]",
+      "items": 3
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "barrel[facing=up,open=false]",
+      "items": 0
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "use"
+    }
+  ]
+}

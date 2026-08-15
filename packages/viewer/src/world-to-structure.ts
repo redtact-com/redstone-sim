@@ -94,6 +94,13 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // facing は反転しない (piston/observer と同じ規則。vanilla FACING = 送り込み方向)。
       // enabled は見た目に影響しないが blockstate バリアント選択のため付与する
       return `minecraft:hopper[enabled=${block.enabled},facing=${block.facing}]`
+    case 'dispenser':
+      return `minecraft:dispenser[facing=${block.facing},triggered=${block.triggered}]`
+    case 'crafter':
+      // orientation は front_top の組。sim は front (facing) しか持たないので
+      // 上向き固定で合成する。crafting はレシピ非対応なので常に false (#163)
+      return `minecraft:crafter[crafting=false,orientation=${block.facing}_up,`
+        + `triggered=${block.triggered}]`
     case 'dropper':
       // facing は反転しない。triggered は見た目に影響しないが付与する
       return `minecraft:dropper[facing=${block.facing},triggered=${block.triggered}]`
@@ -133,6 +140,27 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:rail[shape=${block.shape},waterlogged=false]`
     case 'detector_rail':
       return `minecraft:detector_rail[powered=${block.powered},shape=${block.shape},waterlogged=false]`
+    case 'copper_bulb':
+      // 酸化段階は sim で持たないので素の銅の電球で描画する (#155)
+      return `minecraft:copper_bulb[lit=${block.lit},powered=${block.powered}]`
+    case 'trapdoor_wood':
+    case 'trapdoor_iron': {
+      // facing は反転する (repeater と同じく「ヒンジのある側」= 取り付け方向)。
+      // half は sim で持たないので bottom 固定 (#157)
+      const name = block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor'
+      return `minecraft:${name}[facing=${flipDir(block.facing)},half=bottom,`
+        + `open=${block.open},powered=${block.powered},waterlogged=false]`
+    }
+    case 'fence_gate':
+      return `minecraft:oak_fence_gate[facing=${flipDir(block.facing)},in_wall=false,`
+        + `open=${block.open},powered=${block.powered}]`
+    case 'door_wood':
+    case 'door_iron': {
+      // hinge は sim で持たないので left 固定 (#159)
+      const name = block.type === 'door_iron' ? 'iron_door' : 'oak_door'
+      return `minecraft:${name}[facing=${flipDir(block.facing)},half=${block.half},`
+        + `hinge=left,open=${block.open},powered=${block.powered}]`
+    }
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -180,6 +208,8 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:barrel',
   'minecraft:hopper',
   'minecraft:dropper',
+  'minecraft:dispenser',
+  'minecraft:crafter',
   'minecraft:stone',
   'minecraft:cobblestone',
   'minecraft:glass',
@@ -191,6 +221,12 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:activator_rail',
   'minecraft:rail',
   'minecraft:detector_rail',
+  'minecraft:copper_bulb',
+  'minecraft:oak_trapdoor',
+  'minecraft:iron_trapdoor',
+  'minecraft:oak_fence_gate',
+  'minecraft:oak_door',
+  'minecraft:iron_door',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

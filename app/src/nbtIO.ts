@@ -282,6 +282,29 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'rail':
       // 通常レールは powered を持たない。曲線 4 形状も取る (#140)
       return ['minecraft:rail', { shape: block.shape, waterlogged: 'false' }]
+    case 'door_wood':
+    case 'door_iron':
+      return [block.type === 'door_iron' ? 'minecraft:iron_door' : 'minecraft:oak_door', {
+        facing: block.facing, half: block.half, hinge: 'left',
+        open: String(block.open), powered: String(block.powered),
+      }]
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+      return [block.type === 'trapdoor_iron' ? 'minecraft:iron_trapdoor' : 'minecraft:oak_trapdoor', {
+        facing: block.facing, half: 'bottom',
+        open: String(block.open), powered: String(block.powered), waterlogged: 'false',
+      }]
+    case 'fence_gate':
+      return ['minecraft:oak_fence_gate', {
+        facing: block.facing, in_wall: 'false',
+        open: String(block.open), powered: String(block.powered),
+      }]
+    case 'copper_bulb':
+      // 酸化バリアントは 1 種に集約しているので素の銅の電球として書き出す (#155)
+      return ['minecraft:copper_bulb', {
+        lit: String(block.lit),
+        powered: String(block.powered),
+      }]
     case 'detector_rail':
     case 'powered_rail':
     case 'activator_rail':
@@ -309,8 +332,16 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         enabled: String((block as any).enabled ?? true),
         facing: (block as any).facing ?? 'down',
       }]
+    case 'crafter':
+      // レシピ非対応なので crafting は常に false。orientation は front_top の組 (#163)
+      return ['minecraft:crafter', {
+        crafting: 'false',
+        orientation: `${(block as any).facing ?? 'north'}_up`,
+        triggered: String((block as any).triggered ?? false),
+      }]
     case 'dropper':
-      return ['minecraft:dropper', {
+    case 'dispenser':
+      return [`minecraft:${block.type}`, {
         facing: (block as any).facing ?? 'north',
         triggered: String((block as any).triggered ?? false),
       }]
@@ -444,6 +475,41 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
   if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
+  if (name.endsWith('_door')) {
+    // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#159)
+    return {
+      type: name === 'minecraft:iron_door' ? 'door_iron' : 'door_wood',
+      half: props.half === 'upper' ? 'upper' : 'lower',
+      facing: (props.facing ?? 'north'),
+      open: props.open === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
+  if (name.endsWith('_trapdoor')) {
+    // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#157)
+    return {
+      type: name === 'minecraft:iron_trapdoor' ? 'trapdoor_iron' : 'trapdoor_wood',
+      facing: (props.facing ?? 'north'),
+      open: props.open === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
+  if (name.endsWith('_fence_gate')) {
+    return {
+      type: 'fence_gate',
+      facing: (props.facing ?? 'north'),
+      open: props.open === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
+  if (name.endsWith('copper_bulb')) {
+    // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
+    return {
+      type: 'copper_bulb',
+      lit: props.lit === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
   if (name === 'minecraft:rail') {
     // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4)。通常レールだけが曲線を取る (#140)
     return { type: 'rail', shape: (props.shape ?? 'north_south') } as BlockState
@@ -500,9 +566,17 @@ function minecraftToBlockState(
     } as BlockState
   }
 
-  if (name === 'minecraft:dropper') {
+  if (name === 'minecraft:crafter') {
     return {
-      type: 'dropper',
+      type: 'crafter',
+      facing: ((props.orientation ?? 'north_up').split('_')[0]) as any,
+      triggered: props.triggered === 'true',
+      occupiedSlots: 0,
+    } as BlockState
+  }
+  if (name === 'minecraft:dropper' || name === 'minecraft:dispenser') {
+    return {
+      type: name === 'minecraft:dispenser' ? 'dispenser' : 'dropper',
       facing: (props.facing ?? 'north') as any,
       count: 0,
       triggered: props.triggered === 'true',

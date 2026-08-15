@@ -131,6 +131,11 @@ async function generateFixture(name: string): Promise<void> {
   // 残骸状態によっては以後の入力が全て空振りする)。掃除は必ず unfreeze 区間で行う
   rcon('tick', 'unfreeze')
   rcon('player', PLAYER_NAME, 'kill') // 前回の残骸 (居なければ失敗するが無視される)
+  // **プレイヤー以外のエンティティも全て消す** (#161)。fx_setup が消すのは region 内の
+  // ブロックだけなので、前の fixture が残したマインカート (#146 の summon) や
+  // ディスペンサーが射出したアイテムがワールドに居座り、**fake player のクリックを
+  // 奪って use が空振りする**。テストワールドにはハーネスの生成物しか無いので全消しでよい
+  rcon('kill', '@e[type=!player]')
   await sleep(400)
   rcon('tick', 'freeze')
   scarpet('fx_setup()')

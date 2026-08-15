@@ -79,8 +79,14 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
     const sim = mcToSim(b.block)
     if (sim) {
       // コンテナは items で初期個数を与える (blockstate に現れない BE 内容)
-      if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper' || sim.type === 'container')) {
+      if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper'
+        || sim.type === 'dispenser' || sim.type === 'container')) {
         (sim as { count?: number }).count = b.items
+      }
+      // クラフターは「埋まっているスロット数」を読むので個数ではなくスロット数へ写す。
+      // ハーネスの充填は container.0 の 1 スロットに N 個入れるので、N>0 なら 1 (#163)
+      if (b.items !== undefined && sim.type === 'crafter') {
+        (sim as { occupiedSlots?: number }).occupiedSlots = b.items > 0 ? 1 : 0
       }
       world.setBlockAt(b.pos, sim)
     }

@@ -1,0 +1,52 @@
+# 銅の電球は 1 ブロックで T フリップフロップになる (#155)。
+#
+# neighborChanged で `hasNeighborSignal != POWERED` のとき、
+# **立ち上がりなら LIT を反転**し POWERED を信号に追随させる
+# [確定: 26.2 CopperBulbBlock.checkAndFlip]。tile tick を持たないので遅延 0gt。
+#
+# レバーを 4 回操作すると:
+#   ON  → lit=true  (反転)   powered=true
+#   OFF → lit=true  (保持)   powered=false
+#   ON  → lit=false (反転)   powered=true
+#   OFF → lit=false (保持)   powered=false
+# つまり **ON にした回数の偶奇** が lit に残る = 1 ブロックの記憶素子。
+#
+# 真上のオブザーバーは blockstate が変わるたびに発火するので、
+# **lit が変わらない立ち下がりでも発火する** (powered が変わっているため)。
+#
+# 期待値は実機 (fixture copper-bulb-toggle) が正。
+meta {
+  name: 銅の電球は立ち上がりで lit が反転する
+  ref: #155 / fixture copper-bulb-toggle / 26.2 CopperBulbBlock.checkAndFlip
+}
+
+fixture copper-bulb-toggle
+
+state {
+  # 1 回目 ON — レバーと同じ tick で確定する (遅延 0gt)
+  t2 (1,1,3) lever[face=floor,facing=north,powered=true]
+  t2 (2,1,3) copper_bulb[lit=true,powered=true]
+}
+
+state {
+  # OFF では lit は変わらず powered だけ落ちる
+  t6 (2,1,3) copper_bulb[lit=true,powered=false]
+}
+
+state {
+  # 2 回目 ON で lit が反転する
+  t10 (2,1,3) copper_bulb[lit=false,powered=true]
+}
+
+state {
+  # 2 回目 OFF も lit は保持
+  t14 (2,1,3) copper_bulb[lit=false,powered=false]
+}
+
+state {
+  # オブザーバーは 4 回とも発火する (立ち下がりでも powered が変わるため)
+  t4 (2,2,3) observer[facing=down,powered=true]
+  t8 (2,2,3) observer[facing=down,powered=true]
+  t12 (2,2,3) observer[facing=down,powered=true]
+  t16 (2,2,3) observer[facing=down,powered=true]
+}

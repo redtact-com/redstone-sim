@@ -2,7 +2,7 @@ import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
-  RailShape, BlockType, DetectorRailState,
+  RailShape, BlockType, DetectorRailState, DoorLikeState,
 } from './types.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
@@ -690,7 +690,7 @@ export class SimWorld {
         // count (内容) は authored 保持 (物流の初期条件)。
         const enabled = !isBlockPowered(this, pos)
         this.blocks.set(key, { ...block, enabled, cooldownUntil: 0 })
-      } else if (block.type === 'dropper') {
+      } else if (block.type === 'dropper' || block.type === 'dispenser') {
         // 受電で triggered を確定するが initialize では発火しない (tile tick 予約なし。
         // authored 安定状態は「既に発火済み」相当。runtime の立ち上がりでのみ発火)。
         const powered = this.isDropperPowered(pos)
@@ -867,6 +867,36 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
+    } else if (block.type === 'door_wood') {
+      // 素手で開閉する [確定: 26.2 DoorBlock.useWithoutItem — canOpenByHand]。
+      // トラップドアと同じく **open だけ**動き powered は据え置かれる。
+      // vanilla は押した半分だけを書き換え、相方は updateShape で追従するので
+      // sim では両方に反映する。鉄のドアはここに来ない
+      const open = !block.open
+      this.setBlockAt(pos, { ...block, open })
+      this.emitShapeUpdate(pos)
+      const otherPos: Pos3D = block.half === 'lower'
+        ? [pos[0], pos[1] + 1, pos[2]]
+        : [pos[0], pos[1] - 1, pos[2]]
+      const other = this.getBlockAt(otherPos)
+      if (other?.type === 'door_wood' && other.half !== block.half) {
+        this.setBlockAt(otherPos, { ...other, open })
+        this.emitShapeUpdate(otherPos)
+      }
+      this.traceProcess('PI', 'Do', open ? 'n' : 'f', 0)
+      this.traceOpenUpdate(pos)
+      this.traceCloseUpdate('Do', open ? 'n' : 'f', 0, 'PI')
+    } else if (block.type === 'trapdoor_wood' || block.type === 'fence_gate') {
+      // 素手で開閉する [確定: 26.2 TrapDoorBlock.useWithoutItem — canOpenByHand]。
+      // **open だけが動き powered は据え置かれる**ので、給電中に手で閉めると
+      // 信号が変わるまで閉じたまま残る (意図的なデシンク)。
+      // 鉄のトラップドアは canOpenByHand=false なのでここに来ない
+      const next: DoorLikeState = { ...block, open: !block.open }
+      this.setBlockAt(pos, next)
+      this.traceProcess('PI', abbrOf(next), next.open ? 'n' : 'f', 0)
+      this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
+      this.traceCloseUpdate(abbrOf(next), next.open ? 'n' : 'f', 0, 'PI')
     } else if (block.type === 'detector_rail') {
       // マインカートの「乗り込み」を手動トリガする (#146)。既に powered なら no-op
       // [確定: 26.2 DetectorRailBlock.entityInside の `if (!state.getValue(POWERED))` ガード]。
@@ -1107,13 +1137,18 @@ export class SimWorld {
       if (next.powered) this.schedule(pos, 2, 0)  // OFF tick を背面 NC より先に予約
       this.propagateChange(pos)          // 背面 1 マスへ strong 15 の NC
       this.traceCloseUpdate('Ob', next.powered ? 'n' : 'f', 2, 'ST')
-    } else if (block.type === 'dropper') {
+    } else if (block.type === 'dropper' || block.type === 'dispenser') {
       // vanilla DropperBlock.dispenseFrom (ST フェーズ) [確定: 26.2]:
       // ランダムスロットの 1 個を前方コンテナへ挿入。sim は種別なしなので count を移す。
+      //
+      // **ディスペンサーは挿入しない**。26.2 で DropperBlock だけが dispenseFrom を
+      // override しており [確定: DropperBlock.java:48]、ディスペンサーは常にワールドへ
+      // 射出する = 前方がコンテナでも入らない
+      // [実機 fixture dispenser-no-insert: 同じ配置でドロッパー側だけコンパレーターが反応]
       if (block.count > 0) {
         const destPos = neighbor(pos, block.facing)
         const dest = this.getBlockAt(destPos)
-        if (canContainerAccept(dest)) {
+        if (block.type === 'dropper' && canContainerAccept(dest)) {
           // 前方コンテナに空きあり → 1 個挿入
           const d = dest as HopperState | DropperState | ContainerState
           this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
@@ -1121,9 +1156,10 @@ export class SimWorld {
           changed.push(posKey(pos), posKey(destPos))
           this.emitComparatorUpdate(destPos)
           this.emitComparatorUpdate(pos)
-        } else if (!isContainerType(dest?.type)) {
-          // 前方が非コンテナ → vanilla は発射 (アイテムエンティティ生成)。
+        } else if (block.type === 'dispenser' || !isContainerType(dest?.type)) {
+          // 射出 → vanilla はアイテムエンティティを生成する。
           // エンティティ境界原則 (13 §4.2) により 1 個消費して何も出さない。
+          // ディスペンサーは前方がコンテナでも常にこちら
           this.setBlockAt(pos, { ...block, count: block.count - 1 })
           changed.push(posKey(pos))
           this.emitComparatorUpdate(pos)
@@ -1231,6 +1267,7 @@ export class SimWorld {
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy':
       case 'detector_rail':
+      case 'crafter':
       case 'repeater':
       case 'comparator':
         return true
@@ -1991,7 +2028,27 @@ export class SimWorld {
         }
         break
       }
-      case 'dropper': {
+      case 'crafter': {
+        // vanilla CrafterBlock.neighborChanged [確定: 26.2 CrafterBlock.java:73-88]:
+        //   shouldTrigger = hasNeighborSignal(pos) ← **疑似接続を持たない**
+        //   立ち上がり → scheduleTick 4gt + TRIGGERED=true / 立ち下がり → false
+        // ディスペンサーが pos.above() も見る [確定: DispenserBlock.java:131] のと対照的
+        // [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
+        const signal = isBlockPowered(this, pos)
+        if (signal && !block.triggered) {
+          this.setBlockAt(pos, { ...block, triggered: true })
+          this.emitShapeUpdate(pos)
+          // 4gt の tile tick。**レシピ非対応なので実行しても何も起きない**が、
+          // vanilla と同じ機構に乗せておく (将来クラフトを足すときの受け皿)
+          this.schedule(pos, 4, 0)
+        } else if (!signal && block.triggered) {
+          this.setBlockAt(pos, { ...block, triggered: false })
+          this.emitShapeUpdate(pos)
+        }
+        break
+      }
+      case 'dropper':
+      case 'dispenser': {
         // vanilla DispenserBlock.neighborChanged [確定: 26.2]:
         // 受電 (通常 ∪ QC) の立ち上がりで TRIGGERED を立て 4gt tick を予約、
         // 立ち下がりで TRIGGERED 解除。発火 (dispenseFrom) は ST フェーズの tick。
@@ -2003,6 +2060,69 @@ export class SimWorld {
         } else if (!powered && block.triggered) {
           this.setBlockAt(pos, { ...block, triggered: false })
           this.emitShapeUpdate(pos)
+        }
+        break
+      }
+      case 'door_wood':
+      case 'door_iron': {
+        // vanilla DoorBlock.neighborChanged [確定: 26.2 DoorBlock.java:225-238]:
+        //   signal = hasNeighborSignal(自分) || hasNeighborSignal(相方の半分)
+        //   更新元が同じドアブロックなら無視する (2 つの半分が更新を往復しないガード)
+        // [実機 fixture door-redstone: 下半分だけ / 上半分だけ どちらの給電でも両方開く]
+        if (origin === block.type) break
+        const otherPos: Pos3D = block.half === 'lower'
+          ? [pos[0], pos[1] + 1, pos[2]]
+          : [pos[0], pos[1] - 1, pos[2]]
+        const signal = isBlockPowered(this, pos) || isBlockPowered(this, otherPos)
+        if (signal !== block.powered) {
+          this.setBlockAt(pos, { ...block, open: signal, powered: signal })
+          this.emitShapeUpdate(pos)   // flag 2 なので近隣更新は出さない
+          // 相方へミラーする。vanilla では updateShape が「相手の状態をコピー」して
+          // 同期を保つ [確定: DoorBlock.java:104-106]。片方にしか近隣更新が届かない
+          // ケース (レバーが下半分にだけ隣接する等) ではこれが無いと上半分が取り残される
+          const other = this.getBlockAt(otherPos)
+          if ((other?.type === 'door_wood' || other?.type === 'door_iron')
+              && other.half !== block.half) {
+            this.setBlockAt(otherPos, { ...other, open: signal, powered: signal })
+            this.emitShapeUpdate(otherPos)
+          }
+        }
+        break
+      }
+      case 'trapdoor_wood':
+      case 'trapdoor_iron':
+      case 'fence_gate': {
+        // vanilla TrapDoorBlock / FenceGateBlock.neighborChanged [確定: 26.2]:
+        //   signal != POWERED のとき open を signal に合わせ powered を追随させる。
+        //   書き込みは **flag 2** (UPDATE_CLIENTS のみ) なので
+        //     - UPDATE_NEIGHBORS が無い → **近隣更新を出さない**
+        //     - 16 も無い → updateNeighbourShapes は走りオブザーバーには見える
+        //   [実機 fixture trapdoor-redstone: 開閉では隣の BUD ピストンが伸びず、
+        //    真上のオブザーバーは発火する]
+        const signal = isBlockPowered(this, pos)
+        if (signal !== block.powered) {
+          this.setBlockAt(pos, { ...block, open: signal, powered: signal })
+          this.emitShapeUpdate(pos)   // flag 2 でも updateShape は飛ぶ
+          // submitMultiNC は **出さない** (flag 2 に UPDATE_NEIGHBORS が無いため)
+        }
+        break
+      }
+      case 'copper_bulb': {
+        // vanilla CopperBulbBlock.checkAndFlip [確定: 26.2]:
+        //   signal != POWERED のとき、**立ち上がりなら LIT を反転**し POWERED を追随。
+        //   tile tick を使わないので遅延 0gt (近隣更新の処理中に同期確定する)
+        //   [実機 fixture copper-bulb-toggle: レバーと同じ tick で確定し、
+        //    立ち下がりでは lit が変わらず powered だけ落ちる]
+        const signal = isBlockPowered(this, pos)
+        if (signal !== block.powered) {
+          const lit = block.powered ? block.lit : !block.lit   // 立ち上がりでのみ反転
+          this.setBlockAt(pos, { ...block, lit, powered: signal })
+          // setBlock(flag 3): 周囲 6 方向へ近隣更新 + updateNeighbourShapes。
+          // powered だけ変わった立ち下がりでもオブザーバーは発火する (実機で確認済み)
+          this.emitShapeUpdate(pos)
+          this.submitMultiNC(pos)
+          // lit が変わるとコンパレーターの読み値が変わる
+          if (lit !== block.lit) this.emitComparatorUpdate(pos)
         }
         break
       }
@@ -2146,6 +2266,12 @@ export class SimWorld {
     // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
     //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
     if (isContainerType(back?.type)) return effectiveContainerSignal(back)
+    // クラフターは「埋まっているスロット数」0-9 を返す (充填率ではない)
+    // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal — 空でない or 無効化されたスロット数]
+    if (back?.type === 'crafter') return back.occupiedSlots
+    // 銅の電球も hasAnalogOutputSignal を持つ。読むのは **lit** で powered ではない
+    // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+    if (back?.type === 'copper_bulb') return back.lit ? 15 : 0
 
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
@@ -2216,6 +2342,17 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
       return (a.type === 'weighted_pressure_plate_light' || a.type === 'weighted_pressure_plate_heavy') &&
         (a.powered ? a.pressedPower : 0) !== (b.powered ? b.pressedPower : 0)
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
+    // 銅の電球は lit だけでなく powered も blockstate なので、立ち下がりでも観測される
+    // [実機 fixture copper-bulb-toggle: レバーを切った tick でもオブザーバーが発火]
+    case 'door_wood':
+    case 'door_iron':
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+    case 'fence_gate': return 'open' in a
+      && ((a as { open: boolean }).open !== b.open
+        || (a as { powered: boolean }).powered !== b.powered)
+    case 'copper_bulb': return a.type === 'copper_bulb'
+      && (a.lit !== b.lit || a.powered !== b.powered)
     case 'note_block':  return a.type === 'note_block' && (a.powered !== b.powered || a.note !== b.note)
     case 'target':      return a.type === 'target' && a.outputPower !== b.outputPower
     case 'observer':    return a.type === 'observer' && a.powered !== b.powered
@@ -2225,7 +2362,10 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     // hopper.enabled / dropper.triggered は blockstate プロパティ → 観測対象。
     // count (内容) は BE で非観測 (コンパレーターのみ CU で読む)。
     case 'hopper':      return a.type === 'hopper' && a.enabled !== b.enabled
-    case 'dropper':     return a.type === 'dropper' && a.triggered !== b.triggered
+    case 'crafter':     return a.type === 'crafter' && a.triggered !== b.triggered
+    case 'dropper':
+    case 'dispenser':   return (a.type === 'dropper' || a.type === 'dispenser')
+      && a.triggered !== b.triggered
     // solid.powered / container.signal / *.count は blockstate ではない → 非観測
     default:            return false
   }

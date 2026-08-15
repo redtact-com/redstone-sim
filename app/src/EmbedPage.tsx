@@ -29,30 +29,13 @@ import {
   parseInbound, buildAllowedOrigins, isOriginAllowed,
   type InboundMessage, type OutboundMessage, type EmbedErrorCode,
 } from './embed/protocol'
+import { TRIGGER_META, TRIGGER_TYPES, isTriggerOn } from './palette'
+import type { TriggerEntry } from './palette'
 
 const GRID_W = 16
 const GRID_H = 16
 const GRID_LAYERS = 8
 
-/** interact モードで手動トリガできる素子と表示略号 */
-const TRIGGER_META: Record<string, { abbr: string }> = {
-  lever: { abbr: 'Le' },
-  button_stone: { abbr: 'Bu' },
-  button_wood: { abbr: 'Bu' },
-  pressure_plate_wood: { abbr: 'Pp' },
-  pressure_plate_stone: { abbr: 'Pp' },
-  weighted_pressure_plate_light: { abbr: 'Wp' },
-  weighted_pressure_plate_heavy: { abbr: 'Wp' },
-  target: { abbr: 'Tg' },
-}
-const TRIGGER_TYPES = new Set(Object.keys(TRIGGER_META))
-
-function isTriggerOn(b: { type: string; powered?: boolean; outputPower?: number }): boolean {
-  if (b.type === 'target') return (b.outputPower ?? 0) > 0
-  return b.powered ?? false
-}
-
-interface TriggerEntry { pos: [number, number, number]; type: string }
 
 const GRID_BOUNDS: WorldSnapshot['bounds'] = {
   x: [0, GRID_W - 1], y: [0, GRID_LAYERS - 1], z: [0, GRID_H - 1],
