@@ -263,6 +263,9 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       // 物流ホッパー (#65)。facing = 送り込み方向 (editor は水平のみ。既定 down)。
       // count = 内容個数 (容量 320)。enabled は initialize で受電から確定
       return { type: 'hopper', facing: dir, count: opts.count ?? 0, enabled: true }
+    case 'crafter':
+      // 受電部分のみ実装。occupiedSlots はコンパレーターが読む手動値 (#163)
+      return { type: 'crafter', facing: dir, triggered: false, occupiedSlots: opts.count ?? 0 }
     case 'dropper':
     case 'dispenser':
       // 物流ドロッパー (#65) / ディスペンサー (#161)。facing = 出力方向。

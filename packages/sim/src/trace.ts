@@ -94,6 +94,7 @@ export function abbrOf(b: BlockState): string {
     case 'hopper':         return 'Ho'
     case 'dropper':        return 'Dr'
     case 'dispenser':      return 'Di'
+    case 'crafter':        return 'Cr'
     case 'piston':
     case 'sticky_piston':  return 'Pi'
     case 'piston_head':    return 'Ph'

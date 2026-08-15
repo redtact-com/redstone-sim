@@ -23,7 +23,7 @@ const DIR6_TYPES = new Set<BlockType>([
  * 隣にレールがあれば形状は自動接続で上書きされる (rail.ts の planRailPlacement)。
  */
 const HDIR_TYPES = new Set<BlockType>([
-  'repeater', 'comparator', 'wall_torch', 'dropper', 'dispenser',
+  'repeater', 'comparator', 'wall_torch', 'dropper', 'dispenser', 'crafter',
   'rail', 'powered_rail', 'activator_rail', 'detector_rail',
   'trapdoor_wood', 'trapdoor_iron', 'fence_gate', 'door_wood', 'door_iron',
 ])

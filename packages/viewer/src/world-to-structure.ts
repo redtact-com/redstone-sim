@@ -96,6 +96,11 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:hopper[enabled=${block.enabled},facing=${block.facing}]`
     case 'dispenser':
       return `minecraft:dispenser[facing=${block.facing},triggered=${block.triggered}]`
+    case 'crafter':
+      // orientation は front_top の組。sim は front (facing) しか持たないので
+      // 上向き固定で合成する。crafting はレシピ非対応なので常に false (#163)
+      return `minecraft:crafter[crafting=false,orientation=${block.facing}_up,`
+        + `triggered=${block.triggered}]`
     case 'dropper':
       // facing は反転しない。triggered は見た目に影響しないが付与する
       return `minecraft:dropper[facing=${block.facing},triggered=${block.triggered}]`
@@ -204,6 +209,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:hopper',
   'minecraft:dropper',
   'minecraft:dispenser',
+  'minecraft:crafter',
   'minecraft:stone',
   'minecraft:cobblestone',
   'minecraft:glass',

@@ -558,6 +558,33 @@ export interface DoorState {
   powered: boolean
 }
 
+/**
+ * クラフター (#163)。**受電部分だけを実装し、レシピは非対応**。
+ *
+ *   - `triggered` は `hasNeighborSignal(pos)` の立ち上がりで立ち、4gt の tile tick を
+ *     予約する [確定: 26.2 CrafterBlock.java:73-88]
+ *   - **疑似接続を持たない**。ディスペンサーが `pos.above()` も見る [確定:
+ *     DispenserBlock.java:131] のに対し、クラフターは自分の位置しか見ない
+ *     [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
+ *   - コンパレーターは **「空でない or 無効化されたスロット数」0-9** を読む
+ *     [確定: 26.2 CrafterBlockEntity.getRedstoneSignal:251-262]。コンテナの
+ *     充填率とは**別系統**の読み方
+ *
+ * **レシピ体系はアイテム種別を要求するのでスコープ外** (13 §2 の物流モデルは
+ * 「コンテナ内の数値」までしか持たない)。したがって:
+ *   - `crafting=true` の成功パルスは**出ない**
+ *   - 9 スロットの中身・無効化スロットは持たず、`occupiedSlots` を手動指定の
+ *     折衷値として扱う (コンテナの手動 `signal` と同じ前例。10 C6)
+ */
+export interface CrafterState {
+  type: 'crafter'
+  /** ORIENTATION の front。描画用で回路挙動には影響しない */
+  facing: Dir6
+  triggered: boolean
+  /** コンパレーターが読む「埋まっているスロット数」0-9 (手動指定の折衷) */
+  occupiedSlots: number
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -592,6 +619,7 @@ export type BlockState =
   | CopperBulbState
   | DoorLikeState
   | DoorState
+  | CrafterState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -721,6 +749,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   hopper: false,
   dropper: false,
   dispenser: false,
+  crafter: false,
   solid: false,
   slime_block: false,
   honey_block: false,

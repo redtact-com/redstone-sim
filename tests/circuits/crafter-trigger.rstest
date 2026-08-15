@@ -1,0 +1,49 @@
+# クラフターは疑似接続を持たない (#163)。
+#
+# `neighborChanged` は `hasNeighborSignal(pos)` **だけ**を見る
+# [確定: 26.2 CrafterBlock.java:73-88]。ディスペンサーが `pos.above()` も見る
+# [確定: DispenserBlock.java:131] のと対照的で、同じ「4gt ラッチ素子」でありながら
+# 疑似接続の有無が違う。
+#
+# t4/t6 でレッドストーンブロックを **1 マス上の隣** (真上ではない) に置くが、
+# setblock の近隣更新は置いた位置の 6 方向にしか届かないので、この時点では
+# **条件を満たしても更新が来ておらず BUD 状態**になる。
+# t8/t10 で隣に石を置いて更新を送ると、**ディスペンサーだけが起動する**。
+#
+# コンパレーターは「埋まっているスロット数」を読む [確定: CrafterBlockEntity
+# .getRedstoneSignal] ので、1 スロットに 3 個入れても出力は 1 (充填率ではない)。
+#
+# 期待値は実機 (fixture crafter-trigger) が正。
+meta {
+  name: クラフターは疑似接続で起動しない
+  ref: #163 / fixture crafter-trigger / 26.2 CrafterBlock.neighborChanged
+}
+
+fixture crafter-trigger
+
+state {
+  # 直接受電なら起動する
+  t2 (1,1,1) crafter[crafting=false,orientation=north_up,triggered=true]
+}
+
+state {
+  # コンパレーターは占有スロット数 (1) を読む。3 個入れても 1 のまま
+  t2 (2,1,1) comparator[facing=west,mode=compare,powered=true]
+  t2 (3,1,1) redstone_wire[east=none,north=none,power=1,south=none,west=side]
+}
+
+state {
+  # 更新が届いてもクラフターは起動しない (疑似接続なし)
+  t8 (1,1,4) crafter[crafting=false,orientation=north_up,triggered=false]
+  t20 (1,1,4) crafter[crafting=false,orientation=north_up,triggered=false]
+}
+
+state {
+  # 同じ配置でディスペンサーは起動する (疑似接続あり)
+  t10 (1,1,6) dispenser[facing=east,triggered=true]
+}
+
+state {
+  # レバーを切ると triggered が落ちる
+  t14 (1,1,1) crafter[crafting=false,orientation=north_up,triggered=false]
+}
