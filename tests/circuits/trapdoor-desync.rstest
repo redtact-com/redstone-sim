@@ -1,0 +1,39 @@
+# 素手で開けると open だけが動き、powered は据え置かれる (#157)。
+#
+# `useWithoutItem` は toggle するだけで POWERED を触らない
+# [確定: 26.2 TrapDoorBlock.java:86-95,110-123]。一方 neighborChanged は
+# `signal != POWERED` のときしか補正しない [確定: :125-144] ので、
+# **通電していないのに開いている** という状態がそのまま残る。
+#
+# 鉄のトラップドアは `canOpenByHand=false` なので同じ操作を無視する = 対照。
+# ズレが解消するのは信号が変わったとき (t8 のレバー OFF)。
+#
+# 期待値は実機 (fixture trapdoor-desync) が正。
+meta {
+  name: 素手の開閉は powered を動かさない (デシンク)
+  ref: #157 / fixture trapdoor-desync / 26.2 TrapDoorBlock.useWithoutItem
+}
+
+fixture trapdoor-desync
+
+state {
+  # 素手で開ける → 通電していないのに open=true
+  t2 (1,1,3) oak_trapdoor[facing=north,half=bottom,open=true,powered=false,waterlogged=false]
+}
+
+state {
+  # 鉄は素手では開かない (対照)
+  t4 (3,1,3) iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]
+}
+
+state {
+  # レバー ON。木は既に開いているので powered だけが追随する
+  t6 (1,1,3) oak_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]
+  t6 (3,1,3) iron_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]
+}
+
+state {
+  # レバー OFF で両方閉じ、ズレが解消する
+  t8 (1,1,3) oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]
+  t8 (3,1,3) iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]
+}

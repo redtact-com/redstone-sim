@@ -1,0 +1,318 @@
+{
+  "name": "trapdoor-redstone",
+  "description": "#157 トラップドア / フェンスゲートの受電挙動。どちらも neighborChanged で hasNeighborSignal != POWERED のとき OPEN を信号に合わせ POWERED を追随させる [確定: 26.2 TrapDoorBlock.java:125-144 / FenceGateBlock.java:182-201]。**setBlock の flag が 2** (UPDATE_CLIENTS のみ) なので近隣更新を出さないが、16 が立っていないので updateNeighbourShapes は走りオブザーバーには見えるはず。レバー (2,1,3) の 3 面に 木のトラップドア (1,1,3) / 鉄のトラップドア (3,1,3) / フェンスゲート (2,1,4) を付けて同時に開閉させる。木トラップドアの真上のオブザーバー (1,2,3) が発火すれば updateShape 経路は生きている。西の (0,1,3) のピストンは t2 に quasi セルの隣へレッドストーンブロックを置いて「伸びるべきだが更新が届いていない」BUD 状態にしてあり、**トラップドアの開閉では伸びない** (flag 2 = 近隣更新なし) ことを確かめる。t8 で隣に石を置いて更新を送ると初めて伸びる = BUD は成立していたことの対照。",
+  "mcVersion": "1.21.1",
+  "ticks": 14,
+  "region": {
+    "from": [
+      -2,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      4,
+      7
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "oak_fence_gate[facing=north,in_wall=false,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        3
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        3
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        3
+      ],
+      "block": "piston[extended=false,facing=west]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        3
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        2,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        0,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "stone"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            2
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            4
+          ],
+          "block": "oak_fence_gate[facing=north,in_wall=false,open=true,powered=true]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "iron_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            3
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            3
+          ],
+          "block": "redstone_lamp[lit=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            4
+          ],
+          "block": "oak_fence_gate[facing=north,in_wall=false,open=false,powered=false]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            2
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            3
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 9,
+      "changes": [
+        {
+          "pos": [
+            -1,
+            1,
+            3
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            3
+          ],
+          "block": "piston[extended=true,facing=west]"
+        }
+      ]
+    },
+    {
+      "tick": 11,
+      "changes": [
+        {
+          "pos": [
+            -1,
+            1,
+            3
+          ],
+          "block": "piston_head[facing=west,short=false,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            1,
+            3,
+            3
+          ],
+          "block": "redstone_lamp[lit=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T16:07:40.194Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

@@ -2,7 +2,7 @@ import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
-  RailShape, BlockType, DetectorRailState,
+  RailShape, BlockType, DetectorRailState, DoorLikeState,
 } from './types.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
@@ -867,6 +867,17 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
+    } else if (block.type === 'trapdoor_wood' || block.type === 'fence_gate') {
+      // 素手で開閉する [確定: 26.2 TrapDoorBlock.useWithoutItem — canOpenByHand]。
+      // **open だけが動き powered は据え置かれる**ので、給電中に手で閉めると
+      // 信号が変わるまで閉じたまま残る (意図的なデシンク)。
+      // 鉄のトラップドアは canOpenByHand=false なのでここに来ない
+      const next: DoorLikeState = { ...block, open: !block.open }
+      this.setBlockAt(pos, next)
+      this.traceProcess('PI', abbrOf(next), next.open ? 'n' : 'f', 0)
+      this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
+      this.traceCloseUpdate(abbrOf(next), next.open ? 'n' : 'f', 0, 'PI')
     } else if (block.type === 'detector_rail') {
       // マインカートの「乗り込み」を手動トリガする (#146)。既に powered なら no-op
       // [確定: 26.2 DetectorRailBlock.entityInside の `if (!state.getValue(POWERED))` ガード]。
@@ -2006,6 +2017,24 @@ export class SimWorld {
         }
         break
       }
+      case 'trapdoor_wood':
+      case 'trapdoor_iron':
+      case 'fence_gate': {
+        // vanilla TrapDoorBlock / FenceGateBlock.neighborChanged [確定: 26.2]:
+        //   signal != POWERED のとき open を signal に合わせ powered を追随させる。
+        //   書き込みは **flag 2** (UPDATE_CLIENTS のみ) なので
+        //     - UPDATE_NEIGHBORS が無い → **近隣更新を出さない**
+        //     - 16 も無い → updateNeighbourShapes は走りオブザーバーには見える
+        //   [実機 fixture trapdoor-redstone: 開閉では隣の BUD ピストンが伸びず、
+        //    真上のオブザーバーは発火する]
+        const signal = isBlockPowered(this, pos)
+        if (signal !== block.powered) {
+          this.setBlockAt(pos, { ...block, open: signal, powered: signal })
+          this.emitShapeUpdate(pos)   // flag 2 でも updateShape は飛ぶ
+          // submitMultiNC は **出さない** (flag 2 に UPDATE_NEIGHBORS が無いため)
+        }
+        break
+      }
       case 'copper_bulb': {
         // vanilla CopperBulbBlock.checkAndFlip [確定: 26.2]:
         //   signal != POWERED のとき、**立ち上がりなら LIT を反転**し POWERED を追随。
@@ -2240,6 +2269,11 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
     // 銅の電球は lit だけでなく powered も blockstate なので、立ち下がりでも観測される
     // [実機 fixture copper-bulb-toggle: レバーを切った tick でもオブザーバーが発火]
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+    case 'fence_gate': return 'open' in a
+      && ((a as { open: boolean }).open !== b.open
+        || (a as { powered: boolean }).powered !== b.powered)
     case 'copper_bulb': return a.type === 'copper_bulb'
       && (a.lit !== b.lit || a.powered !== b.powered)
     case 'note_block':  return a.type === 'note_block' && (a.powered !== b.powered || a.note !== b.note)

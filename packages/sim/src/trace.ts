@@ -102,6 +102,9 @@ export function abbrOf(b: BlockState): string {
     case 'rail':           return 'Ra'
     case 'detector_rail':  return 'Dt'
     case 'copper_bulb':    return 'Cb'
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':  return 'Td'
+    case 'fence_gate':     return 'Fg'
     case 'moving_piston':  return abbrOf(b.into)
     case 'air':            return 'Ai'
   }

@@ -194,6 +194,36 @@ export function mcToSim(state: string): BlockState | null {
       // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
       return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
                powered: props.powered === 'true' }
+    case 'oak_trapdoor':
+    case 'spruce_trapdoor':
+    case 'birch_trapdoor':
+    case 'jungle_trapdoor':
+    case 'acacia_trapdoor':
+    case 'dark_oak_trapdoor':
+    case 'mangrove_trapdoor':
+    case 'cherry_trapdoor':
+    case 'bamboo_trapdoor':
+    case 'crimson_trapdoor':
+    case 'warped_trapdoor':
+      // 木のトラップドアは樹種を問わず挙動が同じなので 1 種に集約する (#157)
+      return { type: 'trapdoor_wood', facing: (props.facing ?? 'north') as HDir,
+               open: props.open === 'true', powered: props.powered === 'true' }
+    case 'iron_trapdoor':
+      return { type: 'trapdoor_iron', facing: (props.facing ?? 'north') as HDir,
+               open: props.open === 'true', powered: props.powered === 'true' }
+    case 'oak_fence_gate':
+    case 'spruce_fence_gate':
+    case 'birch_fence_gate':
+    case 'jungle_fence_gate':
+    case 'acacia_fence_gate':
+    case 'dark_oak_fence_gate':
+    case 'mangrove_fence_gate':
+    case 'cherry_fence_gate':
+    case 'bamboo_fence_gate':
+    case 'crimson_fence_gate':
+    case 'warped_fence_gate':
+      return { type: 'fence_gate', facing: (props.facing ?? 'north') as HDir,
+               open: props.open === 'true', powered: props.powered === 'true' }
     case 'copper_bulb':
     case 'exposed_copper_bulb':
     case 'weathered_copper_bulb':
@@ -294,6 +324,17 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'detector_rail':
         return formatMcState('detector_rail', {
           powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
+        })
+      case 'trapdoor_wood':
+      case 'trapdoor_iron':
+        return formatMcState(sim.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor', {
+          facing: sim.facing, half: 'bottom', open: String(sim.open),
+          powered: String(sim.powered), waterlogged: 'false',
+        })
+      case 'fence_gate':
+        return formatMcState('oak_fence_gate', {
+          facing: sim.facing, in_wall: 'false',
+          open: String(sim.open), powered: String(sim.powered),
         })
       case 'copper_bulb':
         return formatMcState('copper_bulb', {
@@ -401,6 +442,13 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
     case 'detector_rail':
       props.powered = String(sim.powered)
       props.shape = sim.shape
+      break
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+    case 'fence_gate':
+      // facing / half / in_wall は authored の値を保持し、動的な 2 つだけ差し替える
+      props.open = String(sim.open)
+      props.powered = String(sim.powered)
       break
     case 'copper_bulb':
       // authored が酸化バリアントでもプロパティだけ差し替える (名前は保持)

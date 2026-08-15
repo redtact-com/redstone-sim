@@ -497,6 +497,32 @@ export interface CopperBulbState {
   powered: boolean
 }
 
+/**
+ * トラップドア / フェンスゲート (#157)。**受電で開閉する出力素子**。
+ *
+ * どちらも挙動はほぼ同一 [確定: 26.2 TrapDoorBlock.java:125-144 /
+ * FenceGateBlock.java:182-201]:
+ *   `signal != powered` のとき `open = signal` にして `powered` を追随させる。
+ *
+ * **書き込みは flag 2** (UPDATE_CLIENTS のみ) なのが要点で、
+ *   - `UPDATE_NEIGHBORS` が無い → **近隣更新を出さない**
+ *   - `UPDATE_KNOWN_SHAPE(16)` も無い → updateNeighbourShapes は走り
+ *     **オブザーバーには見える**
+ * [実機 fixture trapdoor-redstone: 開閉では隣の BUD ピストンが伸びず、
+ *  真上のオブザーバーは発火する]。銅の電球 (flag 3) との対比になる。
+ *
+ * 木製は素手で開閉でき (`canOpenByHand`)、そのとき **open だけが動いて powered は
+ * 据え置かれる**。信号が変わるまで補正されないので、意図的なデシンクを作れる。
+ * **鉄のトラップドアは素手で開かない** = レッドストーン専用の出力素子。
+ */
+export interface DoorLikeState {
+  type: 'trapdoor_wood' | 'trapdoor_iron' | 'fence_gate'
+  /** 描画用。回路挙動には影響しない */
+  facing: HDir
+  open: boolean
+  powered: boolean
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -529,6 +555,7 @@ export type BlockState =
   | PlainRailState
   | DetectorRailState
   | CopperBulbState
+  | DoorLikeState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -640,6 +667,9 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   lamp: false,
   note_block: false,
   copper_bulb: false,   // 受電で反転するだけで手動トリガは無い
+  trapdoor_wood: true,  // 素手で開閉できる (open だけ動く)
+  fence_gate: true,
+  trapdoor_iron: false, // レッドストーン専用。素手では開かない
   observer: false,
   redstone_block: false,
   piston: false,

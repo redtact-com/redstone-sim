@@ -1,0 +1,47 @@
+# トラップドア / フェンスゲートは受電で開閉するが、近隣更新を出さない (#157)。
+#
+# どちらも `signal != POWERED` のとき open を signal に合わせ powered を追随させる
+# [確定: 26.2 TrapDoorBlock.java:125-144 / FenceGateBlock.java:182-201]。
+#
+# **書き込みが flag 2 (UPDATE_CLIENTS のみ)** なのが要点:
+#   - UPDATE_NEIGHBORS が無い → **近隣更新を出さない**
+#   - UPDATE_KNOWN_SHAPE(16) も無い → updateNeighbourShapes は走る
+# 銅の電球 (flag 3 = 近隣更新も出す) との対比になる。
+#
+# 西のピストンは t2 に quasi セルの隣へレッドストーンブロックを置いて
+# 「伸びるべきだが更新が届いていない」BUD 状態にしてある。
+# t4/t6 の開閉では伸びず、t8 で隣に石を置いて更新を送ると初めて伸びる。
+#
+# 期待値は実機 (fixture trapdoor-redstone) が正。
+meta {
+  name: トラップドアの開閉は近隣更新を出さないがオブザーバーには見える
+  ref: #157 / fixture trapdoor-redstone / 26.2 TrapDoorBlock.neighborChanged
+}
+
+fixture trapdoor-redstone
+
+state {
+  # レバー ON — 木/鉄のトラップドアとフェンスゲートが同じ tick で開く
+  t4 (1,1,3) oak_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]
+  t4 (3,1,3) iron_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]
+  t4 (2,1,4) oak_fence_gate[facing=north,in_wall=false,open=true,powered=true]
+}
+
+state {
+  # 開閉では近隣更新が出ないので、BUD 状態のピストンは伸びないまま
+  t4 (0,1,3) piston[extended=false,facing=west]
+  t6 (0,1,3) piston[extended=false,facing=west]
+  t7 (0,1,3) piston[extended=false,facing=west]
+}
+
+state {
+  # 一方 updateShape は走るので、真上のオブザーバーは発火する
+  t6 (1,2,3) observer[facing=down,powered=true]
+  t6 (1,3,3) redstone_lamp[lit=true]
+}
+
+state {
+  # t8 で隣に石を置くと更新が届き、そこで初めてピストンが伸びる (BUD は成立していた)
+  t9 (0,1,3) piston[extended=true,facing=west]
+  t11 (-1,1,3) piston_head[facing=west,short=false,type=normal]
+}
