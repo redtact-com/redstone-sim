@@ -17,7 +17,13 @@ import { isBlockPowered } from './power.js'
 // 支持ブロック要件 (canSurvive / shouldBeRemoved) は**実装しない**。sim 全体が
 // 支持要件を持たない方針 (wire-shape.ts §「支持要件の無い sim でも」) で、
 // レールだけ落下破壊を入れると「レバーは浮くのにレールは落ちる」不整合になるため。
-// レッドストーン挙動には影響しない (#127 のコメント参照)。
+//
+// ただし実機の仕様は fixture として記録してある (#144。どちらも skipUntil 付き):
+//   - rail-support-break       … 給電中の連鎖の途中で床を抜くとレールが消え、
+//                                下流の powered が落ちる (連鎖が分断される)
+//   - rail-slope-support-break … 坂は真下だけでなく**登る側の水平隣接**も要求する
+//                                [確定: 26.2 BaseRailBlock.java:94-106]
+// 実装したくなったら skipUntil を外すだけで検証できる。
 // ============================================================
 
 /** 探索の打ち切り深度 [確定: 26.2 PoweredRailBlock.findPoweredRailSignal — searchDepth >= 8] */
