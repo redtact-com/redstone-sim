@@ -10,6 +10,8 @@ import {
 } from 'deepslate/nbt'
 import { Structure } from 'deepslate'
 import type { BlockState, Dir6 } from '@redstone/sim'
+import { isLitematicRoot, readLitematicBlocks } from './litematic'
+import type { RawPlacedBlock } from './litematic'
 
 const FACING_OPPOSITE: Record<string, string> = {
   north: 'south', south: 'north', east: 'west', west: 'east',
@@ -118,6 +120,30 @@ export interface ImportBounds {
   maxLayers?: number
 }
 
+/**
+ * どの形式としても 1 ブロックも読めなかったときの説明 (#172)。
+ *
+ * ファイル選択は `.schem` も受け付けるが、パーサはバニラ構造 NBT と litematic
+ * だけ。**黙って 0 ブロックになるのが一番たちが悪い**ので、何が起きたかを必ず
+ * 警告として返す。
+ */
+function describeEmptyImport(root: NbtCompound): string {
+  // WorldEdit Sponge 形式: v2 は root 直下、v3 は Schematic 配下
+  if (root.get('BlockData') !== undefined || root.get('Schematic') !== undefined) {
+    return 'WorldEdit (.schem) 形式には未対応です。.nbt / .litematic で書き出してください'
+  }
+  return '読み取れるブロックがありませんでした (対応形式は .nbt / .litematic)'
+}
+
+/** バニラ構造 NBT (.nbt) を形式非依存の RawPlacedBlock 列にする */
+function readVanillaStructureBlocks(root: NbtCompound): RawPlacedBlock[] {
+  return Structure.fromNbt(root).getBlocks().map((placed) => ({
+    pos: placed.pos as [number, number, number],
+    name: placed.state.getName().toString(),
+    props: placed.state.getProperties() as Record<string, string>,
+  }))
+}
+
 export interface ImportResult {
   /** エディタ用ブロックマップ (key: "x,y,z") */
   blocks: Map<string, BlockState>
@@ -128,7 +154,11 @@ export interface ImportResult {
 }
 
 /**
- * バニラ構造 NBT バイト列 → エディタブロックマップ。
+ * バニラ構造 NBT (.nbt) / Litematica (.litematic) のバイト列 →
+ * エディタブロックマップ。
+ *
+ * 形式は root を見て振り分ける (#172)。以降のブロック名変換・バウンド判定・
+ * 警告集約は**両形式で共通**なので、読み取り部だけを差し替える形にしている。
  *
  * bounds を渡すと盤面 (gridW×gridH×maxLayers) に収まらないブロックを省略し、
  * 省略数・非対応ブロックを種類ごとに集約した警告を返す。埋め込み表示 (#97) では
@@ -137,7 +167,9 @@ export interface ImportResult {
 export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {}): ImportResult {
   const { gridW, gridH, maxLayers } = bounds
   const nbt = NbtFile.read(bytes)
-  const structure = Structure.fromNbt(nbt.root)
+  const placedBlocks = isLitematicRoot(nbt.root)
+    ? readLitematicBlocks(nbt.root)
+    : readVanillaStructureBlocks(nbt.root)
 
   const resultBlocks = new Map<string, BlockState>()
   const warnings: string[] = []
@@ -149,8 +181,8 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
   let minX = Infinity, minY = Infinity, minZ = Infinity
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
 
-  for (const placed of structure.getBlocks()) {
-    const [bx, by, bz] = placed.pos as [number, number, number]
+  for (const placed of placedBlocks) {
+    const [bx, by, bz] = placed.pos
     if (maxLayers !== undefined && by >= maxLayers) {
       skippedAbove++
       continue
@@ -164,8 +196,7 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
       continue
     }
 
-    const name = placed.state.getName().toString()
-    const props = placed.state.getProperties() as Record<string, string>
+    const { name, props } = placed
 
     const block = minecraftToBlockState(name, props)
     if (!block) {
@@ -183,6 +214,7 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
     if (bz > maxZ) maxZ = bz
   }
 
+  if (placedBlocks.length === 0) warnings.push(describeEmptyImport(nbt.root))
   if (unsupported.size > 0) {
     const total = [...unsupported.values()].reduce((a, b) => a + b, 0)
     const kinds = [...unsupported.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
