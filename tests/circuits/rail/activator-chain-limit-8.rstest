@@ -1,0 +1,24 @@
+# activator_rail の連鎖も 8 個で打ち切られる (#138)。
+#
+# activator_rail は powered_rail と同じ PoweredRailBlock なので
+# [確定: 26.2 Blocks.java:2893]、findPoweredRailSignal の searchDepth >= 8 も共通。
+# chain-limit-8 (#127) の powered_rail 版と同じ配置・同じ結果になることを確認する
+# 対照テスト。レバーに接した 1 本目 (x=2) から数えて 8 本先 (x=10) までが点き、
+# 9 本先 (x=11) は点かない。
+#
+# 期待値は実機 (fixture activator-rail-chain) が正。
+meta {
+  name: activator_rail の連鎖も 8 個で打ち切られる
+  ref: #138 / fixture activator-rail-chain / 26.2 PoweredRailBlock.findPoweredRailSignal
+}
+
+fixture activator-rail-chain
+
+state {
+  # レバーに直接触れている 1 本目
+  t2 (2,1,3) activator_rail[powered=true,shape=east_west,waterlogged=false]
+  # 8 本先まで届く
+  t2 (10,1,3) activator_rail[powered=true,shape=east_west,waterlogged=false]
+  # 9 本先は届かない
+  t2 (11,1,3) activator_rail[powered=false,shape=east_west,waterlogged=false]
+}

@@ -307,6 +307,74 @@ describe('powered_rail は信号を出さない', () => {
 })
 
 /**
+ * activator_rail は powered_rail と同じ PoweredRailBlock の別インスタンス (#138)
+ * [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock::new]。
+ * 挙動の差は連鎖探索の `state.is(this)` ガードだけで、**動力の連鎖は同種間でしか
+ * 繋がらない** [確定: 26.2 PoweredRailBlock.isSameRailWithPower]
+ * [実機 fixture activator-rail-mixed-chain / activator-rail-chain]。
+ */
+describe('activator_rail (#138)', () => {
+  const arail = (shape: RailShape = 'east_west', powered = false): BlockState =>
+    ({ type: 'activator_rail', shape, powered })
+
+  /** x 方向に types[] の順でレールを敷き、西端にレバーを置いた世界 */
+  function mixedLine(types: ('powered_rail' | 'activator_rail')[]): SimWorld {
+    const w = new SimWorld()
+    for (let x = -1; x <= types.length; x++) w.setBlockAt([x, -1, 0], solid())
+    types.forEach((t, i) => {
+      w.setBlockAt([i, 0, 0], t === 'powered_rail' ? rail('east_west') : arail('east_west'))
+    })
+    w.setBlockAt([-1, 0, 0], { type: 'lever', facing: 'up', powered: false } as BlockState)
+    w.initialize()
+    return w
+  }
+  const on = (w: SimWorld, x: number): boolean => {
+    const b = w.getBlockAt([x, 0, 0])
+    return (b?.type === 'powered_rail' || b?.type === 'activator_rail') && b.powered
+  }
+
+  it('activator_rail 単体でもレバーで on になる', () => {
+    const w = mixedLine(['activator_rail'])
+    w.activateBlock(-1, 0, 0)
+    expect(on(w, 0)).toBe(true)
+  })
+
+  it('activator_rail 同士なら 8 本先まで連鎖する', () => {
+    const w = mixedLine(Array(10).fill('activator_rail'))
+    w.activateBlock(-1, 0, 0)
+    for (let x = 0; x <= 8; x++) expect(on(w, x), `x=${x}`).toBe(true)
+    expect(on(w, 9)).toBe(false)
+  })
+
+  it('powered_rail → activator_rail へは連鎖が渡らない', () => {
+    const w = mixedLine(['powered_rail', 'powered_rail', 'activator_rail', 'activator_rail'])
+    w.activateBlock(-1, 0, 0)
+    expect(on(w, 0)).toBe(true)
+    expect(on(w, 1)).toBe(true)
+    expect(on(w, 2), '異種の境目で切れる').toBe(false)
+    expect(on(w, 3)).toBe(false)
+  })
+
+  it('activator_rail → powered_rail へも連鎖が渡らない (逆向きも同じ)', () => {
+    const w = mixedLine(['activator_rail', 'activator_rail', 'powered_rail', 'powered_rail'])
+    w.activateBlock(-1, 0, 0)
+    expect(on(w, 0)).toBe(true)
+    expect(on(w, 1)).toBe(true)
+    expect(on(w, 2)).toBe(false)
+    expect(on(w, 3)).toBe(false)
+  })
+
+  it('形状の自動接続は種別をまたぐ (BlockTags.RAILS)', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], arail('east_west'))
+    // 既定形状 north_south で東隣に powered_rail を置く → 異種でも向きは繋がる
+    w.setBlockAt([1, 0, 0], rail('north_south'))
+    const changes = planRailPlacement(w, [1, 0, 0], 'north_south')
+    expect(changes.find(c => c.pos[0] === 1)?.shape).toBe('east_west')
+  })
+})
+
+/**
  * レールはピストンで押せる (PushReaction NORMAL) (#134)
  * [確定: 26.2 Blocks.java:689,692,2892 — レール 4 種とも pushReaction 未指定 = 既定 NORMAL]。
  * 着地時は onPlace が movedByPiston でも走るので、形状の決め直しと powered の

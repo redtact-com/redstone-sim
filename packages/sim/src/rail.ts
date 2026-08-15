@@ -1,4 +1,6 @@
-import type { Pos3D, RailShape, BlockState, PoweredRailState } from './types.js'
+import type {
+  Pos3D, RailShape, BlockState, PoweredRailState, PoweredRailType,
+} from './types.js'
 import type { SimWorld } from './world.js'
 import { isBlockPowered } from './power.js'
 
@@ -27,9 +29,14 @@ const below = (p: Pos3D): Pos3D => [p[0], p[1] - 1, p[2]]
 
 const sameColumn = (a: Pos3D, b: Pos3D): boolean => a[0] === b[0] && a[2] === b[2]
 
-/** レール系ブロックか [確定: 26.2 BaseRailBlock.isRail]。sim では powered_rail のみ */
+/**
+ * レール系ブロックか [確定: 26.2 BaseRailBlock.isRail = BlockTags.RAILS]。
+ * sim が持つのは powered_rail / activator_rail の 2 種。
+ * **形状の接続はこの判定 (種別をまたぐ)**、動力の連鎖は同種限定なので
+ * isSameRailWithPower 側で別途 type を突き合わせる (#138)。
+ */
 export function isRail(block: BlockState | null): block is PoweredRailState {
-  return !!block && block.type === 'powered_rail'
+  return !!block && (block.type === 'powered_rail' || block.type === 'activator_rail')
 }
 
 /**
@@ -249,11 +256,17 @@ export function planRailPlacement(
 /**
  * [確定: 26.2 PoweredRailBlock.findPoweredRailSignal]。
  * shape の前後どちらか一方 (forward) へ 1 マス進み、そこ (と 1 段下) に
- * 「繋がる向きの powered なパワードレール」があれば、そのレールが受電しているか、
+ * 「繋がる向きの powered な**同種の**レール」があれば、そのレールが受電しているか、
  * さらに先へ再帰する。深さ 8 で打ち切り。
+ *
+ * railType は連鎖の同一性を決める。vanilla の判定は `state.is(this)` で
+ * **ブロックそのものの一致**なので、powered_rail の連鎖は activator_rail を
+ * 通り抜けない (逆も同じ) [確定: 26.2 PoweredRailBlock.isSameRailWithPower]
+ * [実機 fixture activator-rail-mixed-chain: 両方向とも境目で切れる] (#138)。
  */
 export function findPoweredRailSignal(
   world: SimWorld, pos: Pos3D, shape: RailShape, forward: boolean, searchDepth: number,
+  railType: PoweredRailType,
 ): boolean {
   if (searchDepth >= MAX_RAIL_SEARCH_DEPTH) return false
 
@@ -288,17 +301,20 @@ export function findPoweredRailSignal(
       break
   }
 
-  if (isSameRailWithPower(world, [x, y, z], forward, searchDepth, dir)) return true
-  return checkBelow && isSameRailWithPower(world, [x, y - 1, z], forward, searchDepth, dir)
+  if (isSameRailWithPower(world, [x, y, z], forward, searchDepth, dir, railType)) return true
+  return checkBelow
+    && isSameRailWithPower(world, [x, y - 1, z], forward, searchDepth, dir, railType)
 }
 
 /** [確定: 26.2 PoweredRailBlock.isSameRailWithPower] */
 function isSameRailWithPower(
   world: SimWorld, pos: Pos3D, forward: boolean, searchDepth: number,
-  dir: 'north_south' | 'east_west',
+  dir: 'north_south' | 'east_west', railType: PoweredRailType,
 ): boolean {
   const state = world.getBlockAt(pos)
   if (!isRail(state)) return false
+  // `state.is(this)` — 同じブロックでなければ連鎖しない (#138)
+  if (state.type !== railType) return false
 
   // 進行軸と直交する向きのレールへは伝播しない
   const myShape = state.shape
@@ -311,18 +327,19 @@ function isSameRailWithPower(
 
   if (!state.powered) return false
   if (isBlockPowered(world, pos)) return true
-  return findPoweredRailSignal(world, pos, myShape, forward, searchDepth + 1)
+  return findPoweredRailSignal(world, pos, myShape, forward, searchDepth + 1, railType)
 }
 
 /**
- * パワードレールの powered をあるべき値として算出する
+ * パワードレール / アクティベーターレールの powered をあるべき値として算出する
  * [確定: 26.2 PoweredRailBlock.updateState]:
  *   hasNeighborSignal(自身6面) || 前方向の連鎖 || 後方向の連鎖
+ * 連鎖は同種のレールしかたどらない (#138)。
  */
 export function shouldRailBePowered(
-  world: SimWorld, pos: Pos3D, shape: RailShape,
+  world: SimWorld, pos: Pos3D, shape: RailShape, railType: PoweredRailType,
 ): boolean {
   return isBlockPowered(world, pos)
-    || findPoweredRailSignal(world, pos, shape, true, 0)
-    || findPoweredRailSignal(world, pos, shape, false, 0)
+    || findPoweredRailSignal(world, pos, shape, true, 0, railType)
+    || findPoweredRailSignal(world, pos, shape, false, 0, railType)
 }

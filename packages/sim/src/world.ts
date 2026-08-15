@@ -7,7 +7,7 @@ import type {
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
 } from './types.js'
-import { shouldRailBePowered, planRailPlacement } from './rail.js'
+import { shouldRailBePowered, planRailPlacement, isRail } from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
@@ -476,7 +476,7 @@ export class SimWorld {
     // [確定: 26.2 BaseRailBlock.java:64-77,111-118]
     // [実機 fixture rail-piston-push-connect (着地先の隣のレールに繋がって north_south へ) /
     //  rail-piston-push-powered (電源から押し離すと着地の時点で off)]
-    if (into.type === 'powered_rail') {
+    if (isRail(into)) {
       for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
       this.neighborChanged(pos)
     }
@@ -625,7 +625,7 @@ export class SimWorld {
         // authored の powered/POWER>0 (乗った状態) は初期安定状態では entity 不在の
         // ため OFF から始める (target/observer の onPlace リセットと同趣旨。決定論)
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
-      } else if (block.type === 'powered_rail') {
+      } else if (isRail(block)) {
         // 連鎖伝播 (isSameRailWithPower) は「隣が powered であること」を条件に
         // するため、authored 値から始めると根拠のない powered が自己維持し得る。
         // 一旦 false に落とし、Step 3 の収束ループで単調増加として組み直す。
@@ -696,8 +696,8 @@ export class SimWorld {
       railChanged = false
       railPass++
       for (const [key, block] of this.blocks) {
-        if (block.type !== 'powered_rail') continue
-        const powered = shouldRailBePowered(this, keyToPos(key), block.shape)
+        if (!isRail(block)) continue
+        const powered = shouldRailBePowered(this, keyToPos(key), block.shape, block.type)
         if (block.powered !== powered) {
           this.blocks.set(key, { ...block, powered })
           railChanged = true
@@ -761,7 +761,7 @@ export class SimWorld {
     this.setBlockAt(pos, block)
 
     // 形状の決め直しは「種が変わったとき」だけ (BaseRailBlock.updateState の updateDir 相当)
-    if (block.type === 'powered_rail' && old?.type !== 'powered_rail') {
+    if (isRail(block) && !isRail(old)) {
       this.applyRailPlacement(pos, block.shape)
     }
 
@@ -794,7 +794,7 @@ export class SimWorld {
     const written: Pos3D[] = []
     for (const c of planRailPlacement(this, pos, defaultShape)) {
       const b = this.getBlockAt(c.pos)
-      if (b?.type !== 'powered_rail') continue
+      if (!isRail(b)) continue
       this.setBlockAt(c.pos, { ...b, shape: c.shape })
       written.push(c.pos)
       this.emitShapeUpdate(c.pos)
@@ -1169,7 +1169,7 @@ export class SimWorld {
     // [実機 fixture rail-piston-push: 押されて 1 マス動き、形状は保持される]。
     // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
     // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
-    if (block.type === 'powered_rail') return true
+    if (isRail(block)) return true
     return false
   }
 
@@ -1948,14 +1948,15 @@ export class SimWorld {
         }
         break
       }
-      case 'powered_rail': {
+      case 'powered_rail':
+      case 'activator_rail': {
         // vanilla PoweredRailBlock.updateState [確定: 26.2]:
         //   shouldPower = hasNeighborSignal(pos) || 前方向の連鎖 || 後方向の連鎖
         //   変化したら setBlock(flag3) + updateNeighborsAt(pos.below())
         //                              + 坂なら updateNeighborsAt(pos.above())
         // レール自身は信号を出さない (power.ts に case を持たない) ため、
         // 「真下のブロックへ更新を配る」ことがレッドストーン的な唯一の出力になる。
-        const should = shouldRailBePowered(this, pos, block.shape)
+        const should = shouldRailBePowered(this, pos, block.shape, block.type)
         if (should !== block.powered) {
           this.setBlockAt(pos, { ...block, powered: should })
           this.emitShapeUpdate(pos)               // blockstate 変化 → PP (オブザーバー起動)
