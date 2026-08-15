@@ -619,26 +619,78 @@ function minecraftToBlockState(
     return { type: 'pressure_plate_wood', powered: false } as BlockState
   }
 
-  // 固体ブロック一覧
-  const solidBlocks = [
-    'minecraft:stone', 'minecraft:cobblestone', 'minecraft:smooth_stone',
-    'minecraft:granite', 'minecraft:diorite', 'minecraft:andesite',
-    'minecraft:deepslate', 'minecraft:tuff', 'minecraft:calcite',
-    'minecraft:dirt', 'minecraft:sand', 'minecraft:gravel',
-    'minecraft:oak_planks', 'minecraft:spruce_planks', 'minecraft:birch_planks',
-    'minecraft:jungle_planks', 'minecraft:acacia_planks', 'minecraft:dark_oak_planks',
-    'minecraft:crimson_planks', 'minecraft:warped_planks',
-    'minecraft:bricks', 'minecraft:nether_bricks', 'minecraft:quartz_block',
-    'minecraft:iron_block', 'minecraft:gold_block', 'minecraft:diamond_block',
-    'minecraft:emerald_block', 'minecraft:coal_block', 'minecraft:copper_block',
-    'minecraft:obsidian', 'minecraft:crying_obsidian',
-    'minecraft:slime_block', 'minecraft:honey_block',
-  ]
-  if (solidBlocks.includes(name) || name.endsWith('_slab') || name.endsWith('_concrete') || name.endsWith('_terracotta')) {
-    return { type: 'solid', powered: false } as BlockState
-  }
+  if (isSolidBlockName(name)) return { type: 'solid', powered: false } as BlockState
 
   return null
+}
+
+// ── 固体ブロック (redstone conductor) の判定 ──────────────────────────────────
+//
+// レッドストーン的に効くのは「**導体のフルブロック**か」だけ (ダストが乗る /
+// 強充電を受けて隣へ配る / ピストンに押される)。素材の違いは挙動に影響しない
+// ので、該当するものは全部 solid 1 種に集約する。
+//
+// 逆に**フルブロックでも非導体**のもの (ガラス・色付きガラス・鉄格子など。
+// vanilla では `isRedstoneConductor` が常に false) は solid にすると
+// **誤って導通してしまう**ので、ここでは拾わない。sim に「非導体のフルブロック」
+// の型が無いため現状は省略され、インポート時に未対応ブロックとして警告に出る。
+
+/** 名前がそのまま一致する導体フルブロック */
+const SOLID_EXACT = new Set([
+  // 石・岩系
+  'stone', 'cobblestone', 'mossy_cobblestone', 'smooth_stone',
+  'granite', 'polished_granite', 'diorite', 'polished_diorite',
+  'andesite', 'polished_andesite',
+  'deepslate', 'cobbled_deepslate', 'polished_deepslate', 'chiseled_deepslate',
+  'reinforced_deepslate', 'tuff', 'polished_tuff', 'chiseled_tuff',
+  'calcite', 'dripstone_block', 'netherrack', 'end_stone', 'bedrock',
+  'obsidian', 'crying_obsidian',
+  'blackstone', 'polished_blackstone', 'chiseled_polished_blackstone', 'gilded_blackstone',
+  'basalt', 'polished_basalt', 'smooth_basalt', 'magma_block',
+  // 土・砂・氷系
+  'dirt', 'coarse_dirt', 'rooted_dirt', 'grass_block', 'podzol', 'mycelium',
+  'mud', 'packed_mud', 'clay', 'sand', 'red_sand', 'gravel',
+  'soul_sand', 'soul_soil', 'snow_block', 'moss_block',
+  'ice', 'packed_ice', 'blue_ice',
+  // 鉱物・金属ブロック (redstone_block は信号源なので上流で処理済み)
+  'iron_block', 'gold_block', 'diamond_block', 'emerald_block', 'lapis_block',
+  'coal_block', 'netherite_block', 'copper_block', 'amethyst_block',
+  'raw_iron_block', 'raw_gold_block', 'raw_copper_block',
+  // 石英・プルプァ・プリズマリン
+  'quartz_block', 'smooth_quartz', 'quartz_bricks', 'quartz_pillar', 'chiseled_quartz_block',
+  'purpur_block', 'purpur_pillar',
+  'prismarine', 'prismarine_bricks', 'dark_prismarine', 'sea_lantern',
+  // 砂岩 (red_sandstone 等は接尾辞側で拾う)
+  'sandstone',
+  // 有機・その他フルブロック
+  'bookshelf', 'chiseled_bookshelf', 'hay_block', 'dried_kelp_block', 'bone_block',
+  'sponge', 'wet_sponge', 'melon', 'pumpkin', 'carved_pumpkin', 'jack_o_lantern',
+  'nether_wart_block', 'warped_wart_block', 'shroomlight', 'glowstone',
+  'brown_mushroom_block', 'red_mushroom_block', 'mushroom_stem',
+])
+
+/** 接尾辞で一致する導体フルブロック */
+const SOLID_SUFFIXES = [
+  '_planks', '_log', '_wood', '_stem', '_hyphae',
+  '_wool', '_concrete', '_concrete_powder', '_terracotta',
+  '_bricks', '_sandstone', '_ore',
+  '_copper', 'cut_copper',   // 酸化・蝋引きの各段階
+]
+
+/** 接尾辞に引っかかるが**フルブロックではない**ので除外するもの */
+const NOT_SOLID_EXACT = new Set([
+  'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
+])
+
+function isSolidBlockName(name: string): boolean {
+  const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
+  if (NOT_SOLID_EXACT.has(id)) return false
+  if (SOLID_EXACT.has(id)) return true
+  if (SOLID_SUFFIXES.some(s => id.endsWith(s))) return true
+  // TODO(#170): ハーフブロックは vanilla では**非導体** (二重スラブのみ導体)。
+  // 既存の取り込み挙動を変えることになるため、この issue では従来どおり solid に落とす。
+  if (id.endsWith('_slab')) return true
+  return false
 }
 
 // ── ファイルダウンロード ────────────────────────────────────────────────────
