@@ -4,8 +4,10 @@
  * activeLayer に対する操作として扱う。
  */
 
-import type { BlockState, Dir6, WireConnections, WorldSnapshot } from '@redstone/sim'
-import { posKey, planRailPlacement, isRail } from '@redstone/sim'
+import type {
+  BlockState, Dir6, WireConnections, WorldSnapshot, StraightRailShape,
+} from '@redstone/sim'
+import { posKey, planRailPlacement, isRail, isStraightRailShape } from '@redstone/sim'
 import { isFacingAllowed } from './facing.js'
 import {
   computeWireConnections, computeRawWireConnections, collectWireConnectionUpdates,
@@ -86,7 +88,11 @@ export class EditorGrid {
         const [cx, cy, cz] = c.pos
         const cur = this.getBlock3(cx, cy, cz)
         if (!isRail(cur) || cur.shape === c.shape) continue
-        const after: BlockState = { ...cur, shape: c.shape }
+        // 曲線を取れるのは通常レールだけ (直線レールに曲線は割り当たらないが型でも守る)
+        if (cur.type !== 'rail' && !isStraightRailShape(c.shape)) continue
+        const after: BlockState = cur.type === 'rail'
+          ? { ...cur, shape: c.shape }
+          : { ...cur, shape: c.shape as StraightRailShape }
         this.setRaw(cx, cy, cz, after)
         // 同じ 1 操作として履歴に積む (undo 1 回で元に戻る)
         if (cx === x && cy === y && cz === z) changes[0].after = after

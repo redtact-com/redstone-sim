@@ -1,0 +1,31 @@
+# 3 方向ジャンクションの曲がる先は給電の有無で反転する (#140)。
+#
+# 通常レールをレッドストーン素子たらしめている挙動。RailState.place は
+# 「両軸に隣接がある」ときだけ第三段に落ち、そこで hasSignal によって
+# 曲線の代入順が入れ替わる (どちらも後勝ち) [確定: 26.2 RailState.java:269-303]:
+#   hasSignal = true  → SE → SW → NE → NW の順 (優先順位 NW > NE > SW > SE)
+#   hasSignal = false → NW → NE → SW → SE の順 (優先順位 SE > SW > NE > NW)
+# hasSignal は BaseRailBlock.updateDir が渡す level.hasNeighborSignal(pos)
+# [確定: 26.2 BaseRailBlock.java:111-118]。
+#
+# 北・南・東に隣接がある同じ形のジャンクションを 2 つ用意し、片方だけ
+# 真下をレッドストーンブロックにしてある。非通電側は southAndEast と
+# northAndEast の両方が真になり後勝ちで south_east、通電側は north_east になる。
+#
+# 期待値は実機 (fixture rail-junction-place) が正。
+meta {
+  name: 3 方向ジャンクションは給電の有無で曲がる先が反転する
+  ref: #140 / fixture rail-junction-place / 26.2 RailState.place 第三段
+}
+
+fixture rail-junction-place
+
+state {
+  # 非通電 (真下は石)
+  t2 (2,1,3) rail[shape=south_east,waterlogged=false]
+}
+
+state {
+  # 通電 (真下がレッドストーンブロック) — 同じ配置でも北東に曲がる
+  t4 (7,1,3) rail[shape=north_east,waterlogged=false]
+}

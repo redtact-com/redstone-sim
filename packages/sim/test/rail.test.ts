@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { SimWorld } from '../src/world'
 import { planRailPlacement, railConnections, shouldRailBePowered } from '../src/rail'
-import type { BlockState, RailShape, Pos3D } from '../src/types'
+import { isRailSlope, isCurvedRailShape } from '../src/types'
+import type { BlockState, RailShape, StraightRailShape, Pos3D } from '../src/types'
 
 /**
  * #127 パワードレール。
@@ -13,8 +14,10 @@ import type { BlockState, RailShape, Pos3D } from '../src/types'
  * ダストと違って強度は持たず、8 本先までは減衰なしで届き 9 本目で切れる。
  */
 
-const rail = (shape: RailShape = 'north_south', powered = false): BlockState =>
+const rail = (shape: StraightRailShape = 'north_south', powered = false): BlockState =>
   ({ type: 'powered_rail', shape, powered })
+/** 通常レール (曲線を取れる) */
+const prail = (shape: RailShape = 'north_south'): BlockState => ({ type: 'rail', shape })
 const solid = (): BlockState => ({ type: 'solid', powered: false })
 
 /** x 方向へ n 本のレールを敷き、西端にレバーを置いた世界 */
@@ -30,7 +33,8 @@ function railLine(n: number): SimWorld {
 
 const shapeAt = (w: SimWorld, pos: Pos3D): string => {
   const b = w.getBlockAt(pos)
-  return b?.type === 'powered_rail' ? b.shape : `(${b?.type ?? 'air'})`
+  if (b?.type === 'powered_rail' || b?.type === 'activator_rail' || b?.type === 'rail') return b.shape
+  return `(${b?.type ?? 'air'})`
 }
 const poweredAt = (w: SimWorld, pos: Pos3D): boolean => {
   const b = w.getBlockAt(pos)
@@ -428,5 +432,96 @@ describe('レールはピストンで押される (#134)', () => {
     // 「動かなかったから off」で通ってしまわないよう、移動したことも見る
     expect(shapeAt(w, [4, 1, 3]), 'レールが移動していること').toBe('east_west')
     expect(poweredAt(w, [4, 1, 3])).toBe(false)
+  })
+})
+
+/**
+ * 通常レール `rail` の曲線 4 形状 (#140)
+ * [確定: 26.2 RailState.place — 第二段の排他条件 4 つ + 第三段の hasSignal 依存]。
+ * 実機 fixture rail-curve-priority / rail-junction-place / rail-curve-no-slope が典拠。
+ */
+describe('通常レールの曲線 (#140)', () => {
+  /** 中心 (0,0,0) に指定方向の隣接レールを置いた世界 */
+  function neighbors(dirs: { n?: boolean; s?: boolean; w?: boolean; e?: boolean }): SimWorld {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], prail('north_south'))
+    if (dirs.n) w.setBlockAt([0, 0, -1], prail('north_south'))
+    if (dirs.s) w.setBlockAt([0, 0, 1], prail('north_south'))
+    if (dirs.w) w.setBlockAt([-1, 0, 0], prail('east_west'))
+    if (dirs.e) w.setBlockAt([1, 0, 0], prail('east_west'))
+    return w
+  }
+  const planned = (w: SimWorld, hasSignal = false): string | undefined =>
+    planRailPlacement(w, [0, 0, 0], 'north_south', hasSignal)
+      .find(c => c.pos[0] === 0 && c.pos[2] === 0)?.shape
+
+  it('直交する 2 方向の隣接で曲線が決まる (排他条件)', () => {
+    expect(planned(neighbors({ s: true, e: true }))).toBe('south_east')
+    expect(planned(neighbors({ s: true, w: true }))).toBe('south_west')
+    expect(planned(neighbors({ n: true, w: true }))).toBe('north_west')
+    expect(planned(neighbors({ n: true, e: true }))).toBe('north_east')
+  })
+
+  it('片軸だけの隣接なら直線のまま (曲線分岐に入らない)', () => {
+    expect(planned(neighbors({ n: true, s: true }))).toBe('north_south')
+    expect(planned(neighbors({ w: true, e: true }))).toBe('east_west')
+  })
+
+  it('3 方向ジャンクションは給電の有無で曲がる先が反転する', () => {
+    // n,s,e の 3 方向。southAndEast と northAndEast の両方が真になり後勝ちで決まる
+    expect(planned(neighbors({ n: true, s: true, e: true }), false)).toBe('south_east')
+    expect(planned(neighbors({ n: true, s: true, e: true }), true)).toBe('north_east')
+  })
+
+  it('直線レール (powered_rail) は同じ配置でも曲線にならない', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], rail('north_south'))
+    w.setBlockAt([0, 0, -1], prail('north_south'))
+    w.setBlockAt([0, 0, 1], prail('north_south'))
+    w.setBlockAt([1, 0, 0], prail('east_west'))
+    // 両軸に隣接があるので defaultShape が残る (曲線分岐は isStraight で塞がれる)
+    const shape = planRailPlacement(w, [0, 0, 0], 'north_south', true)
+      .find(c => c.pos[0] === 0 && c.pos[2] === 0)?.shape
+    expect(shape).toBe('north_south')
+  })
+
+  it('曲線に決まった後は坂昇格が適用されない', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], prail('north_south'))
+    w.setBlockAt([0, 0, 1], prail('north_south'))   // 南: 同じ高さ
+    w.setBlockAt([1, 1, 0], prail('east_west'))     // 東: 1 段上
+    expect(planned(w)).toBe('south_east')
+  })
+
+  it('対照: 東の 1 段上だけなら east_west 経由で坂になる', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], prail('east_west'))
+    w.setBlockAt([1, 1, 0], prail('east_west'))
+    const shape = planRailPlacement(w, [0, 0, 0], 'east_west')
+      .find(c => c.pos[0] === 0 && c.pos[1] === 0)?.shape
+    expect(shape).toBe('ascending_east')
+  })
+
+  it('曲線の繋がる 2 マスは名前どおり', () => {
+    expect(railConnections([0, 0, 0], 'south_east')).toEqual([[1, 0, 0], [0, 0, 1]])
+    expect(railConnections([0, 0, 0], 'north_west')).toEqual([[-1, 0, 0], [0, 0, -1]])
+  })
+
+  it('曲線は坂ではない (isRailSlope が誤判定しない)', () => {
+    for (const s of ['south_east', 'south_west', 'north_west', 'north_east'] as RailShape[]) {
+      expect(isRailSlope(s), s).toBe(false)
+      expect(isCurvedRailShape(s), s).toBe(true)
+    }
+    expect(isRailSlope('ascending_east')).toBe(true)
+    expect(isCurvedRailShape('ascending_east')).toBe(false)
+  })
+
+  it('形状の接続は種別をまたぐ (通常レール ↔ パワードレール)', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], rail('east_west'))          // powered_rail
+    w.setBlockAt([1, 0, 0], prail('north_south'))       // 通常レールを東隣に
+    const shape = planRailPlacement(w, [1, 0, 0], 'north_south')
+      .find(c => c.pos[0] === 1)?.shape
+    expect(shape).toBe('east_west')
   })
 })

@@ -360,22 +360,52 @@ export interface MovingPistonState {
 }
 
 /**
- * レール形状 (#127)。powered_rail が取るのは **直線 2 + 坂 4 の 6 種のみ**で、
- * 通常レールの曲線 4 種 (north_east 等) は持たない
+ * 直線レール形状 (直線 2 + 坂 4)。powered_rail / activator_rail / detector_rail が
+ * 取れるのはこの 6 種だけで、曲線は持たない
  * [確定: 26.2 PoweredRailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE_STRAIGHT]。
  */
-export type RailShape =
+export type StraightRailShape =
   | 'north_south' | 'east_west'
   | 'ascending_north' | 'ascending_south' | 'ascending_east' | 'ascending_west'
 
-export const RAIL_SHAPES_STRAIGHT: RailShape[] = [
+/**
+ * 曲線レール形状 (#140)。通常レール `rail` だけが取る 4 種
+ * [確定: 26.2 RailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE (10 種)]。
+ * 名前は「繋がる 2 方向」を表す (south_east なら南と東に繋がる)。
+ */
+export type CurvedRailShape = 'south_east' | 'south_west' | 'north_west' | 'north_east'
+
+/** レール形状 10 種。曲線を取れるのは通常レールのみ (#127, #140) */
+export type RailShape = StraightRailShape | CurvedRailShape
+
+export const RAIL_SHAPES_STRAIGHT: StraightRailShape[] = [
   'north_south', 'east_west',
   'ascending_north', 'ascending_south', 'ascending_east', 'ascending_west',
 ]
 
-/** 坂形状か [確定: 26.2 RailShape.isSlope] */
+export const RAIL_SHAPES_CURVED: CurvedRailShape[] = [
+  'south_east', 'south_west', 'north_west', 'north_east',
+]
+
+const CURVED_SET: ReadonlySet<string> = new Set(RAIL_SHAPES_CURVED)
+
+/** 曲線形状か。通常レール以外に代入する前のガードに使う (#140) */
+export function isCurvedRailShape(shape: RailShape): shape is CurvedRailShape {
+  return CURVED_SET.has(shape)
+}
+
+export function isStraightRailShape(shape: RailShape): shape is StraightRailShape {
+  return !CURVED_SET.has(shape)
+}
+
+/**
+ * 坂形状か [確定: 26.2 RailShape.isSlope]。
+ * **曲線を坂と誤判定しない**よう、直線 2 種の否定ではなくホワイトリストで判定する
+ * (曲線 4 種が加わった #140 以降はこの区別が要る)。
+ */
 export function isRailSlope(shape: RailShape): boolean {
-  return shape !== 'north_south' && shape !== 'east_west'
+  return shape === 'ascending_north' || shape === 'ascending_south'
+    || shape === 'ascending_east' || shape === 'ascending_west'
 }
 
 /**
@@ -405,8 +435,22 @@ export const POWERED_RAIL_TYPES: PoweredRailType[] = ['powered_rail', 'activator
  */
 export interface PoweredRailState {
   type: PoweredRailType
-  shape: RailShape
+  shape: StraightRailShape
   powered: boolean
+}
+
+/**
+ * 通常レール `rail` (#140)。動力を持たず信号も出さないが、**曲線 4 形状**を取り
+ * [確定: 26.2 RailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE]、
+ * 「両軸に隣接がある (= 3 方向以上) ジャンクション」では**給電の有無で曲がる先が
+ * 反転する** [確定: 26.2 RailState.place の第三段。hasSignal=true なら NW>NE>SW>SE、
+ * false なら SE>SW>NE>NW]。これが通常レールをレッドストーン素子たらしめている。
+ * 名前は vanilla の形状計算クラス `RailState` と紛らわしいため `PlainRailState`
+ * とした (ブロック ID は `rail`)。形状計算そのものは rail.ts の RailConnector。
+ */
+export interface PlainRailState {
+  type: 'rail'
+  shape: RailShape
 }
 
 export interface AirState {
@@ -438,6 +482,7 @@ export type BlockState =
   | PistonHeadState
   | MovingPistonState
   | PoweredRailState
+  | PlainRailState
   | AirState
 
 export type BlockType = BlockState['type']

@@ -24,7 +24,7 @@ const DIR6_TYPES = new Set<BlockType>([
  */
 const HDIR_TYPES = new Set<BlockType>([
   'repeater', 'comparator', 'wall_torch', 'dropper',
-  'powered_rail', 'activator_rail',
+  'rail', 'powered_rail', 'activator_rail',
 ])
 
 export function allowedFacings(type: BlockType): Dir6[] {

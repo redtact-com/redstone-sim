@@ -19,7 +19,9 @@
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
 // ============================================================
 
-import type { BlockState, HDir, Dir6, WireConnectionValue, RailShape } from './types.js'
+import type {
+  BlockState, HDir, Dir6, WireConnectionValue, RailShape, StraightRailShape,
+} from './types.js'
 import { OPPOSITE } from './types.js'
 
 export interface ParsedMcState {
@@ -183,8 +185,11 @@ export function mcToSim(state: string): BlockState | null {
     case 'activator_rail':
       // SHAPE は RAIL_SHAPE_STRAIGHT (直線2+坂4)。曲線は取らない [確定: 26.2]。
       // activator_rail は powered_rail と同じ PoweredRailBlock なので状態も同形 (#138)
-      return { type: name, shape: (props.shape ?? 'north_south') as RailShape,
+      return { type: name, shape: (props.shape ?? 'north_south') as StraightRailShape,
                powered: props.powered === 'true' }
+    case 'rail':
+      // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4 の 10 種)。動力は持たない (#140)
+      return { type: 'rail', shape: (props.shape ?? 'north_south') as RailShape }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -269,6 +274,9 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState(sim.type, {
           powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
         })
+      case 'rail':
+        // 通常レールは動力を持たないので shape だけ (#140)
+        return formatMcState('rail', { shape: sim.shape, waterlogged: 'false' })
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':
@@ -362,6 +370,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       // shape は設置時に自動決定され実行中も張り替わり得る (rail.ts) ため
       // authored ではなく sim 状態から直列化する (wire の接続形状と同趣旨)
       props.powered = String(sim.powered)
+      props.shape = sim.shape
+      break
+    case 'rail':
+      // 通常レールは動力を持たない。shape だけ sim 状態から直列化する (#140)
       props.shape = sim.shape
       break
     case 'container':

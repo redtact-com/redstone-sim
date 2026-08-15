@@ -6,8 +6,11 @@ import type {
 } from './types.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
+  isStraightRailShape,
 } from './types.js'
-import { shouldRailBePowered, planRailPlacement, isRail } from './rail.js'
+import {
+  shouldRailBePowered, planRailPlacement, isRail, isPoweredRail,
+} from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
@@ -625,11 +628,12 @@ export class SimWorld {
         // authored の powered/POWER>0 (乗った状態) は初期安定状態では entity 不在の
         // ため OFF から始める (target/observer の onPlace リセットと同趣旨。決定論)
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
-      } else if (isRail(block)) {
+      } else if (isPoweredRail(block)) {
         // 連鎖伝播 (isSameRailWithPower) は「隣が powered であること」を条件に
         // するため、authored 値から始めると根拠のない powered が自己維持し得る。
         // 一旦 false に落とし、Step 3 の収束ループで単調増加として組み直す。
-        // shape は authored のまま (ワイヤーの接続形状と同じ方針。#51 注記)
+        // shape は authored のまま (ワイヤーの接続形状と同じ方針。#51 注記)。
+        // 通常レールは動力を持たないので対象外 (#140)
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
       }
     }
@@ -696,7 +700,7 @@ export class SimWorld {
       railChanged = false
       railPass++
       for (const [key, block] of this.blocks) {
-        if (!isRail(block)) continue
+        if (!isPoweredRail(block)) continue
         const powered = shouldRailBePowered(this, keyToPos(key), block.shape, block.type)
         if (block.powered !== powered) {
           this.blocks.set(key, { ...block, powered })
@@ -792,10 +796,16 @@ export class SimWorld {
    */
   private applyRailPlacement(pos: Pos3D, defaultShape: RailShape): Pos3D[] {
     const written: Pos3D[] = []
-    for (const c of planRailPlacement(this, pos, defaultShape)) {
+    // hasSignal は通常レールの曲線の優先順位にだけ効く [確定: 26.2 BaseRailBlock.updateDir
+    // が level.hasNeighborSignal(pos) を place へ渡す]
+    for (const c of planRailPlacement(this, pos, defaultShape, isBlockPowered(this, pos))) {
       const b = this.getBlockAt(c.pos)
       if (!isRail(b)) continue
-      this.setBlockAt(c.pos, { ...b, shape: c.shape })
+      // 曲線を取れるのは通常レールだけ。直線レールに曲線が割り当たることは
+      // RailConnector の straight ガードにより起こらないが、型でも守っておく
+      if (b.type === 'rail') this.setBlockAt(c.pos, { ...b, shape: c.shape })
+      else if (isStraightRailShape(c.shape)) this.setBlockAt(c.pos, { ...b, shape: c.shape })
+      else continue
       written.push(c.pos)
       this.emitShapeUpdate(c.pos)
       this.submitMultiNC(c.pos)
