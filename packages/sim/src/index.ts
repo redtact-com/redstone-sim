@@ -27,6 +27,8 @@ export {
   isRailSlope,
   isCurvedRailShape,
   isStraightRailShape,
+  TRIGGERABLE_TYPES,
+  isTriggerableType,
 } from './types.js'
 
 // レール (#127, #138, #140)

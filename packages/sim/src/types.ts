@@ -581,3 +581,60 @@ export function canStickToEachOther(a: BlockState, b: BlockState): boolean {
   if (a.type === 'slime_block' && b.type === 'honey_block') return false
   return isStickyBlock(a) || isStickyBlock(b)
 }
+
+/**
+ * 手動トリガ (`SimWorld.activateBlock`) を受け付けるブロックか (#153)。
+ *
+ * **Record<BlockType, boolean> にしてあるのは網羅を型で強制するため**。
+ * 新しいブロック種を BlockState union に足すと、ここを埋めるまでビルドが通らない
+ * = 「トリガできる素子なのに UI から触れない」という追加漏れが起きなくなる。
+ *
+ * 実体は world.ts の activateBlock の分岐と 1 対 1 で、`app/src/palette.ts` の
+ * TRIGGER_META もこの一覧と一致することをテストで突き合わせている
+ * (#146 detector_rail で実際に取りこぼしたのがきっかけ)。
+ */
+const IS_TRIGGERABLE: Record<BlockType, boolean> = {
+  // 手動トリガできる素子
+  lever: true,
+  button_stone: true,
+  button_wood: true,
+  pressure_plate_wood: true,
+  pressure_plate_stone: true,
+  weighted_pressure_plate_light: true,
+  weighted_pressure_plate_heavy: true,
+  target: true,          // 投射物命中の折衷
+  detector_rail: true,   // トロッコ検出の折衷 (#146)
+
+  // 受電・観測でしか動かない素子
+  wire: false,
+  torch: false,
+  wall_torch: false,
+  repeater: false,
+  comparator: false,
+  lamp: false,
+  note_block: false,
+  observer: false,
+  redstone_block: false,
+  piston: false,
+  sticky_piston: false,
+  piston_head: false,
+  moving_piston: false,
+  rail: false,
+  powered_rail: false,
+  activator_rail: false,
+  container: false,
+  hopper: false,
+  dropper: false,
+  solid: false,
+  slime_block: false,
+  honey_block: false,
+  air: false,
+}
+
+/** 手動トリガできるブロック種の一覧 (#153)。UI 側のリストはこれと一致させる */
+export const TRIGGERABLE_TYPES: BlockType[] =
+  (Object.keys(IS_TRIGGERABLE) as BlockType[]).filter(t => IS_TRIGGERABLE[t])
+
+export function isTriggerableType(type: BlockType): boolean {
+  return IS_TRIGGERABLE[type]
+}
