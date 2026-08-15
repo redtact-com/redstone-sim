@@ -206,6 +206,9 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
         type: 'rail',
         shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
       }
+    case 'copper_bulb':
+      // 立ち上がりでのみ lit が反転する記憶素子。初期は消灯 (#155)
+      return { type: 'copper_bulb', lit: false, powered: false }
     case 'detector_rail':
       // カート検出の折衷モデル。初期は非通電 (#146)
       return {

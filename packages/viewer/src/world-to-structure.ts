@@ -133,6 +133,9 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:rail[shape=${block.shape},waterlogged=false]`
     case 'detector_rail':
       return `minecraft:detector_rail[powered=${block.powered},shape=${block.shape},waterlogged=false]`
+    case 'copper_bulb':
+      // 酸化段階は sim で持たないので素の銅の電球で描画する (#155)
+      return `minecraft:copper_bulb[lit=${block.lit},powered=${block.powered}]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -191,6 +194,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:activator_rail',
   'minecraft:rail',
   'minecraft:detector_rail',
+  'minecraft:copper_bulb',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

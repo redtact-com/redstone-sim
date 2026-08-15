@@ -472,6 +472,31 @@ export interface DetectorRailState {
   powered: boolean
 }
 
+/**
+ * 銅の電球 (#155)。**1 ブロックで T フリップフロップ**になる素子。
+ *   - 近隣更新のたびに hasNeighborSignal を見て、`signal != powered` なら
+ *     **立ち上がり (powered=false → signal=true) のときだけ lit を反転**し、
+ *     powered を signal に追随させる [確定: 26.2 CopperBulbBlock.checkAndFlip]
+ *   - **tile tick を持たない** = 遅延 0gt。近隣更新の処理中に同期確定する
+ *     [実機 fixture copper-bulb-toggle: レバーと同じ tick で確定]
+ *   - コンパレーターは **lit** を読む (powered ではない)。lit ? 15 : 0
+ *     [確定: 26.2 getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+ *   - **非導体** (.isRedstoneConductor(Blocks::never) [確定: 26.2 Blocks.java:5272])。
+ *     フルブロックだが強充電を通さないので、給電の仕切りとして使える
+ *   - 自身は信号を出さない (getSignal 非 override)
+ *
+ * 酸化 8 バリアント (素/exposed/weathered/oxidized × waxed) は
+ * **レッドストーン挙動が完全に同一**で、違うのは明るさ (15/12/8/4) と
+ * ランダムティックの酸化だけ。どちらも sim は非モデルなので 1 種に集約している。
+ */
+export interface CopperBulbState {
+  type: 'copper_bulb'
+  /** 点灯状態。立ち上がりでのみ反転する = 記憶ビット */
+  lit: boolean
+  /** 直前に見た入力。エッジ判定のために保持する */
+  powered: boolean
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -503,6 +528,7 @@ export type BlockState =
   | PoweredRailState
   | PlainRailState
   | DetectorRailState
+  | CopperBulbState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -613,6 +639,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   comparator: false,
   lamp: false,
   note_block: false,
+  copper_bulb: false,   // 受電で反転するだけで手動トリガは無い
   observer: false,
   redstone_block: false,
   piston: false,
