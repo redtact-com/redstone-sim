@@ -1267,6 +1267,7 @@ export class SimWorld {
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy':
       case 'detector_rail':
+      case 'crafter':
       case 'repeater':
       case 'comparator':
         return true
@@ -2027,6 +2028,25 @@ export class SimWorld {
         }
         break
       }
+      case 'crafter': {
+        // vanilla CrafterBlock.neighborChanged [確定: 26.2 CrafterBlock.java:73-88]:
+        //   shouldTrigger = hasNeighborSignal(pos) ← **疑似接続を持たない**
+        //   立ち上がり → scheduleTick 4gt + TRIGGERED=true / 立ち下がり → false
+        // ディスペンサーが pos.above() も見る [確定: DispenserBlock.java:131] のと対照的
+        // [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
+        const signal = isBlockPowered(this, pos)
+        if (signal && !block.triggered) {
+          this.setBlockAt(pos, { ...block, triggered: true })
+          this.emitShapeUpdate(pos)
+          // 4gt の tile tick。**レシピ非対応なので実行しても何も起きない**が、
+          // vanilla と同じ機構に乗せておく (将来クラフトを足すときの受け皿)
+          this.schedule(pos, 4, 0)
+        } else if (!signal && block.triggered) {
+          this.setBlockAt(pos, { ...block, triggered: false })
+          this.emitShapeUpdate(pos)
+        }
+        break
+      }
       case 'dropper':
       case 'dispenser': {
         // vanilla DispenserBlock.neighborChanged [確定: 26.2]:
@@ -2246,6 +2266,9 @@ export class SimWorld {
     // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
     //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
     if (isContainerType(back?.type)) return effectiveContainerSignal(back)
+    // クラフターは「埋まっているスロット数」0-9 を返す (充填率ではない)
+    // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal — 空でない or 無効化されたスロット数]
+    if (back?.type === 'crafter') return back.occupiedSlots
     // 銅の電球も hasAnalogOutputSignal を持つ。読むのは **lit** で powered ではない
     // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
     if (back?.type === 'copper_bulb') return back.lit ? 15 : 0
@@ -2339,6 +2362,7 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     // hopper.enabled / dropper.triggered は blockstate プロパティ → 観測対象。
     // count (内容) は BE で非観測 (コンパレーターのみ CU で読む)。
     case 'hopper':      return a.type === 'hopper' && a.enabled !== b.enabled
+    case 'crafter':     return a.type === 'crafter' && a.triggered !== b.triggered
     case 'dropper':
     case 'dispenser':   return (a.type === 'dropper' || a.type === 'dispenser')
       && a.triggered !== b.triggered

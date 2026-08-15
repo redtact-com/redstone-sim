@@ -21,7 +21,7 @@ export const PLACEABLE_TYPES = [
   'trapdoor_wood', 'trapdoor_iron', 'fence_gate', 'door_wood', 'door_iron',
   'redstone_block', 'target', 'observer', 'solid',
   'slime_block', 'honey_block', 'rail', 'powered_rail', 'activator_rail', 'detector_rail',
-  'container', 'hopper', 'dropper', 'dispenser',
+  'container', 'hopper', 'dropper', 'dispenser', 'crafter',
 ] as const satisfies readonly PlaceableType[]
 
 const PLACEABLE_SET: ReadonlySet<string> = new Set(PLACEABLE_TYPES)

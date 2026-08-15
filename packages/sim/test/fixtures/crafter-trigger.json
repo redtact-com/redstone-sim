@@ -1,0 +1,272 @@
+{
+  "name": "crafter-trigger",
+  "description": "#163 クラフターの受電挙動と、**疑似接続を持たない**ことの対比。neighborChanged は hasNeighborSignal(pos) だけを見る [確定: 26.2 CrafterBlock.java:73-88] のに対し、ディスペンサーは pos.above() も見る [確定: DispenserBlock.java:131]。z=1 は直接受電するクラフター + コンパレーター (占有スロット数を読む [確定: CrafterBlockEntity.getRedstoneSignal:251-262]。container.0 に 3 個 = 占有 1 スロット = 出力 1)。z=4 と z=6 は同じ疑似接続の配置で、レッドストーンブロックを **1 マス上の隣** (真上ではない) に置く。ただし setblock の近隣更新は置いた位置の 6 方向にしか 届かないので、この時点では条件を満たしても**更新が来ておらず BUD 状態**になる。t8/t10 で隣に石を 置いて更新を送ると、**ディスペンサーだけが起動しクラフターは起動しない** = QC の有無が確定する。",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": {
+    "from": [
+      -2,
+      0,
+      -1
+    ],
+    "to": [
+      6,
+      4,
+      8
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "crafter[crafting=false,orientation=north_up,triggered=false]",
+      "items": 3
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=none,power=1,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "block": "crafter[crafting=false,orientation=north_up,triggered=false]",
+      "items": 3
+    },
+    {
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "block": "dispenser[facing=east,triggered=false]",
+      "items": 3
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        2,
+        2,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        2,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        1,
+        1,
+        7
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 14,
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            1
+          ],
+          "block": "crafter[crafting=false,orientation=north_up,triggered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            2,
+            2,
+            4
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            2,
+            2,
+            6
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "stone"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            6
+          ],
+          "block": "dispenser[facing=east,triggered=true]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            7
+          ],
+          "block": "stone"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            1
+          ],
+          "block": "crafter[crafting=false,orientation=north_up,triggered=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T17:42:52.545Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

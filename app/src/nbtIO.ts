@@ -332,6 +332,13 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         enabled: String((block as any).enabled ?? true),
         facing: (block as any).facing ?? 'down',
       }]
+    case 'crafter':
+      // レシピ非対応なので crafting は常に false。orientation は front_top の組 (#163)
+      return ['minecraft:crafter', {
+        crafting: 'false',
+        orientation: `${(block as any).facing ?? 'north'}_up`,
+        triggered: String((block as any).triggered ?? false),
+      }]
     case 'dropper':
     case 'dispenser':
       return [`minecraft:${block.type}`, {
@@ -559,6 +566,14 @@ function minecraftToBlockState(
     } as BlockState
   }
 
+  if (name === 'minecraft:crafter') {
+    return {
+      type: 'crafter',
+      facing: ((props.orientation ?? 'north_up').split('_')[0]) as any,
+      triggered: props.triggered === 'true',
+      occupiedSlots: 0,
+    } as BlockState
+  }
   if (name === 'minecraft:dropper' || name === 'minecraft:dispenser') {
     return {
       type: name === 'minecraft:dispenser' ? 'dispenser' : 'dropper',

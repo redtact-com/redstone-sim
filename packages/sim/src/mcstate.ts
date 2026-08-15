@@ -272,6 +272,15 @@ export function mcToSim(state: string): BlockState | null {
         enabled: props.enabled !== 'false',
         cooldownUntil: 0,
       }
+    case 'crafter':
+      // orientation は "front_top" の組。sim は front だけを持つ (#163)。
+      // 中身はレシピ非対応なので occupiedSlots は 0 から始め、items で上書きする
+      return {
+        type: 'crafter',
+        facing: ((props.orientation ?? 'north_up').split('_')[0]) as Dir6,
+        triggered: props.triggered === 'true',
+        occupiedSlots: 0,
+      }
     case 'dropper':
     case 'dispenser':
       // vanilla の facing = 出力方向 (6 方向) = sim と同一 (非反転)。
@@ -370,6 +379,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':
         return formatMcState('hopper', { enabled: String(sim.enabled), facing: sim.facing })
+      case 'crafter':
+        return formatMcState('crafter', {
+          crafting: 'false', orientation: `${sim.facing}_up`, triggered: String(sim.triggered),
+        })
       case 'dropper':
       case 'dispenser':
         return formatMcState(sim.type, { facing: sim.facing, triggered: String(sim.triggered) })
@@ -489,6 +502,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
     case 'hopper':
       // count は BE で blockstate に無い。enabled のみ動的に上書き
       props.enabled = String(sim.enabled)
+      break
+    case 'crafter':
+      // orientation は authored の値を保持する。crafting はレシピ非対応で常に false
+      props.triggered = String(sim.triggered)
+      props.crafting = 'false'
       break
     case 'dropper':
     case 'dispenser':
