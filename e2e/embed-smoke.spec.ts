@@ -124,3 +124,44 @@ test('embed: load 前の reset は無視され空 world を作らない', async 
   expect(await page.evaluate(() => window.__embed!.isLoaded())).toBe(false)
   await expect(page.getByTestId('embed-run-btn')).toBeDisabled()
 })
+
+test('embed: load の完了を待たずに送った step が最新の world に届く (#174)', async ({ page }) => {
+  // インポートは litematic / schem 変換のために非同期になった (#174)。親が load の
+  // 完了を待たずに step を送ってきたときに、**step が古い world (= load 前の
+  // クロージャ) を掴まない**ことを確かめる。実際、ハンドラが dispatch 時点の
+  // actions を掴んでいた最初の実装ではこのテストが落ちた。
+  //
+  // 受信メッセージの直列化キュー自体は保険。現状の変換は同期処理を async で
+  // 包んだだけでマイクロタスク内に収まるため、キューが無くても順序は保たれて
+  // しまう (変異テストで確認済み)。将来 変換が本当に非同期になったときに
+  // 順序が黙って壊れないようにするためのもの。
+  await page.goto('/')
+  await page.waitForFunction(() => !!window.__editorTest)
+  await page.evaluate(() => {
+    const ed = window.__editorTest!
+    ed.placeAt(0, 0, 0, 'lever')
+    ed.placeAt(1, 0, 0, 'wire')
+    ed.placeAt(2, 0, 0, 'lamp')
+  })
+  await page.getByTestId('btn-menu').click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('menu-nbt-save').click()
+  const nbtPath = await (await downloadPromise).path()
+  const bytes = Array.from(readFileSync(nbtPath!))
+
+  await page.goto('/?embed=1')
+  await page.waitForFunction(() => !!window.__embed)
+
+  // load → step を**間を置かず**続けて送る
+  await page.evaluate((arr) => {
+    const u8 = new Uint8Array(arr)
+    window.postMessage({ v: 1, type: 'rdsim:load', format: 'structure-nbt', bytes: u8.buffer }, '*')
+    window.postMessage({ v: 1, type: 'rdsim:step', n: 2 }, '*')
+  }, bytes)
+
+  await page.waitForFunction(() => window.__embed!.isLoaded())
+  await page.waitForFunction(() => window.__embed!.getTick() === 2)
+  // step が load を追い越していたら world が無く tick は 0 のままになる
+  expect(await page.evaluate(() => window.__embed!.getTick())).toBe(2)
+  expect(await page.evaluate(() => window.__embed!.getStateAt(0, 0, 0)?.type)).toBe('lever')
+})

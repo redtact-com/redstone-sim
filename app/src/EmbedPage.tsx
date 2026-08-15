@@ -61,6 +61,14 @@ export function EmbedPage() {
   const editorRef = useRef(new CircuitEditor(0))
 
   const [simWorld, setSimWorld] = useState<SimWorld | null>(null)
+  // world は state と **ref の両方**で持つ (#174)。postMessage を直列化した結果、
+  // load の直後にキューへ積まれた step / trigger が「まだ再レンダされていない」
+  // 状態で走りうるため、操作系は ref を見て最新の world を掴む。
+  const simWorldRef = useRef<SimWorld | null>(null)
+  const putWorld = useCallback((w: SimWorld | null) => {
+    simWorldRef.current = w
+    setSimWorld(w)
+  }, [])
   const [, forceUpdate] = useState(0)
   const rerender = useCallback(() => forceUpdate((n) => n + 1), [])
 
@@ -106,10 +114,10 @@ export function EmbedPage() {
   }, [])
 
   // ── 回路ロード ─────────────────────────────────────────────────────────
-  const loadCircuit = useCallback((bytes: Uint8Array) => {
+  const loadCircuit = useCallback(async (bytes: Uint8Array) => {
     let result
     try {
-      result = importFromNbtBytes(bytes, { gridW: GRID_W, gridH: GRID_H, maxLayers: GRID_LAYERS })
+      result = await importFromNbtBytes(bytes, { gridW: GRID_W, gridH: GRID_H, maxLayers: GRID_LAYERS })
     } catch (e) {
       emitError('parse-error', e instanceof Error ? e.message : String(e))
       return
@@ -123,7 +131,7 @@ export function EmbedPage() {
     editorRef.current.resetToBlocks(blocks)
     const world = editorRef.current.buildSimWorld()
     world.initialize()
-    setSimWorld(world)
+    putWorld(world)
     setTick(0)
     setRunning(false)
     setTriggers(scanTriggers())
@@ -133,38 +141,42 @@ export function EmbedPage() {
     fitCamera(size)
     setReloadKey((k) => k + 1)
     postToParent({ v: 1, type: 'rdsim:loaded', size, warnings: warns })
-  }, [emitError, scanTriggers, fitCamera, postToParent])
+  }, [emitError, scanTriggers, fitCamera, postToParent, putWorld])
 
   // ── 再生制御 ──────────────────────────────────────────────────────────
   const doStep = useCallback((n = 1) => {
-    if (!simWorld) return
+    const world = simWorldRef.current
+    if (!world) return
     let t = 0
-    for (let i = 0; i < n; i++) t = simWorld.tick().currentTick
+    for (let i = 0; i < n; i++) t = world.tick().currentTick
     setTick(t)
     rerender()
     postToParent({ v: 1, type: 'rdsim:tick', tick: t })
-  }, [simWorld, rerender, postToParent])
+  }, [rerender, postToParent])
 
   const doReset = useCallback(() => {
-    if (!loaded) return // load 前の reset は無視 (空 world を作らない)
+    // load 前の reset は無視 (空 world を作らない)。loaded state だと直列化
+    // キュー内で古い値を見るので、world の有無で判定する
+    if (!simWorldRef.current) return
     setRunning(false)
     // editor は元の配置を保持しているので再ビルドで初期状態に戻す
     const world = editorRef.current.buildSimWorld()
     world.initialize()
-    setSimWorld(world)
+    putWorld(world)
     setTick(0)
     setError(null)
     postToParent({ v: 1, type: 'rdsim:tick', tick: 0 })
-  }, [loaded, postToParent])
+  }, [postToParent, putWorld])
 
   const doTrigger = useCallback((x: number, y: number, z: number) => {
-    if (!simWorld) return
-    const b = simWorld.getBlockAt([x, y, z])
+    const world = simWorldRef.current
+    if (!world) return
+    const b = world.getBlockAt([x, y, z])
     if (b && TRIGGER_TYPES.has(b.type)) {
-      simWorld.activateBlock(x, y, z)
+      world.activateBlock(x, y, z)
       rerender()
     }
-  }, [simWorld, rerender])
+  }, [rerender])
 
   // ── 連続実行 (100ms/tick, rdsim spec) ──────────────────────────────────
   useEffect(() => {
@@ -198,25 +210,33 @@ export function EmbedPage() {
     const firstParent = params.get('parentOrigin')?.split(',')[0]?.trim()
     if (firstParent) trustedOriginRef.current = firstParent
 
+    // loadCircuit は litematic / schem の変換を挟むため非同期 (#174)。
+    // 親が load 直後に step を送ってくると追い越されるので、**全メッセージを
+    // 1 本のキューに直列化**して受信順を保つ (プロトコル上の順序保証は維持)。
+    let queue: Promise<unknown> = Promise.resolve()
+    const enqueue = (fn: () => unknown) => { queue = queue.then(fn, fn) }
+
     const onMessage = (event: MessageEvent) => {
       if (event.source !== window.parent) return // 親以外は無視
       if (!isOriginAllowed(event.origin, allowed)) return
       const msg: InboundMessage | null = parseInbound(event.data)
       if (!msg) return
       trustedOriginRef.current = event.origin // 以降の送信先を確定
-      const a = actionsRef.current
+      // actionsRef は**実行時**に読む (dispatch 時に掴むと load 完了前の
+      // 古いクロージャを使ってしまう)
+      const a = () => actionsRef.current
       switch (msg.type) {
         case 'rdsim:load': {
           const bytes = msg.bytes instanceof Uint8Array ? msg.bytes : new Uint8Array(msg.bytes)
-          a.loadCircuit(bytes)
+          enqueue(() => a().loadCircuit(bytes))
           break
         }
-        case 'rdsim:step': a.doStep(msg.n ?? 1); break
-        case 'rdsim:run': a.setRunning(true); break
-        case 'rdsim:pause': a.setRunning(false); break
-        case 'rdsim:reset': a.doReset(); break
-        case 'rdsim:trigger': a.doTrigger(msg.x, msg.y, msg.z); break
-        case 'rdsim:setMode': a.setMode(msg.mode); break
+        case 'rdsim:step': enqueue(() => a().doStep(msg.n ?? 1)); break
+        case 'rdsim:run': enqueue(() => a().setRunning(true)); break
+        case 'rdsim:pause': enqueue(() => a().setRunning(false)); break
+        case 'rdsim:reset': enqueue(() => a().doReset()); break
+        case 'rdsim:trigger': enqueue(() => a().doTrigger(msg.x, msg.y, msg.z)); break
+        case 'rdsim:setMode': enqueue(() => a().setMode(msg.mode)); break
       }
     }
     window.addEventListener('message', onMessage)

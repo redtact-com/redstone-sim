@@ -9,9 +9,9 @@ import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
 } from 'deepslate/nbt'
 import { Structure } from 'deepslate'
+import { sniffFormat, convertBuffer } from '@taku128/java-schematic'
+import type { DetectedFormat } from '@taku128/java-schematic'
 import type { BlockState, Dir6 } from '@redstone/sim'
-import { isLitematicRoot, readLitematicBlocks } from './litematic'
-import type { RawPlacedBlock } from './litematic'
 
 const FACING_OPPOSITE: Record<string, string> = {
   north: 'south', south: 'north', east: 'west', west: 'east',
@@ -121,21 +121,34 @@ export interface ImportBounds {
 }
 
 /**
- * どの形式としても 1 ブロックも読めなかったときの説明 (#172)。
+ * 読めない形式のときに返す説明 (#174)。
  *
- * ファイル選択は `.schem` も受け付けるが、パーサはバニラ構造 NBT と litematic
- * だけ。**黙って 0 ブロックになるのが一番たちが悪い**ので、何が起きたかを必ず
- * 警告として返す。
+ * `sniffFormat` の判別結果から引く。**英語の例外メッセージを文字列一致で
+ * 掴まない**ため (ライブラリの文言変更で壊れる)。
+ * 判別できたのに読めなかった、を黙って 0 ブロックにしないのが目的。
  */
-function describeEmptyImport(root: NbtCompound): string {
-  // WorldEdit Sponge 形式: v2 は root 直下、v3 は Schematic 配下
-  if (root.get('BlockData') !== undefined || root.get('Schematic') !== undefined) {
-    return 'WorldEdit (.schem) 形式には未対応です。.nbt / .litematic で書き出してください'
-  }
-  return '読み取れるブロックがありませんでした (対応形式は .nbt / .litematic)'
+const UNSUPPORTED_FORMAT_MESSAGE: Partial<Record<DetectedFormat, string>> = {
+  'bedrock-mcstructure':
+    'Bedrock 版の .mcstructure には未対応です (Java 版の .nbt / .litematic / .schem を使ってください)',
+  schematic:
+    '旧 MCEdit の .schematic (数値 ID) には未対応です。.schem か .litematic で保存し直してください',
+  unknown:
+    'NBT の形式を判別できませんでした (対応形式は .nbt / .litematic / .schem)',
 }
 
-/** バニラ構造 NBT (.nbt) を形式非依存の RawPlacedBlock 列にする */
+/** 形式の判別に失敗したときの ImportResult */
+function emptyResult(warning: string): ImportResult {
+  return { blocks: new Map(), warnings: [warning], size: [0, 0, 0] }
+}
+
+/** 置かれた 1 ブロック (形式によらない中間形) */
+interface RawPlacedBlock {
+  pos: [number, number, number]
+  name: string
+  props: Record<string, string>
+}
+
+/** バニラ構造 NBT (.nbt) を RawPlacedBlock 列にする */
 function readVanillaStructureBlocks(root: NbtCompound): RawPlacedBlock[] {
   return Structure.fromNbt(root).getBlocks().map((placed) => ({
     pos: placed.pos as [number, number, number],
@@ -154,29 +167,52 @@ export interface ImportResult {
 }
 
 /**
- * バニラ構造 NBT (.nbt) / Litematica (.litematic) のバイト列 →
- * エディタブロックマップ。
+ * Java 版の構造ファイル (.nbt / .litematic / .schem) → エディタブロックマップ。
  *
- * 形式は root を見て振り分ける (#172)。以降のブロック名変換・バウンド判定・
- * 警告集約は**両形式で共通**なので、読み取り部だけを差し替える形にしている。
+ * 形式は**拡張子ではなく NBT の中身**で判別する (#174)。バニラ構造 NBT は
+ * そのまま deepslate で読み、それ以外は `@taku128/java-schematic` で構造 NBT へ
+ * 変換してから同じ経路に流す。以降のブロック名変換・バウンド判定・警告集約は
+ * 全形式で共通。
  *
  * bounds を渡すと盤面 (gridW×gridH×maxLayers) に収まらないブロックを省略し、
  * 省略数・非対応ブロックを種類ごとに集約した警告を返す。埋め込み表示 (#97) では
  * この警告を親ページへ渡し、「n 個を簡略化しました」と提示する。
  */
-export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {}): ImportResult {
+export async function importFromNbtBytes(
+  bytes: Uint8Array,
+  bounds: ImportBounds = {},
+): Promise<ImportResult> {
   const { gridW, gridH, maxLayers } = bounds
-  const nbt = NbtFile.read(bytes)
-  const placedBlocks = isLitematicRoot(nbt.root)
-    ? readLitematicBlocks(nbt.root)
-    : readVanillaStructureBlocks(nbt.root)
+
+  let format: DetectedFormat
+  try {
+    format = sniffFormat(bytes).format
+  } catch (e) {
+    // NBT として展開すらできない (画像を掴んだ等)
+    return emptyResult(`NBT として読めませんでした: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  const unsupported = UNSUPPORTED_FORMAT_MESSAGE[format]
+  if (unsupported) return emptyResult(unsupported)
+
+  // バニラ構造 NBT は変換不要 (再エンコード + 再パースの往復を挟まない)
+  let structureBytes = bytes
+  if (format !== 'structure') {
+    try {
+      structureBytes = (await convertBuffer(bytes)).nbt
+    } catch (e) {
+      return emptyResult(`${format} の変換に失敗しました: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  const nbt = NbtFile.read(structureBytes)
+  const placedBlocks = readVanillaStructureBlocks(nbt.root)
 
   const resultBlocks = new Map<string, BlockState>()
   const warnings: string[] = []
   let skippedAbove = 0
   let skippedOutOfBounds = 0
   // 非対応ブロックは種類ごとに件数を集約する (1 個ずつ列挙すると警告が溢れるため)
-  const unsupported = new Map<string, number>()
+  const unsupportedBlocks = new Map<string, number>()
 
   let minX = Infinity, minY = Infinity, minZ = Infinity
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
@@ -202,7 +238,7 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
     if (!block) {
       // air 亜種 (cave_air / void_air) は空セル扱いで無警告 (通常の air と同様)
       const isAir = name === 'minecraft:air' || name.endsWith('_air')
-      if (!isAir) unsupported.set(name, (unsupported.get(name) ?? 0) + 1)
+      if (!isAir) unsupportedBlocks.set(name, (unsupportedBlocks.get(name) ?? 0) + 1)
       continue
     }
     resultBlocks.set(`${bx},${by},${bz}`, block)
@@ -214,11 +250,11 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
     if (bz > maxZ) maxZ = bz
   }
 
-  if (placedBlocks.length === 0) warnings.push(describeEmptyImport(nbt.root))
-  if (unsupported.size > 0) {
-    const total = [...unsupported.values()].reduce((a, b) => a + b, 0)
-    const kinds = [...unsupported.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
-    warnings.push(`未対応ブロック ${total} 個 (${unsupported.size} 種: ${kinds}) を省略`)
+  if (placedBlocks.length === 0) warnings.push('読み取れるブロックがありませんでした (空の構造ファイル)')
+  if (unsupportedBlocks.size > 0) {
+    const total = [...unsupportedBlocks.values()].reduce((a, b) => a + b, 0)
+    const kinds = [...unsupportedBlocks.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
+    warnings.push(`未対応ブロック ${total} 個 (${unsupportedBlocks.size} 種: ${kinds}) を省略`)
   }
   if (skippedAbove > 0) warnings.push(`高さ上限 (Y≥${maxLayers}) 超過で ${skippedAbove} ブロックを省略`)
   if (skippedOutOfBounds > 0) {
