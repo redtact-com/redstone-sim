@@ -1,0 +1,24 @@
+{
+  "name": "detector-rail-cart-pulse",
+  "description": "#146 detector_rail はマインカートを検出して信号を出す。powered が変わるのは entityInside / 20gt ごとの tick / onPlace の 3 経路だけ [確定: 26.2 DetectorRailBlock.java:56-79] なので、実機で ground truth を採るにはカート召喚が要る。出力は全方向へ weak 15、getDirectSignal は **UP のみ** 15 = 真下のブロックだけを強励起する [確定: 26.2 DetectorRailBlock.java:44-54,72-79]。配置は 1 本で 3 つを見る: (3,1,3) のランプ = 側面の weak / (1,0,3) のランプ = 真下の支持ブロック (2,0,3) が強励起される証拠 / (2,1,5) のランプ = 側面の隣接固体 (2,1,4) は強励起されないので**点かない**はず。t2 で召喚、t6 で削除。OFF は 20gt の予約が切れるタイミングになるはず。",
+  "mcVersion": "1.21.1",
+  "ticks": 34,
+  "region": { "from": [0, 0, 2], "to": [4, 2, 6] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+
+    { "pos": [2, 0, 3], "block": "stone" },
+    { "pos": [1, 0, 3], "block": "redstone_lamp[lit=false]" },
+
+    { "pos": [2, 1, 3], "block": "detector_rail[shape=north_south,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "redstone_lamp[lit=false]" },
+
+    { "pos": [2, 1, 4], "block": "stone" },
+    { "pos": [2, 1, 5], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [2, 1, 3], "action": "summon" },
+    { "tick": 6, "pos": [2, 1, 3], "action": "kill" }
+  ]
+}
