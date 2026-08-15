@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { SimWorld } from '../src/world'
-import { planRailPlacement, railConnections, shouldRailBePowered } from '../src/rail'
+import {
+  planRailPlacement, railConnections, shouldRailBePowered, countPotentialConnections,
+} from '../src/rail'
 import { isRailSlope, isCurvedRailShape } from '../src/types'
 import type { BlockState, RailShape, StraightRailShape, Pos3D } from '../src/types'
 
@@ -523,5 +525,76 @@ describe('通常レールの曲線 (#140)', () => {
     const shape = planRailPlacement(w, [1, 0, 0], 'north_south')
       .find(c => c.pos[0] === 1)?.shape
     expect(shape).toBe('east_west')
+  })
+})
+
+/**
+ * 実行中のジャンクション切り替え (#142)
+ * [確定: 26.2 RailBlock.updateState — 更新元が信号源 かつ 潜在接続がちょうど 3]。
+ * 実機 fixture rail-junction-toggle / rail-junction-gate / rail-junction-nonsignal が典拠。
+ */
+describe('通常レールのジャンクション切り替え (#142)', () => {
+  /** 中心 (0,0,0) に n/s/e の 3 方向 (+ 任意で w) の隣接レールと、西のレバー */
+  function junction(fourWay = false): SimWorld {
+    const w = new SimWorld()
+    for (const p of [[0, -1, 0], [0, -1, -1], [0, -1, 1], [1, -1, 0], [-1, -1, 0]] as Pos3D[]) {
+      w.setBlockAt(p, solid())
+    }
+    w.setBlockAt([0, 0, -1], prail('north_south'))
+    w.setBlockAt([0, 0, 1], prail('north_south'))
+    w.setBlockAt([1, 0, 0], prail('east_west'))
+    if (fourWay) w.setBlockAt([-1, 0, 0], prail('east_west'))
+    w.initialize()
+    return w
+  }
+  /** 中心にレールを置く (非通電なので south_east になる) */
+  const placeCenter = (w: SimWorld): void => {
+    w.setBlockCommand([0, 0, 0], prail('north_south'))
+  }
+
+  it('3 方向ジャンクションはレバー ON/OFF で曲がる先が往復する', () => {
+    const w = junction()
+    placeCenter(w)
+    expect(shapeAt(w, [0, 0, 0])).toBe('south_east')
+
+    // 真下をレッドストーンブロックに差し替えて給電 (信号源からの更新)
+    w.setBlockCommand([0, -1, 0], { type: 'redstone_block' } as BlockState)
+    expect(shapeAt(w, [0, 0, 0])).toBe('north_east')
+
+    // 石に戻すと通電は消えるが、石は信号源ではないので再計算されず固まる
+    w.setBlockCommand([0, -1, 0], solid())
+    expect(shapeAt(w, [0, 0, 0]), '信号源でない更新では再計算されない').toBe('north_east')
+  })
+
+  it('4 方向ジャンクションは給電しても切り替わらない (潜在接続 == 3 の門番)', () => {
+    const w = junction(true)
+    placeCenter(w)
+    expect(shapeAt(w, [0, 0, 0])).toBe('south_east')
+    w.setBlockCommand([0, -1, 0], { type: 'redstone_block' } as BlockState)
+    expect(shapeAt(w, [0, 0, 0])).toBe('south_east')
+  })
+
+  it('潜在接続の数え方は「同じ高さ / 1 段上 / 1 段下」を見る', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], prail('north_south'))
+    w.setBlockAt([0, 0, -1], prail('north_south'))   // 同じ高さ
+    w.setBlockAt([0, 1, 1], prail('north_south'))    // 1 段上
+    w.setBlockAt([1, -1, 0], prail('east_west'))     // 1 段下
+    expect(countPotentialConnections(w, [0, 0, 0])).toBe(3)
+  })
+
+  it('直線レール (powered_rail) はジャンクション切り替えの対象外', () => {
+    const w = new SimWorld()
+    for (const p of [[0, -1, 0], [0, -1, -1], [0, -1, 1], [1, -1, 0]] as Pos3D[]) {
+      w.setBlockAt(p, solid())
+    }
+    w.setBlockAt([0, 0, -1], prail('north_south'))
+    w.setBlockAt([0, 0, 1], prail('north_south'))
+    w.setBlockAt([1, 0, 0], prail('east_west'))
+    w.initialize()
+    w.setBlockCommand([0, 0, 0], rail('north_south'))
+    const before = shapeAt(w, [0, 0, 0])
+    w.setBlockCommand([0, -1, 0], { type: 'redstone_block' } as BlockState)
+    expect(shapeAt(w, [0, 0, 0])).toBe(before)
   })
 })

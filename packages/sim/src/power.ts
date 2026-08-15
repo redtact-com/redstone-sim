@@ -1,5 +1,5 @@
 import type {
-  Pos3D, Dir6, HDir, TorchState, WallTorchState, BlockState,
+  Pos3D, Dir6, HDir, TorchState, WallTorchState, BlockState, BlockType,
 } from './types.js'
 import type { SimWorld } from './world.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
@@ -286,4 +286,38 @@ export function isBlockPowered(world: SimWorld, pos: Pos3D): boolean {
     if (isFacePowered(world, pos, dir)) return true
   }
   return false
+}
+
+/**
+ * vanilla の `Block.isSignalSource(state)` が true になるブロックか
+ * [確定: 26.2 — isSignalSource を override しているのは RedStoneWireBlock /
+ *  RedstoneTorchBlock / DiodeBlock (repeater・comparator) / LeverBlock /
+ *  ButtonBlock / BasePressurePlateBlock / ObserverBlock / TargetBlock /
+ *  PoweredBlock (= redstone_block) / DetectorRailBlock ほか sim 未実装の
+ *  DaylightDetector・SculkSensor・TripWireHook・LightningRod・TrappedChest・Lectern]。
+ *
+ * **状態ではなくブロック種で決まる** ことに注意 (vanilla も defaultBlockState() に
+ * 対して問う場面がある)。通常レールの向き再計算はこれを門番に使う (#142)。
+ */
+export function isSignalSourceType(type: BlockType): boolean {
+  switch (type) {
+    case 'wire':
+    case 'torch':
+    case 'wall_torch':
+    case 'repeater':
+    case 'comparator':
+    case 'lever':
+    case 'button_stone':
+    case 'button_wood':
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone':
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy':
+    case 'observer':
+    case 'target':
+    case 'redstone_block':
+      return true
+    default:
+      return false
+  }
 }

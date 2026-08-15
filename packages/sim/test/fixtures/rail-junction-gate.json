@@ -1,0 +1,265 @@
+{
+  "name": "rail-junction-gate",
+  "description": "#142 実行中の向き再計算の門番 2 条件のうち「潜在接続がちょうど 3」を分離する。RailBlock.updateState は 更新元が信号源 かつ countPotentialConnections()==3 のときだけ updateDir を走らせる [確定: 26.2 RailBlock.java:29-33]。左 (2,1,3) は北・南・東の 3 方向、右 (7,1,3) は四方全ての 4 方向ジャンクション。どちらも非通電で置くと後勝ちで south_east になる。そのあと真下の支持ブロックをレッドストーンブロックに差し替えて給電すると、setblock の近隣更新は**新しいブロック**を運ぶ [確定: 26.2 ServerLevel.java:855-866 — updateNeighborsAt(pos, blockState.getBlock())] のでどちらにも信号源からの更新が届く。左は 3 方向なので north_east に切り替わり、右は 4 方向なので門番に弾かれて south_east のまま残るはず。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      0,
+      0,
+      1
+    ],
+    "to": [
+      9,
+      2,
+      5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        2
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        4
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        3
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        8,
+        1,
+        3
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        7,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        7,
+        0,
+        3
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "rail[shape=south_east,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            3
+          ],
+          "block": "rail[shape=south_east,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            2,
+            0,
+            3
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "rail[shape=north_east,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            7,
+            0,
+            3
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T12:45:29.650Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
