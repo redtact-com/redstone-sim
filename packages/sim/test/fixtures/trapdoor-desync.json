@@ -1,0 +1,176 @@
+{
+  "name": "trapdoor-desync",
+  "description": "#157 素手で開けると open だけが動き powered は据え置かれる。TrapDoorBlock.useWithoutItem は toggle するだけで POWERED を触らず [確定: 26.2 TrapDoorBlock.java:86-95,110-123]、neighborChanged は `signal != POWERED` のときしか補正しない [確定: :125-144]。t2 で木のトラップドアを素手で開けると **通電していないのに open=true** という状態になる。t4 の鉄のトラップドアは canOpenByHand=false なので同じ操作でも開かない (対照)。t6 のレバー ON では木は既に開いているので powered だけが追随し、t8 の OFF で初めて閉じる = ここでズレが解消する。狙点の Y オフセットを 0.10 にしてあるのは、**閉じたトラップドアの当たり判定が下端 3/16 しかない**ため (既定の 0.35 では素通りしてクリックが当たらない)。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      -2,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      4,
+      7
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_trapdoor[facing=north,half=bottom,open=true,powered=false,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "iron_trapdoor[facing=north,half=bottom,open=true,powered=true,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T16:09:26.185Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
