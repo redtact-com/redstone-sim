@@ -147,6 +147,13 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'fence_gate':
       return `minecraft:oak_fence_gate[facing=${flipDir(block.facing)},in_wall=false,`
         + `open=${block.open},powered=${block.powered}]`
+    case 'door_wood':
+    case 'door_iron': {
+      // hinge は sim で持たないので left 固定 (#159)
+      const name = block.type === 'door_iron' ? 'iron_door' : 'oak_door'
+      return `minecraft:${name}[facing=${flipDir(block.facing)},half=${block.half},`
+        + `hinge=left,open=${block.open},powered=${block.powered}]`
+    }
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -209,6 +216,8 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:oak_trapdoor',
   'minecraft:iron_trapdoor',
   'minecraft:oak_fence_gate',
+  'minecraft:oak_door',
+  'minecraft:iron_door',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

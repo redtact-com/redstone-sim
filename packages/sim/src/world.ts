@@ -867,6 +867,25 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
+    } else if (block.type === 'door_wood') {
+      // 素手で開閉する [確定: 26.2 DoorBlock.useWithoutItem — canOpenByHand]。
+      // トラップドアと同じく **open だけ**動き powered は据え置かれる。
+      // vanilla は押した半分だけを書き換え、相方は updateShape で追従するので
+      // sim では両方に反映する。鉄のドアはここに来ない
+      const open = !block.open
+      this.setBlockAt(pos, { ...block, open })
+      this.emitShapeUpdate(pos)
+      const otherPos: Pos3D = block.half === 'lower'
+        ? [pos[0], pos[1] + 1, pos[2]]
+        : [pos[0], pos[1] - 1, pos[2]]
+      const other = this.getBlockAt(otherPos)
+      if (other?.type === 'door_wood' && other.half !== block.half) {
+        this.setBlockAt(otherPos, { ...other, open })
+        this.emitShapeUpdate(otherPos)
+      }
+      this.traceProcess('PI', 'Do', open ? 'n' : 'f', 0)
+      this.traceOpenUpdate(pos)
+      this.traceCloseUpdate('Do', open ? 'n' : 'f', 0, 'PI')
     } else if (block.type === 'trapdoor_wood' || block.type === 'fence_gate') {
       // 素手で開閉する [確定: 26.2 TrapDoorBlock.useWithoutItem — canOpenByHand]。
       // **open だけが動き powered は据え置かれる**ので、給電中に手で閉めると
@@ -2017,6 +2036,32 @@ export class SimWorld {
         }
         break
       }
+      case 'door_wood':
+      case 'door_iron': {
+        // vanilla DoorBlock.neighborChanged [確定: 26.2 DoorBlock.java:225-238]:
+        //   signal = hasNeighborSignal(自分) || hasNeighborSignal(相方の半分)
+        //   更新元が同じドアブロックなら無視する (2 つの半分が更新を往復しないガード)
+        // [実機 fixture door-redstone: 下半分だけ / 上半分だけ どちらの給電でも両方開く]
+        if (origin === block.type) break
+        const otherPos: Pos3D = block.half === 'lower'
+          ? [pos[0], pos[1] + 1, pos[2]]
+          : [pos[0], pos[1] - 1, pos[2]]
+        const signal = isBlockPowered(this, pos) || isBlockPowered(this, otherPos)
+        if (signal !== block.powered) {
+          this.setBlockAt(pos, { ...block, open: signal, powered: signal })
+          this.emitShapeUpdate(pos)   // flag 2 なので近隣更新は出さない
+          // 相方へミラーする。vanilla では updateShape が「相手の状態をコピー」して
+          // 同期を保つ [確定: DoorBlock.java:104-106]。片方にしか近隣更新が届かない
+          // ケース (レバーが下半分にだけ隣接する等) ではこれが無いと上半分が取り残される
+          const other = this.getBlockAt(otherPos)
+          if ((other?.type === 'door_wood' || other?.type === 'door_iron')
+              && other.half !== block.half) {
+            this.setBlockAt(otherPos, { ...other, open: signal, powered: signal })
+            this.emitShapeUpdate(otherPos)
+          }
+        }
+        break
+      }
       case 'trapdoor_wood':
       case 'trapdoor_iron':
       case 'fence_gate': {
@@ -2269,6 +2314,8 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
     // 銅の電球は lit だけでなく powered も blockstate なので、立ち下がりでも観測される
     // [実機 fixture copper-bulb-toggle: レバーを切った tick でもオブザーバーが発火]
+    case 'door_wood':
+    case 'door_iron':
     case 'trapdoor_wood':
     case 'trapdoor_iron':
     case 'fence_gate': return 'open' in a

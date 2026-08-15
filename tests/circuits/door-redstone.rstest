@@ -1,0 +1,37 @@
+# ドアは上下 2 マスにまたがって OR で受電する (#159)。
+#
+# `neighborChanged` は **自分の位置 または 相方の半分** の受電を見る
+# [確定: 26.2 DoorBlock.java:228-229]。ピストン・ディスペンサー以外で唯一の
+# 疑似接続の変種で、**片方の半分だけに給電しても両方が開く**。
+#
+# 左の木のドアは下半分だけにレバーが隣接し、
+# 右の鉄のドアは上半分だけにレッドストーンブロックが隣接する (下半分とは斜め)。
+# どちらも 2 つの半分が同じ tick で開閉する = OR と updateShape による同期。
+#
+# 期待値は実機 (fixture door-redstone) が正。
+meta {
+  name: ドアは片方の半分への給電で両方が開く
+  ref: #159 / fixture door-redstone / 26.2 DoorBlock.neighborChanged
+}
+
+fixture door-redstone
+
+state {
+  # 下半分だけにレバー → 両方開く
+  t2 (1,1,4) oak_door[facing=north,half=lower,hinge=left,open=true,powered=true]
+  t2 (1,2,4) oak_door[facing=north,half=upper,hinge=left,open=true,powered=true]
+}
+
+state {
+  # 上半分だけにレッドストーンブロック → 両方開く (鉄のドアも同じ)
+  t4 (5,1,4) iron_door[facing=north,half=lower,hinge=left,open=true,powered=true]
+  t4 (5,2,4) iron_door[facing=north,half=upper,hinge=left,open=true,powered=true]
+}
+
+state {
+  # 給電を切ると両方閉じる
+  t6 (1,1,4) oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]
+  t6 (1,2,4) oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]
+  t8 (5,1,4) iron_door[facing=north,half=lower,hinge=left,open=false,powered=false]
+  t8 (5,2,4) iron_door[facing=north,half=upper,hinge=left,open=false,powered=false]
+}

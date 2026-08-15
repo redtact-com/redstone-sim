@@ -206,6 +206,16 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
         type: 'rail',
         shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
       }
+    case 'door_wood':
+    case 'door_iron':
+      // 置いたマスが下半分。上半分は grid.placeBlock3 が同じ操作で足す (#159)
+      return {
+        type,
+        half: 'lower',
+        facing: facing === 'east' || facing === 'west' || facing === 'south' ? facing : 'north',
+        open: false,
+        powered: false,
+      }
     case 'trapdoor_wood':
     case 'trapdoor_iron':
     case 'fence_gate':

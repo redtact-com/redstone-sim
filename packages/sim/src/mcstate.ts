@@ -194,6 +194,25 @@ export function mcToSim(state: string): BlockState | null {
       // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
       return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
                powered: props.powered === 'true' }
+    case 'oak_door':
+    case 'spruce_door':
+    case 'birch_door':
+    case 'jungle_door':
+    case 'acacia_door':
+    case 'dark_oak_door':
+    case 'mangrove_door':
+    case 'cherry_door':
+    case 'bamboo_door':
+    case 'crimson_door':
+    case 'warped_door':
+    case 'iron_door':
+      // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#159)
+      return {
+        type: name === 'iron_door' ? 'door_iron' : 'door_wood',
+        half: (props.half === 'upper' ? 'upper' : 'lower'),
+        facing: (props.facing ?? 'north') as HDir,
+        open: props.open === 'true', powered: props.powered === 'true',
+      }
     case 'oak_trapdoor':
     case 'spruce_trapdoor':
     case 'birch_trapdoor':
@@ -325,6 +344,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('detector_rail', {
           powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
         })
+      case 'door_wood':
+      case 'door_iron':
+        return formatMcState(sim.type === 'door_iron' ? 'iron_door' : 'oak_door', {
+          facing: sim.facing, half: sim.half, hinge: 'left',
+          open: String(sim.open), powered: String(sim.powered),
+        })
       case 'trapdoor_wood':
       case 'trapdoor_iron':
         return formatMcState(sim.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor', {
@@ -443,10 +468,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.powered = String(sim.powered)
       props.shape = sim.shape
       break
+    case 'door_wood':
+    case 'door_iron':
     case 'trapdoor_wood':
     case 'trapdoor_iron':
     case 'fence_gate':
-      // facing / half / in_wall は authored の値を保持し、動的な 2 つだけ差し替える
+      // facing / half / hinge / in_wall は authored の値を保持し、動的な 2 つだけ差し替える
       props.open = String(sim.open)
       props.powered = String(sim.powered)
       break
