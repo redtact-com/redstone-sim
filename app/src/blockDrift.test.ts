@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { TRIGGERABLE_TYPES } from '@redstone/sim'
 import { PLACEABLE_TYPES, CircuitEditor } from '@redstone/editor'
 import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS } from '@redstone/viewer'
@@ -54,5 +55,28 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
         expect(meta.texture, `${meta.type} のテクスチャ`).not.toBeNull()
       }
     }
+  })
+})
+
+/**
+ * 盤面サイズの定数は EditorPage と EmbedPage に**同じものが 2 つ**ある (#179)。
+ * どちらもモジュール私有で export していないため、型でもインポートでも守られない。
+ * 片方だけ変えると「エディタでは置けるのに埋め込みでは切り落とされる」がテスト全緑で通る。
+ */
+describe('盤面サイズ定数のドリフト検知 (#179)', () => {
+  const constOf = (file: string, name: string): number => {
+    const src = readFileSync(new URL(file, import.meta.url), 'utf8')
+    const m = src.match(new RegExp(`const ${name} = (\\d+)`))
+    if (!m) throw new Error(`${file} に ${name} の定義が見つからない`)
+    return Number(m[1])
+  }
+
+  it.each(['GRID_W', 'GRID_H', 'GRID_LAYERS'])('%s が EditorPage と EmbedPage で一致する', (name) => {
+    expect(constOf('./EmbedPage.tsx', name)).toBe(constOf('./EditorPage.tsx', name))
+  })
+
+  it('高さは実回路が入る段数を確保している', () => {
+    // 8 段だった頃、配布回路 (12 段) が取り込み時に 34% 切り落とされていた (#179)
+    expect(constOf('./EditorPage.tsx', 'GRID_LAYERS')).toBeGreaterThanOrEqual(12)
   })
 })

@@ -34,7 +34,8 @@ import type { TriggerEntry } from './palette'
 
 const GRID_W = 16
 const GRID_H = 16
-const GRID_LAYERS = 8
+/** EditorPage.tsx の同名定数と揃える (#179 で 8 → 16) */
+const GRID_LAYERS = 16
 
 
 const GRID_BOUNDS: WorldSnapshot['bounds'] = {
