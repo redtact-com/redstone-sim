@@ -16,6 +16,7 @@
     "@redstone/sim": "*",
     "@redstone/viewer": "*",
     "@tailwindcss/vite": "^4.2.2",
+    "@taku128/java-schematic": "^0.2.3",
     "deepslate": "^0.25.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
