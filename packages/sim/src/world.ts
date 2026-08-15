@@ -2,7 +2,7 @@ import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
-  RailShape, BlockType,
+  RailShape, BlockType, DetectorRailState,
 } from './types.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
@@ -10,7 +10,7 @@ import {
 } from './types.js'
 import {
   shouldRailBePowered, planRailPlacement, isRail, isPoweredRail,
-  countPotentialConnections,
+  countPotentialConnections, railConnections,
 } from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
@@ -623,6 +623,10 @@ export class SimWorld {
         // vanilla ObserverBlock.onPlace: POWERED で設置された場合は flag 18
         // (更新なし) で消灯する。authored の powered=true は無視して off から始める
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
+      } else if (block.type === 'detector_rail') {
+        // カート検出でしか powered にならない素子。初期安定状態では不在なので
+        // authored の powered=true は無視して OFF から始める (感圧板と同趣旨。#146)
+        if (block.powered) this.blocks.set(key, { ...block, powered: false })
       } else if (
         block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone' ||
         block.type === 'weighted_pressure_plate_light' || block.type === 'weighted_pressure_plate_heavy'
@@ -863,6 +867,21 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
+    } else if (block.type === 'detector_rail') {
+      // マインカートの「乗り込み」を手動トリガする (#146)。既に powered なら no-op
+      // [確定: 26.2 DetectorRailBlock.entityInside の `if (!state.getValue(POWERED))` ガード]。
+      // ON → 20gt (PRESSED_CHECK_PERIOD) 後の tile tick で checkPressed が
+      // カート不在と再評価して自動 OFF する (感圧板と同型の折衷モデル)。
+      // [実機 fixture detector-rail-cart-pulse: t3 検出 → t23 OFF]
+      if (block.powered) return
+      const next: DetectorRailState = { ...block, powered: true }
+      this.setBlockAt(pos, next)
+      this.traceProcess('PI', 'Dt', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
+      this.propagateChange(pos)
+      this.traceCloseUpdate('Dt', 'n', 0, 'PI')
+      this.schedule(pos, 20, 0)  // [確定: 26.2 PRESSED_CHECK_PERIOD = 20]
     } else if (block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone') {
       // 感圧板の「踏まれ」を手動トリガする。既に踏まれていれば no-op
       // (vanilla entityInside の signal==0 ガード相当)。ON → 20gt (getPressedTime)
@@ -914,6 +933,7 @@ export class SimWorld {
       case 'button_wood':   return block.powered ? 15 : 0
       case 'pressure_plate_wood':
       case 'pressure_plate_stone': return block.powered ? 15 : 0
+      case 'detector_rail':  return block.powered ? 15 : 0
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy': return block.powered ? block.pressedPower : 0
       case 'lamp':          return block.lit ? 15 : 0
@@ -1051,6 +1071,10 @@ export class SimWorld {
         apply({ ...block, powered: newPowered, outputPower: newOutputPower }, 'c')
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
+      if (block.powered) apply({ ...block, powered: false }, 'f')
+    } else if (block.type === 'detector_rail') {
+      // vanilla DetectorRailBlock.tick → checkPressed: powered のときカートを数え直す。
+      // 折衷モデルは entity を持たないので常に 0 = OFF (再予約もしない)。#146
       if (block.powered) apply({ ...block, powered: false }, 'f')
     } else if (
       block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone' ||
@@ -1206,6 +1230,7 @@ export class SimWorld {
       case 'pressure_plate_stone':
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy':
+      case 'detector_rail':
       case 'repeater':
       case 'comparator':
         return true
@@ -1584,6 +1609,18 @@ export class SimWorld {
         // updateNeighbours: 自身の隣接 6 + 取り付けブロックの隣接 6
         this.submitMultiNC(pos)
         this.submitMultiNC(neighbor(pos, OPPOSITE[block.facing]))
+        break
+      }
+      case 'detector_rail': {
+        // checkPressed の更新一式 [確定: 26.2 DetectorRailBlock.java:88-113]:
+        //   setBlock(flag3) → 自身 6 方向 / updatePowerToConnected → 繋がる 2 マスへ
+        //   単発通知 / updateNeighborsAt(pos) (重複) / updateNeighborsAt(pos.below())
+        //   / 末尾で updateNeighbourForOutputSignal (コンパレーター)
+        this.submitMultiNC(pos)
+        for (const c of railConnections(pos, block.shape)) this.submitSingleNC(c, block.type)
+        this.submitMultiNC(pos)
+        this.submitMultiNC(neighbor(pos, 'down'))
+        this.emitComparatorUpdate(pos)
         break
       }
       case 'pressure_plate_wood':
@@ -2170,6 +2207,7 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'lever':
     case 'button_stone':
     case 'button_wood': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
+    case 'detector_rail':
     case 'pressure_plate_wood':
     case 'pressure_plate_stone': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
     case 'weighted_pressure_plate_light':

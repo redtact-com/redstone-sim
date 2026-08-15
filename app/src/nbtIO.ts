@@ -282,6 +282,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'rail':
       // 通常レールは powered を持たない。曲線 4 形状も取る (#140)
       return ['minecraft:rail', { shape: block.shape, waterlogged: 'false' }]
+    case 'detector_rail':
     case 'powered_rail':
     case 'activator_rail':
       return [`minecraft:${block.type}`, {
@@ -446,6 +447,13 @@ function minecraftToBlockState(
   if (name === 'minecraft:rail') {
     // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4)。通常レールだけが曲線を取る (#140)
     return { type: 'rail', shape: (props.shape ?? 'north_south') } as BlockState
+  }
+  if (name === 'minecraft:detector_rail') {
+    return {
+      type: 'detector_rail',
+      shape: (props.shape ?? 'north_south'),
+      powered: props.powered === 'true',
+    } as BlockState
   }
   if (name === 'minecraft:powered_rail' || name === 'minecraft:activator_rail') {
     // SHAPE は RAIL_SHAPE_STRAIGHT (直線2+坂4)。曲線はこの 2 種には無い。

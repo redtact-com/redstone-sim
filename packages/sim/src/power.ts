@@ -124,6 +124,10 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
       return 15
     case 'target':
       return src.outputPower
+    case 'detector_rail':
+      // 全方向へ weak 15 [確定: 26.2 DetectorRailBlock.ownSignal = powered ? 15 : 0]。
+      // 強充電は真下のみ (getEmittedDirectSignal 側)
+      return src.powered ? 15 : 0
     case 'torch':
     case 'wall_torch': {
       if (!src.lit) return 0
@@ -170,6 +174,13 @@ function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): nu
     case 'button_stone':
     case 'button_wood':
       return src.powered && toDir === getAttachFace(src.facing) ? 15 : 0
+    case 'detector_rail':
+      // **真下のブロックだけ**を強充電する [確定: 26.2 DetectorRailBlock.getDirectSignal
+      // = (direction == UP) ? 15 : 0。vanilla の UP = 受信側→レール の向きなので
+      // sim の レール→受信側 'down' に対応]
+      // [実機 fixture detector-rail-cart-pulse: 真下の支持ブロック越しにランプが点き、
+      //  側面の隣接固体越しには点かない]
+      return src.powered && toDir === 'down' ? 15 : 0
     case 'pressure_plate_wood':
     case 'pressure_plate_stone':
       // 取り付け面 = 直下ブロックのみを強充電 [確定: 26.2
@@ -316,6 +327,7 @@ export function isSignalSourceType(type: BlockType): boolean {
     case 'observer':
     case 'target':
     case 'redstone_block':
+    case 'detector_rail':
       return true
     default:
       return false

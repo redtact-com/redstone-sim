@@ -190,6 +190,10 @@ export function mcToSim(state: string): BlockState | null {
     case 'rail':
       // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4 の 10 種)。動力は持たない (#140)
       return { type: 'rail', shape: (props.shape ?? 'north_south') as RailShape }
+    case 'detector_rail':
+      // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
+      return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
+               powered: props.powered === 'true' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -277,6 +281,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'rail':
         // 通常レールは動力を持たないので shape だけ (#140)
         return formatMcState('rail', { shape: sim.shape, waterlogged: 'false' })
+      case 'detector_rail':
+        return formatMcState('detector_rail', {
+          powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
+        })
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':
@@ -374,6 +382,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'rail':
       // 通常レールは動力を持たない。shape だけ sim 状態から直列化する (#140)
+      props.shape = sim.shape
+      break
+    case 'detector_rail':
+      props.powered = String(sim.powered)
       props.shape = sim.shape
       break
     case 'container':

@@ -1,0 +1,49 @@
+# ディテクターレールはカート検出で信号を出す (#146)。
+#
+# レール 4 種で唯一の信号源 [確定: 26.2 DetectorRailBlock.java:44-54]:
+#   - ownSignal      = powered ? 15 : 0  (全方向へ weak)
+#   - getDirectSignal = **UP のみ** 15   (= 真下のブロックだけを強励起)
+#
+# 1 本で 3 つを見ている:
+#   (3,1,3) のランプ … 側面の weak で点く
+#   (1,0,3) のランプ … 真下の支持ブロック (2,0,3) が強励起される証拠
+#   (2,1,5) のランプ … 側面の隣接固体 (2,1,4) は強励起されないので**点かない**
+#
+# 実機では freeze 中に entityInside が走らないため、t2 の召喚は t3 で検出される。
+# OFF は 20gt の予約 (PRESSED_CHECK_PERIOD) が切れる t23。t6 でカートを消しているが、
+# **OFF のタイミングは削除ではなく ON からの 20gt で決まる**。
+#
+# sim はエンティティを持たないので、感圧板と同じ折衷モデル (手動トリガ + 20gt auto-off)
+# で再現している。
+#
+# 期待値は実機 (fixture detector-rail-cart-pulse) が正。
+meta {
+  name: ディテクターレールのカート検出と出力
+  ref: #146 / fixture detector-rail-cart-pulse / 26.2 DetectorRailBlock
+}
+
+fixture detector-rail-cart-pulse
+
+state {
+  # 召喚の次の tick で検出。側面 weak と真下経由の強励起が同時に見える
+  t3 (2,1,3) detector_rail[powered=true,shape=north_south,waterlogged=false]
+  t3 (3,1,3) redstone_lamp[lit=true]
+  t3 (1,0,3) redstone_lamp[lit=true]
+}
+
+state {
+  # 側面の隣接固体は強励起されないので、その先のランプは点かない
+  t3 (2,1,5) redstone_lamp[lit=false]
+  t10 (2,1,5) redstone_lamp[lit=false]
+}
+
+state {
+  # ON から 20gt で OFF (カートを消した t6 ではない)
+  t23 (2,1,3) detector_rail[powered=false,shape=north_south,waterlogged=false]
+}
+
+state {
+  # ランプは 4gt 遅れて消える
+  t27 (3,1,3) redstone_lamp[lit=false]
+  t27 (1,0,3) redstone_lamp[lit=false]
+}

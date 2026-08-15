@@ -24,8 +24,11 @@ export interface FixtureInput {
    * 'step'     … 感圧板を踏む相当。sim の手動モデルでは activateBlock で 'use' と同一に扱う。
    * 'setblock' … `/setblock` 相当のブロック差し替え (#127)。近隣更新を伴わない書き換えを
    *              作れるので BUD の検証に使う。`block` に blockstate 文字列が要る。
+   * 'summon'   … 実機でマインカートを召喚する (#146)。detector_rail の検出トリガ。
+   *              sim にエンティティは無いので activateBlock (手動トリガ) へ写像する。
+   * 'kill'     … 実機でカートを消す。sim では auto-off が予約済みなので no-op。
    */
-  action: 'use' | 'step' | 'setblock'
+  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill'
   /** action='setblock' で置く blockstate 文字列 ('air' 可) */
   block?: string
 }
@@ -95,10 +98,24 @@ export function fixtureInputsAt(fx: Fixture, t: number): FixtureInput[] {
 /** その tick の入力を world へ適用する ('use'/'step' は activateBlock、'setblock' は差し替え) */
 export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): FixtureInput[] {
   const inputs = fixtureInputsAt(fx, t)
+
+  // 実機は freeze 中に entityInside が走らないため、カート召喚の検出は
+  // **次の tick step** で起きる [実測: fixture detector-rail-cart-pulse —
+  // t2 summon → t3 powered]。sim にエンティティは無いので、この 1 tick の遅れを
+  // ここで再現する (前 tick の summon を今 tick のトリガとして適用する)。#146
+  for (const prev of fixtureInputsAt(fx, t - 1)) {
+    if (prev.action !== 'summon') continue
+    world.activateBlock(prev.pos[0], prev.pos[1], prev.pos[2])
+  }
+
   for (const input of inputs) {
     if (input.action === 'setblock') {
       if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
       world.setBlockCommand(input.pos, mcToSim(input.block) ?? { type: 'air' })
+    } else if (input.action === 'kill' || input.action === 'summon') {
+      // kill … 実機ではカートを消す操作。sim は折衷モデル (トリガ時に持続 gt を予約し、
+      //         実行時に「もう乗っていない」とみなして OFF) なので何もしない
+      // summon … 1 tick 遅れて適用済み (上のループ)。ここでは何もしない
     } else {
       world.activateBlock(input.pos[0], input.pos[1], input.pos[2])
     }
