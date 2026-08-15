@@ -202,6 +202,88 @@ describe('powered_rail は真下のブロックへ更新を配る (BUD の更新
   })
 })
 
+/**
+ * 形状を張り替えたレールは、置いた本人でなくても更新源になる (#132)
+ * [確定: 26.2 RailState.place / connectTo はどちらも setBlock(pos, state, 3) — flag 1 で
+ *  周囲 6 方向へ近隣更新、flag 16 が無いので updateNeighbourShapes も走る]。
+ * 実機 fixture rail-shape-update / rail-shape-chain-join が典拠。
+ */
+describe('形状の張り替えが更新源になる (#132)', () => {
+  /** A=(2,1,3) を east_west で孤立させ、南隣に置くと north_south へ張り替わる世界 */
+  function shapeFlipWorld(): SimWorld {
+    const w = new SimWorld()
+    w.setBlockAt([2, 0, 3], solid())
+    w.setBlockAt([2, 0, 4], solid())
+    w.setBlockAt([2, 1, 3], rail('east_west'))
+    w.initialize()
+    return w
+  }
+
+  it('南隣に置くと孤立していたレールが north_south に張り替わる', () => {
+    const w = shapeFlipWorld()
+    w.setBlockCommand([2, 1, 4], rail('north_south'))
+    expect(shapeAt(w, [2, 1, 3])).toBe('north_south')
+  })
+
+  it('張り替わったレールに面したオブザーバーが発火する', () => {
+    const w = new SimWorld()
+    w.setBlockAt([2, 0, 3], solid())
+    w.setBlockAt([2, 0, 4], solid())
+    w.setBlockAt([2, 1, 3], rail('east_west'))
+    w.setBlockAt([2, 2, 3], { type: 'observer', facing: 'down', powered: false } as BlockState)
+    w.initialize()
+
+    w.setBlockCommand([2, 1, 4], rail('north_south'))
+    // startSignal は 2gt の tile tick なので 2 tick 進めると powered になる
+    let fired = false
+    for (let t = 0; t < 4; t++) {
+      w.tick()
+      const o = w.getBlockAt([2, 2, 3])
+      if (o?.type === 'observer' && o.powered) fired = true
+    }
+    expect(fired).toBe(true)
+  })
+
+  it('張り替わったレールが近隣更新を配る (更新を待っていたピストンが伸びる)', () => {
+    const w = new SimWorld()
+    w.setBlockAt([2, 0, 3], solid())
+    w.setBlockAt([2, 0, 4], solid())
+    w.setBlockAt([2, 1, 3], rail('east_west'))
+    // A の北隣のピストン。quasi セル (2,2,2) を通電させておくが更新は届いていない
+    w.setBlockAt([2, 1, 2], { type: 'piston', facing: 'north', extended: false } as BlockState)
+    w.setBlockAt([2, 2, 2], solid())
+    w.initialize()
+    w.setBlockAt([3, 2, 2], { type: 'redstone_block' } as BlockState)  // 更新を出さない
+    w.settle(16)
+    const before = w.getBlockAt([2, 1, 2])
+    expect(before?.type === 'piston' && before.extended, 'まだ更新が届いていない').toBe(false)
+
+    // 南隣にレールを置く → A が張り替わり、その近隣更新がピストンに届く
+    w.setBlockCommand([2, 1, 4], rail('north_south'))
+    w.settle(16)
+    const after = w.getBlockAt([2, 1, 2])
+    expect(after?.type === 'piston' && after.extended).toBe(true)
+  })
+
+  it('対照: 形状が張り替わらない置き方ではピストンは伸びない', () => {
+    const w = new SimWorld()
+    w.setBlockAt([2, 0, 3], solid())
+    w.setBlockAt([2, 1, 3], rail('east_west'))
+    w.setBlockAt([2, 1, 2], { type: 'piston', facing: 'north', extended: false } as BlockState)
+    w.setBlockAt([2, 2, 2], solid())
+    w.initialize()
+    w.setBlockAt([3, 2, 2], { type: 'redstone_block' } as BlockState)
+    w.settle(16)
+
+    // A から 2 マス離れた位置に置く → A の形状は変わらず更新も出ない
+    w.setBlockAt([5, 0, 3], solid())
+    w.setBlockCommand([5, 1, 3], rail('east_west'))
+    w.settle(16)
+    const after = w.getBlockAt([2, 1, 2])
+    expect(after?.type === 'piston' && after.extended).toBe(false)
+  })
+})
+
 describe('powered_rail は信号を出さない', () => {
   it('powered でも隣のランプは点かない', () => {
     const w = new SimWorld()
