@@ -98,6 +98,7 @@ export const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'container',  label: 'コンテナ',      texture: 'block/barrel_side',     hasFacing: false, hasDelay: false, hasMode: false, hasSignal: true },
   { type: 'hopper',     label: 'ホッパー',      texture: 'block/hopper_outside',  hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
   { type: 'dropper',    label: 'ドロッパー',    texture: 'block/dropper_front',   hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
+  { type: 'dispenser',  label: 'ディスペンサー', texture: 'block/dispenser_front', hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },

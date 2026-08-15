@@ -264,8 +264,10 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       // count = 内容個数 (容量 320)。enabled は initialize で受電から確定
       return { type: 'hopper', facing: dir, count: opts.count ?? 0, enabled: true }
     case 'dropper':
-      // 物流ドロッパー (#65)。facing = 出力方向。count = 内容個数 (容量 576)
-      return { type: 'dropper', facing: dir, count: opts.count ?? 0, triggered: false }
+    case 'dispenser':
+      // 物流ドロッパー (#65) / ディスペンサー (#161)。facing = 出力方向。
+      // count = 内容個数 (容量 576)。差は「前方コンテナへ挿入するか」だけ
+      return { type, facing: dir, count: opts.count ?? 0, triggered: false }
     default:
       return null
   }

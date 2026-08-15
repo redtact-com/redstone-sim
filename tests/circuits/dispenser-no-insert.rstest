@@ -1,0 +1,40 @@
+# ディスペンサーは前方がコンテナでも挿入しない (#161)。
+#
+# 26.2 で `DropperBlock extends DispenserBlock` [確定: DropperBlock.java:23] なので
+# **レッドストーン側は完全に共通**: 疑似接続 (自分 または 直上) の立ち上がりで
+# 4gt の tile tick を予約し TRIGGERED を立てる [確定: DispenserBlock.java:128-144]。
+#
+# 差は `dispenseFrom` だけで、**ドロッパーだけが前方コンテナへ挿入する**
+# [確定: DropperBlock.java:48]。ディスペンサーは override しないので常にワールドへ
+# 射出する = 前方がコンテナでも入らない。
+#
+# 同じ配置を 2 組並べ、1 本のレバーで同時に起動する。
+# 上段 (z=1) がドロッパー、下段 (z=3) がディスペンサー。
+#
+# 期待値は実機 (fixture dispenser-no-insert) が正。
+meta {
+  name: ディスペンサーは前方コンテナへ挿入しない
+  ref: #161 / fixture dispenser-no-insert / 26.2 DropperBlock.dispenseFrom
+}
+
+fixture dispenser-no-insert
+
+state {
+  # レッドストーン側は同じ挙動 — 両方が同じ tick で triggered になる
+  t2 (1,1,1) dropper[facing=east,triggered=true]
+  t2 (1,1,3) dispenser[facing=east,triggered=true]
+}
+
+state {
+  # 4gt 後の射出。ドロッパー側だけバレルに入り、コンパレーターが反応する
+  t8 (3,1,1) comparator[facing=west,mode=compare,powered=true]
+  t8 (4,1,1) redstone_lamp[lit=true]
+}
+
+state {
+  # ディスペンサー側は最後まで無反応 (アイテムはワールドへ射出される)
+  t8 (3,1,3) comparator[facing=west,mode=compare,powered=false]
+  t8 (4,1,3) redstone_lamp[lit=false]
+  t20 (3,1,3) comparator[facing=west,mode=compare,powered=false]
+  t20 (4,1,3) redstone_lamp[lit=false]
+}

@@ -246,8 +246,18 @@ export interface HopperState {
  *     HopperBlockEntity.addItem で挿入 (sim は種別なしなので count を 1 移す)。
  * facing = vanilla FACING = 出力方向 (6 方向。既定 north。非反転)。
  */
+/**
+ * ドロッパー / ディスペンサー (#65, #161)。26.2 で `DropperBlock extends DispenserBlock`
+ * [確定: DropperBlock.java:23] なので**レッドストーン側は完全に共通**:
+ * 疑似接続 (自分 または 直上) の立ち上がりで 4gt の tile tick を予約し TRIGGERED を立てる。
+ *
+ * 差は `dispenseFrom` だけで、**ドロッパーだけが前方コンテナへ挿入する** [確定: :48]。
+ * ディスペンサーは override しないので常にワールドへ射出する = **前方がコンテナでも
+ * 入れない** [実機 fixture dispenser-no-insert]。sim では射出をエンティティ境界原則で
+ * 「1 個消費して何も出さない」に丸めるので、この違いだけが残る。
+ */
 export interface DropperState {
-  type: 'dropper'
+  type: 'dropper' | 'dispenser'
   facing: Dir6
   /** 内容個数 (0..576) */
   count: number
@@ -710,6 +720,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   container: false,
   hopper: false,
   dropper: false,
+  dispenser: false,
   solid: false,
   slime_block: false,
   honey_block: false,

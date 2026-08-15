@@ -333,7 +333,8 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing: (block as any).facing ?? 'down',
       }]
     case 'dropper':
-      return ['minecraft:dropper', {
+    case 'dispenser':
+      return [`minecraft:${block.type}`, {
         facing: (block as any).facing ?? 'north',
         triggered: String((block as any).triggered ?? false),
       }]
@@ -558,9 +559,9 @@ function minecraftToBlockState(
     } as BlockState
   }
 
-  if (name === 'minecraft:dropper') {
+  if (name === 'minecraft:dropper' || name === 'minecraft:dispenser') {
     return {
-      type: 'dropper',
+      type: name === 'minecraft:dispenser' ? 'dispenser' : 'dropper',
       facing: (props.facing ?? 'north') as any,
       count: 0,
       triggered: props.triggered === 'true',

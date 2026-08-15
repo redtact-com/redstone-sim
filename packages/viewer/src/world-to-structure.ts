@@ -94,6 +94,8 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // facing は反転しない (piston/observer と同じ規則。vanilla FACING = 送り込み方向)。
       // enabled は見た目に影響しないが blockstate バリアント選択のため付与する
       return `minecraft:hopper[enabled=${block.enabled},facing=${block.facing}]`
+    case 'dispenser':
+      return `minecraft:dispenser[facing=${block.facing},triggered=${block.triggered}]`
     case 'dropper':
       // facing は反転しない。triggered は見た目に影響しないが付与する
       return `minecraft:dropper[facing=${block.facing},triggered=${block.triggered}]`
@@ -201,6 +203,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:barrel',
   'minecraft:hopper',
   'minecraft:dropper',
+  'minecraft:dispenser',
   'minecraft:stone',
   'minecraft:cobblestone',
   'minecraft:glass',

@@ -21,7 +21,7 @@ export const PLACEABLE_TYPES = [
   'trapdoor_wood', 'trapdoor_iron', 'fence_gate', 'door_wood', 'door_iron',
   'redstone_block', 'target', 'observer', 'solid',
   'slime_block', 'honey_block', 'rail', 'powered_rail', 'activator_rail', 'detector_rail',
-  'container', 'hopper', 'dropper',
+  'container', 'hopper', 'dropper', 'dispenser',
 ] as const satisfies readonly PlaceableType[]
 
 const PLACEABLE_SET: ReadonlySet<string> = new Set(PLACEABLE_TYPES)
@@ -41,7 +41,8 @@ export const PLACE_OPTION_RANGES = {
 
 /** 個数を持てる型か (ホッパー/ドロッパー/コンテナ)。上限は容量 = スロット数 × 64 */
 export function maxCount(type: BlockType): number {
-  return type === 'hopper' || type === 'dropper' || type === 'container'
+  return type === 'hopper' || type === 'dropper' || type === 'dispenser'
+    || type === 'container'
     ? containerCapacity(type)
     : 0
 }
