@@ -9,6 +9,8 @@ import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
 } from 'deepslate/nbt'
 import { Structure } from 'deepslate'
+import { sniffFormat, convertBuffer } from '@taku128/java-schematic'
+import type { DetectedFormat } from '@taku128/java-schematic'
 import type { BlockState, Dir6 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
@@ -118,6 +120,43 @@ export interface ImportBounds {
   maxLayers?: number
 }
 
+/**
+ * 読めない形式のときに返す説明 (#174)。
+ *
+ * `sniffFormat` の判別結果から引く。**英語の例外メッセージを文字列一致で
+ * 掴まない**ため (ライブラリの文言変更で壊れる)。
+ * 判別できたのに読めなかった、を黙って 0 ブロックにしないのが目的。
+ */
+const UNSUPPORTED_FORMAT_MESSAGE: Partial<Record<DetectedFormat, string>> = {
+  'bedrock-mcstructure':
+    'Bedrock 版の .mcstructure には未対応です (Java 版の .nbt / .litematic / .schem を使ってください)',
+  schematic:
+    '旧 MCEdit の .schematic (数値 ID) には未対応です。.schem か .litematic で保存し直してください',
+  unknown:
+    'NBT の形式を判別できませんでした (対応形式は .nbt / .litematic / .schem)',
+}
+
+/** 形式の判別に失敗したときの ImportResult */
+function emptyResult(warning: string): ImportResult {
+  return { blocks: new Map(), warnings: [warning], size: [0, 0, 0] }
+}
+
+/** 置かれた 1 ブロック (形式によらない中間形) */
+interface RawPlacedBlock {
+  pos: [number, number, number]
+  name: string
+  props: Record<string, string>
+}
+
+/** バニラ構造 NBT (.nbt) を RawPlacedBlock 列にする */
+function readVanillaStructureBlocks(root: NbtCompound): RawPlacedBlock[] {
+  return Structure.fromNbt(root).getBlocks().map((placed) => ({
+    pos: placed.pos as [number, number, number],
+    name: placed.state.getName().toString(),
+    props: placed.state.getProperties() as Record<string, string>,
+  }))
+}
+
 export interface ImportResult {
   /** エディタ用ブロックマップ (key: "x,y,z") */
   blocks: Map<string, BlockState>
@@ -128,29 +167,58 @@ export interface ImportResult {
 }
 
 /**
- * バニラ構造 NBT バイト列 → エディタブロックマップ。
+ * Java 版の構造ファイル (.nbt / .litematic / .schem) → エディタブロックマップ。
+ *
+ * 形式は**拡張子ではなく NBT の中身**で判別する (#174)。バニラ構造 NBT は
+ * そのまま deepslate で読み、それ以外は `@taku128/java-schematic` で構造 NBT へ
+ * 変換してから同じ経路に流す。以降のブロック名変換・バウンド判定・警告集約は
+ * 全形式で共通。
  *
  * bounds を渡すと盤面 (gridW×gridH×maxLayers) に収まらないブロックを省略し、
  * 省略数・非対応ブロックを種類ごとに集約した警告を返す。埋め込み表示 (#97) では
  * この警告を親ページへ渡し、「n 個を簡略化しました」と提示する。
  */
-export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {}): ImportResult {
+export async function importFromNbtBytes(
+  bytes: Uint8Array,
+  bounds: ImportBounds = {},
+): Promise<ImportResult> {
   const { gridW, gridH, maxLayers } = bounds
-  const nbt = NbtFile.read(bytes)
-  const structure = Structure.fromNbt(nbt.root)
+
+  let format: DetectedFormat
+  try {
+    format = sniffFormat(bytes).format
+  } catch (e) {
+    // NBT として展開すらできない (画像を掴んだ等)
+    return emptyResult(`NBT として読めませんでした: ${e instanceof Error ? e.message : String(e)}`)
+  }
+  const unsupported = UNSUPPORTED_FORMAT_MESSAGE[format]
+  if (unsupported) return emptyResult(unsupported)
+
+  // バニラ構造 NBT は変換不要 (再エンコード + 再パースの往復を挟まない)
+  let structureBytes = bytes
+  if (format !== 'structure') {
+    try {
+      structureBytes = (await convertBuffer(bytes)).nbt
+    } catch (e) {
+      return emptyResult(`${format} の変換に失敗しました: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  const nbt = NbtFile.read(structureBytes)
+  const placedBlocks = readVanillaStructureBlocks(nbt.root)
 
   const resultBlocks = new Map<string, BlockState>()
   const warnings: string[] = []
   let skippedAbove = 0
   let skippedOutOfBounds = 0
   // 非対応ブロックは種類ごとに件数を集約する (1 個ずつ列挙すると警告が溢れるため)
-  const unsupported = new Map<string, number>()
+  const unsupportedBlocks = new Map<string, number>()
 
   let minX = Infinity, minY = Infinity, minZ = Infinity
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
 
-  for (const placed of structure.getBlocks()) {
-    const [bx, by, bz] = placed.pos as [number, number, number]
+  for (const placed of placedBlocks) {
+    const [bx, by, bz] = placed.pos
     if (maxLayers !== undefined && by >= maxLayers) {
       skippedAbove++
       continue
@@ -164,14 +232,13 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
       continue
     }
 
-    const name = placed.state.getName().toString()
-    const props = placed.state.getProperties() as Record<string, string>
+    const { name, props } = placed
 
     const block = minecraftToBlockState(name, props)
     if (!block) {
       // air 亜種 (cave_air / void_air) は空セル扱いで無警告 (通常の air と同様)
       const isAir = name === 'minecraft:air' || name.endsWith('_air')
-      if (!isAir) unsupported.set(name, (unsupported.get(name) ?? 0) + 1)
+      if (!isAir) unsupportedBlocks.set(name, (unsupportedBlocks.get(name) ?? 0) + 1)
       continue
     }
     resultBlocks.set(`${bx},${by},${bz}`, block)
@@ -183,10 +250,11 @@ export function importFromNbtBytes(bytes: Uint8Array, bounds: ImportBounds = {})
     if (bz > maxZ) maxZ = bz
   }
 
-  if (unsupported.size > 0) {
-    const total = [...unsupported.values()].reduce((a, b) => a + b, 0)
-    const kinds = [...unsupported.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
-    warnings.push(`未対応ブロック ${total} 個 (${unsupported.size} 種: ${kinds}) を省略`)
+  if (placedBlocks.length === 0) warnings.push('読み取れるブロックがありませんでした (空の構造ファイル)')
+  if (unsupportedBlocks.size > 0) {
+    const total = [...unsupportedBlocks.values()].reduce((a, b) => a + b, 0)
+    const kinds = [...unsupportedBlocks.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
+    warnings.push(`未対応ブロック ${total} 個 (${unsupportedBlocks.size} 種: ${kinds}) を省略`)
   }
   if (skippedAbove > 0) warnings.push(`高さ上限 (Y≥${maxLayers}) 超過で ${skippedAbove} ブロックを省略`)
   if (skippedOutOfBounds > 0) {
@@ -619,26 +687,78 @@ function minecraftToBlockState(
     return { type: 'pressure_plate_wood', powered: false } as BlockState
   }
 
-  // 固体ブロック一覧
-  const solidBlocks = [
-    'minecraft:stone', 'minecraft:cobblestone', 'minecraft:smooth_stone',
-    'minecraft:granite', 'minecraft:diorite', 'minecraft:andesite',
-    'minecraft:deepslate', 'minecraft:tuff', 'minecraft:calcite',
-    'minecraft:dirt', 'minecraft:sand', 'minecraft:gravel',
-    'minecraft:oak_planks', 'minecraft:spruce_planks', 'minecraft:birch_planks',
-    'minecraft:jungle_planks', 'minecraft:acacia_planks', 'minecraft:dark_oak_planks',
-    'minecraft:crimson_planks', 'minecraft:warped_planks',
-    'minecraft:bricks', 'minecraft:nether_bricks', 'minecraft:quartz_block',
-    'minecraft:iron_block', 'minecraft:gold_block', 'minecraft:diamond_block',
-    'minecraft:emerald_block', 'minecraft:coal_block', 'minecraft:copper_block',
-    'minecraft:obsidian', 'minecraft:crying_obsidian',
-    'minecraft:slime_block', 'minecraft:honey_block',
-  ]
-  if (solidBlocks.includes(name) || name.endsWith('_slab') || name.endsWith('_concrete') || name.endsWith('_terracotta')) {
-    return { type: 'solid', powered: false } as BlockState
-  }
+  if (isSolidBlockName(name)) return { type: 'solid', powered: false } as BlockState
 
   return null
+}
+
+// ── 固体ブロック (redstone conductor) の判定 ──────────────────────────────────
+//
+// レッドストーン的に効くのは「**導体のフルブロック**か」だけ (ダストが乗る /
+// 強充電を受けて隣へ配る / ピストンに押される)。素材の違いは挙動に影響しない
+// ので、該当するものは全部 solid 1 種に集約する。
+//
+// 逆に**フルブロックでも非導体**のもの (ガラス・色付きガラス・鉄格子など。
+// vanilla では `isRedstoneConductor` が常に false) は solid にすると
+// **誤って導通してしまう**ので、ここでは拾わない。sim に「非導体のフルブロック」
+// の型が無いため現状は省略され、インポート時に未対応ブロックとして警告に出る。
+
+/** 名前がそのまま一致する導体フルブロック */
+const SOLID_EXACT = new Set([
+  // 石・岩系
+  'stone', 'cobblestone', 'mossy_cobblestone', 'smooth_stone',
+  'granite', 'polished_granite', 'diorite', 'polished_diorite',
+  'andesite', 'polished_andesite',
+  'deepslate', 'cobbled_deepslate', 'polished_deepslate', 'chiseled_deepslate',
+  'reinforced_deepslate', 'tuff', 'polished_tuff', 'chiseled_tuff',
+  'calcite', 'dripstone_block', 'netherrack', 'end_stone', 'bedrock',
+  'obsidian', 'crying_obsidian',
+  'blackstone', 'polished_blackstone', 'chiseled_polished_blackstone', 'gilded_blackstone',
+  'basalt', 'polished_basalt', 'smooth_basalt', 'magma_block',
+  // 土・砂・氷系
+  'dirt', 'coarse_dirt', 'rooted_dirt', 'grass_block', 'podzol', 'mycelium',
+  'mud', 'packed_mud', 'clay', 'sand', 'red_sand', 'gravel',
+  'soul_sand', 'soul_soil', 'snow_block', 'moss_block',
+  'ice', 'packed_ice', 'blue_ice',
+  // 鉱物・金属ブロック (redstone_block は信号源なので上流で処理済み)
+  'iron_block', 'gold_block', 'diamond_block', 'emerald_block', 'lapis_block',
+  'coal_block', 'netherite_block', 'copper_block', 'amethyst_block',
+  'raw_iron_block', 'raw_gold_block', 'raw_copper_block',
+  // 石英・プルプァ・プリズマリン
+  'quartz_block', 'smooth_quartz', 'quartz_bricks', 'quartz_pillar', 'chiseled_quartz_block',
+  'purpur_block', 'purpur_pillar',
+  'prismarine', 'prismarine_bricks', 'dark_prismarine', 'sea_lantern',
+  // 砂岩 (red_sandstone 等は接尾辞側で拾う)
+  'sandstone',
+  // 有機・その他フルブロック
+  'bookshelf', 'chiseled_bookshelf', 'hay_block', 'dried_kelp_block', 'bone_block',
+  'sponge', 'wet_sponge', 'melon', 'pumpkin', 'carved_pumpkin', 'jack_o_lantern',
+  'nether_wart_block', 'warped_wart_block', 'shroomlight', 'glowstone',
+  'brown_mushroom_block', 'red_mushroom_block', 'mushroom_stem',
+])
+
+/** 接尾辞で一致する導体フルブロック */
+const SOLID_SUFFIXES = [
+  '_planks', '_log', '_wood', '_stem', '_hyphae',
+  '_wool', '_concrete', '_concrete_powder', '_terracotta',
+  '_bricks', '_sandstone', '_ore',
+  '_copper', 'cut_copper',   // 酸化・蝋引きの各段階
+]
+
+/** 接尾辞に引っかかるが**フルブロックではない**ので除外するもの */
+const NOT_SOLID_EXACT = new Set([
+  'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
+])
+
+function isSolidBlockName(name: string): boolean {
+  const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
+  if (NOT_SOLID_EXACT.has(id)) return false
+  if (SOLID_EXACT.has(id)) return true
+  if (SOLID_SUFFIXES.some(s => id.endsWith(s))) return true
+  // TODO(#170): ハーフブロックは vanilla では**非導体** (二重スラブのみ導体)。
+  // 既存の取り込み挙動を変えることになるため、この issue では従来どおり solid に落とす。
+  if (id.endsWith('_slab')) return true
+  return false
 }
 
 // ── ファイルダウンロード ────────────────────────────────────────────────────
