@@ -1,0 +1,210 @@
+{
+  "name": "door-desync",
+  "description": "#159 ドアも素手で開けると open だけが動き powered は据え置かれる [確定: 26.2 DoorBlock.useWithoutItem — POWERED を触らず flag 10 で書く]。押した半分だけを書き換えるが相方は updateShape で追従する [確定: :104-106] ので **両方が開く**はず。プレイヤーを 2 枚のドアの真ん中に置き、南 (1,1,3) が木・北 (1,1,1) が鉄。**ドアの当たり判定は facing 側の薄い板だけ**なので、斜めから狙うと素通りする (最初の版で実際に外した)。t2 で木を素手で開け、t4 で鉄を同じように押しても開かないことを確認。t6 で木の隣にレッドストーンブロックを置くと既に開いているので powered だけが追随し、t8 で外すと閉じる = ここでズレが解消する。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      4,
+      4,
+      5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        3
+      ],
+      "block": "oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "iron_door[facing=south,half=lower,hinge=left,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        1
+      ],
+      "block": "iron_door[facing=south,half=upper,hinge=left,open=false,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_door[facing=north,half=lower,hinge=left,open=true,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            3
+          ],
+          "block": "oak_door[facing=north,half=upper,hinge=left,open=true,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_door[facing=north,half=lower,hinge=left,open=true,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            3
+          ],
+          "block": "oak_door[facing=north,half=upper,hinge=left,open=true,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            3
+          ],
+          "block": "oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "air"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T17:16:59.670Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
