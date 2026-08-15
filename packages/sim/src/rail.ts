@@ -1,6 +1,6 @@
 import type {
   Pos3D, RailShape, StraightRailShape, BlockState,
-  PoweredRailState, PlainRailState, PoweredRailType,
+  PoweredRailState, PlainRailState, DetectorRailState, PoweredRailType,
 } from './types.js'
 import type { SimWorld } from './world.js'
 import { isBlockPowered } from './power.js'
@@ -10,7 +10,7 @@ import { isBlockPowered } from './power.js'
 //
 // 26.2 の RailState (形状の自動接続) と PoweredRailBlock.findPoweredRailSignal
 // (動力の連鎖伝播) の移植。sim が持つのは
-//   - powered_rail / activator_rail: 直線 6 形状のみ (isStraight=true)
+//   - powered_rail / activator_rail / detector_rail: 直線 6 形状のみ (isStraight=true)
 //   - rail (通常レール): 曲線 4 形状も取る (isStraight=false)
 // で、曲線分岐と hasSignal による優先順位の反転は通常レールにだけ効く。
 //
@@ -38,8 +38,8 @@ const below = (p: Pos3D): Pos3D => [p[0], p[1] - 1, p[2]]
 
 const sameColumn = (a: Pos3D, b: Pos3D): boolean => a[0] === b[0] && a[2] === b[2]
 
-/** sim が持つレール全種 (#140) */
-export type AnyRailState = PoweredRailState | PlainRailState
+/** sim が持つレール全種 (#140, #146) */
+export type AnyRailState = PoweredRailState | PlainRailState | DetectorRailState
 
 /**
  * レール系ブロックか [確定: 26.2 BaseRailBlock.isRail = BlockTags.RAILS]。
@@ -48,8 +48,10 @@ export type AnyRailState = PoweredRailState | PlainRailState
  * isSameRailWithPower 側で別途 type を突き合わせる (#138)。
  */
 export function isRail(block: BlockState | null): block is AnyRailState {
-  return !!block
-    && (block.type === 'rail' || block.type === 'powered_rail' || block.type === 'activator_rail')
+  return !!block && (
+    block.type === 'rail' || block.type === 'powered_rail'
+    || block.type === 'activator_rail' || block.type === 'detector_rail'
+  )
 }
 
 /**

@@ -140,6 +140,7 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'rail', label: 'レール', texture: 'block/rail', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'powered_rail', label: 'パワードレール', texture: 'block/powered_rail', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'activator_rail', label: 'アクティベーターレール', texture: 'block/activator_rail', hasFacing: true, hasDelay: false, hasMode: false },
+  { type: 'detector_rail', label: 'ディテクターレール', texture: 'block/detector_rail', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'container',  label: 'コンテナ',      texture: 'block/barrel_side',     hasFacing: false, hasDelay: false, hasMode: false, hasSignal: true },
   { type: 'hopper',     label: 'ホッパー',      texture: 'block/hopper_outside',  hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },

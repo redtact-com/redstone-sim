@@ -131,6 +131,8 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // 通常レールは曲線 4 形状も取る。曲線名は「繋がる 2 方向」を表すので
       // 構造座標と同じ向きで描画される (flipDir 不要) (#140)
       return `minecraft:rail[shape=${block.shape},waterlogged=false]`
+    case 'detector_rail':
+      return `minecraft:detector_rail[powered=${block.powered},shape=${block.shape},waterlogged=false]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -188,6 +190,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:powered_rail',
   'minecraft:activator_rail',
   'minecraft:rail',
+  'minecraft:detector_rail',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

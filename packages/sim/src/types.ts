@@ -453,6 +453,25 @@ export interface PlainRailState {
   shape: RailShape
 }
 
+/**
+ * ディテクターレール (#146)。レール 4 種で**唯一信号を出す**ブロック。
+ * トリガはマインカートの検出だけ (entityInside / 20gt ごとの tick / onPlace)
+ * [確定: 26.2 DetectorRailBlock.java:56-79] なので、エンティティを持たない sim では
+ * **感圧板・ターゲットと同じ折衷モデル** (手動トリガ + 持続 gt で auto-off) を採る
+ * (13 §2 エンティティ境界原則)。
+ *   - 出力: 全方向へ weak 15 / 強充電は **真下のブロックのみ**
+ *     [確定: 26.2 DetectorRailBlock.ownSignal / getDirectSignal (UP のみ)]
+ *   - 持続: 20gt [確定: 26.2 PRESSED_CHECK_PERIOD]
+ *     [実機 fixture detector-rail-cart-pulse: t3 検出 → t23 OFF]
+ *   - 形状は直線 6 種のみ。実行中の形状再計算はしない (4 引数 updateState 非 override)
+ *   - コンパレーター出力は空カート相当で常に 0
+ */
+export interface DetectorRailState {
+  type: 'detector_rail'
+  shape: StraightRailShape
+  powered: boolean
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -483,6 +502,7 @@ export type BlockState =
   | MovingPistonState
   | PoweredRailState
   | PlainRailState
+  | DetectorRailState
   | AirState
 
 export type BlockType = BlockState['type']

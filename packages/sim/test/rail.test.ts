@@ -598,3 +598,98 @@ describe('通常レールのジャンクション切り替え (#142)', () => {
     expect(shapeAt(w, [0, 0, 0])).toBe(before)
   })
 })
+
+/**
+ * ディテクターレール (#146)。レール 4 種で唯一の信号源で、
+ * トリガはカート検出だけなので**感圧板と同じ折衷モデル** (手動トリガ +
+ * 20gt auto-off) で実装している [確定: 26.2 DetectorRailBlock]。
+ * 実機 fixture detector-rail-cart-pulse が典拠。
+ */
+describe('detector_rail (#146)', () => {
+  const drail = (shape: StraightRailShape = 'north_south', powered = false): BlockState =>
+    ({ type: 'detector_rail', shape, powered })
+
+  /** 支持ブロックの上に detector_rail、側面と真下経由の観測点を置いた世界 */
+  function detectorWorld(): SimWorld {
+    const w = new SimWorld()
+    w.setBlockAt([2, 0, 3], solid())                       // 支持 (強励起される)
+    w.setBlockAt([1, 0, 3], { type: 'lamp', lit: false } as BlockState)  // 真下経由
+    w.setBlockAt([2, 1, 3], drail())
+    w.setBlockAt([3, 1, 3], { type: 'lamp', lit: false } as BlockState)  // 側面 weak
+    w.setBlockAt([2, 1, 4], solid())                       // 側面の隣接固体
+    w.setBlockAt([2, 1, 5], { type: 'lamp', lit: false } as BlockState)  // その先
+    w.initialize()
+    return w
+  }
+  const lit = (w: SimWorld, pos: Pos3D): boolean => {
+    const b = w.getBlockAt(pos)
+    return b?.type === 'lamp' && b.lit
+  }
+  const powered = (w: SimWorld): boolean => {
+    const b = w.getBlockAt([2, 1, 3])
+    return b?.type === 'detector_rail' && b.powered
+  }
+
+  it('トリガで powered になり、側面へ weak 15 を出す', () => {
+    const w = detectorWorld()
+    expect(powered(w)).toBe(false)
+    w.activateBlock(2, 1, 3)
+    expect(powered(w)).toBe(true)
+    expect(lit(w, [3, 1, 3]), '側面のランプ').toBe(true)
+  })
+
+  it('真下のブロックだけを強励起する (側面の固体は強充電しない)', () => {
+    const w = detectorWorld()
+    w.activateBlock(2, 1, 3)
+    expect(lit(w, [1, 0, 3]), '真下の支持ブロック越し').toBe(true)
+    expect(lit(w, [2, 1, 5]), '側面の隣接固体越しは点かない').toBe(false)
+  })
+
+  it('20gt 後に自動で OFF になる', () => {
+    const w = detectorWorld()
+    w.activateBlock(2, 1, 3)
+    for (let t = 0; t < 19; t++) w.tick()
+    expect(powered(w), '19gt 時点ではまだ on').toBe(true)
+    w.tick()
+    expect(powered(w), '20gt で off').toBe(false)
+  })
+
+  it('既に powered ならトリガは no-op (entityInside のガード相当)', () => {
+    const w = detectorWorld()
+    w.activateBlock(2, 1, 3)
+    for (let t = 0; t < 10; t++) w.tick()
+    w.activateBlock(2, 1, 3)          // 再トリガしても予約は延びない
+    for (let t = 0; t < 10; t++) w.tick()
+    expect(powered(w)).toBe(false)
+  })
+
+  it('authored の powered は初期化で落ちる (カート不在から始める)', () => {
+    const w = new SimWorld()
+    w.setBlockAt([2, 0, 3], solid())
+    w.setBlockAt([2, 1, 3], drail('north_south', true))
+    w.initialize()
+    expect(powered(w)).toBe(false)
+  })
+
+  it('パワードレールの連鎖には参加しない', () => {
+    const w = new SimWorld()
+    for (let x = -1; x <= 3; x++) w.setBlockAt([x, -1, 0], solid())
+    w.setBlockAt([-1, 0, 0], { type: 'lever', facing: 'up', powered: false } as BlockState)
+    w.setBlockAt([0, 0, 0], rail('east_west'))
+    w.setBlockAt([1, 0, 0], drail('east_west'))    // 異種なので連鎖が切れる
+    w.setBlockAt([2, 0, 0], rail('east_west'))
+    w.initialize()
+    w.activateBlock(-1, 0, 0)
+    expect(poweredAt(w, [0, 0, 0])).toBe(true)
+    expect(poweredAt(w, [2, 0, 0]), 'detector_rail を挟むと連鎖しない').toBe(false)
+  })
+
+  it('形状の接続は他のレールとまたぐ', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], drail('east_west'))
+    w.setBlockAt([1, 0, 0], prail('north_south'))
+    const shape = planRailPlacement(w, [1, 0, 0], 'north_south')
+      .find(c => c.pos[0] === 1)?.shape
+    expect(shape).toBe('east_west')
+  })
+})

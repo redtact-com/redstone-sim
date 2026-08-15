@@ -1,0 +1,20 @@
+{
+  "name": "detector-rail-cart-stay",
+  "description": "#146 カートを乗せっぱなしにした場合。実機は 20gt ごとの checkPressed でカートを数え直し、居続ける限り powered を維持する [確定: 26.2 DetectorRailBlock.java:100-107 — shouldBePressed なら scheduleTick(pos, this, 20) を再予約]。**sim の折衷モデルはエンティティを持たないので 20gt 後に必ず OFF になる** = 既知の乖離。実装できないことを明示するための記録用 fixture として skipUntil 付きでコミットする。detector-rail-cart-pulse (召喚してすぐ削除) は一致するので、乖離は「乗り続ける」ケースに限定される。",
+  "mcVersion": "1.21.1",
+  "ticks": 30,
+  "skipUntil": "146",
+  "skipReason": "折衷モデル (手動トリガ + 20gt auto-off) の既知乖離。カートが乗り続けるケースはエンティティ非実装のため再現できない",
+  "region": { "from": [0, 0, 2], "to": [4, 2, 4] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+
+    { "pos": [2, 0, 3], "block": "stone" },
+    { "pos": [2, 1, 3], "block": "detector_rail[shape=north_south,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [2, 1, 3], "action": "summon" }
+  ]
+}

@@ -206,6 +206,13 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
         type: 'rail',
         shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
       }
+    case 'detector_rail':
+      // カート検出の折衷モデル。初期は非通電 (#146)
+      return {
+        type: 'detector_rail',
+        shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
+        powered: false,
+      }
     case 'powered_rail':
     case 'activator_rail':
       // facing は「置いた向き」= 孤立して置いたときの既定形状にだけ効く。
