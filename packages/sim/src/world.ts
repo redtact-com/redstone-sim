@@ -2,7 +2,7 @@ import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
-  RailShape,
+  RailShape, BlockType,
 } from './types.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
@@ -10,6 +10,7 @@ import {
 } from './types.js'
 import {
   shouldRailBePowered, planRailPlacement, isRail, isPoweredRail,
+  countPotentialConnections,
 } from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
@@ -37,7 +38,7 @@ export interface NotePlayEvent {
 }
 import {
   getSignal, getDirectSignal, getSolidPower,
-  isBlockPowered, isFacePowered, isSolidPowered, isConductor,
+  isBlockPowered, isFacePowered, isSolidPowered, isConductor, isSignalSourceType,
 } from './power.js'
 import {
   Tracer, abbrOf, pendingAction, elemDelay,
@@ -76,10 +77,12 @@ function offset(pos: Pos3D, dir: Dir6, n: number): Pos3D {
   return cur
 }
 
-// NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)
+// NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)。
+// origin は vanilla の `updateNeighborsAt(pos, block)` が運ぶ **更新元ブロック**。
+// 通常レールの向き再計算がこれを門番に使う (更新元が信号源のときだけ走る。#142)
 type UpdateEntry =
-  | { kind: 'single'; target: Pos3D }
-  | { kind: 'multi'; around: Pos3D; skip: Dir6 | null; idx: number }
+  | { kind: 'single'; target: Pos3D; origin: BlockType }
+  | { kind: 'multi'; around: Pos3D; skip: Dir6 | null; idx: number; origin: BlockType }
 
 // ============================================================
 // SimWorld 実装
@@ -794,11 +797,13 @@ export class SimWorld {
    *
    * @returns 実際に形状を書いた座標 (呼び出し側が changed セットに積むため)
    */
-  private applyRailPlacement(pos: Pos3D, defaultShape: RailShape): Pos3D[] {
+  private applyRailPlacement(pos: Pos3D, defaultShape: RailShape, first = true): Pos3D[] {
     const written: Pos3D[] = []
     // hasSignal は通常レールの曲線の優先順位にだけ効く [確定: 26.2 BaseRailBlock.updateDir
-    // が level.hasNeighborSignal(pos) を place へ渡す]
-    for (const c of planRailPlacement(this, pos, defaultShape, isBlockPowered(this, pos))) {
+    // が level.hasNeighborSignal(pos) を place へ渡す]。
+    // first=false は実行中の再計算 (RailBlock.updateState) 経路で、形状が変わらなければ
+    // ワールドへの書き込みごと起きない = 更新も出ない (#142)
+    for (const c of planRailPlacement(this, pos, defaultShape, isBlockPowered(this, pos), first)) {
       const b = this.getBlockAt(c.pos)
       if (!isRail(b)) continue
       // 曲線を取れるのは通常レールだけ。直線レールに曲線が割り当たることは
@@ -1665,16 +1670,22 @@ export class SimWorld {
 
   // ── NC 更新の DFS 実行 ───────────────────────────────────
 
-  private submitSingleNC(target: Pos3D): void {
+  private submitSingleNC(target: Pos3D, origin?: BlockType): void {
     if (this.traceBuf) this.traceBuf.push(`bu(${this.relToken(target)})`)
-    this.submitUpdate({ kind: 'single', target })
+    this.submitUpdate({ kind: 'single', target, origin: origin ?? this.getBlockAt(target)?.type ?? 'air' })
   }
 
-  private submitMultiNC(around: Pos3D, skip: Dir6 | null = null): void {
+  private submitMultiNC(around: Pos3D, skip: Dir6 | null = null, origin?: BlockType): void {
     if (this.traceBuf) {
       this.traceBuf.push(`bu(${this.relToken(around)}${skip ? `\\${skip}` : ''})`)
     }
-    this.submitUpdate({ kind: 'multi', around, skip, idx: 0 })
+    this.submitUpdate({
+      kind: 'multi', around, skip, idx: 0,
+      // 既定は「更新を出した座標にあるブロック」。vanilla も呼び出し側が Block を
+      // 渡すが、ほとんどの経路で pos のブロック自身になる。異なる経路 (レールが
+      // 真下へ配る更新など) は origin を明示する
+      origin: origin ?? this.getBlockAt(around)?.type ?? 'air',
+    })
   }
 
   private submitUpdate(entry: UpdateEntry): void {
@@ -1688,14 +1699,14 @@ export class SimWorld {
       const top = this.updateStack[this.updateStack.length - 1]
       if (top.kind === 'single') {
         this.updateStack.pop()
-        this.neighborChanged(top.target)
+        this.neighborChanged(top.target, top.origin)
       } else {
         while (top.idx < NC_UPDATE_ORDER.length && NC_UPDATE_ORDER[top.idx] === top.skip) top.idx++
         if (top.idx >= NC_UPDATE_ORDER.length) {
           this.updateStack.pop()
           continue
         }
-        this.neighborChanged(neighbor(top.around, NC_UPDATE_ORDER[top.idx++]))
+        this.neighborChanged(neighbor(top.around, NC_UPDATE_ORDER[top.idx++]), top.origin)
       }
       if (++this.updateCount > 1_000_000) {
         // vanilla の maxChainedNeighborUpdates = 1,000,000 溢れ相当
@@ -1831,7 +1842,7 @@ export class SimWorld {
    * 即時系 (lamp/solid 表示値) はその場で更新する。
    * ワイヤーは案 A では no-op (電力値は propagateChange 側で確定済み)。
    */
-  private neighborChanged(pos: Pos3D): void {
+  private neighborChanged(pos: Pos3D, origin: BlockType = 'air'): void {
     const block = this.getBlockAt(pos)
     if (!block) return
 
@@ -1958,6 +1969,20 @@ export class SimWorld {
         }
         break
       }
+      case 'rail': {
+        // 実行中の向き再計算 [確定: 26.2 RailBlock.updateState]:
+        //   更新元が信号源 かつ 潜在接続がちょうど 3 のときだけ updateDir(first=false)
+        // レバー ON/OFF で 3 方向ジャンクションの曲がる先が入れ替わる、通常レール
+        // 本来の使い方がこれ [実機 fixture rail-junction-toggle]。
+        // 門番はどちらも実機で分離済み:
+        //   - 信号源でない更新 (石への差し替え) では再計算されず、通電時の向きが
+        //     残ったまま固まる [fixture rail-junction-nonsignal]
+        //   - 4 方向ジャンクションは給電しても動かない [fixture rail-junction-gate]
+        if (!isSignalSourceType(origin)) break
+        if (countPotentialConnections(this, pos) !== 3) break
+        this.applyRailPlacement(pos, block.shape, false)
+        break
+      }
       case 'powered_rail':
       case 'activator_rail': {
         // vanilla PoweredRailBlock.updateState [確定: 26.2]:
@@ -1973,9 +1998,13 @@ export class SimWorld {
           // flag3 の UPDATE_NEIGHBORS = 自身の周囲 6 方向。隣のパワードレールが
           // NC を受けて再評価することで、連鎖 (最大 8) が伝わっていく
           this.submitMultiNC(pos)
-          // 明示の updateNeighborsAt(pos.below()) — 真下ブロックの「周囲」へ更新を配る
-          this.submitMultiNC([pos[0], pos[1] - 1, pos[2]])
-          if (isRailSlope(block.shape)) this.submitMultiNC([pos[0], pos[1] + 1, pos[2]])
+          // 明示の updateNeighborsAt(pos.below(), this) — 真下ブロックの「周囲」へ配る。
+          // vanilla が運ぶのは **レール自身** なので origin を明示する (真下のブロック
+          // ではない。既定に任せると信号源判定を取り違える。#142)
+          this.submitMultiNC([pos[0], pos[1] - 1, pos[2]], null, block.type)
+          if (isRailSlope(block.shape)) {
+            this.submitMultiNC([pos[0], pos[1] + 1, pos[2]], null, block.type)
+          }
         }
         break
       }

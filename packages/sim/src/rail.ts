@@ -235,9 +235,15 @@ class RailConnector {
     return shape
   }
 
-  private applyShape(shape: RailShape): void {
+  /** 内部状態だけ更新する (vanilla の updateConnections + state.setValue 相当) */
+  private setInternal(shape: RailShape): void {
     this.shape = shape
     this.connections = [...railConnections(this.pos, shape)]
+  }
+
+  /** 内部状態 + ワールドへの書き込み (vanilla の setBlock(pos, state, 3) 相当) */
+  private applyShape(shape: RailShape): void {
+    this.setInternal(shape)
     this.ws.set(this.pos, shape)
   }
 
@@ -307,9 +313,13 @@ class RailConnector {
 
     const decided = this.promoteSlope(shape) ?? defaultShape
     const changed = decided !== this.shape
-    this.applyShape(decided)
-
+    // 内部状態は必ず更新するが、**ワールドへの書き込みと隣への伝播は条件つき**
+    // [確定: 26.2 RailState.place — `if (first || level.getBlockState(pos) != state)`]。
+    // first=false (実行中の再計算) で形状が変わらなければ setBlock ごと起きないので、
+    // 近隣更新もオブザーバー通知も出ない (#142)
+    this.setInternal(decided)
     if (first || changed) {
+      this.ws.set(this.pos, decided)
       for (const conn of [...this.connections]) {
         const neighbor = this.getRail(conn)
         if (!neighbor) continue
@@ -319,6 +329,23 @@ class RailConnector {
     }
     return this.shape
   }
+}
+
+/**
+ * 水平 4 方向のうち「同じ高さ / 1 段上 / 1 段下 のいずれかにレールがある」数
+ * [確定: 26.2 RailState.countPotentialConnections + hasRail]。
+ * 通常レールの実行中の向き再計算は、この値が**ちょうど 3** のときだけ走る
+ * [確定: 26.2 RailBlock.updateState]
+ * [実機 fixture rail-junction-gate: 4 方向ジャンクションは同じ給電操作でも動かない]。
+ */
+export function countPotentialConnections(grid: RailGrid, pos: Pos3D): number {
+  let count = 0
+  for (const dir of [north, south, west, east]) {
+    const p = dir(pos)
+    // hasRail は同じ高さ → 1 段上 → 1 段下 を見る
+    if ([p, above(p), below(p)].some(q => isRail(grid.getBlock3(q[0], q[1], q[2])))) count++
+  }
+  return count
 }
 
 /**
@@ -334,12 +361,12 @@ class RailConnector {
  * 発行は適用側の責務** で、SimWorld ではこの一覧の順に 1 件ずつ書いて発行する (#132)。
  */
 export function planRailPlacement(
-  grid: RailGrid, pos: Pos3D, defaultShape: RailShape, hasSignal = false,
+  grid: RailGrid, pos: Pos3D, defaultShape: RailShape, hasSignal = false, first = true,
 ): { pos: Pos3D; shape: RailShape }[] {
   const ws = new RailWorkspace(grid)
   const block = ws.get(pos)
   if (!block) return []
-  new RailConnector(ws, pos, block.shape, block.straight).place(true, defaultShape, hasSignal)
+  new RailConnector(ws, pos, block.shape, block.straight).place(first, defaultShape, hasSignal)
   return ws.changes()
 }
 

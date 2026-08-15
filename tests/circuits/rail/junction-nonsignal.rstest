@@ -1,0 +1,50 @@
+# 向き再計算の門番: 更新元が信号源のときだけ (#142)。
+#
+# RailBlock.updateState の門番 2 条件のうち
+# `block.defaultBlockState().isSignalSource()` を分離する
+# [確定: 26.2 RailBlock.java:29-33]。
+#
+# 3 方向ジャンクションを非通電で置くと south_east。真下をレッドストーンブロックに
+# 差し替えると信号源からの更新なので north_east に切り替わる。**それを石に戻すと
+# 通電は消えるのに向きは north_east のまま固まる** — setblock が運ぶのは新しい
+# ブロック (= 石) で信号源ではないため、再計算そのものが走らないから。
+# 動力源が無いのに通電時の向きが残る、という状態が実機に作れる。
+# レバー操作 (信号源からの更新) を挟むと、そこで初めて south_east に戻る。
+#
+# 期待値は実機 (fixture rail-junction-nonsignal) が正。
+meta {
+  name: 信号源でない更新では向きが再計算されない
+  ref: #142 / fixture rail-junction-nonsignal / 26.2 RailBlock.updateState
+}
+
+fixture rail-junction-nonsignal
+
+state {
+  # 非通電で south_east
+  t2 (2,1,3) rail[shape=south_east,waterlogged=false]
+}
+
+state {
+  # レッドストーンブロック (信号源) で north_east へ
+  t4 (2,0,3) redstone_block
+  t4 (2,1,3) rail[shape=north_east,waterlogged=false]
+}
+
+state {
+  # 石に戻す = 通電は消えるが再計算されず north_east のまま固まる
+  t6 (2,0,3) stone
+  t6 (2,1,3) rail[shape=north_east,waterlogged=false]
+  t7 (2,1,3) rail[shape=north_east,waterlogged=false]
+}
+
+state {
+  # レバー ON は信号源だが、通電中なので結果は north_east のまま
+  t8 (1,1,3) lever[face=floor,facing=north,powered=true]
+  t8 (2,1,3) rail[shape=north_east,waterlogged=false]
+}
+
+state {
+  # レバー OFF (信号源からの更新) で初めて south_east に戻る
+  t10 (1,1,3) lever[face=floor,facing=north,powered=false]
+  t10 (2,1,3) rail[shape=south_east,waterlogged=false]
+}
