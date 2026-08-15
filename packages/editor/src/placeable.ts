@@ -17,7 +17,7 @@ export const PLACEABLE_TYPES = [
   'lever', 'button_stone', 'button_wood',
   'pressure_plate_wood', 'pressure_plate_stone',
   'weighted_pressure_plate_light', 'weighted_pressure_plate_heavy',
-  'lamp', 'note_block', 'piston', 'sticky_piston',
+  'lamp', 'note_block', 'copper_bulb', 'piston', 'sticky_piston',
   'redstone_block', 'target', 'observer', 'solid',
   'slime_block', 'honey_block', 'rail', 'powered_rail', 'activator_rail', 'detector_rail',
   'container', 'hopper', 'dropper',

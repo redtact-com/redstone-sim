@@ -1,0 +1,47 @@
+# 銅の電球の 2 つの出力性質 (#155)。
+#
+# (a) **コンパレーターは lit を読む** (powered ではない)。
+#     lit ? 15 : 0 [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal]。
+#     レバーを切って powered が落ちても lit は保持されるので、コンパレーターの
+#     出力は 15 のまま残る — これが「読んでいるのは記憶ビットの方」の証拠。
+#
+# (b) **銅の電球は非導体** (.isRedstoneConductor(Blocks::never)
+#     [確定: 26.2 Blocks.java:5272]) かつ非信号源なので、レバーの給電が
+#     電球を素通りしない。南隣 (2,1,4) のダストは lit でも powered でも常に 0。
+#     フルブロックなのに強充電を通さないので、**給電の仕切り**として使える。
+#
+# 期待値は実機 (fixture copper-bulb-output) が正。
+meta {
+  name: 銅の電球はコンパレーターに lit を渡し、給電は通さない
+  ref: #155 / fixture copper-bulb-output / 26.2 CopperBulbBlock.getAnalogOutputSignal
+}
+
+fixture copper-bulb-output
+
+state {
+  # 点灯 → 2gt 後にコンパレーターが 15 を出す
+  t2 (2,1,3) copper_bulb[lit=true,powered=true]
+  t4 (3,1,3) comparator[facing=west,mode=compare,powered=true]
+  t4 (4,1,3) redstone_wire[east=none,north=none,power=15,south=none,west=side]
+}
+
+state {
+  # レバーを切っても lit は保持されるのでコンパレーターは 15 のまま
+  t6 (2,1,3) copper_bulb[lit=true,powered=false]
+  t8 (3,1,3) comparator[facing=west,mode=compare,powered=true]
+  t8 (4,1,3) redstone_wire[east=none,north=none,power=15,south=none,west=side]
+}
+
+state {
+  # 2 回目の ON で lit が反転 → コンパレーターが 0 に落ちる
+  t10 (2,1,3) copper_bulb[lit=false,powered=true]
+  t12 (3,1,3) comparator[facing=west,mode=compare,powered=false]
+  t12 (4,1,3) redstone_wire[east=none,north=none,power=0,south=none,west=side]
+}
+
+state {
+  # 非導体なので南隣のダストは一度も給電されない
+  t2 (2,1,4) redstone_wire[east=none,north=none,power=0,south=none,west=none]
+  t10 (2,1,4) redstone_wire[east=none,north=none,power=0,south=none,west=none]
+  t16 (2,1,4) redstone_wire[east=none,north=none,power=0,south=none,west=none]
+}

@@ -194,6 +194,16 @@ export function mcToSim(state: string): BlockState | null {
       // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
       return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
                powered: props.powered === 'true' }
+    case 'copper_bulb':
+    case 'exposed_copper_bulb':
+    case 'weathered_copper_bulb':
+    case 'oxidized_copper_bulb':
+    case 'waxed_copper_bulb':
+    case 'waxed_exposed_copper_bulb':
+    case 'waxed_weathered_copper_bulb':
+    case 'waxed_oxidized_copper_bulb':
+      // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
+      return { type: 'copper_bulb', lit: props.lit === 'true', powered: props.powered === 'true' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -284,6 +294,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'detector_rail':
         return formatMcState('detector_rail', {
           powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
+        })
+      case 'copper_bulb':
+        return formatMcState('copper_bulb', {
+          lit: String(sim.lit), powered: String(sim.powered),
         })
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
@@ -387,6 +401,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
     case 'detector_rail':
       props.powered = String(sim.powered)
       props.shape = sim.shape
+      break
+    case 'copper_bulb':
+      // authored が酸化バリアントでもプロパティだけ差し替える (名前は保持)
+      props.lit = String(sim.lit)
+      props.powered = String(sim.powered)
       break
     case 'container':
       break // signal/count は blockstate に現れない (authored 名 barrel/chest を保持)

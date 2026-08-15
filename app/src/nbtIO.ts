@@ -282,6 +282,12 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'rail':
       // 通常レールは powered を持たない。曲線 4 形状も取る (#140)
       return ['minecraft:rail', { shape: block.shape, waterlogged: 'false' }]
+    case 'copper_bulb':
+      // 酸化バリアントは 1 種に集約しているので素の銅の電球として書き出す (#155)
+      return ['minecraft:copper_bulb', {
+        lit: String(block.lit),
+        powered: String(block.powered),
+      }]
     case 'detector_rail':
     case 'powered_rail':
     case 'activator_rail':
@@ -444,6 +450,14 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
   if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
+  if (name.endsWith('copper_bulb')) {
+    // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
+    return {
+      type: 'copper_bulb',
+      lit: props.lit === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
   if (name === 'minecraft:rail') {
     // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4)。通常レールだけが曲線を取る (#140)
     return { type: 'rail', shape: (props.shape ?? 'north_south') } as BlockState

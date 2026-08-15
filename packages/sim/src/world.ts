@@ -2006,6 +2006,25 @@ export class SimWorld {
         }
         break
       }
+      case 'copper_bulb': {
+        // vanilla CopperBulbBlock.checkAndFlip [確定: 26.2]:
+        //   signal != POWERED のとき、**立ち上がりなら LIT を反転**し POWERED を追随。
+        //   tile tick を使わないので遅延 0gt (近隣更新の処理中に同期確定する)
+        //   [実機 fixture copper-bulb-toggle: レバーと同じ tick で確定し、
+        //    立ち下がりでは lit が変わらず powered だけ落ちる]
+        const signal = isBlockPowered(this, pos)
+        if (signal !== block.powered) {
+          const lit = block.powered ? block.lit : !block.lit   // 立ち上がりでのみ反転
+          this.setBlockAt(pos, { ...block, lit, powered: signal })
+          // setBlock(flag 3): 周囲 6 方向へ近隣更新 + updateNeighbourShapes。
+          // powered だけ変わった立ち下がりでもオブザーバーは発火する (実機で確認済み)
+          this.emitShapeUpdate(pos)
+          this.submitMultiNC(pos)
+          // lit が変わるとコンパレーターの読み値が変わる
+          if (lit !== block.lit) this.emitComparatorUpdate(pos)
+        }
+        break
+      }
       case 'rail': {
         // 実行中の向き再計算 [確定: 26.2 RailBlock.updateState]:
         //   更新元が信号源 かつ 潜在接続がちょうど 3 のときだけ updateDir(first=false)
@@ -2146,6 +2165,9 @@ export class SimWorld {
     // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
     //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
     if (isContainerType(back?.type)) return effectiveContainerSignal(back)
+    // 銅の電球も hasAnalogOutputSignal を持つ。読むのは **lit** で powered ではない
+    // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+    if (back?.type === 'copper_bulb') return back.lit ? 15 : 0
 
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
@@ -2216,6 +2238,10 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
       return (a.type === 'weighted_pressure_plate_light' || a.type === 'weighted_pressure_plate_heavy') &&
         (a.powered ? a.pressedPower : 0) !== (b.powered ? b.pressedPower : 0)
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
+    // 銅の電球は lit だけでなく powered も blockstate なので、立ち下がりでも観測される
+    // [実機 fixture copper-bulb-toggle: レバーを切った tick でもオブザーバーが発火]
+    case 'copper_bulb': return a.type === 'copper_bulb'
+      && (a.lit !== b.lit || a.powered !== b.powered)
     case 'note_block':  return a.type === 'note_block' && (a.powered !== b.powered || a.note !== b.note)
     case 'target':      return a.type === 'target' && a.outputPower !== b.outputPower
     case 'observer':    return a.type === 'observer' && a.powered !== b.powered
