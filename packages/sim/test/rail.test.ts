@@ -223,3 +223,60 @@ describe('powered_rail は信号を出さない', () => {
     expect(shapeAt(w, [0, 0, 0])).toBe('ascending_east')
   })
 })
+
+/**
+ * レールはピストンで押せる (PushReaction NORMAL) (#134)
+ * [確定: 26.2 Blocks.java:689,692,2892 — レール 4 種とも pushReaction 未指定 = 既定 NORMAL]。
+ * 着地時は onPlace が movedByPiston でも走るので、形状の決め直しと powered の
+ * 再計算がその場で起きる [確定: 26.2 BaseRailBlock.java:64-77]。
+ * 実機 fixture rail-piston-push / -connect / -powered が典拠。
+ */
+describe('レールはピストンで押される (#134)', () => {
+  /** レバー(1) → ピストン(2, 東向き) → レール(3) → 着地先(4) を y=1 に並べた世界 */
+  function pushWorld(floorAt3: BlockState = solid()): SimWorld {
+    const w = new SimWorld()
+    for (let x = 1; x <= 4; x++) w.setBlockAt([x, 0, 3], solid())
+    w.setBlockAt([3, 0, 3], floorAt3)
+    w.setBlockAt([1, 1, 3], { type: 'lever', facing: 'up', powered: false } as BlockState)
+    w.setBlockAt([2, 1, 3], { type: 'piston', facing: 'east', extended: false } as BlockState)
+    return w
+  }
+
+  it('レールは障害物ではなく 1 マス押される (形状は保持)', () => {
+    const w = pushWorld()
+    w.setBlockAt([3, 1, 3], rail('east_west'))
+    w.initialize()
+
+    w.activateBlock(1, 1, 3)
+    w.settle(32)
+    expect(shapeAt(w, [4, 1, 3])).toBe('east_west')
+    expect(w.getBlockAt([3, 1, 3])?.type).not.toBe('powered_rail')
+  })
+
+  it('着地先の隣にレールがあると繋がって形状を決め直す', () => {
+    const w = pushWorld()
+    w.setBlockAt([4, 0, 4], solid())
+    w.setBlockAt([3, 1, 3], rail('east_west'))
+    w.setBlockAt([4, 1, 4], rail('north_south'))   // 着地先の南隣
+    w.initialize()
+
+    w.activateBlock(1, 1, 3)
+    w.settle(32)
+    // east_west のまま飛んでいくが、着地時の onPlace で north_south に張り替わる
+    expect(shapeAt(w, [4, 1, 3])).toBe('north_south')
+  })
+
+  it('電源から押し離されると着地の時点で powered が落ちる', () => {
+    // レールの真下だけレッドストーンブロック。移動先 (4,0,3) は石なので受電が切れる
+    const w = pushWorld({ type: 'redstone_block' } as BlockState)
+    w.setBlockAt([3, 1, 3], rail('east_west'))
+    w.initialize()
+    expect(poweredAt(w, [3, 1, 3]), '押す前は真下から受電している').toBe(true)
+
+    w.activateBlock(1, 1, 3)
+    w.settle(32)
+    // 「動かなかったから off」で通ってしまわないよう、移動したことも見る
+    expect(shapeAt(w, [4, 1, 3]), 'レールが移動していること').toBe('east_west')
+    expect(poweredAt(w, [4, 1, 3])).toBe(false)
+  })
+})
