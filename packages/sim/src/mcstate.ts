@@ -273,9 +273,10 @@ export function mcToSim(state: string): BlockState | null {
         cooldownUntil: 0,
       }
     case 'dropper':
+    case 'dispenser':
       // vanilla の facing = 出力方向 (6 方向) = sim と同一 (非反転)。
       return {
-        type: 'dropper',
+        type: name,
         facing: (props.facing ?? 'north') as Dir6,
         count: 0,
         triggered: props.triggered === 'true',
@@ -370,7 +371,8 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'hopper':
         return formatMcState('hopper', { enabled: String(sim.enabled), facing: sim.facing })
       case 'dropper':
-        return formatMcState('dropper', { facing: sim.facing, triggered: String(sim.triggered) })
+      case 'dispenser':
+        return formatMcState(sim.type, { facing: sim.facing, triggered: String(sim.triggered) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'note_block':
@@ -489,6 +491,7 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.enabled = String(sim.enabled)
       break
     case 'dropper':
+    case 'dispenser':
       props.triggered = String(sim.triggered)
       break
     case 'solid':

@@ -45,14 +45,16 @@ export const CONTAINER_SLOTS = 27
 
 /** コンテナ種か (物流の対象になり得るブロック種)。 */
 export function isContainerType(type: BlockType | undefined): boolean {
-  return type === 'hopper' || type === 'dropper' || type === 'container'
+  return type === 'hopper' || type === 'dropper' || type === 'dispenser'
+    || type === 'container'
 }
 
 /** コンテナ種のスロット数。 */
 export function containerSlots(type: BlockType): number {
   switch (type) {
     case 'hopper':    return HOPPER_SLOTS
-    case 'dropper':   return DROPPER_SLOTS
+    case 'dropper':
+    case 'dispenser': return DROPPER_SLOTS
     case 'container': return CONTAINER_SLOTS
     default:          return 0
   }
@@ -82,7 +84,9 @@ export function fillSignal(count: number, capacity: number): number {
  */
 export function containerCount(block: BlockState | null | undefined): number | undefined {
   if (!block) return undefined
-  if (block.type === 'hopper' || block.type === 'dropper') return block.count
+  if (block.type === 'hopper' || block.type === 'dropper' || block.type === 'dispenser') {
+    return block.count
+  }
   if (block.type === 'container') return block.count
   return undefined
 }
@@ -108,7 +112,7 @@ export function canContainerAccept(block: BlockState | null | undefined): boolea
  */
 export function effectiveContainerSignal(block: BlockState | null | undefined): number {
   if (!block) return 0
-  if (block.type === 'hopper' || block.type === 'dropper') {
+  if (block.type === 'hopper' || block.type === 'dropper' || block.type === 'dispenser') {
     return fillSignal(block.count, containerCapacity(block.type))
   }
   if (block.type === 'container') {

@@ -690,7 +690,7 @@ export class SimWorld {
         // count (内容) は authored 保持 (物流の初期条件)。
         const enabled = !isBlockPowered(this, pos)
         this.blocks.set(key, { ...block, enabled, cooldownUntil: 0 })
-      } else if (block.type === 'dropper') {
+      } else if (block.type === 'dropper' || block.type === 'dispenser') {
         // 受電で triggered を確定するが initialize では発火しない (tile tick 予約なし。
         // authored 安定状態は「既に発火済み」相当。runtime の立ち上がりでのみ発火)。
         const powered = this.isDropperPowered(pos)
@@ -1137,13 +1137,18 @@ export class SimWorld {
       if (next.powered) this.schedule(pos, 2, 0)  // OFF tick を背面 NC より先に予約
       this.propagateChange(pos)          // 背面 1 マスへ strong 15 の NC
       this.traceCloseUpdate('Ob', next.powered ? 'n' : 'f', 2, 'ST')
-    } else if (block.type === 'dropper') {
+    } else if (block.type === 'dropper' || block.type === 'dispenser') {
       // vanilla DropperBlock.dispenseFrom (ST フェーズ) [確定: 26.2]:
       // ランダムスロットの 1 個を前方コンテナへ挿入。sim は種別なしなので count を移す。
+      //
+      // **ディスペンサーは挿入しない**。26.2 で DropperBlock だけが dispenseFrom を
+      // override しており [確定: DropperBlock.java:48]、ディスペンサーは常にワールドへ
+      // 射出する = 前方がコンテナでも入らない
+      // [実機 fixture dispenser-no-insert: 同じ配置でドロッパー側だけコンパレーターが反応]
       if (block.count > 0) {
         const destPos = neighbor(pos, block.facing)
         const dest = this.getBlockAt(destPos)
-        if (canContainerAccept(dest)) {
+        if (block.type === 'dropper' && canContainerAccept(dest)) {
           // 前方コンテナに空きあり → 1 個挿入
           const d = dest as HopperState | DropperState | ContainerState
           this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
@@ -1151,9 +1156,10 @@ export class SimWorld {
           changed.push(posKey(pos), posKey(destPos))
           this.emitComparatorUpdate(destPos)
           this.emitComparatorUpdate(pos)
-        } else if (!isContainerType(dest?.type)) {
-          // 前方が非コンテナ → vanilla は発射 (アイテムエンティティ生成)。
+        } else if (block.type === 'dispenser' || !isContainerType(dest?.type)) {
+          // 射出 → vanilla はアイテムエンティティを生成する。
           // エンティティ境界原則 (13 §4.2) により 1 個消費して何も出さない。
+          // ディスペンサーは前方がコンテナでも常にこちら
           this.setBlockAt(pos, { ...block, count: block.count - 1 })
           changed.push(posKey(pos))
           this.emitComparatorUpdate(pos)
@@ -2021,7 +2027,8 @@ export class SimWorld {
         }
         break
       }
-      case 'dropper': {
+      case 'dropper':
+      case 'dispenser': {
         // vanilla DispenserBlock.neighborChanged [確定: 26.2]:
         // 受電 (通常 ∪ QC) の立ち上がりで TRIGGERED を立て 4gt tick を予約、
         // 立ち下がりで TRIGGERED 解除。発火 (dispenseFrom) は ST フェーズの tick。
@@ -2332,7 +2339,9 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     // hopper.enabled / dropper.triggered は blockstate プロパティ → 観測対象。
     // count (内容) は BE で非観測 (コンパレーターのみ CU で読む)。
     case 'hopper':      return a.type === 'hopper' && a.enabled !== b.enabled
-    case 'dropper':     return a.type === 'dropper' && a.triggered !== b.triggered
+    case 'dropper':
+    case 'dispenser':   return (a.type === 'dropper' || a.type === 'dispenser')
+      && a.triggered !== b.triggered
     // solid.powered / container.signal / *.count は blockstate ではない → 非観測
     default:            return false
   }
