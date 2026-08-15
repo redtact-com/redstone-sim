@@ -1,0 +1,49 @@
+# レールを 1 本置くと、**形状が張り替わった隣のレール**も更新源になる (#132)。
+#
+# vanilla は RailState.place も connectTo も `level.setBlock(pos, state, 3)` で書く
+# [確定: 26.2 RailState.java:205,333]。flag 3 = UPDATE_NEIGHBORS(1) | UPDATE_CLIENTS(2) で
+#   - flag 1  → そのレールが周囲 6 方向へ近隣更新を配る
+#   - 16 が無い → updateNeighbourShapes が走り、面したオブザーバーが起動する
+# つまり「置いた本人」以外に「向きが変わった周囲のレール」も更新を出す。
+#
+# A=(2,1,3) は east_west で孤立して置いてあり、t4 に南隣へレールを置くと
+# connectTo で north_south に張り替わる。その瞬間に
+#   (a) 北隣の BUD ピストン (t2 に quasi セルの隣へレッドストーンブロックを置いて
+#       「伸びるべきだが更新が届いていない」状態にしてある) が伸びる
+#   (b) 真上のオブザーバーが発火する
+# の両方が起きる。t4 の setblock 自身の近隣更新は (2,1,4) の 6 方向だけで
+# ピストン (2,1,2) には届かないので、(a) の更新源は A で確定する。
+#
+# 期待値は実機 (fixture rail-shape-update) が正。
+meta {
+  name: 形状が張り替わったレールが近隣更新とオブザーバー通知を出す
+  ref: #132 / fixture rail-shape-update / 26.2 RailState.place・connectTo
+}
+
+fixture rail-shape-update
+
+state {
+  # t2: quasi セルの隣にレッドストーンブロックを置いてもピストンには更新が届かない (BUD)
+  t2 (3,2,2) redstone_block
+  t2 (2,1,2) piston[extended=false,facing=north]
+}
+
+state {
+  # t4: 南隣にレールを置くと A が north_south に張り替わる
+  t4 (2,1,3) powered_rail[powered=false,shape=north_south,waterlogged=false]
+  t4 (2,1,4) powered_rail[powered=false,shape=north_south,waterlogged=false]
+}
+
+state {
+  # (a) 張り替わった A からの近隣更新でピストンが伸びる
+  # (t5-t6 は moving_piston の過渡状態。.rstest は過渡状態を書けないので確定後を見る)
+  t7 (2,1,1) piston_head[facing=north,short=false,type=normal]
+  t7 (2,1,2) piston[extended=true,facing=north]
+}
+
+state {
+  # (b) 張り替わりは updateShape 経路でも観測される (2gt 後にオブザーバーが発火)
+  t6 (2,2,3) observer[facing=down,powered=true]
+  t6 (2,3,3) redstone_lamp[lit=true]
+  t8 (2,2,3) observer[facing=down,powered=false]
+}

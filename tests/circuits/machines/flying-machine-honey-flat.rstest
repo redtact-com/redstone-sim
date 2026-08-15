@@ -1,0 +1,33 @@
+# スライム版フライングマシン (Engine B) のスライムを **蜂蜜に置き換えただけ** では
+# 1 マスも動かないことの回帰ガード (#125 ①)。
+#
+# 理由: オブザーバーの出力はブロック越しに隣のピストンへ届く必要があるが、
+#   蜂蜜は非導体 (26.2 HoneyBlock SHAPE = column(14,0,15) でフルブロックでない
+#   → isRedstoneConductor 既定 isCollisionShapeFullBlock が false)。
+#   スライムは noOcclusion() のみで当たり判定はフルブロック = 導体。
+#   ∴ 蜂蜜に替えるとピストンが動力を受け取れず、オブザーバーは発火するが機械は静止する。
+#
+# 期待値は実機 (fixture flying-machine-honey-flat) が正。
+meta {
+  name: 蜂蜜に置き換えただけのフライングマシンは動かない
+  ref: #125 / fixture flying-machine-honey-flat / 26.2 HoneyBlock.SHAPE
+}
+
+fixture flying-machine-honey-flat
+
+state {
+  # トリガのオブザーバーは発火する (蜂蜜が原因であってトリガ不良ではない)
+  t4 (4,1,4) observer[facing=north,powered=true]
+}
+
+state {
+  # t=40 になっても初期配置のまま = 1 マスも進んでいない
+  t40 (4,1,5) honey_block
+  t40 (5,1,5) sticky_piston[extended=false,facing=west]
+  t40 (4,1,6) sticky_piston[extended=false,facing=east]
+  t40 (5,1,6) honey_block
+  t40 (5,1,7) observer[facing=south,powered=false]
+  # 進行方向 (+X) は空のまま
+  t40 (6,1,5) air
+  t40 (6,1,6) air
+}

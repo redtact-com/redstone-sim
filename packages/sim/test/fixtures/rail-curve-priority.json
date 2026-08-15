@@ -1,0 +1,289 @@
+{
+  "name": "rail-curve-priority",
+  "description": "#140 通常レールの曲線 4 形状が「直交する 2 方向に隣接があるとき」どう決まるか。RailState.place の第二段は isStraight=false のときだけ有効で、s&&e&&!n&&!w → SOUTH_EAST / s&&w&&!n&&!e → SOUTH_WEST / n&&w&&!s&&!e → NORTH_WEST / n&&e&&!s&&!w → NORTH_EAST の 4 つ [確定: 26.2 RailState.java:242-258]。4 パターンを離して並べ、隣 2 本を authored (孤立した直線レールなので自然な状態) に置き、中心だけを setblock で後から置いて実機に形状を決めさせる。中心を置いたときに隣 2 本が connectTo でどう張り替わるかも同時に採れる。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      0,
+      0,
+      1
+    ],
+    "to": [
+      8,
+      2,
+      9
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        4
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        3
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        7
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        7
+      ],
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        8
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        6,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        6,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "rail[shape=south_east,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            3
+          ],
+          "block": "rail[shape=south_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            8
+          ],
+          "block": "rail[shape=north_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            8
+          ],
+          "block": "rail[shape=north_east,waterlogged=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T12:16:33.954Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

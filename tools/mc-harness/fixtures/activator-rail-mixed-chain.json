@@ -1,0 +1,39 @@
+{
+  "name": "activator-rail-mixed-chain",
+  "description": "#138 powered_rail と activator_rail の連鎖は混ざらないのか。26.2 に ActivatorRailBlock は存在せず、activator_rail は powered_rail と同じ PoweredRailBlock を別インスタンスとして登録しているだけ [確定: 26.2 Blocks.java:2892]。唯一の差は連鎖探索が state.is(this) で「同じブロックであること」を要求する点 [確定: 26.2 PoweredRailBlock.isSameRailWithPower] なので、異種の境目で連鎖が切れるはず。両方向を 1 本で見る: 上段 (z=3) は レバー → powered_rail 2 本 → activator_rail 2 本、下段 (z=5) は レバー → activator_rail 2 本 → powered_rail 2 本。どちらもレバー側の 2 本だけが on になり、境目から先は off になるはず。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": { "from": [0, 0, 2], "to": [6, 2, 6] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+
+    { "pos": [1, 0, 3], "block": "stone" },
+    { "pos": [2, 0, 3], "block": "stone" },
+    { "pos": [3, 0, 3], "block": "stone" },
+    { "pos": [4, 0, 3], "block": "stone" },
+    { "pos": [5, 0, 3], "block": "stone" },
+
+    { "pos": [1, 1, 3], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [2, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [4, 1, 3], "block": "activator_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [5, 1, 3], "block": "activator_rail[shape=east_west,powered=false,waterlogged=false]" },
+
+    { "pos": [1, 0, 5], "block": "stone" },
+    { "pos": [2, 0, 5], "block": "stone" },
+    { "pos": [3, 0, 5], "block": "stone" },
+    { "pos": [4, 0, 5], "block": "stone" },
+    { "pos": [5, 0, 5], "block": "stone" },
+
+    { "pos": [1, 1, 5], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [2, 1, 5], "block": "activator_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 5], "block": "activator_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [4, 1, 5], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [5, 1, 5], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 1, 3], "action": "use" },
+    { "tick": 4, "pos": [1, 1, 5], "action": "use" }
+  ]
+}

@@ -1,0 +1,345 @@
+{
+  "name": "observer-pulled",
+  "description": "#119 粘着ピストンで押して引いたオブザーバー。lever(0,1,0) → dust → sticky_piston(2,1,0,facing=east) の前に observer(3,1,0,facing=east)。レバー ON で押し出し、OFF で引き戻す。伸長と収縮は別経路なので、引き戻し着地でも発火するかを実機で確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 26,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      1,
+      2
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "observer[facing=east,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 12,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 3,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "piston_head[facing=east,short=false,type=sticky]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "observer[facing=east,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 7,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "observer[facing=east,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 9,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "observer[facing=east,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 13,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 15,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "observer[facing=east,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 17,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "observer[facing=east,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 19,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "observer[facing=east,powered=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-12T08:23:04.539Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

@@ -1,13 +1,16 @@
 import type {
-  BlockState, BlockType, HDir, WorldSnapshot,
+  BlockState, BlockType, Dir6, HDir, WorldSnapshot,
 } from '@redstone/sim'
 import { SimWorld } from '@redstone/sim'
 import { EditorGrid } from './grid.js'
+import { defaultFacing, isFacingAllowed, toHDir } from './facing.js'
+import { normalizePlaceOptions } from './placeable.js'
 
 export type PlaceableType = Exclude<BlockType, 'air'>
 
 export interface PlaceOptions {
-  facing?: HDir
+  /** 取付面つきの素子 (レバー・ボタン等) は up/down も取る。素子ごとの許容は facing.ts (#111) */
+  facing?: Dir6
   delay?: 1 | 2 | 3 | 4
   mode?: 'compare' | 'subtract'
   /** 重量感圧板が踏まれたとき出力する信号強度 (1-15)。既定 15 */
@@ -68,7 +71,7 @@ export class CircuitEditor {
     return this.grid.getAllBlocks()
   }
 
-  rotateBlock(x: number, z: number, dir: HDir): void {
+  rotateBlock(x: number, z: number, dir: Dir6): void {
     this.grid.rotateBlock(x, z, dir)
     this.emit()
   }
@@ -148,8 +151,14 @@ export class CircuitEditor {
 
 // ── ブロック状態の初期値を生成 ──────────────────────────────
 
-function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | null {
-  const facing: HDir = opts.facing ?? 'north'
+function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState | null {
+  // 型が持たないオプションを落とし、数値を範囲へ丸める (#115)。
+  // 壊れた保存データや外部入力をそのまま BlockState にしないための関所
+  const opts = normalizePlaceOptions(type, rawOpts)
+  // 素子ごとに許される向きが違う。許されない向きが来たら既定へ落とす (#111)
+  const want = opts.facing
+  const dir: Dir6 = want !== undefined && isFacingAllowed(type, want) ? want : defaultFacing(type)
+  const facing: HDir = toHDir(dir)
 
   switch (type) {
     case 'wire':
@@ -163,11 +172,11 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
     case 'comparator':
       return { type: 'comparator', facing, mode: opts.mode ?? 'compare', powered: false, outputPower: 0 }
     case 'lever':
-      return { type: 'lever', facing: 'up', powered: false }
+      return { type: 'lever', facing: dir, powered: false }
     case 'button_stone':
-      return { type: 'button_stone', facing: 'up', powered: false }
+      return { type: 'button_stone', facing: dir, powered: false }
     case 'button_wood':
-      return { type: 'button_wood', facing: 'up', powered: false }
+      return { type: 'button_wood', facing: dir, powered: false }
     case 'pressure_plate_wood':
       return { type: 'pressure_plate_wood', powered: false }
     case 'pressure_plate_stone':
@@ -183,10 +192,36 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'note_block', powered: false, note: 0 }
     case 'piston':
     case 'sticky_piston':
-      return { type, facing, extended: false }
+      return { type, facing: dir, extended: false }
     case 'piston_head':
     case 'moving_piston':
       return null  // head / 移動中ブロックは sim が管理する (直接配置不可)
+    case 'slime_block':
+      return { type: 'slime_block' }
+    case 'honey_block':
+      return { type: 'honey_block' }
+    case 'rail':
+      // 通常レールは動力を持たない。曲線は隣接から自動で決まる (#140)
+      return {
+        type: 'rail',
+        shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
+      }
+    case 'detector_rail':
+      // カート検出の折衷モデル。初期は非通電 (#146)
+      return {
+        type: 'detector_rail',
+        shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
+        powered: false,
+      }
+    case 'powered_rail':
+    case 'activator_rail':
+      // facing は「置いた向き」= 孤立して置いたときの既定形状にだけ効く。
+      // 隣にレールがあれば grid.placeBlock3 の自動接続が形状を上書きする (#127)
+      return {
+        type,
+        shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
+        powered: false,
+      }
     case 'redstone_block':
       // 定数動力源。石と同列にパレットへ追加 (常時通電)
       return { type: 'redstone_block' }
@@ -195,7 +230,7 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
       return { type: 'target', outputPower: 0 }
     case 'observer':
       // facing = 観測方向 (顔のある面)。出力は背面。初期は消灯
-      return { type: 'observer', facing, powered: false }
+      return { type: 'observer', facing: dir, powered: false }
     case 'solid':
       return { type: 'solid', powered: false }
     case 'container':
@@ -204,10 +239,10 @@ function buildBlockState(type: PlaceableType, opts: PlaceOptions): BlockState | 
     case 'hopper':
       // 物流ホッパー (#65)。facing = 送り込み方向 (editor は水平のみ。既定 down)。
       // count = 内容個数 (容量 320)。enabled は initialize で受電から確定
-      return { type: 'hopper', facing: opts.facing ?? 'down', count: opts.count ?? 0, enabled: true }
+      return { type: 'hopper', facing: dir, count: opts.count ?? 0, enabled: true }
     case 'dropper':
       // 物流ドロッパー (#65)。facing = 出力方向。count = 内容個数 (容量 576)
-      return { type: 'dropper', facing: opts.facing ?? 'north', count: opts.count ?? 0, triggered: false }
+      return { type: 'dropper', facing: dir, count: opts.count ?? 0, triggered: false }
     default:
       return null
   }

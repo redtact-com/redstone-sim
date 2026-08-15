@@ -87,6 +87,26 @@ docs/research/04 §2.2-8 の「freeze 中の `__on_tick` 発火有無」を実�
 - `expect` は変化のあった tick の差分のみ。消滅は `"block": "air"`。
 - sim との対応付けは `packages/sim/src/mcstate.ts` (`mcToSim` / `simToMc`)。**facing の罠**: MC の repeater/comparator の `facing` は入力側 (sim は出力方向)、`redstone_wall_torch` の `facing` は壁から離れる方向 (sim は壁方向) で、いずれも OPPOSITE 変換する [確定: 1.21.1 DiodeBlock デコンパイル + 実機 dump で検証]。
 
+### 入力アクション
+
+| action | 実機での動作 | sim 側の写像 |
+| --- | --- | --- |
+| `use` | fake player が `pos` を右クリック (レバー/ボタン/ターゲット) | `activateBlock` |
+| `step` | fake player を板の中心へ tp して `entityInside` を発火 | `activateBlock` |
+| `setblock` | `/setblock` (flag 2\|256 → 近隣更新は `updateNeighboursOnBlockSet` の 6 方向のみ)。**運ばれるのは新しいブロック** [確定: 26.2 `ServerLevel.updateNeighboursOnBlockSet`] | `setBlockCommand` |
+| `summon` | `/summon minecart` で `pos` にマインカートを出す (#146) | **次の tick** で `activateBlock` |
+| `kill` | `/kill @e[type=minecart,...,distance=..2]` で近傍のカートを消す | no-op (auto-off が予約済み) |
+
+`summon` / `kill` は detector_rail の ground truth を採るために追加した。**sim にエンティティは
+持ち込まない** (13 §2 エンティティ境界原則) ので、ハーネス側だけの拡張という線引きになっている。
+
+- freeze 中は `entityInside` が走らないため、**検出は召喚の次の tick step で起きる**
+  (fixture `detector-rail-cart-pulse` で実測: t2 summon → t3 powered)。sim 側はこの 1 tick の
+  遅れを `fixture-driver.ts` が再現する
+- カートが動くと座標がズレるので、fixture は**平坦・無給電のレール**に限定する
+- カートを乗せ続けるケースは折衷モデルでは再現できない (`detector-rail-cart-stay` に
+  `skipUntil` 付きで記録)
+
 ### tick 規約
 
 `state[t]` = 「tick t のブロックティック (ScheduledTick) フェーズ完了後、`inputs[tick==t]` を適用した直後」の状態。

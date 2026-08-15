@@ -1,0 +1,29 @@
+# パワードレールの動力は、繋がったレールを **最大 8 個** たどって伝わる (#127)。
+#
+# [確定: 26.2 PoweredRailBlock.findPoweredRailSignal — searchDepth >= 8 で打ち切り]
+# ダストのような減衰は無く、届く範囲は一様に powered=true になる。
+# レバーに接した 1 本目 (x=2) から数えて 8 本先 (x=10) までが点き、
+# 9 本先 (x=11) は点かない。「レール 9 本ごとに動力源が要る」という定説の根拠。
+#
+# 期待値は実機 (fixture powered-rail-chain) が正。
+meta {
+  name: パワードレールの連鎖は 8 個で打ち切られる
+  ref: #127 / fixture powered-rail-chain / 26.2 PoweredRailBlock.findPoweredRailSignal
+}
+
+fixture powered-rail-chain
+
+state {
+  # レバーに直接触れている 1 本目
+  t2 (2,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+  # 8 本先まで届く
+  t2 (10,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+  # 9 本先は届かない
+  t2 (11,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}
+
+state {
+  # 遅延は無い (レバーと同 tick で確定する)
+  t2 (1,1,3) lever[face=floor,facing=north,powered=true]
+  t2 (6,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+}

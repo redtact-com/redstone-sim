@@ -177,3 +177,42 @@ describe('nbtIO: bounds 検証と warnings 集約 (#97)', () => {
     }
   })
 })
+
+describe('nbtIO: レバー/ボタンの取付面 (#111)', () => {
+  // sim の facing = レバーが向く方向。vanilla の face(floor|wall|ceiling)+facing と 1:1
+  const dirs = ['up', 'down', 'north', 'south', 'east', 'west'] as const
+
+  it.each(dirs)('レバーの facing=%s が往復で保たれる', dir => {
+    expect(roundTrip({ type: 'lever', facing: dir, powered: false } as BlockState))
+      .toMatchObject({ type: 'lever', facing: dir })
+  })
+
+  it.each(dirs)('石ボタンの facing=%s が往復で保たれる', dir => {
+    expect(roundTrip({ type: 'button_stone', facing: dir, powered: false } as BlockState))
+      .toMatchObject({ type: 'button_stone', facing: dir })
+  })
+
+  it('vanilla の壁レバーを取付面つきで読み込む', () => {
+    expect(importVanilla('minecraft:lever', { face: 'wall', facing: 'east', powered: 'true' }))
+      .toMatchObject({ type: 'lever', facing: 'east', powered: true })
+  })
+
+  it('vanilla の天井レバー → facing=down', () => {
+    expect(importVanilla('minecraft:lever', { face: 'ceiling', facing: 'north', powered: 'false' }))
+      .toMatchObject({ type: 'lever', facing: 'down' })
+  })
+
+  it('vanilla の壁ボタン → 取付面つき (押下状態は momentary なので常に OFF)', () => {
+    expect(importVanilla('minecraft:oak_button', { face: 'wall', facing: 'west', powered: 'true' }))
+      .toMatchObject({ type: 'button_wood', facing: 'west', powered: false })
+  })
+
+  it('face が無い古い保存データは床置き扱い', () => {
+    expect(importVanilla('minecraft:lever', { powered: 'false' })).toMatchObject({ facing: 'up' })
+  })
+
+  it('face=wall で facing が壊れていても水平へ落とす (up にはしない)', () => {
+    expect(importVanilla('minecraft:lever', { face: 'wall', facing: 'diagonal' }))
+      .toMatchObject({ type: 'lever', facing: 'north' })
+  })
+})

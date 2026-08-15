@@ -1,0 +1,94 @@
+import type { BlockType } from '@redstone/sim'
+import { containerCapacity } from '@redstone/sim'
+import type { PlaceableType, PlaceOptions } from './editor.js'
+import { allowedFacings, defaultFacing } from './facing.js'
+
+/**
+ * 「置けるブロック」と配置オプションの実行時定義 (#115)。
+ *
+ * これまで型 (`PlaceableType` / `PlaceOptions`) しか公開しておらず、実行時に
+ * 列挙・検証する手段が無かった。下流はブロック種 16 個と各オプションの範囲を
+ * 手写ししており、こちらが増減しても型エラーにならず静かにドリフトしていた。
+ */
+
+/** placeBlock が受け付けるブロック種。buildBlockState が対応する型と一致させる */
+export const PLACEABLE_TYPES = [
+  'wire', 'torch', 'wall_torch', 'repeater', 'comparator',
+  'lever', 'button_stone', 'button_wood',
+  'pressure_plate_wood', 'pressure_plate_stone',
+  'weighted_pressure_plate_light', 'weighted_pressure_plate_heavy',
+  'lamp', 'note_block', 'piston', 'sticky_piston',
+  'redstone_block', 'target', 'observer', 'solid',
+  'slime_block', 'honey_block', 'rail', 'powered_rail', 'activator_rail', 'detector_rail',
+  'container', 'hopper', 'dropper',
+] as const satisfies readonly PlaceableType[]
+
+const PLACEABLE_SET: ReadonlySet<string> = new Set(PLACEABLE_TYPES)
+
+export function isPlaceableType(v: unknown): v is PlaceableType {
+  return typeof v === 'string' && PLACEABLE_SET.has(v)
+}
+
+/** 数値オプションの範囲。UI とバリデータでこの 1 か所を見る */
+export const PLACE_OPTION_RANGES = {
+  delay: { min: 1, max: 4 },
+  /** 重量感圧板が踏まれたときの出力 */
+  pressedPower: { min: 1, max: 15 },
+  /** コンテナがコンパレーター背面から読まれる実効出力 */
+  signal: { min: 0, max: 15 },
+} as const
+
+/** 個数を持てる型か (ホッパー/ドロッパー/コンテナ)。上限は容量 = スロット数 × 64 */
+export function maxCount(type: BlockType): number {
+  return type === 'hopper' || type === 'dropper' || type === 'container'
+    ? containerCapacity(type)
+    : 0
+}
+
+const clamp = (v: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, Math.round(v)))
+
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+/**
+ * 配置オプションを型に合わせて正規化する。
+ *
+ * - その型が持たないオプションは落とす (リピーターに signal 等)
+ * - 数値は範囲へ丸める (壊れた保存データや外部入力をそのまま通さない)
+ * - 許されない向きは既定へ落とす ([[facing.ts]] と同じ規則)
+ */
+export function normalizePlaceOptions(type: BlockType, opts: PlaceOptions = {}): PlaceOptions {
+  const out: PlaceOptions = {}
+
+  const dirs = allowedFacings(type)
+  if (dirs.length > 0) {
+    out.facing = opts.facing !== undefined && dirs.includes(opts.facing)
+      ? opts.facing
+      : defaultFacing(type)
+  }
+
+  if (type === 'repeater' && isNum(opts.delay)) {
+    const { min, max } = PLACE_OPTION_RANGES.delay
+    out.delay = clamp(opts.delay, min, max) as 1 | 2 | 3 | 4
+  }
+
+  if (type === 'comparator' && (opts.mode === 'compare' || opts.mode === 'subtract')) {
+    out.mode = opts.mode
+  }
+
+  if ((type === 'weighted_pressure_plate_light' || type === 'weighted_pressure_plate_heavy')
+      && isNum(opts.pressedPower)) {
+    const { min, max } = PLACE_OPTION_RANGES.pressedPower
+    out.pressedPower = clamp(opts.pressedPower, min, max)
+  }
+
+  if (type === 'container' && isNum(opts.signal)) {
+    const { min, max } = PLACE_OPTION_RANGES.signal
+    out.signal = clamp(opts.signal, min, max)
+  }
+
+  const cap = maxCount(type)
+  if (cap > 0 && isNum(opts.count)) out.count = clamp(opts.count, 0, cap)
+
+  return out
+}

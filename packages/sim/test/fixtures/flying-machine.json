@@ -1,0 +1,1186 @@
+{
+  "name": "flying-machine",
+  "description": "#123 定番フライングマシン (Engine B / フラット型 2×1×4)。粘着ピストン2 + オブザーバー2 + スライム2 で構成し +X へ自走する。起動は本来「観測面の前にブロックを置いて壊す」だが、ハーネスは実行中の設置ができないため、観測面のマスにレバーを置いてトグルする方式に置き換えた (オブザーバーは blockstate 変化を検知するのでレバーのトグルで起動する)。実機で実際に飛ぶことと、sim が同じ動きをするかを確認するための fixture。",
+  "mcVersion": "1.21.1",
+  "ticks": 40,
+  "region": {
+    "from": [
+      0,
+      0,
+      2
+    ],
+    "to": [
+      16,
+      1,
+      9
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        4
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "slime_block"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        5
+      ],
+      "block": "sticky_piston[extended=false,facing=west]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        6
+      ],
+      "block": "slime_block"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        7
+      ],
+      "block": "observer[facing=south,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            7
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            7
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=true,facing=west]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            4
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            7
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            7
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 16,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 18,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=true,facing=west]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 20,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            4
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 22,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        }
+      ]
+    },
+    {
+      "tick": 24,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            7
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            7
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 26,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            6
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 28,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=true,facing=west]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 30,
+      "changes": [
+        {
+          "pos": [
+            6,
+            1,
+            4
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            4
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 32,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        }
+      ]
+    },
+    {
+      "tick": 34,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            7
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            7
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 36,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            4
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=west]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            6
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 38,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            5
+          ],
+          "block": "sticky_piston[extended=true,facing=west]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 40,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            4
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            4
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            6
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            5
+          ],
+          "block": "moving_piston[facing=west,type=sticky]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            7
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-12T09:18:38.156Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

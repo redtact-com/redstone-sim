@@ -1,0 +1,33 @@
+# パワードレールの powered 変化は blockstate 変化として観測される (#127)。
+#
+# vanilla は setBlock(pos, state, 3) で更新する。flag 3 に UPDATE_KNOWN_SHAPE (16) が
+# 立っていないため updateShape が飛び、面したオブザーバーが起動する
+# [確定: 26.2 PoweredRailBlock.updateState]。
+# レール自身は信号を出さない (非導体・非信号源) ので、この経路と「真下のブロックへ
+# 配る近隣更新」がレールの唯一の出力になる。
+#
+# 期待値は実機 (fixture powered-rail-observer) が正。
+meta {
+  name: パワードレールの状態変化をオブザーバーが検知する
+  ref: #127 / fixture powered-rail-observer / 26.2 PoweredRailBlock.updateState
+}
+
+fixture powered-rail-observer
+
+state {
+  # レバー ON と同 tick でレールが点く
+  t2 (3,1,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+  t2 (3,2,3) observer[facing=down,powered=false]
+}
+
+state {
+  # 2gt 後にオブザーバーが発火してランプが点く
+  t4 (3,2,3) observer[facing=down,powered=true]
+  t4 (3,3,3) redstone_lamp[lit=true]
+}
+
+state {
+  # パルス幅 2gt でオブザーバーは戻り、ランプは 4gt 遅れて消える
+  t6 (3,2,3) observer[facing=down,powered=false]
+  t10 (3,3,3) redstone_lamp[lit=false]
+}

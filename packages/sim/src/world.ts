@@ -2,8 +2,16 @@ import type {
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
+  RailShape, BlockType, DetectorRailState,
 } from './types.js'
-import { OPPOSITE, ALL_DIRS } from './types.js'
+import {
+  OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
+  isStraightRailShape,
+} from './types.js'
+import {
+  shouldRailBePowered, planRailPlacement, isRail, isPoweredRail,
+  countPotentialConnections, railConnections,
+} from './rail.js'
 import {
   isBasePowered as isTorchBasePowered,
   pruneToggles, MAX_RECENT_TOGGLES, RESTART_DELAY,
@@ -30,7 +38,7 @@ export interface NotePlayEvent {
 }
 import {
   getSignal, getDirectSignal, getSolidPower,
-  isBlockPowered, isFacePowered, isSolidPowered, isConductor,
+  isBlockPowered, isFacePowered, isSolidPowered, isConductor, isSignalSourceType,
 } from './power.js'
 import {
   Tracer, abbrOf, pendingAction, elemDelay,
@@ -62,10 +70,19 @@ function neighbor(pos: Pos3D, dir: Dir6): Pos3D {
   }
 }
 
-// NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)
+/** pos から dir へ n マス進んだ座標 (n=0 は pos 自身) */
+function offset(pos: Pos3D, dir: Dir6, n: number): Pos3D {
+  let cur = pos
+  for (let i = 0; i < n; i++) cur = neighbor(cur, dir)
+  return cur
+}
+
+// NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)。
+// origin は vanilla の `updateNeighborsAt(pos, block)` が運ぶ **更新元ブロック**。
+// 通常レールの向き再計算がこれを門番に使う (更新元が信号源のときだけ走る。#142)
 type UpdateEntry =
-  | { kind: 'single'; target: Pos3D }
-  | { kind: 'multi'; around: Pos3D; skip: Dir6 | null; idx: number }
+  | { kind: 'single'; target: Pos3D; origin: BlockType }
+  | { kind: 'multi'; around: Pos3D; skip: Dir6 | null; idx: number; origin: BlockType }
 
 // ============================================================
 // SimWorld 実装
@@ -453,6 +470,22 @@ export class SimWorld {
     this.traceProcess('TE', abbrOf(into), 'c', 2)
     this.traceOpenUpdate(pos)
     if (observableChanged(mp, into)) this.emitShapeUpdate(pos)
+    // 設置されたオブザーバーは 1 回発火する [確定: 26.2 ObserverBlock.onPlace +
+    // 実機 fixture observer-pushed — 着地 (t5) の 2gt 後 t7 に powered=true]。
+    // 監視先が変わったかではなく「置かれたこと」が起動条件なので、ここで予約する (#119)
+    if (into.type === 'observer' && !into.powered && !this.hasScheduledTick(pos, 'observer')) {
+      this.schedule(pos, 2, 0)
+    }
+    // 着地したレールは onPlace が movedByPiston でも走るので、
+    //   (1) updateDir(first=true) で形状を決め直し (隣のレールも connectTo で張り替わる)
+    //   (2) isStraight なので自分自身に neighborChanged が掛かり powered が再計算される
+    // [確定: 26.2 BaseRailBlock.java:64-77,111-118]
+    // [実機 fixture rail-piston-push-connect (着地先の隣のレールに繋がって north_south へ) /
+    //  rail-piston-push-powered (電源から押し離すと着地の時点で off)]
+    if (isRail(into)) {
+      for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
+      this.neighborChanged(pos)
+    }
     this.propagateChange(pos)
     this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
@@ -495,6 +528,47 @@ export class SimWorld {
       if (this.scheduledTicks.length === 0) break
       this.tick()
     }
+  }
+
+  /**
+   * これ以上「自力で」変化しない状態か (#113)。
+   *
+   * flush() が見ている予約 tick だけでは足りない。ピストンの押し出し確定は
+   * tile tick でなく BlockEntity 相 (moving_piston の finalizeDue) で進むため、
+   * 予約が尽きた瞬間に止めると押し出し途中の世界を「安定」と誤判定する。
+   *
+   * 対象外: ホッパー/ドロッパーの物流は BE 相のクールダウンで動き続けるため
+   * ここでは見ない (アイテムが流れている限り静止しないのが正しいが、
+   * settle の停止条件としては maxTicks で切る)。
+   */
+  isQuiescent(): boolean {
+    if (this.scheduledTicks.length > 0) return false
+    if (this.blockEvents.length > 0) return false
+    for (const block of this.blocks.values()) {
+      if (block.type === 'moving_piston') return false
+    }
+    return true
+  }
+
+  /**
+   * 安定するまで進める (#113)。flush より安全側で、押し出し中のピストンも確定させる。
+   *
+   * @param maxTicks 上限。発振回路はここで打ち切られる
+   * @param quietTicks 静止と判定するのに必要な連続 tick 数。既定 1
+   * @returns 進めた tick 数と、静止して終わったか (false = 発振または打ち切り)
+   */
+  settle(maxTicks = 4096, quietTicks = 1): { ticks: number; quiescent: boolean } {
+    let quiet = 0
+    for (let i = 0; i < maxTicks; i++) {
+      if (this.isQuiescent()) {
+        quiet++
+        if (quiet >= quietTicks) return { ticks: i, quiescent: true }
+      } else {
+        quiet = 0
+      }
+      this.tick()
+    }
+    return { ticks: maxTicks, quiescent: this.isQuiescent() }
   }
 
   /**
@@ -549,6 +623,10 @@ export class SimWorld {
         // vanilla ObserverBlock.onPlace: POWERED で設置された場合は flag 18
         // (更新なし) で消灯する。authored の powered=true は無視して off から始める
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
+      } else if (block.type === 'detector_rail') {
+        // カート検出でしか powered にならない素子。初期安定状態では不在なので
+        // authored の powered=true は無視して OFF から始める (感圧板と同趣旨。#146)
+        if (block.powered) this.blocks.set(key, { ...block, powered: false })
       } else if (
         block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone' ||
         block.type === 'weighted_pressure_plate_light' || block.type === 'weighted_pressure_plate_heavy'
@@ -556,6 +634,13 @@ export class SimWorld {
         // 感圧板は entity が乗って初めて powered になる。手動モデルでは
         // authored の powered/POWER>0 (乗った状態) は初期安定状態では entity 不在の
         // ため OFF から始める (target/observer の onPlace リセットと同趣旨。決定論)
+        if (block.powered) this.blocks.set(key, { ...block, powered: false })
+      } else if (isPoweredRail(block)) {
+        // 連鎖伝播 (isSameRailWithPower) は「隣が powered であること」を条件に
+        // するため、authored 値から始めると根拠のない powered が自己維持し得る。
+        // 一旦 false に落とし、Step 3 の収束ループで単調増加として組み直す。
+        // shape は authored のまま (ワイヤーの接続形状と同じ方針。#51 注記)。
+        // 通常レールは動力を持たないので対象外 (#140)
         if (block.powered) this.blocks.set(key, { ...block, powered: false })
       }
     }
@@ -613,6 +698,24 @@ export class SimWorld {
       }
     }
 
+    // Step 3b: パワードレールの powered を収束するまで繰り返し計算。
+    // 連鎖は「隣接レールが powered」を条件にするため 1 パスでは広がらない。
+    // Step 1 で false に落としてあるので単調増加として収束する (ワイヤーと同趣旨)。
+    let railChanged = true
+    let railPass = 0
+    while (railChanged && railPass < 100) {
+      railChanged = false
+      railPass++
+      for (const [key, block] of this.blocks) {
+        if (!isPoweredRail(block)) continue
+        const powered = shouldRailBePowered(this, keyToPos(key), block.shape, block.type)
+        if (block.powered !== powered) {
+          this.blocks.set(key, { ...block, powered })
+          railChanged = true
+        }
+      }
+    }
+
     // Step 4: トーチ・リピーター・コンパレーターの初期スケジュール登録。
     // 土台が充電されているトーチは消灯を、後面に動力が来ているリピーターは
     // turn_on を、入力のあるコンパレーターは出力を schedule する。
@@ -638,6 +741,85 @@ export class SimWorld {
 
     // 初期組み立て完了。以降 (tick / flush / activateBlock) の状態変化は PP を発行する
     this.suppressPP = false
+  }
+
+  /**
+   * `/setblock` 相当のブロック差し替え (#127)。**BUD の検証に使う**。
+   *
+   * vanilla の SetBlockCommand は `block.place(level, pos, 2 | 256)` で置く。
+   * flag に **UPDATE_NEIGHBORS (1) が立っていない**ので置いた瞬間は近隣更新を出さず、
+   * そのあと `updateNeighboursOnBlockSet` → `updateNeighborsAt(pos)` で
+   * **周囲 6 方向にだけ**更新を配る (自分自身には配らない)
+   * [確定: 26.2 SetBlockCommand.setBlock / ServerLevel.updateNeighboursOnBlockSet]。
+   *
+   * **置いた位置自身も再評価する**。`BaseRailBlock.onPlace` は
+   * `if (!oldState.is(state.getBlock()))` で「同じブロック種の上書きなら updateState を
+   * 呼ばない」ように読めるが、**実機 1.21.1 で試すと同種上書きでも powered は保持されず
+   * 即座に再計算される** (リピーターの powered / ランプの lit も同様に落ちる)。
+   * `/setblock ... strict` (onPlace を飛ばす flag 512) は 1.21.1 には無く、carpet の
+   * scarpet `set()` でも同じだった。実機の観測に合わせてここでも自身を再評価する。
+   * [実測: 2026-08-12 / 26.2 のデコンパイルとは読みが食い違うため要追調査]
+   *
+   * ∴ 実機ハーネスでは「更新を伴わないブロック差し替え」は作れない。BUD の検証は
+   * 「既に on のレールは値が変わらないので近隣更新を再送しない」性質を使って行う
+   * (fixture powered-rail-bud)。
+   *
+   * 既知の限定: onPlace の形状決定はレールのみ再現。他の素子を setblock する fixture を
+   * 書くときはここに追加すること。
+   */
+  setBlockCommand(pos: Pos3D, block: BlockState): void {
+    const old = this.getBlockAt(pos)
+    this.setBlockAt(pos, block)
+
+    // 形状の決め直しは「種が変わったとき」だけ (BaseRailBlock.updateState の updateDir 相当)
+    if (isRail(block) && !isRail(old)) {
+      this.applyRailPlacement(pos, block.shape)
+    }
+
+    this.neighborChanged(pos)   // 置いた位置自身の再評価 (上記の実測に合わせる)
+    this.emitShapeUpdate(pos)   // flag に UPDATE_KNOWN_SHAPE(16) が無い → updateShape は飛ぶ
+    this.submitMultiNC(pos)     // updateNeighborsAt(pos) — 周囲 6 方向のみ
+  }
+
+  /**
+   * レールを置いた (または押されて着地した) ときの形状決定を世界へ適用する。
+   * vanilla の `BaseRailBlock.updateDir` → `new RailState(...).place(...)` に対応する
+   * [確定: 26.2 BaseRailBlock.java:111-118]。
+   *
+   * **形状を書いた各レールが更新源になる** (#132)。vanilla は RailState.place も
+   * connectTo も `level.setBlock(pos, state, 3)` で書く [確定: 26.2 RailState.java:205,333]。
+   * flag 3 = UPDATE_NEIGHBORS(1) | UPDATE_CLIENTS(2) なので
+   *   - flag 1  → そのレールが周囲 6 方向へ近隣更新を配る
+   *   - 16 が無い → updateNeighbourShapes が走り隣接オブザーバーが発火する
+   * [実機 fixture rail-shape-update: 張り替わった隣レールの近隣にある BUD ピストンが
+   *  伸び、真上のオブザーバーも発火する。置いた本人以外が更新源になることの直接証拠]
+   *
+   * 書き込みと発行は **1 件ずつ交互に** 行う。vanilla も自分の setBlock を済ませてから
+   * 隣の connectTo に入るので、自分の近隣更新が走る時点では隣はまだ旧形状のままになる。
+   * planRailPlacement は副作用を持たない (計算結果を返すだけ) 設計を維持し、
+   * 更新の発行は適用側であるここが担う。
+   *
+   * @returns 実際に形状を書いた座標 (呼び出し側が changed セットに積むため)
+   */
+  private applyRailPlacement(pos: Pos3D, defaultShape: RailShape, first = true): Pos3D[] {
+    const written: Pos3D[] = []
+    // hasSignal は通常レールの曲線の優先順位にだけ効く [確定: 26.2 BaseRailBlock.updateDir
+    // が level.hasNeighborSignal(pos) を place へ渡す]。
+    // first=false は実行中の再計算 (RailBlock.updateState) 経路で、形状が変わらなければ
+    // ワールドへの書き込みごと起きない = 更新も出ない (#142)
+    for (const c of planRailPlacement(this, pos, defaultShape, isBlockPowered(this, pos), first)) {
+      const b = this.getBlockAt(c.pos)
+      if (!isRail(b)) continue
+      // 曲線を取れるのは通常レールだけ。直線レールに曲線が割り当たることは
+      // RailConnector の straight ガードにより起こらないが、型でも守っておく
+      if (b.type === 'rail') this.setBlockAt(c.pos, { ...b, shape: c.shape })
+      else if (isStraightRailShape(c.shape)) this.setBlockAt(c.pos, { ...b, shape: c.shape })
+      else continue
+      written.push(c.pos)
+      this.emitShapeUpdate(c.pos)
+      this.submitMultiNC(c.pos)
+    }
+    return written
   }
 
   // ── プレイヤー操作（PIフェーズ相当） ────────────────────
@@ -685,6 +867,21 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Tg', 'n', 0, 'PI')
       this.schedule(pos, 20, 0)
+    } else if (block.type === 'detector_rail') {
+      // マインカートの「乗り込み」を手動トリガする (#146)。既に powered なら no-op
+      // [確定: 26.2 DetectorRailBlock.entityInside の `if (!state.getValue(POWERED))` ガード]。
+      // ON → 20gt (PRESSED_CHECK_PERIOD) 後の tile tick で checkPressed が
+      // カート不在と再評価して自動 OFF する (感圧板と同型の折衷モデル)。
+      // [実機 fixture detector-rail-cart-pulse: t3 検出 → t23 OFF]
+      if (block.powered) return
+      const next: DetectorRailState = { ...block, powered: true }
+      this.setBlockAt(pos, next)
+      this.traceProcess('PI', 'Dt', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitShapeUpdate(pos)
+      this.propagateChange(pos)
+      this.traceCloseUpdate('Dt', 'n', 0, 'PI')
+      this.schedule(pos, 20, 0)  // [確定: 26.2 PRESSED_CHECK_PERIOD = 20]
     } else if (block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone') {
       // 感圧板の「踏まれ」を手動トリガする。既に踏まれていれば no-op
       // (vanilla entityInside の signal==0 ガード相当)。ON → 20gt (getPressedTime)
@@ -736,6 +933,7 @@ export class SimWorld {
       case 'button_wood':   return block.powered ? 15 : 0
       case 'pressure_plate_wood':
       case 'pressure_plate_stone': return block.powered ? 15 : 0
+      case 'detector_rail':  return block.powered ? 15 : 0
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy': return block.powered ? block.pressedPower : 0
       case 'lamp':          return block.lit ? 15 : 0
@@ -874,6 +1072,10 @@ export class SimWorld {
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (block.powered) apply({ ...block, powered: false }, 'f')
+    } else if (block.type === 'detector_rail') {
+      // vanilla DetectorRailBlock.tick → checkPressed: powered のときカートを数え直す。
+      // 折衷モデルは entity を持たないので常に 0 = OFF (再予約もしない)。#146
+      if (block.powered) apply({ ...block, powered: false }, 'f')
     } else if (
       block.type === 'pressure_plate_wood' || block.type === 'pressure_plate_stone' ||
       block.type === 'weighted_pressure_plate_light' || block.type === 'weighted_pressure_plate_heavy'
@@ -995,6 +1197,18 @@ export class SimWorld {
     if (block.type === 'solid' || block.type === 'lamp') return true
     if (block.type === 'redstone_block' || block.type === 'target' || block.type === 'note_block') return true
     if ((block.type === 'piston' || block.type === 'sticky_piston') && !block.extended) return true
+    // オブザーバーは vanilla どおり可動 (PushReaction NORMAL) [確定: 26.2 + 実機 fixture
+    // observer-pushed]。着地時に自分で 1 回発火する — finalizeMovingPiston を参照 (#119)
+    if (block.type === 'observer') return true
+    // スライム/蜂蜜も可動 (PushReaction STICKY)。くっついた塊の収集は
+    // resolvePushStructure が担当する (#121)
+    if (isStickyBlock(block)) return true
+    // レールも可動 (PushReaction NORMAL)。26.2 の登録はどのレールも pushReaction を
+    // 指定していない = 既定の NORMAL [確定: 26.2 Blocks.java:689,692,2892]
+    // [実機 fixture rail-piston-push: 押されて 1 マス動き、形状は保持される]。
+    // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
+    // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
+    if (isRail(block)) return true
     return false
   }
 
@@ -1016,6 +1230,7 @@ export class SimWorld {
       case 'pressure_plate_stone':
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy':
+      case 'detector_rail':
       case 'repeater':
       case 'comparator':
         return true
@@ -1034,23 +1249,112 @@ export class SimWorld {
    * extending 時のみ。sticky は引かずに置き去りにする = 既存挙動)。
    */
   private resolvePushStructure(
-    pos: Pos3D, facing: Dir6,
+    pos: Pos3D, facing: Dir6, startAt?: Pos3D,
   ): { toPush: Pos3D[]; toDestroy: Pos3D[] } | null {
     const toPush: Pos3D[] = []
     const toDestroy: Pos3D[] = []
-    let cur = neighbor(pos, facing)
-    for (;;) {
-      const b = this.getBlockAt(cur)
-      if (!b) return { toPush, toDestroy }   // 空きに到達 → 押せる
-      if (this.isPushDestroy(b)) {
-        toDestroy.push(cur)                  // 破壊して終端 (連鎖はここまで)
+    const key = (p: Pos3D): string => posKey(p)
+    const inPush = (p: Pos3D): number => toPush.findIndex(q => key(q) === key(p))
+
+    /** 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可 */
+    const pushable = (p: Pos3D, allowDestroy: boolean): boolean => {
+      const b = this.getBlockAt(p)
+      if (!b) return true                                   // 空気
+      if (b.type === 'piston' || b.type === 'sticky_piston') return !b.extended
+      if (this.isPushDestroy(b)) return allowDestroy
+      return this.isMovable(b)                              // それ以外は BLOCK 扱い
+    }
+
+    /** 26.2 PistonStructureResolver.addBlockLine */
+    const addBlockLine = (start: Pos3D): boolean => {
+      const first = this.getBlockAt(start)
+      if (!first) return true                               // 空気 → 何も足さない
+      if (!pushable(start, false)) return true
+      if (key(start) === key(pos)) return true
+      if (inPush(start) > -1) return true
+
+      // 粘着ブロックは「後ろ (押し方向の逆)」に繋がっている塊も連れていく
+      let count = 1
+      if (count + toPush.length > MAX_PUSH_DEPTH) return false
+      let cur = first
+      while (isStickyBlock(cur)) {
+        const back = offset(start, OPPOSITE[facing], count)
+        const prev = cur
+        const next = this.getBlockAt(back)
+        if (!next
+            || !canStickToEachOther(prev, next)
+            || !pushable(back, false)
+            || key(back) === key(pos)) break
+        cur = next
+        if (++count + toPush.length > MAX_PUSH_DEPTH) return false
+      }
+
+      let added = 0
+      for (let i = count - 1; i >= 0; i--) {
+        toPush.push(offset(start, OPPOSITE[facing], i))
+        added++
+      }
+
+      // 前方へ伸ばす
+      for (let i = 1; ; i++) {
+        const p = offset(start, facing, i)
+        const collision = inPush(p)
+        if (collision > -1) {
+          reorderAtCollision(added, collision)
+          for (let j = 0; j <= collision + added; j++) {
+            const b = this.getBlockAt(toPush[j])
+            if (b && isStickyBlock(b) && !addBranchingBlocks(toPush[j])) return false
+          }
+          return true
+        }
+        const b = this.getBlockAt(p)
+        if (!b) return true                                 // 空気に到達 → 押せる
+        if (!pushable(p, true) || key(p) === key(pos)) return false
+        if (this.isPushDestroy(b)) { toDestroy.push(p); return true }
+        if (toPush.length >= MAX_PUSH_DEPTH) return false
+        toPush.push(p)
+        added++
+      }
+    }
+
+    /** 26.2 reorderListAtCollision — 衝突した行を先頭側へ並べ替える */
+    const reorderAtCollision = (added: number, collision: number): void => {
+      const head = toPush.slice(0, collision)
+      const lastLine = toPush.slice(toPush.length - added)
+      const collisionToLine = toPush.slice(collision, toPush.length - added)
+      toPush.length = 0
+      toPush.push(...head, ...lastLine, ...collisionToLine)
+    }
+
+    /** 26.2 addBranchingBlocks — 押し方向と直交する 4 方向の「くっついている」塊を足す */
+    const addBranchingBlocks = (from: Pos3D): boolean => {
+      const fromState = this.getBlockAt(from)
+      if (!fromState) return true
+      for (const dir of ALL_DIRS) {
+        if (dir === facing || dir === OPPOSITE[facing]) continue   // 押し軸は対象外
+        const nPos = neighbor(from, dir)
+        const nb = this.getBlockAt(nPos)
+        if (nb && canStickToEachOther(nb, fromState) && !addBlockLine(nPos)) return false
+      }
+      return true
+    }
+
+    const start = startAt ?? neighbor(pos, facing)
+    const startBlock = this.getBlockAt(start)
+    if (!pushable(start, false)) {
+      // 直前が壊れ物なら破壊して終端 (26.2 resolve の DESTROY 分岐)
+      if (startBlock && this.isPushDestroy(startBlock)) {
+        toDestroy.push(start)
         return { toPush, toDestroy }
       }
-      if (!this.isMovable(b)) return null
-      if (toPush.length >= 12) return null   // 13 個目 = 押せない
-      toPush.push(cur)
-      cur = neighbor(cur, facing)
+      return startBlock ? null : { toPush, toDestroy }
     }
+    if (!addBlockLine(start)) return null
+    for (let i = 0; i < toPush.length; i++) {
+      const b = this.getBlockAt(toPush[i])
+      if (b && isStickyBlock(b) && !addBranchingBlocks(toPush[i])) return null
+    }
+    return { toPush, toDestroy }
   }
 
   private executeBlockEvent(ev: BlockEvent): string[] {
@@ -1118,6 +1422,15 @@ export class SimWorld {
       for (let i = pushList.length - 1; i >= 0; i--) {
         setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i])
       }
+      // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
+      // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
+      const destKeys = new Set(pushList.map(q => posKey(neighbor(q, piston.facing))))
+      for (const src of pushList) {
+        const k = posKey(src)
+        if (destKeys.has(k) || k === posKey(headPos)) continue
+        this.setBlockAt(src, { type: 'air' })
+        changed.push(k)
+      }
       // head セル (= 最近接 src と同座標) を head 行きの moving に
       setMoving(headPos, sticky ? 'sticky' : 'normal', {
         type: 'piston_head', facing: piston.facing, sticky,
@@ -1154,14 +1467,27 @@ export class SimWorld {
       }
       const affected: Pos3D[] = [ev.pos, headPos]
       if (sticky) {
+        // 引き戻しも vanilla は PistonStructureResolver を通る (extending=false)。
+        // 押し方向は facing の逆、開始位置は piston+facing*2 = head の 1 つ先 (#121)。
+        // これでスライム/蜂蜜にくっついた塊ごと引き戻せる
+        const pullDir = OPPOSITE[piston.facing]
         const pullFrom = neighbor(headPos, piston.facing)
-        const target = this.getBlockAt(pullFrom)
-        if (target && this.isMovable(target)) {
-          // 引かれるブロック: src 即時 air、head セルに moving(into=ブロック)
-          this.setBlockAt(pullFrom, { type: 'air' })
-          changed.push(posKey(pullFrom))
-          setMoving(headPos, 'normal', target)
-          affected.push(pullFrom)
+        const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom)
+        const pullList = pulled ? pulled.toPush : []
+        if (pullList.length > 0) {
+          const payloads = pullList.map(q => this.getBlockAt(q)!)
+          // 近い順に行き先 (piston 側) へ moving を置く
+          for (let i = 0; i < pullList.length; i++) {
+            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i])
+          }
+          const destKeys = new Set(pullList.map(q => posKey(neighbor(q, pullDir))))
+          for (const src of pullList) {
+            const k = posKey(src)
+            if (destKeys.has(k)) continue
+            this.setBlockAt(src, { type: 'air' })
+            changed.push(k)
+          }
+          affected.push(...pullList, ...pullList.map(q => neighbor(q, pullDir)))
         }
       }
       // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
@@ -1285,6 +1611,18 @@ export class SimWorld {
         this.submitMultiNC(neighbor(pos, OPPOSITE[block.facing]))
         break
       }
+      case 'detector_rail': {
+        // checkPressed の更新一式 [確定: 26.2 DetectorRailBlock.java:88-113]:
+        //   setBlock(flag3) → 自身 6 方向 / updatePowerToConnected → 繋がる 2 マスへ
+        //   単発通知 / updateNeighborsAt(pos) (重複) / updateNeighborsAt(pos.below())
+        //   / 末尾で updateNeighbourForOutputSignal (コンパレーター)
+        this.submitMultiNC(pos)
+        for (const c of railConnections(pos, block.shape)) this.submitSingleNC(c, block.type)
+        this.submitMultiNC(pos)
+        this.submitMultiNC(neighbor(pos, 'down'))
+        this.emitComparatorUpdate(pos)
+        break
+      }
       case 'pressure_plate_wood':
       case 'pressure_plate_stone':
       case 'weighted_pressure_plate_light':
@@ -1369,16 +1707,22 @@ export class SimWorld {
 
   // ── NC 更新の DFS 実行 ───────────────────────────────────
 
-  private submitSingleNC(target: Pos3D): void {
+  private submitSingleNC(target: Pos3D, origin?: BlockType): void {
     if (this.traceBuf) this.traceBuf.push(`bu(${this.relToken(target)})`)
-    this.submitUpdate({ kind: 'single', target })
+    this.submitUpdate({ kind: 'single', target, origin: origin ?? this.getBlockAt(target)?.type ?? 'air' })
   }
 
-  private submitMultiNC(around: Pos3D, skip: Dir6 | null = null): void {
+  private submitMultiNC(around: Pos3D, skip: Dir6 | null = null, origin?: BlockType): void {
     if (this.traceBuf) {
       this.traceBuf.push(`bu(${this.relToken(around)}${skip ? `\\${skip}` : ''})`)
     }
-    this.submitUpdate({ kind: 'multi', around, skip, idx: 0 })
+    this.submitUpdate({
+      kind: 'multi', around, skip, idx: 0,
+      // 既定は「更新を出した座標にあるブロック」。vanilla も呼び出し側が Block を
+      // 渡すが、ほとんどの経路で pos のブロック自身になる。異なる経路 (レールが
+      // 真下へ配る更新など) は origin を明示する
+      origin: origin ?? this.getBlockAt(around)?.type ?? 'air',
+    })
   }
 
   private submitUpdate(entry: UpdateEntry): void {
@@ -1392,14 +1736,14 @@ export class SimWorld {
       const top = this.updateStack[this.updateStack.length - 1]
       if (top.kind === 'single') {
         this.updateStack.pop()
-        this.neighborChanged(top.target)
+        this.neighborChanged(top.target, top.origin)
       } else {
         while (top.idx < NC_UPDATE_ORDER.length && NC_UPDATE_ORDER[top.idx] === top.skip) top.idx++
         if (top.idx >= NC_UPDATE_ORDER.length) {
           this.updateStack.pop()
           continue
         }
-        this.neighborChanged(neighbor(top.around, NC_UPDATE_ORDER[top.idx++]))
+        this.neighborChanged(neighbor(top.around, NC_UPDATE_ORDER[top.idx++]), top.origin)
       }
       if (++this.updateCount > 1_000_000) {
         // vanilla の maxChainedNeighborUpdates = 1,000,000 溢れ相当
@@ -1535,7 +1879,7 @@ export class SimWorld {
    * 即時系 (lamp/solid 表示値) はその場で更新する。
    * ワイヤーは案 A では no-op (電力値は propagateChange 側で確定済み)。
    */
-  private neighborChanged(pos: Pos3D): void {
+  private neighborChanged(pos: Pos3D, origin: BlockType = 'air'): void {
     const block = this.getBlockAt(pos)
     if (!block) return
 
@@ -1659,6 +2003,45 @@ export class SimWorld {
         } else if (!powered && block.triggered) {
           this.setBlockAt(pos, { ...block, triggered: false })
           this.emitShapeUpdate(pos)
+        }
+        break
+      }
+      case 'rail': {
+        // 実行中の向き再計算 [確定: 26.2 RailBlock.updateState]:
+        //   更新元が信号源 かつ 潜在接続がちょうど 3 のときだけ updateDir(first=false)
+        // レバー ON/OFF で 3 方向ジャンクションの曲がる先が入れ替わる、通常レール
+        // 本来の使い方がこれ [実機 fixture rail-junction-toggle]。
+        // 門番はどちらも実機で分離済み:
+        //   - 信号源でない更新 (石への差し替え) では再計算されず、通電時の向きが
+        //     残ったまま固まる [fixture rail-junction-nonsignal]
+        //   - 4 方向ジャンクションは給電しても動かない [fixture rail-junction-gate]
+        if (!isSignalSourceType(origin)) break
+        if (countPotentialConnections(this, pos) !== 3) break
+        this.applyRailPlacement(pos, block.shape, false)
+        break
+      }
+      case 'powered_rail':
+      case 'activator_rail': {
+        // vanilla PoweredRailBlock.updateState [確定: 26.2]:
+        //   shouldPower = hasNeighborSignal(pos) || 前方向の連鎖 || 後方向の連鎖
+        //   変化したら setBlock(flag3) + updateNeighborsAt(pos.below())
+        //                              + 坂なら updateNeighborsAt(pos.above())
+        // レール自身は信号を出さない (power.ts に case を持たない) ため、
+        // 「真下のブロックへ更新を配る」ことがレッドストーン的な唯一の出力になる。
+        const should = shouldRailBePowered(this, pos, block.shape, block.type)
+        if (should !== block.powered) {
+          this.setBlockAt(pos, { ...block, powered: should })
+          this.emitShapeUpdate(pos)               // blockstate 変化 → PP (オブザーバー起動)
+          // flag3 の UPDATE_NEIGHBORS = 自身の周囲 6 方向。隣のパワードレールが
+          // NC を受けて再評価することで、連鎖 (最大 8) が伝わっていく
+          this.submitMultiNC(pos)
+          // 明示の updateNeighborsAt(pos.below(), this) — 真下ブロックの「周囲」へ配る。
+          // vanilla が運ぶのは **レール自身** なので origin を明示する (真下のブロック
+          // ではない。既定に任せると信号源判定を取り違える。#142)
+          this.submitMultiNC([pos[0], pos[1] - 1, pos[2]], null, block.type)
+          if (isRailSlope(block.shape)) {
+            this.submitMultiNC([pos[0], pos[1] + 1, pos[2]], null, block.type)
+          }
         }
         break
       }
@@ -1824,6 +2207,7 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'lever':
     case 'button_stone':
     case 'button_wood': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
+    case 'detector_rail':
     case 'pressure_plate_wood':
     case 'pressure_plate_stone': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
     case 'weighted_pressure_plate_light':

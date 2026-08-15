@@ -1,0 +1,131 @@
+{
+  "name": "rail-mixed-neighbor-shape",
+  "description": "#140 形状の自動接続はレール種別をまたぐのか。BaseRailBlock.isRail は BlockTags.RAILS 判定なので種別を問わない [確定: 26.2 BaseRailBlock.java:33-39] 一方、動力の連鎖は state.is(this) で同種限定 (#138)。この非対称を形状側から確定させる。上段は powered_rail の東隣に通常レールを north_south で置く、下段は通常レールの東隣に powered_rail を north_south で置く。どちらも隣に引かれて east_west になるはず。",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": {
+    "from": [
+      0,
+      0,
+      2
+    ],
+    "to": [
+      9,
+      2,
+      6
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        4,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        5
+      ],
+      "block": "rail[shape=east_west,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "action": "setblock",
+      "block": "rail[shape=north_south,waterlogged=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        7,
+        1,
+        5
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "rail[shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            7,
+            1,
+            5
+          ],
+          "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-15T12:17:55.512Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

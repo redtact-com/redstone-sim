@@ -1,0 +1,53 @@
+# 平坦段差は「電源が入った状態で組み立てれば」BUD なしで普通に伝わる (#129)。
+#
+# 手順は rail/flat-step-build.rstest と同じだが、**レバーを先に ON にしてから**組む。
+# ⑥ で向きを揃えるレールを置いた瞬間、(5,2,6) は onPlace → updateState を通って
+# 評価されるため、その場で on になる [確定: 26.2 BaseRailBlock.onPlace]。
+# 補助レールを壊しても on のまま残る。
+#
+# ∴ 実際にプレイヤーが敷くときは電源が入った状態で組むので、平坦段差でも
+# **斜め上には普通に伝わり、BUD を意識する必要はない**。
+# ただし **一度組み上がった後にレバーを切っても斜め上は追従しない** (更新が届かないため)。
+# 手前が off になっても斜め上は on のまま残る = #127 の「信号源が無いのにレールだけ on」。
+# 一方 **斜め下は更新を送っても伝わらない** (rail/step-updown.rstest の t=8) —
+# こちらは探索そのものが到達しないため。
+#
+# 完成後に給電した場合だけ斜め上に更新が届かず点かない (rail/flat-step-build.rstest)。
+#
+# 期待値は実機 (fixture powered-rail-flat-step-live) が正。
+meta {
+  name: 電源が入った状態で組めば平坦段差でも斜め上に普通に伝わる
+  ref: #129 / fixture powered-rail-flat-step-live / 26.2 BaseRailBlock.onPlace
+}
+
+fixture powered-rail-flat-step-live
+
+state {
+  # ④ x 方向に置いた時点ではまだ繋がっていないので off
+  t12 (5,1,5) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t12 (5,2,6) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}
+
+state {
+  # ⑥ 向きが揃った瞬間に on になる (BUD 不要)
+  t16 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}
+
+state {
+  # 補助レールを壊しても on のまま。手前は坂になっていない
+  t18 (5,1,5) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t18 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}
+
+state {
+  # ただし完成後にレバーを切っても斜め上は **追従しない** (更新が届かないため)。
+  # 手前は off になるのに斜め上は on のまま = 信号源が無いのにレールだけ on
+  t20 (5,1,5) powered_rail[powered=false,shape=north_south,waterlogged=false]
+  t20 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}
+
+state {
+  # 入れ直しても斜め上は変わらない (もともと on のまま)
+  t24 (5,1,5) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t24 (5,2,6) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}

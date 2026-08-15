@@ -1,5 +1,5 @@
 import type {
-  Pos3D, Dir6, HDir, TorchState, WallTorchState, BlockState,
+  Pos3D, Dir6, HDir, TorchState, WallTorchState, BlockState, BlockType,
 } from './types.js'
 import type { SimWorld } from './world.js'
 import { OPPOSITE, ALL_DIRS } from './types.js'
@@ -32,7 +32,21 @@ import { deriveWireConnections } from './wire-shape.js'
 export function isConductor(block: BlockState | null): boolean {
   // note_block は既定フルキューブで isRedstoneConductor=true (solid 同等)。
   // 直接充電されると隣を活性化しうる (10 §C5)。信号は出さない [確定: 26.2]。
-  return !!block && (block.type === 'solid' || block.type === 'target' || block.type === 'note_block')
+  //
+  // slime_block も導体 [確定: 26.2 — isRedstoneConductor の既定は
+  // isCollisionShapeFullBlock で、SLIME_BLOCK は noOcclusion() のみ = 当たり判定は
+  // フルブロック]。一方 **honey_block は非導体** (HoneyBlock.SHAPE = column(14,0,15) で
+  // フルブロックでない)。フライングマシンはオブザーバーの出力がスライム越しに
+  // ピストンへ届くことで動くため、ここを取り違えると動かない (#123)。
+  //
+  // powered_rail は**非導体かつ非信号源**。powered=true でも周囲へ weak/strong は
+  // 出さない (getSignal / getDirectSignal とも非 override) [確定: 26.2
+  // PoweredRailBlock]。動力を「受ける」だけの素子で、出力に相当するのは
+  // powered 変化時に真下のブロックへ配る近隣更新のみ (world.ts の neighborChanged)。
+  return !!block && (
+    block.type === 'solid' || block.type === 'target' ||
+    block.type === 'note_block' || block.type === 'slime_block'
+  )
 }
 
 /** pos から dir 方向に 1 進んだ座標 */
@@ -110,6 +124,10 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
       return 15
     case 'target':
       return src.outputPower
+    case 'detector_rail':
+      // 全方向へ weak 15 [確定: 26.2 DetectorRailBlock.ownSignal = powered ? 15 : 0]。
+      // 強充電は真下のみ (getEmittedDirectSignal 側)
+      return src.powered ? 15 : 0
     case 'torch':
     case 'wall_torch': {
       if (!src.lit) return 0
@@ -156,6 +174,13 @@ function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): nu
     case 'button_stone':
     case 'button_wood':
       return src.powered && toDir === getAttachFace(src.facing) ? 15 : 0
+    case 'detector_rail':
+      // **真下のブロックだけ**を強充電する [確定: 26.2 DetectorRailBlock.getDirectSignal
+      // = (direction == UP) ? 15 : 0。vanilla の UP = 受信側→レール の向きなので
+      // sim の レール→受信側 'down' に対応]
+      // [実機 fixture detector-rail-cart-pulse: 真下の支持ブロック越しにランプが点き、
+      //  側面の隣接固体越しには点かない]
+      return src.powered && toDir === 'down' ? 15 : 0
     case 'pressure_plate_wood':
     case 'pressure_plate_stone':
       // 取り付け面 = 直下ブロックのみを強充電 [確定: 26.2
@@ -272,4 +297,39 @@ export function isBlockPowered(world: SimWorld, pos: Pos3D): boolean {
     if (isFacePowered(world, pos, dir)) return true
   }
   return false
+}
+
+/**
+ * vanilla の `Block.isSignalSource(state)` が true になるブロックか
+ * [確定: 26.2 — isSignalSource を override しているのは RedStoneWireBlock /
+ *  RedstoneTorchBlock / DiodeBlock (repeater・comparator) / LeverBlock /
+ *  ButtonBlock / BasePressurePlateBlock / ObserverBlock / TargetBlock /
+ *  PoweredBlock (= redstone_block) / DetectorRailBlock ほか sim 未実装の
+ *  DaylightDetector・SculkSensor・TripWireHook・LightningRod・TrappedChest・Lectern]。
+ *
+ * **状態ではなくブロック種で決まる** ことに注意 (vanilla も defaultBlockState() に
+ * 対して問う場面がある)。通常レールの向き再計算はこれを門番に使う (#142)。
+ */
+export function isSignalSourceType(type: BlockType): boolean {
+  switch (type) {
+    case 'wire':
+    case 'torch':
+    case 'wall_torch':
+    case 'repeater':
+    case 'comparator':
+    case 'lever':
+    case 'button_stone':
+    case 'button_wood':
+    case 'pressure_plate_wood':
+    case 'pressure_plate_stone':
+    case 'weighted_pressure_plate_light':
+    case 'weighted_pressure_plate_heavy':
+    case 'observer':
+    case 'target':
+    case 'redstone_block':
+    case 'detector_rail':
+      return true
+    default:
+      return false
+  }
 }

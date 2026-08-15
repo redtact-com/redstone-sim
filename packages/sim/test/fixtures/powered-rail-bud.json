@@ -1,0 +1,415 @@
+{
+  "name": "powered-rail-bud",
+  "description": "#127 パワードレールの powered は live read ではなく neighborChanged / onPlace でしか再評価されない (= BUD) ことの検証。鍵は「既に on のレールは値が変わらないので近隣更新を再送しない」こと [確定: 26.2 PoweredRailBlock.updateState は shouldPower != isPowered のときだけ setBlock する]。①レバーで 10 本中 9 本が on になり 10 本目 (x=11) は届かない (8 連鎖の限界)。②2 本目の隣にレッドストーンブロックを置くと探索の起点がずれて 10 本目は**本来 on になるべき**になるが、2 本目は既に on で変化しないため更新が下流へ流れず 10 本目は off のまま。③10 本目の隣にブロックを置いて更新を送ると、そこで初めて on になる。④レッドストーンブロックを撤去しても (更新が届かないので) 10 本目は on のまま = **信号源が無いのに on**。⑤10 本目の隣を触って更新を送ると off に戻る。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      0,
+      0,
+      1
+    ],
+    "to": [
+      13,
+      2,
+      4
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        11,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        8,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        10,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        11,
+        1,
+        3
+      ],
+      "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        11,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        11,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            3
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            10,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            2
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            11,
+            1,
+            2
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            11,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=true,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            2
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            11,
+            1,
+            2
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            11,
+            1,
+            3
+          ],
+          "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-12T11:07:37.187Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

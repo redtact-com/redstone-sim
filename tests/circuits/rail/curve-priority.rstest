@@ -1,0 +1,45 @@
+# 通常レールの曲線 4 形状は「直交する 2 方向の隣接」で決まる (#140)。
+#
+# RailState.place の第二段は isStraight=false のときだけ有効で、排他条件つき:
+#   s && e && !n && !w → SOUTH_EAST
+#   s && w && !n && !e → SOUTH_WEST
+#   n && w && !s && !e → NORTH_WEST
+#   n && e && !s && !w → NORTH_EAST
+# [確定: 26.2 RailState.java:242-258]
+#
+# 4 パターンを離して並べ、隣 2 本は authored (孤立した直線レールなので自然な状態)、
+# 中心だけを setblock で後から置いて実機に形状を決めさせている。
+#
+# 期待値は実機 (fixture rail-curve-priority) が正。
+meta {
+  name: 通常レールの曲線は直交 2 方向で決まる
+  ref: #140 / fixture rail-curve-priority / 26.2 RailState.place 第二段
+}
+
+fixture rail-curve-priority
+
+state {
+  # 南 + 東 → south_east
+  t2 (2,1,3) rail[shape=south_east,waterlogged=false]
+}
+
+state {
+  # 南 + 西 → south_west
+  t4 (6,1,3) rail[shape=south_west,waterlogged=false]
+}
+
+state {
+  # 北 + 西 → north_west
+  t6 (2,1,8) rail[shape=north_west,waterlogged=false]
+}
+
+state {
+  # 北 + 東 → north_east
+  t8 (6,1,8) rail[shape=north_east,waterlogged=false]
+}
+
+state {
+  # 隣 2 本は connectTo で張り替わるが、この配置では元の直線のまま
+  t8 (2,1,4) rail[shape=north_south,waterlogged=false]
+  t8 (3,1,3) rail[shape=east_west,waterlogged=false]
+}

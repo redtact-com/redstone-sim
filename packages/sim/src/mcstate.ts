@@ -19,7 +19,9 @@
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
 // ============================================================
 
-import type { BlockState, HDir, Dir6, WireConnectionValue } from './types.js'
+import type {
+  BlockState, HDir, Dir6, WireConnectionValue, RailShape, StraightRailShape,
+} from './types.js'
 import { OPPOSITE } from './types.js'
 
 export interface ParsedMcState {
@@ -175,6 +177,23 @@ export function mcToSim(state: string): BlockState | null {
       throw new Error('moving_piston は authored に使えません (過渡状態)')
     case 'redstone_block':
       return { type: 'redstone_block' }
+    case 'slime_block':
+      return { type: 'slime_block' }
+    case 'honey_block':
+      return { type: 'honey_block' }
+    case 'powered_rail':
+    case 'activator_rail':
+      // SHAPE は RAIL_SHAPE_STRAIGHT (直線2+坂4)。曲線は取らない [確定: 26.2]。
+      // activator_rail は powered_rail と同じ PoweredRailBlock なので状態も同形 (#138)
+      return { type: name, shape: (props.shape ?? 'north_south') as StraightRailShape,
+               powered: props.powered === 'true' }
+    case 'rail':
+      // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4 の 10 種)。動力は持たない (#140)
+      return { type: 'rail', shape: (props.shape ?? 'north_south') as RailShape }
+    case 'detector_rail':
+      // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
+      return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
+               powered: props.powered === 'true' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -250,6 +269,22 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'redstone_block':
         // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
         return 'redstone_block'
+      case 'slime_block':
+        return 'slime_block'
+      case 'honey_block':
+        return 'honey_block'
+      case 'powered_rail':
+      case 'activator_rail':
+        return formatMcState(sim.type, {
+          powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
+        })
+      case 'rail':
+        // 通常レールは動力を持たないので shape だけ (#140)
+        return formatMcState('rail', { shape: sim.shape, waterlogged: 'false' })
+      case 'detector_rail':
+        return formatMcState('detector_rail', {
+          powered: String(sim.powered), shape: sim.shape, waterlogged: 'false',
+        })
       case 'target':
         return formatMcState('target', { power: String(sim.outputPower) })
       case 'hopper':
@@ -337,6 +372,21 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'observer':
       props.powered = String(sim.powered)
+      break
+    case 'powered_rail':
+    case 'activator_rail':
+      // shape は設置時に自動決定され実行中も張り替わり得る (rail.ts) ため
+      // authored ではなく sim 状態から直列化する (wire の接続形状と同趣旨)
+      props.powered = String(sim.powered)
+      props.shape = sim.shape
+      break
+    case 'rail':
+      // 通常レールは動力を持たない。shape だけ sim 状態から直列化する (#140)
+      props.shape = sim.shape
+      break
+    case 'detector_rail':
+      props.powered = String(sim.powered)
+      props.shape = sim.shape
       break
     case 'container':
       break // signal/count は blockstate に現れない (authored 名 barrel/chest を保持)

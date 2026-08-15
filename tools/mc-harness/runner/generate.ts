@@ -189,6 +189,30 @@ async function generateFixture(name: string): Promise<void> {
         await sleep(200)
         rcon('player', PLAYER_NAME, 'use', 'once')
         await sleep(200)
+      } else if (input.action === 'setblock') {
+        // `/setblock` は flag 2|256 で置くので近隣更新を伴わず、そのあと
+        // updateNeighboursOnBlockSet が **周囲6方向にだけ** 更新を配る。
+        // 同じブロック種の上書きなら onPlace の再評価も走らないため、
+        // 「本来ありえない状態」を実機に作れる (BUD 検証用。#127)
+        if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
+        rcon('setblock', String(input.pos[0]), String(input.pos[1]), String(input.pos[2]),
+          input.block)
+        await sleep(200)
+      } else if (input.action === 'summon') {
+        // マインカートを召喚する (#146)。detector_rail の powered=true は実機では
+        // カート検出でしか作れず、setblock で置いても onPlace → checkPressed が
+        // 即 false に落とすため、ground truth を採るにはこれが要る。
+        // sim にエンティティは持ち込まない (13 §2 エンティティ境界原則) ので、
+        // **ハーネス側だけの拡張**という線引き。
+        // freeze 中は entityInside が走らないので、検出は次の tick step で起きる。
+        rcon('summon', 'minecart',
+          String(input.pos[0] + 0.5), String(input.pos[1]), String(input.pos[2] + 0.5))
+        await sleep(200)
+      } else if (input.action === 'kill') {
+        // 対象座標の近傍のカートだけを消す (他の fixture 要素を巻き込まないため)
+        rcon('kill', `@e[type=minecart,x=${input.pos[0]},y=${input.pos[1]},z=${input.pos[2]},`
+          + 'distance=..2]')
+        await sleep(200)
       } else if (input.action === 'step') {
         // 感圧板を踏む: fake player を板の中心へ tp して entityInside を発火させ、
         // 直後に spawn へ戻して離れる (手動 sim モデルは単発 = getPressedTime 後 auto-off の

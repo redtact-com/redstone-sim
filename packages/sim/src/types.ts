@@ -282,6 +282,26 @@ export interface TargetState {
 }
 
 /** 信号を充電・遮断する不透過ブロック（石・丸石など） */
+/**
+ * スライムブロック / 蜂蜜ブロック (#121)。ピストンで動かすと**くっついている塊も一緒に動く**
+ * (PushReaction STICKY)。互いにはくっつかない [確定: 26.2 PistonStructureResolver]。
+ *
+ * **スライムは導体、蜂蜜は非導体** [確定: 26.2 — isRedstoneConductor の既定は
+ * isCollisionShapeFullBlock。SLIME_BLOCK は noOcclusion() のみで当たり判定はフルブロック、
+ * HoneyBlock.SHAPE = column(14,0,15) はフルブロックでない]。フライングマシンは
+ * オブザーバーの出力がスライム越しにピストンへ届くことで動く (#123)。
+ *
+ * 既知の抽象化: 落下ダメージ無効化・跳ね返り・移動速度低下といったエンティティ側の効果は
+ * 持たない (13 §2 エンティティ境界原則)。
+ */
+export interface SlimeBlockState {
+  type: 'slime_block'
+}
+
+export interface HoneyBlockState {
+  type: 'honey_block'
+}
+
 export interface SolidState {
   type: 'solid'
   /**
@@ -339,6 +359,119 @@ export interface MovingPistonState {
   seq: number
 }
 
+/**
+ * 直線レール形状 (直線 2 + 坂 4)。powered_rail / activator_rail / detector_rail が
+ * 取れるのはこの 6 種だけで、曲線は持たない
+ * [確定: 26.2 PoweredRailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE_STRAIGHT]。
+ */
+export type StraightRailShape =
+  | 'north_south' | 'east_west'
+  | 'ascending_north' | 'ascending_south' | 'ascending_east' | 'ascending_west'
+
+/**
+ * 曲線レール形状 (#140)。通常レール `rail` だけが取る 4 種
+ * [確定: 26.2 RailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE (10 種)]。
+ * 名前は「繋がる 2 方向」を表す (south_east なら南と東に繋がる)。
+ */
+export type CurvedRailShape = 'south_east' | 'south_west' | 'north_west' | 'north_east'
+
+/** レール形状 10 種。曲線を取れるのは通常レールのみ (#127, #140) */
+export type RailShape = StraightRailShape | CurvedRailShape
+
+export const RAIL_SHAPES_STRAIGHT: StraightRailShape[] = [
+  'north_south', 'east_west',
+  'ascending_north', 'ascending_south', 'ascending_east', 'ascending_west',
+]
+
+export const RAIL_SHAPES_CURVED: CurvedRailShape[] = [
+  'south_east', 'south_west', 'north_west', 'north_east',
+]
+
+const CURVED_SET: ReadonlySet<string> = new Set(RAIL_SHAPES_CURVED)
+
+/** 曲線形状か。通常レール以外に代入する前のガードに使う (#140) */
+export function isCurvedRailShape(shape: RailShape): shape is CurvedRailShape {
+  return CURVED_SET.has(shape)
+}
+
+export function isStraightRailShape(shape: RailShape): shape is StraightRailShape {
+  return !CURVED_SET.has(shape)
+}
+
+/**
+ * 坂形状か [確定: 26.2 RailShape.isSlope]。
+ * **曲線を坂と誤判定しない**よう、直線 2 種の否定ではなくホワイトリストで判定する
+ * (曲線 4 種が加わった #140 以降はこの区別が要る)。
+ */
+export function isRailSlope(shape: RailShape): boolean {
+  return shape === 'ascending_north' || shape === 'ascending_south'
+    || shape === 'ascending_east' || shape === 'ascending_west'
+}
+
+/**
+ * 動力を持つレールの種別 (#138)。26.2 に ActivatorRailBlock は**存在せず**、
+ * activator_rail は powered_rail と同じ PoweredRailBlock を別インスタンスとして
+ * 登録しているだけ [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock::new]。
+ * レッドストーン挙動の差は**連鎖が同種のレール間でしか繋がらない**ことだけで
+ * [確定: 26.2 PoweredRailBlock.isSameRailWithPower の `!state.is(this)` ガード]、
+ * activator = トロッコを起動する側面はエンティティなのでスコープ外 (13 §2)。
+ */
+export type PoweredRailType = 'powered_rail' | 'activator_rail'
+
+export const POWERED_RAIL_TYPES: PoweredRailType[] = ['powered_rail', 'activator_rail']
+
+/**
+ * パワードレール / アクティベーターレール (#127, #138)。トロッコを持たないため
+ * エンティティ側の加速・起動効果は実装せず、**レッドストーン素子としての側面のみ**を
+ * 扱う (13 §2 エンティティ境界原則):
+ *   - powered = 自身6面の受電 (hasNeighborSignal) **または**
+ *     繋がった**同種の**レールを前後方向に最大 8 個たどった先での受電
+ *     [確定: 26.2 PoweredRailBlock.findPoweredRailSignal — searchDepth >= 8 で打ち切り]
+ *   - powered が変化したら**真下のブロック**へ近隣更新を出す (坂なら真上へも)
+ *     [確定: 26.2 PoweredRailBlock.updateState]
+ *   - 自身は信号を出さず (getSignal 非 override)、導体でもない (非フルブロック)
+ * shape は設置時に隣接レールから自動決定される (RailState.place。rail.ts)。
+ * 形状の接続は種別をまたぐ (BlockTags.RAILS) が、**動力の連鎖はまたがない**。
+ */
+export interface PoweredRailState {
+  type: PoweredRailType
+  shape: StraightRailShape
+  powered: boolean
+}
+
+/**
+ * 通常レール `rail` (#140)。動力を持たず信号も出さないが、**曲線 4 形状**を取り
+ * [確定: 26.2 RailBlock.SHAPE = BlockStateProperties.RAIL_SHAPE]、
+ * 「両軸に隣接がある (= 3 方向以上) ジャンクション」では**給電の有無で曲がる先が
+ * 反転する** [確定: 26.2 RailState.place の第三段。hasSignal=true なら NW>NE>SW>SE、
+ * false なら SE>SW>NE>NW]。これが通常レールをレッドストーン素子たらしめている。
+ * 名前は vanilla の形状計算クラス `RailState` と紛らわしいため `PlainRailState`
+ * とした (ブロック ID は `rail`)。形状計算そのものは rail.ts の RailConnector。
+ */
+export interface PlainRailState {
+  type: 'rail'
+  shape: RailShape
+}
+
+/**
+ * ディテクターレール (#146)。レール 4 種で**唯一信号を出す**ブロック。
+ * トリガはマインカートの検出だけ (entityInside / 20gt ごとの tick / onPlace)
+ * [確定: 26.2 DetectorRailBlock.java:56-79] なので、エンティティを持たない sim では
+ * **感圧板・ターゲットと同じ折衷モデル** (手動トリガ + 持続 gt で auto-off) を採る
+ * (13 §2 エンティティ境界原則)。
+ *   - 出力: 全方向へ weak 15 / 強充電は **真下のブロックのみ**
+ *     [確定: 26.2 DetectorRailBlock.ownSignal / getDirectSignal (UP のみ)]
+ *   - 持続: 20gt [確定: 26.2 PRESSED_CHECK_PERIOD]
+ *     [実機 fixture detector-rail-cart-pulse: t3 検出 → t23 OFF]
+ *   - 形状は直線 6 種のみ。実行中の形状再計算はしない (4 引数 updateState 非 override)
+ *   - コンパレーター出力は空カート相当で常に 0
+ */
+export interface DetectorRailState {
+  type: 'detector_rail'
+  shape: StraightRailShape
+  powered: boolean
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -361,10 +494,15 @@ export type BlockState =
   | RedstoneBlockState
   | TargetState
   | SolidState
+  | SlimeBlockState
+  | HoneyBlockState
   | ObserverState
   | PistonState
   | PistonHeadState
   | MovingPistonState
+  | PoweredRailState
+  | PlainRailState
+  | DetectorRailState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -424,4 +562,22 @@ export interface BlockEvent {
 export interface TickResult {
   changedPositions: Pos3D[]
   currentTick: number
+}
+
+/** ピストンが動かせるブロック数の上限 [確定: 26.2 PistonStructureResolver.MAX_PUSH_DEPTH] */
+export const MAX_PUSH_DEPTH = 12
+
+/** スライム/蜂蜜ブロックか (26.2 PistonStructureResolver.isSticky) */
+export function isStickyBlock(block: BlockState): boolean {
+  return block.type === 'slime_block' || block.type === 'honey_block'
+}
+
+/**
+ * 互いにくっつくか (26.2 canStickToEachOther)。
+ * **蜂蜜とスライムは互いにくっつかない**のが要点。
+ */
+export function canStickToEachOther(a: BlockState, b: BlockState): boolean {
+  if (a.type === 'honey_block' && b.type === 'slime_block') return false
+  if (a.type === 'slime_block' && b.type === 'honey_block') return false
+  return isStickyBlock(a) || isStickyBlock(b)
 }

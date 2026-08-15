@@ -1,0 +1,30 @@
+{
+  "name": "powered-rail-priority",
+  "description": "#129 レール形状の決定優先度。RailState.place は「南北と東西の両方に接続があれば置いた向き (defaultShape)」「坂の判定は north→south / east→west の順で**後勝ち**」で決まる [確定: 26.2 RailState.place]。中心のレールを最後に置いて、周囲との競合でどの形状に落ち着くかを実機で確定させる。blocks の順序 = setblock の順序なので、中心が常に最後になるよう並べてある。",
+  "mcVersion": "1.21.1",
+  "ticks": 2,
+  "region": { "from": [0, 0, 1], "to": [16, 3, 5] },
+  "blocks": [
+    { "pos": [2, 0, 3], "block": "stone" }, { "pos": [4, 0, 3], "block": "stone" },
+    { "pos": [3, 0, 2], "block": "stone" }, { "pos": [3, 0, 4], "block": "stone" },
+    { "pos": [3, 0, 3], "block": "stone" },
+    { "pos": [2, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [4, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 2], "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 4], "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]" },
+    { "pos": [3, 1, 3], "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]" },
+
+    { "pos": [8, 0, 3], "block": "stone" },
+    { "pos": [8, 1, 2], "block": "stone" }, { "pos": [8, 1, 4], "block": "stone" },
+    { "pos": [8, 2, 2], "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]" },
+    { "pos": [8, 2, 4], "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]" },
+    { "pos": [8, 1, 3], "block": "powered_rail[shape=ascending_south,powered=false,waterlogged=false]" },
+
+    { "pos": [13, 0, 3], "block": "stone" },
+    { "pos": [12, 1, 3], "block": "stone" }, { "pos": [14, 1, 3], "block": "stone" },
+    { "pos": [12, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [14, 2, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" },
+    { "pos": [13, 1, 3], "block": "powered_rail[shape=ascending_west,powered=false,waterlogged=false]" }
+  ],
+  "inputs": []
+}

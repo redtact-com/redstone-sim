@@ -1,0 +1,346 @@
+{
+  "name": "powered-rail-flat-step-build",
+  "description": "#129 補助レールの置き壊しで「平坦のまま段差」を実プレイの手順で組み立てる。ユーザ提示の手順 (最終的に残るのは (5,1,5) と (5,2,6) の 2 本): ①(5,1,5) を z 方向に置く ②(5,1,4) に一瞬置いて向きを合わせ壊す ③(6,2,6) を x 方向に置く ④(5,2,6) を x 方向に置く ⑤(6,2,6) を壊す ⑥(5,2,7) に z 方向で置いてすぐ壊す。完成形は 2 本とも north_south (坂にならない) で、(5,2,6) は (5,1,5) の進行方向 (z) と平行な斜め上になる。最後にレバーを入れて、この途切れた斜め上に伝わるかを確定させる。 最後に (5,3,6) へ石を置いて B に近隣更新を送り、探索そのものは到達可能であること (更新さえ届けば on になる) を示す。",
+  "mcVersion": "1.21.1",
+  "ticks": 22,
+  "region": {
+    "from": [
+      3,
+      0,
+      3
+    ],
+    "to": [
+      8,
+      3,
+      8
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        4,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        7
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        5,
+        1,
+        5
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        5,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        5,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        6,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        5,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 12,
+      "pos": [
+        6,
+        2,
+        6
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 14,
+      "pos": [
+        5,
+        2,
+        7
+      ],
+      "action": "setblock",
+      "block": "powered_rail[shape=north_south,powered=false,waterlogged=false]"
+    },
+    {
+      "tick": 16,
+      "pos": [
+        5,
+        2,
+        7
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 18,
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 20,
+      "pos": [
+        5,
+        3,
+        6
+      ],
+      "action": "setblock",
+      "block": "stone"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            5,
+            1,
+            4
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            6,
+            2,
+            6
+          ],
+          "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            5,
+            2,
+            6
+          ],
+          "block": "powered_rail[powered=false,shape=east_west,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            6,
+            2,
+            6
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            5,
+            2,
+            6
+          ],
+          "block": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
+        },
+        {
+          "pos": [
+            5,
+            2,
+            7
+          ],
+          "block": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 16,
+      "changes": [
+        {
+          "pos": [
+            5,
+            2,
+            7
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 18,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            5
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            5
+          ],
+          "block": "powered_rail[powered=true,shape=north_south,waterlogged=false]"
+        }
+      ]
+    },
+    {
+      "tick": 20,
+      "changes": [
+        {
+          "pos": [
+            5,
+            2,
+            6
+          ],
+          "block": "powered_rail[powered=true,shape=north_south,waterlogged=false]"
+        },
+        {
+          "pos": [
+            5,
+            3,
+            6
+          ],
+          "block": "stone"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-12T12:06:29.188Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

@@ -1,0 +1,39 @@
+# 定番のフライングマシン (Engine B / 粘着ピストン2 + オブザーバー2 + スライム2) が
+# 自走することの回帰ガード (#123)。
+#
+# 動作原理: オブザーバーの出力が **スライムブロック越しに** 隣のピストンへ届く。
+#   スライムは導体 (26.2 の isRedstoneConductor 既定 = isCollisionShapeFullBlock、
+#   SLIME_BLOCK は noOcclusion() のみで当たり判定はフルブロック)。
+#   一方 蜂蜜は非導体 (SHAPE = column(14,0,15) でフルブロックでない)。
+#   ここを取り違えると電力がピストンに届かず、機械は 1 歩も動かない。
+#
+# ∴ 機械は 10 tick ごとに +X へ 1 マス進む。t=12 と t=22 で 1 マスずれた同じ形になる。
+# 期待値は実機 (fixture flying-machine) が正。
+meta {
+  name: フライングマシンが 10gt ごとに 1 マス進む
+  ref: #123 / fixture flying-machine / 26.2 BlockBehaviour.isRedstoneConductor
+}
+
+fixture flying-machine
+
+state {
+  t12 (5,1,4) observer[facing=north,powered=false]
+  t12 (5,1,5) slime_block
+  t12 (6,1,5) sticky_piston[extended=false,facing=west]
+  t12 (5,1,6) sticky_piston[extended=false,facing=east]
+  t12 (6,1,6) slime_block
+  t12 (6,1,7) observer[facing=south,powered=false]
+}
+
+state {
+  # 10 tick 後: 構造そのままで +X に 1 マス
+  t22 (6,1,4) observer[facing=north,powered=false]
+  t22 (6,1,5) slime_block
+  t22 (7,1,5) sticky_piston[extended=false,facing=west]
+  t22 (6,1,6) sticky_piston[extended=false,facing=east]
+  t22 (7,1,6) slime_block
+  t22 (7,1,7) observer[facing=south,powered=false]
+  # 出発地点は空になっている
+  t22 (4,1,5) air
+  t22 (5,1,4) air
+}

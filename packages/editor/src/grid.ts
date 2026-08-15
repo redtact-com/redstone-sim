@@ -4,8 +4,11 @@
  * activeLayer に対する操作として扱う。
  */
 
-import type { BlockState, HDir, WireConnections, WorldSnapshot } from '@redstone/sim'
-import { posKey } from '@redstone/sim'
+import type {
+  BlockState, Dir6, WireConnections, WorldSnapshot, StraightRailShape,
+} from '@redstone/sim'
+import { posKey, planRailPlacement, isRail, isStraightRailShape } from '@redstone/sim'
+import { isFacingAllowed } from './facing.js'
 import {
   computeWireConnections, computeRawWireConnections, collectWireConnectionUpdates,
 } from './wire-connect.js'
@@ -77,6 +80,26 @@ export class EditorGrid {
       changes[0].after = updatedSelf
     }
 
+    // レールを配置した場合: 隣接レールに合わせて自分と相手の形状を張り替える (#127)。
+    // vanilla も設置時にだけ形状が決まる (壊しても隣の形状は戻らない) ので、
+    // removeBlock3 側には対応する処理を置かない [確定: 26.2 BaseRailBlock]
+    if (isRail(block)) {
+      for (const c of planRailPlacement(this, [x, y, z], block.shape)) {
+        const [cx, cy, cz] = c.pos
+        const cur = this.getBlock3(cx, cy, cz)
+        if (!isRail(cur) || cur.shape === c.shape) continue
+        // 曲線を取れるのは通常レールだけ (直線レールに曲線は割り当たらないが型でも守る)
+        if (cur.type !== 'rail' && !isStraightRailShape(c.shape)) continue
+        const after: BlockState = cur.type === 'rail'
+          ? { ...cur, shape: c.shape }
+          : { ...cur, shape: c.shape as StraightRailShape }
+        this.setRaw(cx, cy, cz, after)
+        // 同じ 1 操作として履歴に積む (undo 1 回で元に戻る)
+        if (cx === x && cy === y && cz === z) changes[0].after = after
+        else changes.push({ pos: [cx, cy, cz], before: cur, after })
+      }
+    }
+
     // 周辺ワイヤー（同レイヤー・上下ステップ範囲）の接続を更新
     this.applyNeighborWireUpdates(x, y, z, changes)
 
@@ -99,11 +122,14 @@ export class EditorGrid {
     this.pushHistory(changes)
   }
 
-  rotateBlock(x: number, z: number, dir: HDir): void {
+  rotateBlock(x: number, z: number, dir: Dir6): void {
     const y = this.activeLayer
     const block = this.getBlock3(x, y, z)
     if (!block) return
     if (!('facing' in block)) return
+    // 素子が取れない向き (リピーターに up 等) は無視する。ここで弾かないと
+    // `as BlockState` が型検査を潰しているぶん、静かに無出力の素子が生まれる (#111)
+    if (!isFacingAllowed(block.type, dir)) return
 
     const before = block
     const after: BlockState = { ...block, facing: dir } as BlockState

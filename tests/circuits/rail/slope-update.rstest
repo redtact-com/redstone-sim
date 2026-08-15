@@ -1,0 +1,26 @@
+# 斜め上へ **BUD なしで** 届くかは「手前のレールが坂かどうか」で決まる (#129)。
+#
+# PoweredRailBlock.updateState は powered が変わったとき真下へ近隣更新を配るが、
+# **坂のときだけ真上にも配る**
+# [確定: 26.2 `if (state.getValue(SHAPE).isSlope()) level.updateNeighborsAt(pos.above(), this)`]。
+# 真上 (2,2,3) の周囲 6 方向には斜め上のレール (3,2,3) が入るので、坂ならレバーと
+# **同じ tick** で斜め上とその先まで一気に点く。
+#
+# 対になるのが machines/../rail/step-updown.rstest で、そちらは手前が**平坦**なため
+# 斜め上に更新が届かず、真上にブロックを置くまで点かない (= BUD が要る)。
+# 同じ「斜め上」でも、坂かどうかで BUD の要否が変わる。
+#
+# 期待値は実機 (fixture powered-rail-slope-update) が正。
+meta {
+  name: 坂を経由する斜め上は BUD なしで伝わる
+  ref: #129 / fixture powered-rail-slope-update / 26.2 PoweredRailBlock.updateState
+}
+
+fixture powered-rail-slope-update
+
+state {
+  # レバーと同じ tick で、坂 → 斜め上 → その先 まで一気に点く
+  t2 (2,1,3) powered_rail[powered=true,shape=ascending_east,waterlogged=false]
+  t2 (3,2,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+  t2 (4,2,3) powered_rail[powered=true,shape=east_west,waterlogged=false]
+}

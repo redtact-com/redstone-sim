@@ -1,0 +1,212 @@
+{
+  "name": "powered-rail-step",
+  "description": "#129 **平坦のまま段差にしたレール**での探索と更新の届き方。仕様 [確定: 26.2 PoweredRailBlock.findPoweredRailSignal]: 平坦なレールの探索先は `isSameRailWithPower(x,y,z) ? true : checkBelow && isSameRailWithPower(x,y-1,z)` = **同じ高さと 1 段下だけで、1 段上は見ない**。∴ 上のレールは下のレールを根として見つけられるが、下のレールは上を見つけられない = **途切れた斜め上には伝わり、途切れた斜め下には伝わらない**。この fixture はその非対称性を固定する。なお本 fixture の初期配置はハーネスの authored 設置 (scarpet の without_updates) で作っている。普通に敷くと段差の相手を置いた時点で手前が坂へ張り替わる (powered-rail-step-place) が、補助レールの置き壊し等で平坦のまま段差にする置き方もあるとの指摘があり、実プレイでの再現手順は未確認 (西→東に補助レールを置いて壊す手順は試したが ascending_east になった)。更新の届き方についても同時に記録している: 斜めのセルは近隣更新の 6 方向に入らないため、手前が平坦のままだとレバーを入れただけでは判定し直されず、真上にブロックを置いて更新を送ると確定する。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "region": {
+    "from": [
+      0,
+      0,
+      2
+    ],
+    "to": [
+      6,
+      3,
+      6
+    ]
+  },
+  "player": {
+    "spawn": [
+      1.5,
+      1.0,
+      4.5
+    ],
+    "facing": [
+      0,
+      20
+    ],
+    "lookAt": [
+      1.5,
+      1.35,
+      3.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        3
+      ],
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        3
+      ],
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        5
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        5
+      ],
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        5
+      ],
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        1,
+        2,
+        5
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        3,
+        3,
+        3
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        3,
+        2,
+        5
+      ],
+      "action": "setblock",
+      "block": "stone"
+    }
+  ]
+}
