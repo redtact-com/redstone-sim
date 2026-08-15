@@ -14,6 +14,12 @@ v2 更新 (2026-07-03, #65): アイテム物流 (ホッパー・ドロッパー)
 eject→suck 順 / NC ロック / CU 連動 / 容量抽象・BE フェーズ順の既知抽象化)。典拠 26.2 HopperBlockEntity /
 DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
 
+v3 更新 (2026-08-15, #148): レール 4 種 (rail / powered_rail / activator_rail / detector_rail) を
+実装し §6 にレール節を追加。形状の自動接続 (place と connectTo の規則差・給電による曲線の
+優先順位反転)、動力の連鎖 (深さ 8・同種限定)、実行中のジャンクション切り替えの門番 2 条件、
+detector_rail の出力 (weak 全方向 / strong は真下のみ) を [確定] 化。典拠 26.2 RailState /
+BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixture 28 本。
+
 ---
 
 ## 1. ゲームティック構造
@@ -468,6 +474,109 @@ DropperBlock / DispenserBlock / Level.tickBlockEntities [確定: 26.2]。
   「powered 反転 → PP → (ON なら) OFF tick 予約 → 背面 NC」の順で実行し、§2.4 の飲み込み順序を保証する。
 - **実機 fixture (I8)**: observer-detects-dust / observer-piston / observer-comparator-swallow (§2.4 最重要回帰) /
   observer-chain の 4 本を Fabric 1.21.1 + carpet で生成し tick 単位一致を確認済み。
+
+### rail / powered_rail / activator_rail / detector_rail (実装済み: #127 #132 #134 #136 #138 #140 #142 #144 #146)
+
+レールは **形状 (shape)** と **動力 (powered)** という 2 つの独立した機構を持つ。形状は設置・撤去・
+給電で書き換わり、動力は繋がった同種レールを最大 8 個たどって伝わる。実機 fixture は
+`rail-*` / `powered-rail-*` / `activator-rail-*` / `detector-rail-*` (計 28 本)。
+
+**4 種の関係 [確定: 26.2 Blocks の登録行]**
+
+| ブロック | クラス | 曲線 | 動力 | 信号出力 |
+|---|---|---|---|---|
+| `rail` | RailBlock (`isStraight=false`) | **取る (4 種)** | 持たない | しない |
+| `powered_rail` | PoweredRailBlock (`isStraight=true`) | 取らない | 連鎖で伝わる | しない |
+| `activator_rail` | **PoweredRailBlock (同一クラス)** | 取らない | 連鎖で伝わる | しない |
+| `detector_rail` | DetectorRailBlock (`isStraight=true`) | 取らない | カート検出 | **する** |
+
+26.2 に `ActivatorRailBlock` は**存在しない**。`activator_rail` は `powered_rail` と同じ
+`PoweredRailBlock` を別インスタンスとして登録しているだけで、挙動差は連鎖判定が
+`state.is(this)` (ブロックそのものの一致) を要求する点のみ [確定]。**形状の接続は種別をまたぐ**
+(`BlockTags.RAILS`) が、**動力の連鎖はまたがない** [実機 fixture activator-rail-mixed-chain]。
+
+**形状の自動接続 [確定: 26.2 RailState]**
+
+vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規則が違う**。1 つにまとめると
+通常レールで乖離する:
+
+| | 排他条件 | 両軸に隣接があるとき | `hasSignal` |
+|---|---|---|---|
+| `place` (設置・再計算) | あり (片軸だけ / 直交ちょうど 2 方向) | 既定形状に落ちてから曲線を選び直す | **見る** |
+| `connectTo` (隣が張り替わる) | なし | 後勝ちで `east_west` | 見ない |
+
+- 隣接判定は `hasNeighborRail` = 「同じ高さ / 1 段上 / 1 段下」を探し、相手の接続枠が空いて
+  いるか (`canConnectTo`) を問う。**両端が埋まっているレールは 3 本目を受け付けない** [確定]
+- 直線に決まったものだけが坂へ昇格する。**曲線が確定した後は昇格しない**
+  [実機 fixture rail-curve-no-slope]
+- 直交ちょうど 2 方向 → 曲線が確定 (s+e→`south_east` / s+w→`south_west` / n+w→`north_west` /
+  n+e→`north_east`) [実機 fixture rail-curve-priority]
+- **両軸に隣接がある (3 方向以上) ときだけ `hasSignal` が効く**。後勝ちの代入順が反転するため
+  優先順位が `true`: NW > NE > SW > SE / `false`: SE > SW > NE > NW になる
+  [実機 fixture rail-junction-place: 非通電 `south_east` / 通電 `north_east`]
+- `place` の第三段には「片軸だけ」の else-if が 2 本あるが、第一段で必ず確定済みのため
+  **到達しない死コード**。写すと「片軸だけでも hasSignal が効く」誤実装になる
+
+**実行中のジャンクション切り替え [確定: 26.2 RailBlock.updateState]**
+
+通常レールだけが、置いた後も近隣更新を受けて向きを計算し直す。門番は 2 つで、**両方**を
+満たすときだけ `updateDir(first=false)` が走る:
+
+1. 更新元ブロックが信号源 (`defaultBlockState().isSignalSource()`)
+2. 潜在接続 (`countPotentialConnections`) が **ちょうど 3**
+
+- レバー ON/OFF で 3 方向ジャンクションの曲がる先が往復する [実機 fixture rail-junction-toggle]
+- **4 方向ジャンクションは給電しても動かない** (門番 2) [実機 fixture rail-junction-gate]
+- 給電源を石に差し替えると通電は消えるのに向きは残る (門番 1。石は信号源でないので再計算
+  そのものが走らない) [実機 fixture rail-junction-nonsignal]
+- `first=false` で形状が変わらなければ `setBlock` ごと起きない = 近隣更新も出ない [確定]
+
+**動力の連鎖 [確定: 26.2 PoweredRailBlock.findPoweredRailSignal]**
+
+- `powered` = 自身 6 面の受電 (`hasNeighborSignal`) **または** 繋がった同種レールを前後方向に
+  最大 8 個たどった先での受電。`searchDepth >= 8` で打ち切り [実機 fixture powered-rail-chain]
+- 減衰は無い。届く範囲は一様に `powered=true` (「レール 9 本ごとに動力源」の根拠)
+- 探索は同高さと 1 段下を見るが、**坂の登り側では 1 段下を見ない** (`checkBelow=false`)
+- 進行軸に直交する向きのレールへは伝播しない
+- **BUD 素子**である。`powered` が変わったときだけ更新を出すので、「既に on のレールは
+  再送しない」→ 本来 on になるべき下流が off のまま残る [実機 fixture powered-rail-bud]
+
+**更新の配り先 [確定: 26.2]**
+
+| 起点 | 配り先 |
+|---|---|
+| 形状を書いた各レール (`place` / `connectTo` の `setBlock(flag 3)`) | 自身の 6 方向 + `updateNeighbourShapes` (オブザーバーが発火する) [実機 fixture rail-shape-update] |
+| `powered` 変化 (`PoweredRailBlock.updateState`) | 自身の 6 方向 + **真下**のブロックの 6 方向 (坂なら真上も)。運ばれるのは**レール自身** |
+| `powered` 変化 (`DetectorRailBlock.checkPressed`) | 自身の 6 方向 → 繋がる 2 マスへ単発通知 → 自身 (重複) → 真下 → コンパレーター通知 |
+| 撤去 (`affectNeighborsAfterRemoval`) | 坂なら真上。`isStraight` なら自身と真下。**通常レールの撤去は自身の更新を出さない** |
+
+レール自身は信号を出さず導体でもない (`detector_rail` を除く) ので、この近隣更新が
+`powered_rail` / `activator_rail` の唯一の「出力」になる [実機 fixture powered-rail-observer]。
+
+**detector_rail の出力 [確定: 26.2 DetectorRailBlock]**
+
+- `isSignalSource` = true。`ownSignal` = `powered ? 15 : 0` (全方向へ weak)
+- `getDirectSignal` は **UP のみ** 15 = **真下のブロックだけを強励起**する
+  [実機 fixture detector-rail-cart-pulse: 側面の隣接固体越しにはランプが点かない]
+- `powered` のトリガはカート検出のみ (`entityInside` / 20gt ごとの `tick` / `onPlace`)。
+  持続は `PRESSED_CHECK_PERIOD = 20`
+- **OFF のタイミングはカートが去った時ではなく ON からの 20gt** で決まる [実機で確定]
+
+**ピストンとの関係 [確定: 26.2 — レール 4 種とも pushReaction 未指定 = 既定 NORMAL]**
+
+- レールは押せる。形状は保持されたまま 1 マス動く [実機 fixture rail-piston-push]
+- **着地の tick で `onPlace(movedByPiston)` が走る**ので、その場で形状を決め直し
+  (`updateDir(first=true)`)、`isStraight` なら自分自身への `neighborChanged` で `powered` を
+  再計算する [実機 fixture rail-piston-push-connect / rail-piston-push-powered]
+
+**既知の抽象化**
+
+| 項目 | 実機 | sim | 根拠 |
+|---|---|---|---|
+| トロッコ | レールの本来の目的 | **非実装** | 13 §2 エンティティ境界原則 |
+| 支持ブロック要件 | 支持を失うとドロップして消える | **非実装** | sim 全体が支持要件を持たない。レールだけ入れると不整合。実機仕様は fixture `rail-support-break` / `rail-slope-support-break` に `skipUntil` 付きで記録 |
+| detector_rail のカート常駐 | 20gt ごとに数え直して通電を維持 | 20gt で必ず OFF | 折衷モデル (手動トリガ + 持続 gt)。fixture `detector-rail-cart-stay` に記録 |
+| コンパレーター読み取り | カートの中身を読む | 常に 0 | エンティティ非実装 |
 
 ---
 
