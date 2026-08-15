@@ -1,0 +1,26 @@
+{
+  "name": "copper-bulb-toggle",
+  "description": "#155 銅の電球は 1 ブロックで T フリップフロップになる。neighborChanged で hasNeighborSignal != POWERED のとき、**立ち上がりなら LIT を反転**し POWERED を信号に追随させる [確定: 26.2 CopperBulbBlock.java:40-60]。tile tick を持たないので遅延 0gt。レバーを 4 回操作して (ON→OFF→ON→OFF)、lit が立ち上がりでだけ反転すること・powered は両エッジで追随すること・どちらもレバーと同じ tick で確定することを確定させる。真上のオブザーバーは blockstate が変わるたびに発火するはずなので、**立ち下がり (powered だけ変わる) でも発火する**かどうかも同時に見る。",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": { "from": [0, 0, 2], "to": [4, 4, 4] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+
+    { "pos": [1, 0, 3], "block": "stone" },
+    { "pos": [2, 0, 3], "block": "stone" },
+
+    { "pos": [1, 1, 3], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [2, 1, 3], "block": "copper_bulb[lit=false,powered=false]" },
+
+    { "pos": [2, 2, 3], "block": "observer[facing=down,powered=false]" },
+    { "pos": [2, 3, 3], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 1, 3], "action": "use" },
+    { "tick": 6, "pos": [1, 1, 3], "action": "use" },
+    { "tick": 10, "pos": [1, 1, 3], "action": "use" },
+    { "tick": 14, "pos": [1, 1, 3], "action": "use" }
+  ]
+}
