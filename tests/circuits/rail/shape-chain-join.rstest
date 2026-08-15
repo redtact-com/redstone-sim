@@ -1,0 +1,40 @@
+# 形状が張り替わったレールはその場で連鎖に合流する (#132)。
+#
+# A=(2,1,3) を「北に north_south のレール Q、東に east_west のレール R」がある状態で
+# 置くと、両軸に隣接があるため defaultShape (置いた向き) が採用されて east_west になる
+# [確定: 26.2 RailState.place — northOrSouth && westOrEast なら defaultShape]。
+# このとき Q は A の connections に入らないので connectTo されず north_south のまま残り、
+# **隣接しているのに直交していて繋がらない** 2 本ができる。
+# R を壊しても形状は再計算されない (BaseRailBlock.neighborChanged → PoweredRailBlock.
+# updateState は powered しか見ない) ので A は east_west のまま残る。
+#
+# したがって t8 でレバーを入れても Q だけが on になり、直交する A には伝わらない。
+# t10 で A の南隣にレールを置くと connectTo で A が north_south に張り替わり、
+# その場で Q の連鎖に合流して on になる (張り替えと powered の再評価が同 tick)。
+#
+# 期待値は実機 (fixture rail-shape-chain-join) が正。
+meta {
+  name: 張り替わったレールが連鎖に合流する
+  ref: #132 / fixture rail-shape-chain-join / 26.2 RailState.place
+}
+
+fixture rail-shape-chain-join
+
+state {
+  # 両軸に隣接があるので置いた向き (east_west) が残る
+  t4 (2,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+  # 北の Q は connectTo されないので north_south のまま
+  t4 (2,1,2) powered_rail[powered=false,shape=north_south,waterlogged=false]
+}
+
+state {
+  # レバー ON。直交している A へは伝わらない
+  t8 (2,1,2) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t8 (2,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+}
+
+state {
+  # 南隣に 1 本置くと A が north_south に張り替わり、同 tick で連鎖に合流する
+  t10 (2,1,3) powered_rail[powered=true,shape=north_south,waterlogged=false]
+  t10 (2,1,4) powered_rail[powered=true,shape=north_south,waterlogged=false]
+}
