@@ -1,0 +1,30 @@
+# レールはピストンで押せる (#134)。
+#
+# 26.2 のレール 4 種の登録はどれも pushReaction を指定していない = 既定の
+# PushReaction.NORMAL [確定: 26.2 Blocks.java:689 (powered_rail) / :692 (detector_rail)
+# / :2892 (activator_rail)]。sim は isMovable にも isPushDestroy にもレールを持たず
+# 「押せない障害物」扱いだったため、ピストンが伸びることすらできなかった。
+#
+# t3 で押し出しが始まり (moving_piston 相)、t5 に着地して 1 マス東へ移る。
+# 通常ピストンなので t6 の OFF では引き戻さない。
+#
+# 期待値は実機 (fixture rail-piston-push) が正。
+meta {
+  name: レールはピストンで押される
+  ref: #134 / fixture rail-piston-push / 26.2 Blocks.java:689,692,2892
+}
+
+fixture rail-piston-push
+
+state {
+  # t5: 1 マス東へ移動し、形状は保持される
+  t5 (4,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+  t5 (3,1,3) piston_head[facing=east,short=false,type=normal]
+}
+
+state {
+  # 通常ピストンなので引き戻さない (レールは押した先に残る)
+  t9 (2,1,3) piston[extended=false,facing=east]
+  t9 (4,1,3) powered_rail[powered=false,shape=east_west,waterlogged=false]
+  t9 (3,1,3) air
+}

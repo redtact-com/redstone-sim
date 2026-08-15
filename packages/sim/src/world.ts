@@ -469,6 +469,23 @@ export class SimWorld {
     if (into.type === 'observer' && !into.powered && !this.hasScheduledTick(pos, 'observer')) {
       this.schedule(pos, 2, 0)
     }
+    // 着地したレールは onPlace が movedByPiston でも走るので、
+    //   (1) updateDir(first=true) で形状を決め直し (隣のレールも connectTo で張り替わる)
+    //   (2) isStraight なので自分自身に neighborChanged が掛かり powered が再計算される
+    // [確定: 26.2 BaseRailBlock.java:64-77,111-118]
+    // [実機 fixture rail-piston-push-connect (着地先の隣のレールに繋がって north_south へ) /
+    //  rail-piston-push-powered (電源から押し離すと着地の時点で off)]
+    if (into.type === 'powered_rail') {
+      for (const c of planRailPlacement(this, pos, into.shape)) {
+        const b = this.getBlockAt(c.pos)
+        if (b?.type !== 'powered_rail') continue
+        this.setBlockAt(c.pos, { ...b, shape: c.shape })
+        changed.add(posKey(c.pos))
+        this.emitShapeUpdate(c.pos)
+        this.submitMultiNC(c.pos)
+      }
+      this.neighborChanged(pos)
+    }
     this.propagateChange(pos)
     this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
@@ -1139,6 +1156,12 @@ export class SimWorld {
     // スライム/蜂蜜も可動 (PushReaction STICKY)。くっついた塊の収集は
     // resolvePushStructure が担当する (#121)
     if (isStickyBlock(block)) return true
+    // レールも可動 (PushReaction NORMAL)。26.2 の登録はどのレールも pushReaction を
+    // 指定していない = 既定の NORMAL [確定: 26.2 Blocks.java:689,692,2892]
+    // [実機 fixture rail-piston-push: 押されて 1 マス動き、形状は保持される]。
+    // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
+    // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
+    if (block.type === 'powered_rail') return true
     return false
   }
 

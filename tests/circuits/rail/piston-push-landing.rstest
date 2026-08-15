@@ -1,0 +1,24 @@
+# 押されて着地したレールは、その場で形状と powered を決め直す (#134)。
+#
+# BaseRailBlock.onPlace は movedByPiston でも走り、直前が moving_piston なので
+# `!oldState.is(block)` を満たして updateState に入る [確定: 26.2 BaseRailBlock.java:64-77]。
+# そこで
+#   (1) updateDir(first=true) → RailState.place で形状を決め直す
+#   (2) isStraight (= powered/detector/activator) なので自分自身に neighborChanged が
+#       掛かり、PoweredRailBlock.updateState で powered が再計算される
+# の 2 つが着地の tick に起きる。
+#
+# 期待値は実機 (fixture rail-piston-push-connect) が正。
+meta {
+  name: 着地したレールが隣のレールに繋がって形状を決め直す
+  ref: #134 / fixture rail-piston-push-connect / 26.2 BaseRailBlock.onPlace
+}
+
+fixture rail-piston-push-connect
+
+state {
+  # east_west のまま飛んでいくが、着地先の南隣にレールがあるので north_south になる
+  t5 (4,1,3) powered_rail[powered=false,shape=north_south,waterlogged=false]
+  # 繋がった相手は north_south のまま
+  t5 (4,1,4) powered_rail[powered=false,shape=north_south,waterlogged=false]
+}

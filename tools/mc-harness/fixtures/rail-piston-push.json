@@ -1,0 +1,24 @@
+{
+  "name": "rail-piston-push",
+  "description": "#134 レールはピストンで押せるのか。26.2 のレール 4 種の登録はいずれも pushReaction を指定していない = 既定の PushReaction.NORMAL [確定: 26.2 Blocks.java:689,692,2892] ため、押されて 1 マス動くはず。sim は isMovable / isPushDestroy のどちらにもレールを持たないので「押せない障害物」扱いになっており、実機と乖離する。移動先 (4,1,3) には床を敷いてある (支持ブロック要件は sim 未実装なので、床が無いケースは意図的に避ける)。t2 でレバー ON → 伸びてレールを東へ 1 マス送る。t6 で OFF → 通常ピストンなので引き戻さない。着地したレールの形状 (east_west のままか) と powered の再評価もここで確定させる。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": { "from": [0, 0, 2], "to": [6, 3, 4] },
+  "player": { "spawn": [1.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [1.5, 1.35, 3.5] },
+  "blocks": [
+    { "pos": [1, 0, 2], "block": "stone" },
+
+    { "pos": [1, 0, 3], "block": "stone" },
+    { "pos": [2, 0, 3], "block": "stone" },
+    { "pos": [3, 0, 3], "block": "stone" },
+    { "pos": [4, 0, 3], "block": "stone" },
+
+    { "pos": [1, 1, 3], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [2, 1, 3], "block": "piston[facing=east,extended=false]" },
+    { "pos": [3, 1, 3], "block": "powered_rail[shape=east_west,powered=false,waterlogged=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 1, 3], "action": "use" },
+    { "tick": 6, "pos": [1, 1, 3], "action": "use" }
+  ]
+}
