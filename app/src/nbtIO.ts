@@ -282,6 +282,17 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'rail':
       // 通常レールは powered を持たない。曲線 4 形状も取る (#140)
       return ['minecraft:rail', { shape: block.shape, waterlogged: 'false' }]
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+      return [block.type === 'trapdoor_iron' ? 'minecraft:iron_trapdoor' : 'minecraft:oak_trapdoor', {
+        facing: block.facing, half: 'bottom',
+        open: String(block.open), powered: String(block.powered), waterlogged: 'false',
+      }]
+    case 'fence_gate':
+      return ['minecraft:oak_fence_gate', {
+        facing: block.facing, in_wall: 'false',
+        open: String(block.open), powered: String(block.powered),
+      }]
     case 'copper_bulb':
       // 酸化バリアントは 1 種に集約しているので素の銅の電球として書き出す (#155)
       return ['minecraft:copper_bulb', {
@@ -450,6 +461,23 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
   if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
+  if (name.endsWith('_trapdoor')) {
+    // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#157)
+    return {
+      type: name === 'minecraft:iron_trapdoor' ? 'trapdoor_iron' : 'trapdoor_wood',
+      facing: (props.facing ?? 'north'),
+      open: props.open === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
+  if (name.endsWith('_fence_gate')) {
+    return {
+      type: 'fence_gate',
+      facing: (props.facing ?? 'north'),
+      open: props.open === 'true',
+      powered: props.powered === 'true',
+    } as BlockState
+  }
   if (name.endsWith('copper_bulb')) {
     // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
     return {

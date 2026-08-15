@@ -206,6 +206,16 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
         type: 'rail',
         shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
       }
+    case 'trapdoor_wood':
+    case 'trapdoor_iron':
+    case 'fence_gate':
+      // 受電で開閉する出力素子。facing は描画用で回路挙動には影響しない (#157)
+      return {
+        type,
+        facing: facing === 'east' || facing === 'west' || facing === 'south' ? facing : 'north',
+        open: false,
+        powered: false,
+      }
     case 'copper_bulb':
       // 立ち上がりでのみ lit が反転する記憶素子。初期は消灯 (#155)
       return { type: 'copper_bulb', lit: false, powered: false }
