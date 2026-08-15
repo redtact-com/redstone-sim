@@ -279,6 +279,9 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:slime_block', {}]
     case 'honey_block':
       return ['minecraft:honey_block', {}]
+    case 'rail':
+      // 通常レールは powered を持たない。曲線 4 形状も取る (#140)
+      return ['minecraft:rail', { shape: block.shape, waterlogged: 'false' }]
     case 'powered_rail':
     case 'activator_rail':
       return [`minecraft:${block.type}`, {
@@ -440,6 +443,10 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
   if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
+  if (name === 'minecraft:rail') {
+    // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4)。通常レールだけが曲線を取る (#140)
+    return { type: 'rail', shape: (props.shape ?? 'north_south') } as BlockState
+  }
   if (name === 'minecraft:powered_rail' || name === 'minecraft:activator_rail') {
     // SHAPE は RAIL_SHAPE_STRAIGHT (直線2+坂4)。曲線はこの 2 種には無い。
     // activator_rail は powered_rail と同じ PoweredRailBlock なので状態も同形 (#138)

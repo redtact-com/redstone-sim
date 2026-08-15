@@ -1,15 +1,18 @@
 import type {
-  Pos3D, RailShape, BlockState, PoweredRailState, PoweredRailType,
+  Pos3D, RailShape, StraightRailShape, BlockState,
+  PoweredRailState, PlainRailState, PoweredRailType,
 } from './types.js'
 import type { SimWorld } from './world.js'
 import { isBlockPowered } from './power.js'
 
 // ============================================================
-// レール (#127)
+// レール (#127, #138, #140)
 //
 // 26.2 の RailState (形状の自動接続) と PoweredRailBlock.findPoweredRailSignal
-// (動力の連鎖伝播) の移植。対象は powered_rail のみで、通常レールの曲線 4 形状は
-// 扱わない (isStraight=true 固定なので vanilla の curved 分岐は落としてある)。
+// (動力の連鎖伝播) の移植。sim が持つのは
+//   - powered_rail / activator_rail: 直線 6 形状のみ (isStraight=true)
+//   - rail (通常レール): 曲線 4 形状も取る (isStraight=false)
+// で、曲線分岐と hasSignal による優先順位の反転は通常レールにだけ効く。
 //
 // 支持ブロック要件 (canSurvive / shouldBeRemoved) は**実装しない**。sim 全体が
 // 支持要件を持たない方針 (wire-shape.ts §「支持要件の無い sim でも」) で、
@@ -29,13 +32,31 @@ const below = (p: Pos3D): Pos3D => [p[0], p[1] - 1, p[2]]
 
 const sameColumn = (a: Pos3D, b: Pos3D): boolean => a[0] === b[0] && a[2] === b[2]
 
+/** sim が持つレール全種 (#140) */
+export type AnyRailState = PoweredRailState | PlainRailState
+
 /**
  * レール系ブロックか [確定: 26.2 BaseRailBlock.isRail = BlockTags.RAILS]。
- * sim が持つのは powered_rail / activator_rail の 2 種。
+ * sim が持つのは rail / powered_rail / activator_rail の 3 種。
  * **形状の接続はこの判定 (種別をまたぐ)**、動力の連鎖は同種限定なので
  * isSameRailWithPower 側で別途 type を突き合わせる (#138)。
  */
-export function isRail(block: BlockState | null): block is PoweredRailState {
+export function isRail(block: BlockState | null): block is AnyRailState {
+  return !!block
+    && (block.type === 'rail' || block.type === 'powered_rail' || block.type === 'activator_rail')
+}
+
+/**
+ * 曲線を取れるレールか (vanilla の `BaseRailBlock.isStraight` の否定)。
+ * 通常レールだけが false [確定: 26.2 RailBlock は super(false, ...)、
+ * PoweredRailBlock / DetectorRailBlock は super(true, ...)]。
+ */
+export function isStraightRail(block: AnyRailState): boolean {
+  return block.type !== 'rail'
+}
+
+/** 動力を持つレール (powered_rail / activator_rail) か。通常レールは持たない (#140) */
+export function isPoweredRail(block: BlockState | null): block is PoweredRailState {
   return !!block && (block.type === 'powered_rail' || block.type === 'activator_rail')
 }
 
@@ -51,6 +72,11 @@ export function railConnections(pos: Pos3D, shape: RailShape): [Pos3D, Pos3D] {
     case 'ascending_west':   return [above(west(pos)), east(pos)]
     case 'ascending_north':  return [above(north(pos)), south(pos)]
     case 'ascending_south':  return [north(pos), above(south(pos))]
+    // 曲線は「名前が示す 2 方向」に繋がる。順序も vanilla に合わせる
+    case 'south_east':       return [east(pos), south(pos)]
+    case 'south_west':       return [west(pos), south(pos)]
+    case 'north_west':       return [west(pos), north(pos)]
+    case 'north_east':       return [east(pos), north(pos)]
   }
 }
 
@@ -76,11 +102,16 @@ class RailWorkspace {
     this.grid = grid
   }
 
-  get(pos: Pos3D): PoweredRailState | null {
+  /**
+   * その座標のレールの「形状計算に必要な情報だけ」を返す。ブロック状態そのもの
+   * ではなく {shape, straight} に正規化するのは、通常レールと直線レールで
+   * shape の型が違う (曲線を取れるのは通常レールだけ) ため (#140)。
+   */
+  get(pos: Pos3D): { shape: RailShape; straight: boolean } | null {
     const b = this.grid.getBlock3(pos[0], pos[1], pos[2])
     if (!isRail(b)) return null
     const shape = this.pending.get(`${pos[0]},${pos[1]},${pos[2]}`)
-    return shape === undefined ? b : { ...b, shape }
+    return { shape: shape ?? b.shape, straight: isStraightRail(b) }
   }
 
   set(pos: Pos3D, shape: RailShape): void {
@@ -100,18 +131,29 @@ class RailWorkspace {
 }
 
 /**
- * 26.2 RailState の移植 (isStraight=true 固定なので curved 分岐は落としてある)。
+ * 26.2 RailState の移植。straight (powered/activator) は直線 6 形状しか取らず、
+ * 通常レールだけが曲線 4 形状を取る [確定: 26.2 BaseRailBlock の isStraight]。
+ *
+ * vanilla は形状決定を place と connectTo の 2 か所に持っていて、**規則が違う**:
+ *   - place    … 「片軸だけ」の排他条件で直線を決め、直交 2 方向なら曲線を確定させ、
+ *                 どちらでもない (= 両軸に隣接がある) ときだけ既定形状に落ちてから
+ *                 hasSignal で曲線の優先順位を決める
+ *   - connectTo… 排他条件なし・後勝ち (両軸あれば EAST_WEST)・hasSignal を見ない
+ * 1 つの関数にまとめると通常レールで実機と乖離するので、分けて写している (#140)。
  */
 class RailConnector {
   private connections: Pos3D[]
   private readonly ws: RailWorkspace
   readonly pos: Pos3D
   private shape: RailShape
+  /** 曲線を取れないレールか [確定: 26.2 BaseRailBlock.isStraight] */
+  private readonly straight: boolean
 
-  constructor(ws: RailWorkspace, pos: Pos3D, shape: RailShape) {
+  constructor(ws: RailWorkspace, pos: Pos3D, shape: RailShape, straight: boolean) {
     this.ws = ws
     this.pos = pos
     this.shape = shape
+    this.straight = straight
     this.connections = [...railConnections(pos, shape)]
   }
 
@@ -121,7 +163,7 @@ class RailConnector {
   private getRail(pos: Pos3D): RailConnector | null {
     for (const p of [pos, above(pos), below(pos)]) {
       const b = this.ws.get(p)
-      if (b) return new RailConnector(this.ws, p, b.shape)
+      if (b) return new RailConnector(this.ws, p, b.shape, b.straight)
     }
     return null
   }
@@ -152,39 +194,41 @@ class RailConnector {
     return this.connectsTo(rail) || this.connections.length !== 2
   }
 
-  /** [確定: 26.2 RailState.connectTo] — 相手を接続先に加えて自分の形状を張り替える */
+  /**
+   * [確定: 26.2 RailState.connectTo] — 相手を接続先に加えて自分の形状を張り替える。
+   * place と違い排他条件が無く (後勝ちなので両軸あれば EAST_WEST)、hasSignal も見ない。
+   */
   private connectTo(rail: RailConnector): void {
     this.connections.push(rail.pos)
-    const shape = this.decideShape(
-      this.hasConnection(north(this.pos)), this.hasConnection(south(this.pos)),
-      this.hasConnection(west(this.pos)),  this.hasConnection(east(this.pos)),
-      null,
-    )
-    this.applyShape(shape ?? 'north_south')
+    const n = this.hasConnection(north(this.pos))
+    const s = this.hasConnection(south(this.pos))
+    const w = this.hasConnection(west(this.pos))
+    const e = this.hasConnection(east(this.pos))
+
+    let shape: RailShape | null = null
+    if (n || s) shape = 'north_south'
+    if (w || e) shape = 'east_west'      // 後勝ち: 両軸あれば EAST_WEST
+
+    if (!this.straight) {
+      if (s && e && !n && !w) shape = 'south_east'
+      if (s && w && !n && !e) shape = 'south_west'
+      if (n && w && !s && !e) shape = 'north_west'
+      if (n && e && !s && !w) shape = 'north_east'
+    }
+
+    this.applyShape(this.promoteSlope(shape) ?? 'north_south')
   }
 
   /**
-   * 接続の有無から形状を決める共通部分。曲線は straight レールでは選ばれないため
-   * vanilla の !isStraight 分岐は落としてある。fallback は連結が交差する場合のみ使う。
+   * 直線に決まったものだけを坂へ昇格させる [確定: 26.2 RailState.place / connectTo —
+   * `if (shape == NORTH_SOUTH)` / `if (shape == EAST_WEST)` の 2 ブロックのみ]。
+   * **曲線に決まった後は適用されない** [実機 fixture rail-curve-no-slope]。
    */
-  private decideShape(
-    n: boolean, s: boolean, w: boolean, e: boolean, fallback: RailShape | null,
-  ): RailShape | null {
-    const northOrSouth = n || s
-    const westOrEast = w || e
-    let shape: RailShape | null = null
-    if (northOrSouth) shape = 'north_south'
-    if (westOrEast) shape = 'east_west'
-    // 交差する場合だけ既定形状 (置いた向き) を優先する [確定: 26.2 RailState.place]
-    if (northOrSouth && westOrEast && fallback) shape = fallback
-    if (shape === null) return null
-
-    // 隣の 1 段上にレールがあれば坂になる [確定: 26.2 RailState.place / connectTo]
+  private promoteSlope(shape: RailShape | null): RailShape | null {
     if (shape === 'north_south') {
       if (this.ws.isRailAt(above(north(this.pos)))) shape = 'ascending_north'
       if (this.ws.isRailAt(above(south(this.pos)))) shape = 'ascending_south'
-    }
-    if (shape === 'east_west') {
+    } else if (shape === 'east_west') {
       if (this.ws.isRailAt(above(east(this.pos)))) shape = 'ascending_east'
       if (this.ws.isRailAt(above(west(this.pos)))) shape = 'ascending_west'
     }
@@ -208,16 +252,62 @@ class RailConnector {
   /**
    * [確定: 26.2 RailState.place]。自身の形状を確定させ、繋がった相手の形状も
    * connectTo で張り替える。first は設置時 (形状が同じでも隣へ伝える) を意味する。
+   *
+   * hasSignal (= level.hasNeighborSignal(pos)) が効くのは**第三段の内側だけ**で、
+   * しかも通常レールのときだけ。両軸に隣接がある (3 方向以上の) ジャンクションで
+   * 曲がる先が反転する [実機 fixture rail-junction-place: 非通電 south_east /
+   * 通電 north_east]。
    */
-  place(first: boolean, defaultShape: RailShape): RailShape {
+  place(first: boolean, defaultShape: RailShape, hasSignal: boolean): RailShape {
     const n = this.hasNeighborRail(north(this.pos))
     const s = this.hasNeighborRail(south(this.pos))
     const w = this.hasNeighborRail(west(this.pos))
     const e = this.hasNeighborRail(east(this.pos))
 
-    const shape = this.decideShape(n, s, w, e, defaultShape) ?? defaultShape
-    const changed = shape !== this.shape
-    this.applyShape(shape)
+    const northOrSouth = n || s
+    const westOrEast = w || e
+    let shape: RailShape | null = null
+
+    // 第一段: 片軸だけに隣接があるときの直線 (排他条件)
+    if (northOrSouth && !westOrEast) shape = 'north_south'
+    if (westOrEast && !northOrSouth) shape = 'east_west'
+
+    const sAndE = s && e, sAndW = s && w, nAndE = n && e, nAndW = n && w
+
+    // 第二段: 直交ちょうど 2 方向の曲線 (排他条件)
+    if (!this.straight) {
+      if (sAndE && !n && !w) shape = 'south_east'
+      if (sAndW && !n && !e) shape = 'south_west'
+      if (nAndW && !s && !e) shape = 'north_west'
+      if (nAndE && !s && !w) shape = 'north_east'
+    }
+
+    // 第三段: ここに来るのは「両軸に隣接がある」か「隣接ゼロ」のときだけ。
+    // vanilla にはこのあと `else if (northOrSouth)` / `else if (westOrEast)` が
+    // あるが、その条件は第一段で必ず確定済みなので**到達しない死コード**。
+    // 写すと「片軸だけでも hasSignal が効く」誤実装になるので落としてある。
+    if (shape === null) {
+      if (northOrSouth && westOrEast) shape = defaultShape
+
+      if (!this.straight) {
+        // 後勝ちなので優先順位は hasSignal で反転する [確定: 26.2 RailState.java:269-303]
+        if (hasSignal) {
+          if (sAndE) shape = 'south_east'
+          if (sAndW) shape = 'south_west'
+          if (nAndE) shape = 'north_east'
+          if (nAndW) shape = 'north_west'
+        } else {
+          if (nAndW) shape = 'north_west'
+          if (nAndE) shape = 'north_east'
+          if (sAndW) shape = 'south_west'
+          if (sAndE) shape = 'south_east'
+        }
+      }
+    }
+
+    const decided = this.promoteSlope(shape) ?? defaultShape
+    const changed = decided !== this.shape
+    this.applyShape(decided)
 
     if (first || changed) {
       for (const conn of [...this.connections]) {
@@ -244,12 +334,12 @@ class RailConnector {
  * 発行は適用側の責務** で、SimWorld ではこの一覧の順に 1 件ずつ書いて発行する (#132)。
  */
 export function planRailPlacement(
-  grid: RailGrid, pos: Pos3D, defaultShape: RailShape,
+  grid: RailGrid, pos: Pos3D, defaultShape: RailShape, hasSignal = false,
 ): { pos: Pos3D; shape: RailShape }[] {
   const ws = new RailWorkspace(grid)
   const block = ws.get(pos)
   if (!block) return []
-  new RailConnector(ws, pos, block.shape).place(true, defaultShape)
+  new RailConnector(ws, pos, block.shape, block.straight).place(true, defaultShape, hasSignal)
   return ws.changes()
 }
 
@@ -265,7 +355,7 @@ export function planRailPlacement(
  * [実機 fixture activator-rail-mixed-chain: 両方向とも境目で切れる] (#138)。
  */
 export function findPoweredRailSignal(
-  world: SimWorld, pos: Pos3D, shape: RailShape, forward: boolean, searchDepth: number,
+  world: SimWorld, pos: Pos3D, shape: StraightRailShape, forward: boolean, searchDepth: number,
   railType: PoweredRailType,
 ): boolean {
   if (searchDepth >= MAX_RAIL_SEARCH_DEPTH) return false
@@ -312,9 +402,9 @@ function isSameRailWithPower(
   dir: 'north_south' | 'east_west', railType: PoweredRailType,
 ): boolean {
   const state = world.getBlockAt(pos)
-  if (!isRail(state)) return false
-  // `state.is(this)` — 同じブロックでなければ連鎖しない (#138)
-  if (state.type !== railType) return false
+  // `state.is(this)` — 同じブロックでなければ連鎖しない (#138)。
+  // 通常レールもここで弾かれる (動力を持たないので連鎖に参加しない)
+  if (!isPoweredRail(state) || state.type !== railType) return false
 
   // 進行軸と直交する向きのレールへは伝播しない
   const myShape = state.shape
@@ -337,7 +427,7 @@ function isSameRailWithPower(
  * 連鎖は同種のレールしかたどらない (#138)。
  */
 export function shouldRailBePowered(
-  world: SimWorld, pos: Pos3D, shape: RailShape, railType: PoweredRailType,
+  world: SimWorld, pos: Pos3D, shape: StraightRailShape, railType: PoweredRailType,
 ): boolean {
   return isBlockPowered(world, pos)
     || findPoweredRailSignal(world, pos, shape, true, 0, railType)

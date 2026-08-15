@@ -127,6 +127,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // shape は軸/坂を表すだけなので flipDir 不要 (north_south / east_west は対称、
       // ascending_* は構造座標と同じ向きで描画される)
       return `minecraft:${block.type}[powered=${block.powered},shape=${block.shape},waterlogged=false]`
+    case 'rail':
+      // 通常レールは曲線 4 形状も取る。曲線名は「繋がる 2 方向」を表すので
+      // 構造座標と同じ向きで描画される (flipDir 不要) (#140)
+      return `minecraft:rail[shape=${block.shape},waterlogged=false]`
     case 'solid':
       return 'minecraft:stone'
     case 'air':
@@ -183,6 +187,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:honey_block',
   'minecraft:powered_rail',
   'minecraft:activator_rail',
+  'minecraft:rail',
 ]
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────

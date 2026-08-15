@@ -200,6 +200,12 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       return { type: 'slime_block' }
     case 'honey_block':
       return { type: 'honey_block' }
+    case 'rail':
+      // 通常レールは動力を持たない。曲線は隣接から自動で決まる (#140)
+      return {
+        type: 'rail',
+        shape: facing === 'east' || facing === 'west' ? 'east_west' : 'north_south',
+      }
     case 'powered_rail':
     case 'activator_rail':
       // facing は「置いた向き」= 孤立して置いたときの既定形状にだけ効く。

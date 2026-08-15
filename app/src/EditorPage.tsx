@@ -137,6 +137,7 @@ const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'redstone_block', label: 'レッドストーンブロック', texture: 'block/redstone_block', hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'slime_block', label: 'スライム',    texture: 'block/slime_block',     hasFacing: false, hasDelay: false, hasMode: false },
   { type: 'honey_block', label: 'ハチミツ',    texture: 'block/honey_block_side', hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'rail', label: 'レール', texture: 'block/rail', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'powered_rail', label: 'パワードレール', texture: 'block/powered_rail', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'activator_rail', label: 'アクティベーターレール', texture: 'block/activator_rail', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'target',     label: 'ターゲット',    texture: 'block/target_side',     hasFacing: false, hasDelay: false, hasMode: false },
