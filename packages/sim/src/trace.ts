@@ -105,6 +105,8 @@ export function abbrOf(b: BlockState): string {
     case 'trapdoor_wood':
     case 'trapdoor_iron':  return 'Td'
     case 'fence_gate':     return 'Fg'
+    case 'door_wood':
+    case 'door_iron':      return 'Do'
     case 'moving_piston':  return abbrOf(b.into)
     case 'air':            return 'Ai'
   }

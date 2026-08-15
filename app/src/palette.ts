@@ -31,6 +31,7 @@ export const TRIGGER_META: Record<string, { abbr: string; log: string; momentary
   target:                          { abbr: 'Tg', log: 'ターゲット発火',   momentary: true },
   trapdoor_wood:                   { abbr: 'Td', log: 'トラップドア(木) を開閉', momentary: false },
   fence_gate:                      { abbr: 'Fg', log: 'フェンスゲート を開閉',   momentary: false },
+  door_wood:                       { abbr: 'Do', log: 'ドア(木) を開閉',       momentary: false },
   detector_rail:                   { abbr: 'Dt', log: 'ディテクターレールにトロッコ', momentary: true },
 }
 export const TRIGGER_TYPES = new Set(Object.keys(TRIGGER_META))
@@ -81,6 +82,8 @@ export const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'trapdoor_wood', label: 'トラップドア(木)', texture: 'block/oak_trapdoor', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'trapdoor_iron', label: 'トラップドア(鉄)', texture: 'block/iron_trapdoor', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'fence_gate', label: 'フェンスゲート', texture: 'block/oak_planks',   hasFacing: true, hasDelay: false, hasMode: false },
+  { type: 'door_wood', label: 'ドア(木)',      texture: 'block/oak_door_bottom', hasFacing: true, hasDelay: false, hasMode: false },
+  { type: 'door_iron', label: 'ドア(鉄)',      texture: 'block/iron_door_bottom', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'piston',     label: 'ピストン',      texture: 'block/piston_top',      hasFacing: true,  hasDelay: false, hasMode: false },
   { type: 'sticky_piston', label: '粘着ピストン', texture: 'block/piston_top_sticky', hasFacing: true, hasDelay: false, hasMode: false },
   { type: 'observer',   label: 'オブザーバー',  texture: 'block/observer_front',   hasFacing: true,  hasDelay: false, hasMode: false },

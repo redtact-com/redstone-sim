@@ -1,0 +1,39 @@
+# ドアも素手で開けると open だけが動く (#159)。
+#
+# `useWithoutItem` は POWERED を触らない [確定: 26.2 DoorBlock.java:200-210]。
+# 押した半分だけを書き換えるが、相方は `updateShape` が相手の状態をコピーして
+# 追従する [確定: :104-106] ので **両方が開く**。
+#
+# 鉄のドアは `canOpenByHand=false` なので同じ操作を無視する = 対照。
+# ズレが解消するのは信号が変わったとき (t8 の給電解除)。
+#
+# 期待値は実機 (fixture door-desync) が正。
+meta {
+  name: ドアの素手操作は powered を動かさず、相方には伝わる
+  ref: #159 / fixture door-desync / 26.2 DoorBlock.useWithoutItem
+}
+
+fixture door-desync
+
+state {
+  # 下半分を素手で開ける → 通電していないのに両方が open=true
+  t2 (1,1,3) oak_door[facing=north,half=lower,hinge=left,open=true,powered=false]
+  t2 (1,2,3) oak_door[facing=north,half=upper,hinge=left,open=true,powered=false]
+}
+
+state {
+  # 鉄のドアは素手では開かない (対照)
+  t4 (1,1,1) iron_door[facing=south,half=lower,hinge=left,open=false,powered=false]
+}
+
+state {
+  # 給電すると既に開いているので powered だけが追随する
+  t6 (1,1,3) oak_door[facing=north,half=lower,hinge=left,open=true,powered=true]
+  t6 (1,2,3) oak_door[facing=north,half=upper,hinge=left,open=true,powered=true]
+}
+
+state {
+  # 給電を外すと両方閉じ、ズレが解消する
+  t8 (1,1,3) oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]
+  t8 (1,2,3) oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]
+}

@@ -523,6 +523,31 @@ export interface DoorLikeState {
   powered: boolean
 }
 
+/**
+ * ドア (#159)。**上下 2 マスにまたがる素子**で、sim では half を持つ独立した
+ * 2 ブロックとして表現する (ピストン + ピストンヘッドと同じ前例)。
+ *
+ *   - 受電判定は **自分の位置 または 相方の半分** の OR
+ *     [確定: 26.2 DoorBlock.java:228-229]。ピストン・ディスペンサー以外で唯一の
+ *     疑似接続の変種で、下半分だけに給電しても両方が開く
+ *     [実機 fixture door-redstone]
+ *   - **更新元が同じドアブロックなら無視する** [確定: :230 の
+ *     `!this.defaultBlockState().is(block)`]。2 つの半分が更新を往復しないためのガード
+ *   - 2 つの半分は updateShape で常に同期する [確定: :104-106 — 相手の状態を
+ *     そのままコピーして HALF だけ自分のものにする] ので、sim では状態変化時に
+ *     相方へミラーする
+ *   - 書き込みは **flag 2** なので近隣更新を出さない (トラップドアと同じ)
+ *   - 木製は素手で開閉でき、そのとき open だけが動く。**鉄のドアは素手で開かない**
+ */
+export interface DoorState {
+  type: 'door_wood' | 'door_iron'
+  half: 'lower' | 'upper'
+  /** 描画用。回路挙動には影響しない */
+  facing: HDir
+  open: boolean
+  powered: boolean
+}
+
 export interface AirState {
   type: 'air'
 }
@@ -556,6 +581,7 @@ export type BlockState =
   | DetectorRailState
   | CopperBulbState
   | DoorLikeState
+  | DoorState
   | AirState
 
 export type BlockType = BlockState['type']
@@ -670,6 +696,8 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   trapdoor_wood: true,  // 素手で開閉できる (open だけ動く)
   fence_gate: true,
   trapdoor_iron: false, // レッドストーン専用。素手では開かない
+  door_wood: true,      // 素手で開閉できる (open だけ動く)
+  door_iron: false,     // レッドストーン専用
   observer: false,
   redstone_block: false,
   piston: false,
