@@ -256,6 +256,12 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       return { type: 'observer', facing: dir, powered: false }
     case 'solid':
       return { type: 'solid', powered: false }
+    case 'glass':
+      return { type: 'glass' }
+    case 'slab':
+      // 上付きスラブは取り込みでしか現れない。エディタからは下付き固定で置く (#184)。
+      // half は sim の挙動に影響しないため、置き分けの UI は用意していない
+      return { type: 'slab', half: 'bottom' }
     case 'container':
       // コンパレーター背面から読まれる実効出力 (0-15) を editor で設定する (#54)。
       return { type: 'container', signal: opts.signal ?? 0 }

@@ -88,6 +88,8 @@ export function abbrOf(b: BlockState): string {
     case 'slime_block':      return 'Sb'
     case 'honey_block':      return 'Hb'
     case 'solid':          return 'Bl'
+    case 'glass':          return 'Gl'
+    case 'slab':           return 'Sl'
     case 'redstone_block': return 'Rb'
     case 'target':         return 'Tg'
     case 'container':      return 'Cn'

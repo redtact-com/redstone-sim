@@ -19,7 +19,7 @@ export const PLACEABLE_TYPES = [
   'weighted_pressure_plate_light', 'weighted_pressure_plate_heavy',
   'lamp', 'note_block', 'copper_bulb', 'piston', 'sticky_piston',
   'trapdoor_wood', 'trapdoor_iron', 'fence_gate', 'door_wood', 'door_iron',
-  'redstone_block', 'target', 'observer', 'solid',
+  'redstone_block', 'target', 'observer', 'solid', 'glass', 'slab',
   'slime_block', 'honey_block', 'rail', 'powered_rail', 'activator_rail', 'detector_rail',
   'container', 'hopper', 'dropper', 'dispenser', 'crafter',
 ] as const satisfies readonly PlaceableType[]
