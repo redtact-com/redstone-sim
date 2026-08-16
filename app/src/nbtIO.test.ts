@@ -264,14 +264,39 @@ describe('固体ブロックの取り込み (#170)', () => {
 
   it.each([
     'minecraft:glass', 'minecraft:white_stained_glass', 'minecraft:tinted_glass',
-  ])('ガラスは**非導体**なので solid にしない (省略される): %s', async (name) => {
-    expect(await importVanilla(name)).toBeUndefined()
+  ])('ガラスは solid にしない (#184 で専用型へ): %s', async (name) => {
+    expect(await importVanilla(name)).toMatchObject({ type: 'glass' })
   })
 
   it.each([
     'minecraft:melon_stem', 'minecraft:attached_pumpkin_stem',
   ])('_stem の接尾辞に引っかかる作物は solid にしない: %s', async (name) => {
     expect(await importVanilla(name)).toBeUndefined()
+  })
+
+  // ── ハーフブロック (#184) ──────────────────────────────────────────────
+  //
+  // 単体スラブは**非導体**。#170 では既存挙動を変えないため solid に落としていたが、
+  // 実機で導通しないことを確定させた (fixture nonconductor-glass-slab) ので専用型へ移した。
+  // **二重スラブだけは当たり判定がフルブロック = 導体**で、これも実機で確認済み。
+
+  it.each([
+    ['minecraft:smooth_stone_slab', 'bottom'],
+    ['minecraft:oak_slab', 'top'],
+    ['minecraft:cut_copper_slab', 'bottom'],   // _copper 接尾辞より優先されること
+  ])('単体スラブは非導体の slab になる: %s[type=%s]', async (name, half) => {
+    expect(await importVanilla(name, { type: half })).toMatchObject({ type: 'slab', half })
+  })
+
+  it('二重スラブは導体なので solid になる', async () => {
+    expect(await importVanilla('minecraft:smooth_stone_slab', { type: 'double' }))
+      .toMatchObject({ type: 'solid' })
+  })
+
+  it('type プロパティが無いスラブは bottom として扱う', async () => {
+    // 壊れたファイルや簡略化された palette でも落ちないこと
+    expect(await importVanilla('minecraft:stone_brick_slab'))
+      .toMatchObject({ type: 'slab', half: 'bottom' })
   })
 
   it('専用型を持つブロックは接尾辞判定より優先される', async () => {

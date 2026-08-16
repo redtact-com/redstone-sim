@@ -323,6 +323,42 @@ export interface SolidState {
 }
 
 /**
+ * ガラス系 (glass / *_stained_glass)。**フルブロックだが非導体** (#184)。
+ *
+ * [確定: Blocks.GLASS が `isRedstoneConductor(never)` を明示している]。したがって
+ *   - 充電されない・信号を通さない (isConductor=false)
+ *   - ワイヤーの上下斜め接続を切らない (isWireCutBlock=false)
+ *   - ピストンで押せる (PushReaction 既定 = NORMAL)
+ * となり、レッドストーン的には**空気とほぼ同じ**。違いはピストンの押し対象になる点。
+ *
+ * 既知の抽象化: 色 (16 種の stained_glass) は持たず、すべて無色として描画する。
+ * ガラス板 (glass_pane) はフルブロックでないため対象外。
+ */
+export interface GlassState {
+  type: 'glass'
+}
+
+/**
+ * ハーフブロック (単体スラブ)。**非導体** (#184)。
+ *
+ * 単体スラブは当たり判定がフルブロックでないため `isRedstoneConductor` の既定
+ * (isCollisionShapeFullBlock) が false になる。本リポジトリの
+ * `docs/research/07_mojira-fixtures.md` (MC-3703 の再現手順) にも
+ * 「グロウストーンやハーフブロック等の**透過ブロック**越しに下方向へダストが接続する」
+ * とあり、透過扱いであることは確定している。
+ *
+ * **二重スラブ (`type=double`) は別物**で、当たり判定がフルブロック = 導体。
+ * 取り込み時に `solid` へ振り分ける (nbtIO.ts)。
+ *
+ * half は sim の挙動に一切影響しない (支持ブロック要件が未実装のため)。
+ * 3D で上付き / 下付きを描き分けるためだけに持つ。素材も持たず一律 smooth_stone。
+ */
+export interface SlabState {
+  type: 'slab'
+  half: 'top' | 'bottom'
+}
+
+/**
  * オブザーバー。facing = 観測方向 (vanilla FACING と同一 = 顔のある面が向く方向)。
  * 出力は背面 (OPPOSITE[facing]) の 1 ブロックへ strong 15 (diode 型)。
  * [確定: 02 §4.1/§2.4/§6 observer + ObserverBlock デコンパイル / minecraft.wiki]:
@@ -607,6 +643,8 @@ export type BlockState =
   | RedstoneBlockState
   | TargetState
   | SolidState
+  | GlassState
+  | SlabState
   | SlimeBlockState
   | HoneyBlockState
   | ObserverState
@@ -751,6 +789,8 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   dispenser: false,
   crafter: false,
   solid: false,
+  glass: false,
+  slab: false,
   slime_block: false,
   honey_block: false,
   air: false,

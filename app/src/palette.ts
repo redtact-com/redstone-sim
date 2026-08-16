@@ -101,6 +101,9 @@ export const BLOCK_PALETTE: BlockMeta[] = [
   { type: 'dispenser',  label: 'ディスペンサー', texture: 'block/dispenser_front', hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
   { type: 'crafter',    label: 'クラフター',    texture: 'block/crafter_south',  hasFacing: true,  hasDelay: false, hasMode: false, hasCount: true },
   { type: 'solid',      label: '石',            texture: 'block/stone',           hasFacing: false, hasDelay: false, hasMode: false },
+  // 非導体 (フルブロックだが電気を通さない) #184。スラブは下付き固定で置かれる
+  { type: 'glass',      label: 'ガラス',        texture: 'block/glass',           hasFacing: false, hasDelay: false, hasMode: false },
+  { type: 'slab',       label: 'ハーフ',        texture: 'block/smooth_stone',    hasFacing: false, hasDelay: false, hasMode: false },
   // 消しゴム（特殊アイテム）
   { type: 'eraser',     label: '消しゴム',      texture: null,                    hasFacing: false, hasDelay: false, hasMode: false },
 ]
