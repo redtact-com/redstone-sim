@@ -3,6 +3,8 @@ import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
 } from 'deepslate/nbt'
 import type { BlockState } from '@redstone/sim'
+import { mcToSim } from '@redstone/sim'
+import { blockStateToMinecraftStr } from '@redstone/viewer'
 import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
 
 // ============================================================
@@ -325,4 +327,91 @@ describe('固体ブロックの取り込み (#170)', () => {
   it('装飾ブロックは従来どおり省略される', async () => {
     expect(await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })).toBeUndefined()
   })
+})
+
+// ============================================================
+// 向き規約の突き合わせ (#189)
+//
+// `facing` の意味は素子によって sim と vanilla で逆になる。この変換は**3 箇所**に
+// 独立して実装されている:
+//   1. `app/src/nbtIO.ts`                        — ファイル取り込み / 書き出し
+//   2. `packages/sim/src/mcstate.ts`             — 実機ハーネスとの変換 (規約の正)
+//   3. `packages/viewer/src/world-to-structure.ts` — 3D 描画
+//
+// #189 では 1 だけが repeater / comparator を反転しておらず、取り込むと 180° 逆を
+// 向いた。**書き出し側にも同じ漏れがあったため export → import の往復では誤りが
+// 打ち消し合い、`nbt-roundtrip.spec.ts` は通ってしまっていた**。
+// 往復ではなく「3 箇所が同じ規約か」を直接見る。
+// ============================================================
+
+describe('向き規約: nbtIO と mcstate が一致する (#189)', () => {
+  const mcStr = (name: string, props: Record<string, string>): string =>
+    `${name}[${Object.entries(props).map(([k, v]) => `${k}=${v}`).join(',')}]`
+
+  const CASES: [string, Record<string, string>][] = [
+    ['repeater',   { facing: 'north', delay: '1', locked: 'false', powered: 'false' }],
+    ['repeater',   { facing: 'east',  delay: '2', locked: 'false', powered: 'false' }],
+    ['comparator', { facing: 'south', mode: 'compare',  powered: 'false' }],
+    ['comparator', { facing: 'west',  mode: 'subtract', powered: 'false' }],
+    ['observer',   { facing: 'north', powered: 'false' }],
+    ['piston',     { facing: 'east',  extended: 'false' }],
+    ['redstone_wall_torch', { facing: 'north', lit: 'true' }],
+    ['lever',      { face: 'wall', facing: 'north', powered: 'false' }],
+    ['stone_button', { face: 'wall', facing: 'east', powered: 'false' }],
+    ['hopper',     { facing: 'north', enabled: 'true' }],
+    ['dropper',    { facing: 'south', triggered: 'false' }],
+    ['dispenser',  { facing: 'west',  triggered: 'false' }],
+  ]
+
+  it.each(CASES)('%s の facing が mcstate と一致する: %o', async (name, props) => {
+    const viaNbt = await importVanilla(`minecraft:${name}`, props)
+    const viaHarness = mcToSim(mcStr(name, props))
+    expect(viaNbt, `${name} が取り込めていない`).toBeDefined()
+    expect((viaNbt as { facing?: string }).facing)
+      .toBe((viaHarness as { facing?: string } | null)?.facing)
+  })
+
+  // 取り込み → 描画で元の blockstate に戻ること。上のテストが nbtIO と mcstate の
+  // 一致を見るのに対し、こちらは nbtIO と viewer の一致を見る (両方揃って初めて
+  // 「ファイルで見た向き = 画面で見える向き」になる)
+  it.each([
+    ['minecraft:repeater',   { facing: 'north', delay: '1', locked: 'false', powered: 'false' }],
+    ['minecraft:comparator', { facing: 'east',  mode: 'compare', powered: 'false' }],
+  ] as [string, Record<string, string>][])(
+    '取り込んで描画すると元の向きに戻る: %s', async (name, props) => {
+      const b = await importVanilla(name, props)
+      expect(blockStateToMinecraftStr(b as BlockState)).toContain(`facing=${props.facing}`)
+    })
+})
+
+describe('向き規約: 書き出しが vanilla 互換になる (#189)', () => {
+  /** 単一ブロックを書き出して palette[1] の blockstate 文字列を得る */
+  function exportOne(block: BlockState): string {
+    const bytes = exportToNbtBytes(new Map([['0,0,0', block]]), GRID, GRID)
+    const root = NbtFile.read(bytes).root
+    const entry = root.getList('palette').get(1) as NbtCompound
+    const name = entry.getString('Name')
+    const props = entry.get('Properties') as NbtCompound | undefined
+    if (!props) return name
+    const kv = [...props.keys()].sort().map(k => `${k}=${props.getString(k)}`).join(',')
+    return `${name}[${kv}]`
+  }
+
+  // 往復テストは**書き出しと取り込みの両方で同じ反転漏れがあると打ち消し合う** (#189
+  // がまさにそれで通り抜けた)。ここでは書き出した blockstate 単体を、実機準拠の
+  // simToMc と突き合わせて片側だけで固定する。
+  it.each([
+    [{ type: 'repeater', facing: 'south', delay: 1, locked: false, powered: false }, 'north'],
+    [{ type: 'repeater', facing: 'west',  delay: 1, locked: false, powered: false }, 'east'],
+    [{ type: 'comparator', facing: 'north', mode: 'compare', powered: false, outputPower: 0 }, 'south'],
+  ] as [BlockState, string][])(
+    'sim の facing=出力方向 が vanilla の facing=入力側 として書き出される (期待 %#s)',
+    (block, expectedVanillaFacing) => {
+      const exported = exportOne(block)
+      expect(exported).toContain(`facing=${expectedVanillaFacing}`)
+      // 実機準拠の変換器で読み戻すと元の sim state に戻ること。
+      // (simToMc は repeater に authored 文字列を要求するため逆向きに突き合わせる)
+      expect((mcToSim(exported) as { facing?: string } | null)?.facing)
+        .toBe((block as { facing?: string }).facing)
+    })
 })
