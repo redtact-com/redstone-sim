@@ -25,7 +25,8 @@ import { CircuitEditor, decideCellTap } from '@redstone/editor'
 import type { PlaceableType, PlaceOptions } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState } from '@redstone/sim'
-import type { Dir6, HDir, Pos3D } from '@redstone/sim'
+import type { Dir6, HDir, Pos3D, StackSize } from '@redstone/sim'
+import { totalItems } from '@redstone/sim'
 import { IsometricView } from '@redstone/viewer'
 import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
@@ -138,6 +139,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const [signal, setSignal] = useState(0)
   // ホッパー/ドロッパーの内容個数 (既定 0) (#65)
   const [count, setCount] = useState(0)
+  /** コンテナに入れるアイテムのスタック上限 (#194)。エディタは種別ごとに代表 1 種 */
+  const [stack, setStack] = useState<StackSize>(64)
 
   // グリッド上の選択セル (x, z)
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null)
@@ -273,7 +276,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
     gridBlock?.type === 'container' ? gridBlock.signal : signal
 
   const barCount: number =
-    (gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper') ? gridBlock.count : count
+    (gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper')
+      ? totalItems(gridBlock.slots) : count
+  /** 選択中コンテナのスタック上限 (混載していれば先頭スロット基準) */
+  const barStack: StackSize =
+    (gridBlock?.type === 'hopper' || gridBlock?.type === 'dropper')
+      ? (gridBlock.slots.find(Boolean)?.stack ?? stack) : stack
 
   // 向き・遅延バーを表示するか
   const gridBlockHasFacing = gridFacingUsable
@@ -393,7 +401,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
         setSignal(existing.signal)
       }
       if (existing.type === 'hopper' || existing.type === 'dropper') {
-        setCount(existing.count)
+        setCount(totalItems(existing.slots))
+        const first = existing.slots.find(Boolean)
+        if (first) setStack(first.stack)
       }
       addLog(`選択: ${existing.type} (${x}, ${z})`)
       return
@@ -407,7 +417,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     if (meta?.hasMode)   opts.mode   = comparatorMode
     if (meta?.hasPressedPower) opts.pressedPower = pressedPower
     if (meta?.hasSignal)       opts.signal       = signal
-    if (meta?.hasCount)        opts.count        = count
+    if (meta?.hasCount)      { opts.count = count; opts.stack = stack }
     editorRef.current.placeBlock(x, z, selectedType as PlaceableType, opts)
     setSelectedPos([x, z])
     addLog(`${meta?.label ?? selectedType}${existing && existing.type !== 'air' ? ' で置き換え' : ' を配置'} (${x}, ${z})`)
@@ -498,6 +508,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   // ── 内容個数変更（ホッパー/ドロッパー #65） ─────────────────────────
 
+  /** スタック上限の切り替え (#194)。選択中コンテナがあれば中身を入れ替える */
+  const handleStackChange = useCallback((newStack: StackSize) => {
+    setStack(newStack)
+    setSelectedPos(prev => {
+      if (prev) {
+        const block = editorRef.current.getBlock(prev[0], prev[1])
+        if (block?.type === 'hopper' || block?.type === 'dropper') {
+          const f = (block as unknown as Record<string, unknown>).facing as HDir
+          const n = totalItems(block.slots)
+          editorRef.current.placeBlock(prev[0], prev[1], block.type,
+            { facing: f, count: n, stack: newStack })
+          rerender()
+        }
+      }
+      return prev
+    })
+  }, [rerender])
+
   const handleCountChange = useCallback((newCount: number) => {
     setCount(newCount)
     setSelectedPos(prev => {
@@ -505,7 +533,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'hopper' || block?.type === 'dropper') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
-          editorRef.current.placeBlock(prev[0], prev[1], block.type, { facing: f, count: newCount })
+          editorRef.current.placeBlock(prev[0], prev[1], block.type,
+            { facing: f, count: newCount, stack })
           rerender()
         }
       }
@@ -1039,6 +1068,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
           barPressedPower={barPressedPower}
           barSignal={barSignal}
           barCount={barCount}
+          barStack={barStack}
+          onStackChange={handleStackChange}
           onFacingChange={handleFacingChange}
           onDelayChange={handleDelayChange}
           onModeChange={handleModeChange}
@@ -1077,6 +1108,8 @@ interface FacingBarProps {
   barPressedPower:    number
   barSignal:          number
   barCount:           number
+  barStack:           StackSize
+  onStackChange:      (v: StackSize) => void
   onFacingChange:     (f: Dir6) => void
   onDelayChange:      (d: 1 | 2 | 3 | 4) => void
   onModeChange:       (m: 'compare' | 'subtract') => void
@@ -1087,7 +1120,8 @@ interface FacingBarProps {
 
 function FacingBar({
   gridBlock, gridBlockHasFacing, selectedType, selectedPos, activeLayer,
-  barFacing, facingKind, barDelay, barMode, barPressedPower, barSignal, barCount,
+  barFacing, facingKind, barDelay, barMode, barPressedPower, barSignal, barCount, barStack,
+  onStackChange,
   onFacingChange, onDelayChange, onModeChange, onPressedPowerChange, onSignalChange, onCountChange,
 }: FacingBarProps) {
   const meta = BLOCK_PALETTE.find(b => b.type === selectedType)
@@ -1223,6 +1257,28 @@ function FacingBar({
       {/* 内容個数（ホッパー/ドロッパー #65。範囲が広いため数値入力） */}
       {showCount && (
         <CountInput label="個数" max={countMax} value={barCount} onChange={onCountChange} />
+      )}
+
+      {/* スタック上限 (#194)。コンパレーター強度がこれで変わる。
+          エディタは種別ごとに代表アイテム 1 種だけを扱う */}
+      {showCount && (
+        <div className="flex items-center" style={{ gap: 4 }}>
+          <span className="font-pixel shrink-0" style={{ fontSize: 10, color: '#888' }}>スタック</span>
+          {([64, 16, 1] as const).map(n => (
+            <button
+              key={n}
+              onClick={() => onStackChange(n)}
+              title={n === 1 ? 'スタック不可アイテム' : `${n} スタックのアイテム`}
+              className="mc-btn font-mono"
+              style={{
+                width: 30, height: 22, fontSize: 10,
+                background: barStack === n ? '#6b0000' : undefined,
+                borderColor: barStack === n ? '#ff4444' : undefined,
+                color: barStack === n ? '#ff9999' : undefined,
+              }}
+            >{n}</button>
+          ))}
+        </div>
       )}
 
       <div className="flex-1" />

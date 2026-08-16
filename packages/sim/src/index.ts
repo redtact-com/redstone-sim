@@ -7,6 +7,7 @@ export type {
   RepeaterState, ComparatorState,
   LeverState, ButtonState,
   LampState, NoteBlockState, ContainerState, HopperState, DropperState,
+  StackSize, ItemStack, ContainerSlots,
   RedstoneBlockState, TargetState, SolidState,
   PressurePlateState, WeightedPressurePlateState,
   ObserverState, AirState,
@@ -77,9 +78,11 @@ export { getRepeaterOutputFacing, isInputFaceOfRepeater, getRepeaterLockDirs } f
 export {
   HOPPER_COOLDOWN, DROPPER_TICK_DELAY, STACK_SIZE,
   HOPPER_SLOTS, DROPPER_SLOTS, CONTAINER_SLOTS,
-  isContainerType, containerSlots, containerCapacity, fillSignal,
-  containerCount, containerParticipates, canContainerAccept, effectiveContainerSignal,
+  isContainerType, containerSlots, emptySlots, fillSignal, totalItems,
+  takeOne, putOne, containerSlotsOf, canContainerAcceptItem, slotsFromCount,
+  containerParticipates, effectiveContainerSignal,
 } from './blocks/container.js'
+export { stackSizeOf, REPRESENTATIVE_ITEM } from './blocks/itemStacks.js'
 
 // fixture 再生ドライバ (CI 回帰 fixture-runner とデモページ ?demo= の共通基盤)
 export {

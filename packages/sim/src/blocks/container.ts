@@ -4,24 +4,28 @@
 //
 // エンティティ境界原則 (13 §2): アイテムは「コンテナ内の数値」としてのみ
 // 存在する。ワールドへのドロップ・吸い取り (アイテムエンティティ) は扱わない。
-// スタック種別・スロット配置は持たず、コンテナごとに 1 本の「個数 (count)」で
-// 表す。
+//
+// #194 でスロットモデルに変更した。それまでは「個数 1 本の数値・スタック上限
+// 64 固定」で、**スタック上限の違うアイテムを混ぜて強度を微調整する回路**
+// (実在の配布回路で使われる定番手法) が再現できなかった。
 //
 // 充填率 → コンパレーター信号の変換 [確定: 02 §6 comparator —
 //   AbstractContainerMenu.getRedstoneSignalFromContainer]:
 //     f = (Σ 各スロットの count / maxStackSize) / スロット数
 //     signal = Mth.lerpDiscrete(f, 0, 15) = floor(f * 14) + (f > 0 ? 1 : 0)
 //
-// 容量の抽象化 (設計判断, 02 §6 「既知の抽象化」):
-//   sim は個数 1 本しか持たないため、アイテムが「スロット 0 から順にスタック
-//   される」(= ホッパー/ドロッパーの実挿入順) と仮定する。この仮定の下では
-//     f = count / (スロット数 × 64)
-//   が per-slot 式と厳密一致する (満スタックが並ぶだけなので端数も含め等価)。
-//   よって容量 = スロット数 × 64 を用いて fillSignal(count, capacity) で信号を
-//   求める。異種アイテムを別スロットに散らす配置は表現しない (単一種前提)。
+// [実機測定でこの式を 7 ケース確認 (#194)。ホッパー (5 スロット):
+//   snowball 14 (16 スタック) = 3 / player_head 14 (64) = 1 / 混載 11+3 = 2 /
+//   iron_axe 1 (スタック不可) = 3 / snowball 1 = 1 / gold_ingot 1 = 1 /
+//   iron_axe ×5 スロット = 15]
+//
+// アイテム ID を保持する理由 (#194 の判断): 強度も転送順も stack しか見ないが、
+// ID を捨てると**上限が同じ別アイテムが 1 スロットに統合されてしまう**。
+// 実機では別スロットを消費するため、スロットを使い切るタイミングがずれる。
 // ============================================================
 
-import type { BlockState, BlockType } from '../types.js'
+import type { BlockState, BlockType, ContainerSlots, ItemStack, StackSize } from '../types.js'
+import { REPRESENTATIVE_ITEM } from './itemStacks.js'
 
 /** ホッパーの転送クールダウン (gt) [確定: 26.2 HopperBlockEntity — setCooldown(8)]。 */
 export const HOPPER_COOLDOWN = 8
@@ -33,8 +37,8 @@ export const HOPPER_COOLDOWN = 8
  */
 export const DROPPER_TICK_DELAY = 4
 
-/** 1 スタックの最大個数 [確定: バニラ既定 64]。 */
-export const STACK_SIZE = 64
+/** 既定のスタック上限 [確定: バニラ既定 64]。ID 表に無いアイテムはこれ。 */
+export const STACK_SIZE: StackSize = 64
 
 /** ホッパーのスロット数 [確定: 26.2 HopperBlockEntity CONTAINER_SIZE=5]。 */
 export const HOPPER_SLOTS = 5
@@ -60,65 +64,136 @@ export function containerSlots(type: BlockType): number {
   }
 }
 
-/** コンテナ種の容量 (スロット数 × 64)。 */
-export function containerCapacity(type: BlockType): number {
-  return containerSlots(type) * STACK_SIZE
+/** 空のスロット列を作る。 */
+export function emptySlots(type: BlockType): ContainerSlots {
+  return new Array<ItemStack | null>(containerSlots(type)).fill(null)
 }
 
 /**
- * 個数 → コンパレーター信号 (0-15)。
- * lerpDiscrete(count/capacity, 0, 15) = floor(f*14) + (f>0?1:0)。
- * capacity<=0 や count<=0 は 0。満杯 (count>=capacity) は 15。
+ * スロット列 → コンパレーター信号 (0-15)。
+ *   f = Σ(count / stack) / スロット数
+ *   signal = floor(f * 14) + (f > 0 ? 1 : 0)
  */
-export function fillSignal(count: number, capacity: number): number {
-  if (capacity <= 0 || count <= 0) return 0
-  const f = Math.min(count, capacity) / capacity
+export function fillSignal(slots: ContainerSlots, slotCount: number): number {
+  if (slotCount <= 0) return 0
+  let sum = 0
+  for (const s of slots) if (s) sum += s.count / s.stack
+  if (sum <= 0) return 0
+  const f = Math.min(sum / slotCount, 1)
   return Math.floor(f * 14) + 1
 }
 
+/** スロット列の総個数 (アイテムが 1 個でもあるかの判定に使う)。 */
+export function totalItems(slots: ContainerSlots): number {
+  let n = 0
+  for (const s of slots) if (s) n += s.count
+  return n
+}
+
 /**
- * ブロックの現在個数。物流に参加しないブロックは undefined。
- * - hopper / dropper: 常に count を持つ (物流に参加)
- * - container: count が定義されていれば物流、未定義なら「手動 signal の計測用
- *   ダミー」(C6)。後者は物流に不参加。
+ * ブロックの現在のスロット列。物流に参加しないブロックは undefined。
+ * - hopper / dropper / dispenser: 常に持つ
+ * - container: slots が定義されていれば物流、未定義なら手動 signal (C6)
  */
-export function containerCount(block: BlockState | null | undefined): number | undefined {
+export function containerSlotsOf(block: BlockState | null | undefined): ContainerSlots | undefined {
   if (!block) return undefined
   if (block.type === 'hopper' || block.type === 'dropper' || block.type === 'dispenser') {
-    return block.count
+    return block.slots
   }
-  if (block.type === 'container') return block.count
+  if (block.type === 'container') return block.slots
   return undefined
 }
 
-/** ブロックが物流に参加するコンテナか (個数を持つか)。 */
+/** ブロックが物流に参加するコンテナか。 */
 export function containerParticipates(block: BlockState | null | undefined): boolean {
-  return containerCount(block) !== undefined
+  return containerSlotsOf(block) !== undefined
 }
 
-/** コンテナが 1 個受け入れられるか (個数を持ち、容量に空きがある)。 */
-export function canContainerAccept(block: BlockState | null | undefined): boolean {
+/**
+ * 先頭の非空スロットから 1 個取り出す [確定: 実機測定 (#194) — 混載ホッパーは
+ * slot0 が尽きてから slot1 に移る]。取れなければ null。
+ */
+export function takeOne(slots: ContainerSlots): { item: ItemStack; slots: ContainerSlots } | null {
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i]
+    if (!s || s.count <= 0) continue
+    const next = slots.slice()
+    next[i] = s.count > 1 ? { ...s, count: s.count - 1 } : null
+    return { item: { ...s, count: 1 }, slots: next }
+  }
+  return null
+}
+
+/**
+ * 1 個入れる。**同じ ID の空きスタックへマージ → 無ければ先頭の空きスロット**
+ * [確定: 26.2 HopperBlockEntity.addItem]。入らなければ null。
+ */
+export function putOne(slots: ContainerSlots, item: ItemStack): ContainerSlots | null {
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i]
+    if (s && s.id === item.id && s.count < s.stack) {
+      const next = slots.slice()
+      next[i] = { ...s, count: s.count + 1 }
+      return next
+    }
+  }
+  for (let i = 0; i < slots.length; i++) {
+    if (slots[i] === null) {
+      const next = slots.slice()
+      next[i] = { ...item, count: 1 }
+      return next
+    }
+  }
+  return null
+}
+
+/** そのアイテムを 1 個受け入れられるか。 */
+export function canContainerAcceptItem(
+  block: BlockState | null | undefined, item: ItemStack,
+): boolean {
   if (!block || !isContainerType(block.type)) return false
-  const c = containerCount(block)
-  if (c === undefined) return false
-  return c < containerCapacity(block.type)
+  const slots = containerSlotsOf(block)
+  if (slots === undefined) return false
+  return putOne(slots, item) !== null
 }
 
 /**
  * コンパレーターが背面から読む実効信号 (0-15)。
- * - hopper / dropper: fillSignal(count, 容量)
- * - container: count があれば fillSignal、無ければ手動 signal (C6)
+ * - hopper / dropper / dispenser: スロットから導出
+ * - container: slots があればスロット、無ければ手動 signal (C6)
  * - コンテナ以外: 0
  */
 export function effectiveContainerSignal(block: BlockState | null | undefined): number {
   if (!block) return 0
   if (block.type === 'hopper' || block.type === 'dropper' || block.type === 'dispenser') {
-    return fillSignal(block.count, containerCapacity(block.type))
+    return fillSignal(block.slots, containerSlots(block.type))
   }
   if (block.type === 'container') {
-    return block.count !== undefined
-      ? fillSignal(block.count, CONTAINER_SLOTS * STACK_SIZE)
+    return block.slots !== undefined
+      ? fillSignal(block.slots, CONTAINER_SLOTS)
       : block.signal
   }
   return 0
+}
+
+/**
+ * 「同じアイテムを n 個、slot 0 から詰める」スロット列を作る (#194)。
+ *
+ * エディタ (スタック種別ごとに代表アイテム 1 種) と、実機 fixture の
+ * `items: <数>` 形式、旧 `count` からの移行で使う。
+ * 容量を超える分は切り捨てる。
+ */
+export function slotsFromCount(
+  type: BlockType, count: number, stack: StackSize = STACK_SIZE, id?: string,
+): ContainerSlots {
+  const n = containerSlots(type)
+  const out = new Array<ItemStack | null>(n).fill(null)
+  const itemId = id ?? REPRESENTATIVE_ITEM[stack]
+  let left = Math.max(0, Math.min(count, n * stack))
+  for (let i = 0; i < n && left > 0; i++) {
+    const c = Math.min(left, stack)
+    out[i] = { id: itemId, stack, count: c }
+    left -= c
+  }
+  return out
 }

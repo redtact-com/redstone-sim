@@ -1,5 +1,5 @@
 import type { BlockType } from '@redstone/sim'
-import { containerCapacity } from '@redstone/sim'
+import { containerSlots } from '@redstone/sim'
 import type { PlaceableType, PlaceOptions } from './editor.js'
 import { allowedFacings, defaultFacing } from './facing.js'
 
@@ -39,11 +39,15 @@ export const PLACE_OPTION_RANGES = {
   signal: { min: 0, max: 15 },
 } as const
 
-/** 個数を持てる型か (ホッパー/ドロッパー/コンテナ)。上限は容量 = スロット数 × 64 */
+/**
+ * 個数を持てる型か (ホッパー/ドロッパー/コンテナ)。
+ * 上限はスタック上限に依存するので**最大の 64 スタック基準**で返す (#194)。
+ * 実際に置ける個数は選んだスタック種別で決まり、slotsFromCount が切り詰める。
+ */
 export function maxCount(type: BlockType): number {
   return type === 'hopper' || type === 'dropper' || type === 'dispenser'
     || type === 'container'
-    ? containerCapacity(type)
+    ? containerSlots(type) * 64
     : 0
 }
 
