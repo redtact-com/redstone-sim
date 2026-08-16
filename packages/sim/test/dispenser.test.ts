@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SimWorld } from '../src/world'
+import { slotsFromCount } from '../src/blocks/container.js'
 import type { BlockState, Pos3D } from '../src/types'
 
 /**
@@ -11,21 +12,23 @@ import type { BlockState, Pos3D } from '../src/types'
  */
 
 const solid = (): BlockState => ({ type: 'solid', powered: false })
-const barrel = (count = 0): BlockState => ({ type: 'container', signal: 0, count } as BlockState)
+const barrel = (count = 0): BlockState =>
+  ({ type: 'container', signal: 0, slots: slotsFromCount('container', count) } as BlockState)
 
 /** レバー(0) → ドロッパー/ディスペンサー(1) → バレル(2) を東向きに並べる */
 function world(kind: 'dropper' | 'dispenser', count = 3): SimWorld {
   const w = new SimWorld()
   for (let x = 0; x <= 2; x++) w.setBlockAt([x, -1, 0], solid())
   w.setBlockAt([0, 0, 0], { type: 'lever', facing: 'up', powered: false } as BlockState)
-  w.setBlockAt([1, 0, 0], { type: kind, facing: 'east', count, triggered: false } as BlockState)
+  w.setBlockAt([1, 0, 0], { type: kind, facing: 'east', slots: slotsFromCount(kind, count), triggered: false } as BlockState)
   w.setBlockAt([2, 0, 0], barrel(0))
   w.initialize()
   return w
 }
 const countAt = (w: SimWorld, pos: Pos3D): number => {
   const b = w.getBlockAt(pos)
-  return (b as { count?: number })?.count ?? -1
+  const slots = (b as { slots?: readonly ({ count: number } | null)[] })?.slots
+  return slots ? slots.reduce((a, x) => a + (x?.count ?? 0), 0) : -1
 }
 
 describe('ディスペンサー (#161)', () => {
@@ -65,7 +68,7 @@ describe('ディスペンサー (#161)', () => {
   it('疑似接続 (直上からの受電) でも起動する', () => {
     const w = new SimWorld()
     for (let x = 0; x <= 2; x++) w.setBlockAt([x, -1, 0], solid())
-    w.setBlockAt([1, 0, 0], { type: 'dispenser', facing: 'east', count: 3, triggered: false } as BlockState)
+    w.setBlockAt([1, 0, 0], { type: 'dispenser', facing: 'east', slots: slotsFromCount('dispenser', 3), triggered: false } as BlockState)
     w.setBlockAt([2, 0, 0], barrel(0))
     w.setBlockAt([1, 1, 0], solid())          // 直上の導体
     w.setBlockAt([0, 1, 0], { type: 'lever', facing: 'up', powered: false } as BlockState)

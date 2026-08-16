@@ -141,14 +141,21 @@ async function generateFixture(name: string): Promise<void> {
   scarpet('fx_setup()')
   scarpet('fx_settle()')
   // コンテナ (hopper/dropper/barrel 等) の初期アイテム充填 (#65)。
-  // items は blockstate に現れない BE 内容のため item replace で slot 0 に入れる
+  // items は blockstate に現れない BE 内容のため item replace で入れる
   // (数値モデルの count に対応。settle dump より前に行い、コンパレーター読み等の
   // 初期安定状態へ反映させる)
   for (const b of def.blocks) {
-    if (b.items && b.items > 0) {
+    if (b.items === undefined) continue
+    // 数値は旧形式 (cobblestone を slot 0 に n 個)。配列はスロット指定 (#194) で、
+    // **スタック上限の違うアイテムを混ぜた状態**を実機に作れる
+    const specs = typeof b.items === 'number'
+      ? (b.items > 0 ? [{ slot: 0, id: 'cobblestone', count: b.items }] : [])
+      : b.items
+    for (const it of specs) {
+      const id = it.id.startsWith('minecraft:') ? it.id : `minecraft:${it.id}`
       rcon('item', 'replace', 'block',
         String(b.pos[0]), String(b.pos[1]), String(b.pos[2]),
-        'container.0', 'with', 'minecraft:cobblestone', String(b.items))
+        `container.${it.slot}`, 'with', id, String(it.count))
       await sleep(80)
     }
   }
