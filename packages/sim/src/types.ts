@@ -198,9 +198,36 @@ export interface ContainerState {
   type: 'container'
   /** 手動計測モードでコンパレーター背面から読まれる実効出力 (0-15) */
   signal: number
-  /** 物流モードの個数 (定義時は signal より優先。容量 = 27×64 = 1728) */
-  count?: number
+  /** 物流モードのスロット (定義時は signal より優先。長さ 27) */
+  slots?: ContainerSlots
 }
+
+/**
+ * アイテムのスタック上限 (#194)。
+ *
+ * レッドストーン的に効くのはこの値だけ [確定: 実機測定 — ホッパー 5 スロットで
+ * `iron_axe` 1 個 = 強度 3 / `snowball` 1 個 = 1 / `gold_ingot` 1 個 = 1]。
+ */
+export type StackSize = 1 | 16 | 64
+
+/**
+ * スロット 1 枠の中身 (#194)。
+ *
+ * `id` は**マージ判定にのみ使う**。強度も転送順も `stack` しか見ないが、
+ * ID を捨てると「上限が同じ別アイテム」が 1 スロットに統合されてしまい、
+ * スロットを使い切るタイミングが実機とずれる。
+ */
+export interface ItemStack {
+  /** アイテム ID (`minecraft:` 接頭辞なし)。マージ判定用 */
+  id: string
+  /** スタック上限 */
+  stack: StackSize
+  /** 個数 (1..stack) */
+  count: number
+}
+
+/** コンテナのスロット列。空き枠は null。長さはコンテナ種で固定 */
+export type ContainerSlots = readonly (ItemStack | null)[]
 
 /**
  * ホッパー (物流。C6' #65)。アイテムは「個数 count」1 本の数値で持つ
@@ -221,8 +248,8 @@ export interface HopperState {
   type: 'hopper'
   /** 送り込み方向 (vanilla FACING。down または水平)。up は取らない */
   facing: Dir6
-  /** 内容個数 (0..320) */
-  count: number
+  /** スロット (長さ 5)。空き枠は null (#194) */
+  slots: ContainerSlots
   /** 転送可能か (= !受電)。false でロック */
   enabled: boolean
   /**
@@ -259,8 +286,8 @@ export interface HopperState {
 export interface DropperState {
   type: 'dropper' | 'dispenser'
   facing: Dir6
-  /** 内容個数 (0..576) */
-  count: number
+  /** スロット (長さ 9)。空き枠は null (#194) */
+  slots: ContainerSlots
   /** 受電エッジ検出フラグ (vanilla TRIGGERED)。 */
   triggered: boolean
 }

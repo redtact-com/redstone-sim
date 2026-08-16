@@ -12,7 +12,11 @@
 import { SimWorld, posKey, keyToPos } from './world.js'
 import type { NotePlayEvent } from './world.js'
 import { mcToSim, simToMc, canonicalize } from './mcstate.js'
-import type { Pos3D, BlockState, WorldSnapshot } from './types.js'
+import type {
+  Pos3D, BlockState, BlockType, WorldSnapshot, ContainerSlots, ItemStack,
+} from './types.js'
+import { slotsFromCount, containerSlots } from './blocks/container.js'
+import { stackSizeOf } from './blocks/itemStacks.js'
 
 // ── fixture の形 ──────────────────────────────────────────────────────────────
 
@@ -53,12 +57,39 @@ export interface Fixture {
   region: { from: Pos3D; to: Pos3D }
   /**
    * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
-   * items で初期個数を与えられる (アイテムは blockstate に現れないため item 数で初期化)。
+   * items で初期の中身を与えられる (アイテムは blockstate に現れないため)。
+   *
+   * - `items: 2` … 旧形式。cobblestone (64 スタック) を slot 0 から 2 個
+   * - `items: [{slot, id, count}]` … スロット指定 (#194)。混載を表現できる
    */
-  blocks: { pos: Pos3D; block: string; items?: number }[]
+  blocks: { pos: Pos3D; block: string; items?: number | FixtureItem[] }[]
   inputs: FixtureInput[]
   expect: FixtureExpectEntry[]
   generated?: { at: string; mc: string; carpet: string }
+}
+
+
+/** fixture の items 指定 1 件 (#194)。 */
+export interface FixtureItem { slot: number; id: string; count: number }
+
+const fixtureItemTotal = (items: number | FixtureItem[]): number =>
+  typeof items === 'number' ? items : items.reduce((a, b) => a + b.count, 0)
+
+/**
+ * fixture の items 指定 → スロット列 (#194)。
+ * 数値は旧形式 (cobblestone を slot 0 から詰める) として読み替えるので、
+ * **既存 fixture の期待値は変わらない**。
+ */
+function fixtureSlots(type: BlockType, items: number | FixtureItem[]): ContainerSlots {
+  if (typeof items === 'number') return slotsFromCount(type, items)
+  const out = new Array<ItemStack | null>(containerSlots(type)).fill(null)
+  for (const it of items) {
+    if (it.slot < 0 || it.slot >= out.length) continue
+    const { stack } = stackSizeOf(it.id)
+    const id = it.id.startsWith('minecraft:') ? it.id.slice('minecraft:'.length) : it.id
+    out[it.slot] = { id, stack, count: Math.min(it.count, stack) }
+  }
+  return out
 }
 
 /** 'x,y,z' → 正規化 blockstate 文字列 のスナップショット */
@@ -78,15 +109,15 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
     authored.set(posKey(b.pos), b.block)
     const sim = mcToSim(b.block)
     if (sim) {
-      // コンテナは items で初期個数を与える (blockstate に現れない BE 内容)
+      // コンテナは items で初期の中身を与える (blockstate に現れない BE 内容)
       if (b.items !== undefined && (sim.type === 'hopper' || sim.type === 'dropper'
         || sim.type === 'dispenser' || sim.type === 'container')) {
-        (sim as { count?: number }).count = b.items
+        (sim as { slots?: ContainerSlots }).slots = fixtureSlots(sim.type, b.items)
       }
       // クラフターは「埋まっているスロット数」を読むので個数ではなくスロット数へ写す。
       // ハーネスの充填は container.0 の 1 スロットに N 個入れるので、N>0 なら 1 (#163)
       if (b.items !== undefined && sim.type === 'crafter') {
-        (sim as { occupiedSlots?: number }).occupiedSlots = b.items > 0 ? 1 : 0
+        (sim as { occupiedSlots?: number }).occupiedSlots = fixtureItemTotal(b.items) > 0 ? 1 : 0
       }
       world.setBlockAt(b.pos, sim)
     }

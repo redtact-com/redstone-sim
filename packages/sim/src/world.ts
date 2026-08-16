@@ -22,8 +22,8 @@ import {
 } from './wire-shape.js'
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import {
-  containerCapacity, canContainerAccept, containerParticipates,
   isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
+  takeOne, putOne, totalItems, containerSlotsOf,
 } from './blocks/container.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
@@ -405,13 +405,16 @@ export class SimWorld {
       let moved = false
 
       // (1) 送り込み (eject): facing 先のコンテナへ 1 個 (h が空でないとき)
-      if (h.count > 0) {
+      const taken = takeOne(h.slots)
+      if (taken) {
         const destPos = neighbor(pos, h.facing)
         const dest = this.getBlockAt(destPos)
-        if (canContainerAccept(dest)) {
+        const destSlots = containerSlotsOf(dest)
+        const put = destSlots !== undefined ? putOne(destSlots, taken.item) : null
+        if (dest && put) {
           const d = dest as HopperState | DropperState | ContainerState
-          this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
-          h = { ...h, count: h.count - 1 }
+          this.setBlockAt(destPos, { ...d, slots: put } as BlockState)
+          h = { ...h, slots: taken.slots }
           this.setBlockAt(pos, h)
           // #89/#91: 押し込み先ホッパーのクールダウンを再設定 (vanilla HopperBlockEntity.add)。
           // vanilla は `if (bl && dest is hopper && !isOnCustomCooldown) setCooldown(8-k)`:
@@ -422,7 +425,7 @@ export class SimWorld {
           // ★ bl 条件が要 (#91): bottom-up 縦チェーンでは受信側が先に suck して非空に
           //   なってから push されるため bl=false → -1 を効かせず既存 cooldown(+8) を保つ。
           //   これを怠ると bottom-up 配置で位相が 1gt ずれる。
-          if (d.type === 'hopper' && (d.count ?? 0) === 0) {  // bl: 受信スロットが空だった
+          if (d.type === 'hopper' && totalItems(destSlots!) === 0) {  // bl: 受信側が空だった
             const cur = this.getBlockAt(destPos) as HopperState
             const remaining = (cur.cooldownUntil ?? 0) - this.currentTick
             if (remaining <= HOPPER_COOLDOWN) {  // !isOnCustomCooldown (残り>8gt でない)
@@ -435,14 +438,17 @@ export class SimWorld {
         }
       }
 
-      // (2) 吸い出し (suck): 直上コンテナから 1 個 (h が満杯でないとき)
-      if (h.count < containerCapacity('hopper')) {
+      // (2) 吸い出し (suck): 直上コンテナから 1 個 (受け入れ余地があるとき)
+      {
         const srcPos: Pos3D = [pos[0], pos[1] + 1, pos[2]]
         const src = this.getBlockAt(srcPos)
-        if (containerParticipates(src) && (src as { count?: number }).count! > 0) {
+        const srcSlots = containerSlotsOf(src)
+        const pulled = srcSlots !== undefined ? takeOne(srcSlots) : null
+        const merged = pulled ? putOne(h.slots, pulled.item) : null
+        if (src && pulled && merged) {
           const s = src as HopperState | DropperState | ContainerState
-          this.setBlockAt(srcPos, { ...s, count: (s.count ?? 0) - 1 } as BlockState)
-          h = { ...h, count: h.count + 1 }
+          this.setBlockAt(srcPos, { ...s, slots: pulled.slots } as BlockState)
+          h = { ...h, slots: merged }
           this.setBlockAt(pos, h)
           this.emitComparatorUpdate(srcPos)
           changed.add(posKey(srcPos))
@@ -1145,14 +1151,20 @@ export class SimWorld {
       // override しており [確定: DropperBlock.java:48]、ディスペンサーは常にワールドへ
       // 射出する = 前方がコンテナでも入らない
       // [実機 fixture dispenser-no-insert: 同じ配置でドロッパー側だけコンパレーターが反応]
-      if (block.count > 0) {
+      // 既知の抽象化 (#194): vanilla の dispenseFrom は**ランダムな非空スロット**を
+      // 選ぶが、sim は決定性が要るので takeOne (先頭の非空スロット) で代用する。
+      // 単一種のドロッパーでは差が出ない
+      const taken = takeOne(block.slots)
+      if (taken) {
         const destPos = neighbor(pos, block.facing)
         const dest = this.getBlockAt(destPos)
-        if (block.type === 'dropper' && canContainerAccept(dest)) {
+        const destSlots = containerSlotsOf(dest)
+        const put = destSlots !== undefined ? putOne(destSlots, taken.item) : null
+        if (block.type === 'dropper' && dest && put) {
           // 前方コンテナに空きあり → 1 個挿入
           const d = dest as HopperState | DropperState | ContainerState
-          this.setBlockAt(destPos, { ...d, count: (d.count ?? 0) + 1 } as BlockState)
-          this.setBlockAt(pos, { ...block, count: block.count - 1 })
+          this.setBlockAt(destPos, { ...d, slots: put } as BlockState)
+          this.setBlockAt(pos, { ...block, slots: taken.slots })
           changed.push(posKey(pos), posKey(destPos))
           this.emitComparatorUpdate(destPos)
           this.emitComparatorUpdate(pos)
@@ -1160,7 +1172,7 @@ export class SimWorld {
           // 射出 → vanilla はアイテムエンティティを生成する。
           // エンティティ境界原則 (13 §4.2) により 1 個消費して何も出さない。
           // ディスペンサーは前方がコンテナでも常にこちら
-          this.setBlockAt(pos, { ...block, count: block.count - 1 })
+          this.setBlockAt(pos, { ...block, slots: taken.slots })
           changed.push(posKey(pos))
           this.emitComparatorUpdate(pos)
         }

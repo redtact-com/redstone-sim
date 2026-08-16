@@ -6,12 +6,13 @@
  */
 
 import {
-  NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
+  NbtFile, NbtCompound, NbtList, NbtInt, NbtString, NbtByte,
 } from 'deepslate/nbt'
 import { Structure } from 'deepslate'
 import { sniffFormat, convertBuffer } from '@taku128/java-schematic'
 import type { DetectedFormat } from '@taku128/java-schematic'
-import type { BlockState, Dir6 } from '@redstone/sim'
+import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
+import { emptySlots, stackSizeOf, containerSlotsOf } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
   north: 'south', south: 'north', east: 'west', west: 'east',
@@ -37,6 +38,28 @@ const FACING_OPPOSITE: Record<string, string> = {
 function flipFacingForVanillaNbt(facing: string | undefined): string {
   if (!facing) return 'north'
   return FACING_OPPOSITE[facing] ?? facing
+}
+
+/**
+ * コンテナの中身を block entity NBT として書き出す (#194)。
+ * 中身を落とすと**コンパレーター強度の微調整が失われる**ため往復で保持する。
+ * Items が空なら undefined (不要な nbt を付けない)。
+ */
+function containerNbt(block: BlockState, name: string): NbtCompound | undefined {
+  const slots = containerSlotsOf(block)
+  if (!slots) return undefined
+  const entries: NbtCompound[] = []
+  slots.forEach((s, i) => {
+    if (!s || s.count <= 0) return
+    entries.push(new NbtCompound()
+      .set('Slot', new NbtByte(i))
+      .set('id', new NbtString(`minecraft:${s.id}`))
+      .set('count', new NbtInt(s.count)))
+  })
+  if (entries.length === 0) return undefined
+  return new NbtCompound()
+    .set('id', new NbtString(name))
+    .set('Items', new NbtList<NbtCompound>(entries))
 }
 
 // ── エクスポート ─────────────────────────────────────────────────────────────
@@ -70,14 +93,16 @@ export function exportToNbtBytes(
   // air を 0 番に登録
   getOrAdd('minecraft:air')
 
-  const blockEntries: Array<{ x: number; y: number; z: number; state: number }> = []
+  const blockEntries: Array<{
+    x: number; y: number; z: number; state: number; nbt?: NbtCompound
+  }> = []
   let maxY = 0
 
   for (const [key, block] of blocks) {
     const [x, y, z] = key.split(',').map(Number)
     const [name, props] = blockStateToMinecraft(block)
     const state = getOrAdd(name, props)
-    blockEntries.push({ x, y, z, state })
+    blockEntries.push({ x, y, z, state, nbt: containerNbt(block, name) })
     if (y > maxY) maxY = y
   }
 
@@ -86,11 +111,12 @@ export function exportToNbtBytes(
 
   // blocks リスト
   const blocksList = new NbtList<NbtCompound>(
-    blockEntries.map(({ x, y, z, state }) => {
+    blockEntries.map(({ x, y, z, state, nbt }) => {
       const c = new NbtCompound()
       c.set('state', new NbtInt(state))
       const pos = new NbtList<NbtInt>([new NbtInt(x), new NbtInt(y), new NbtInt(z)])
       c.set('pos', pos)
+      if (nbt) c.set('nbt', nbt)   // コンテナの中身 (#194)
       return c
     })
   )
@@ -153,7 +179,12 @@ interface RawPlacedBlock {
   pos: [number, number, number]
   name: string
   props: Record<string, string>
+  /** コンテナの中身 (block entity の Items)。#194 */
+  items?: RawItem[]
 }
+
+/** block entity の Items 1 件 (#194)。 */
+interface RawItem { slot: number; id: string; count: number }
 
 /** バニラ構造 NBT (.nbt) を RawPlacedBlock 列にする */
 function readVanillaStructureBlocks(root: NbtCompound): RawPlacedBlock[] {
@@ -161,7 +192,30 @@ function readVanillaStructureBlocks(root: NbtCompound): RawPlacedBlock[] {
     pos: placed.pos as [number, number, number],
     name: placed.state.getName().toString(),
     props: placed.state.getProperties() as Record<string, string>,
+    items: readItems((placed as { nbt?: NbtCompound }).nbt),
   }))
+}
+
+/**
+ * block entity の `Items` を読む (#194)。
+ * コンパレーター強度はスタック上限に依存するので、**個数だけでなく ID が要る**。
+ * 1.20.5 以降は `count`、それ以前は `Count` [minecraft.wiki Item structure]。
+ */
+function readItems(nbt: NbtCompound | undefined): RawItem[] | undefined {
+  if (!nbt) return undefined
+  const list = nbt.get('Items')
+  if (!(list instanceof NbtList)) return undefined
+  const out: RawItem[] = []
+  for (let i = 0; i < list.length; i++) {
+    const e = list.get(i)
+    if (!(e instanceof NbtCompound)) continue
+    const id = e.getString('id')
+    if (!id) continue
+    const count = e.getNumber('count') || e.getNumber('Count') || 0
+    if (count <= 0) continue
+    out.push({ slot: e.getNumber('Slot') ?? 0, id, count })
+  }
+  return out.length > 0 ? out : undefined
 }
 
 export interface ImportResult {
@@ -212,6 +266,7 @@ export async function importFromNbtBytes(
   }
 
   const nbt = NbtFile.read(structureBytes)
+  unknownStackItems.clear()   // #194: 取り込みごとに集計し直す
   const placedBlocks = readVanillaStructureBlocks(nbt.root)
 
   const resultBlocks = new Map<string, BlockState>()
@@ -241,7 +296,7 @@ export async function importFromNbtBytes(
 
     const { name, props } = placed
 
-    const block = minecraftToBlockState(name, props)
+    const block = minecraftToBlockState(name, props, placed.items)
     if (!block) {
       // air 亜種 (cave_air / void_air) は空セル扱いで無警告 (通常の air と同様)
       const isAir = name === 'minecraft:air' || name.endsWith('_air')
@@ -258,6 +313,14 @@ export async function importFromNbtBytes(
   }
 
   if (placedBlocks.length === 0) warnings.push('読み取れるブロックがありませんでした (空の構造ファイル)')
+  if (unknownStackItems.size > 0) {
+    // スタック上限が分からないとコンパレーター強度がずれるので黙って進めない (#194)
+    const names = [...unknownStackItems].sort()
+    warnings.push(
+      `スタック上限が不明なアイテム ${names.length} 種 (${names.slice(0, 4).join(', ')}`
+      + `${names.length > 4 ? ' ほか' : ''}) を 64 として扱いました`,
+    )
+  }
   if (unsupportedBlocks.size > 0) {
     const total = [...unsupportedBlocks.values()].reduce((a, b) => a + b, 0)
     const kinds = [...unsupportedBlocks.keys()].map((n) => n.replace('minecraft:', '')).join(', ')
@@ -478,6 +541,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
 function minecraftToBlockState(
   name: string,
   props: Record<string, string>,
+  items?: RawItem[],
 ): BlockState | null {
   if (name === 'minecraft:redstone_wire') {
     const val = (p: string | undefined) => p === 'up' ? 'up' as const : p === 'side'
@@ -637,14 +701,14 @@ function minecraftToBlockState(
     name === 'minecraft:trapped_chest' ||
     name.endsWith('shulker_box')
   ) {
-    return { type: 'container', signal: 0 } as BlockState
+    return { type: 'container', signal: 0, slots: buildSlots('container', items) } as BlockState
   }
 
   if (name === 'minecraft:hopper') {
     return {
       type: 'hopper',
       facing: (props.facing ?? 'down') as any,
-      count: 0,
+      slots: buildSlots('hopper', items),
       enabled: props.enabled !== 'false',
     } as BlockState
   }
@@ -661,7 +725,7 @@ function minecraftToBlockState(
     return {
       type: name === 'minecraft:dispenser' ? 'dispenser' : 'dropper',
       facing: (props.facing ?? 'north') as any,
-      count: 0,
+      slots: buildSlots(name === 'minecraft:dispenser' ? 'dispenser' : 'dropper', items),
       triggered: props.triggered === 'true',
     } as BlockState
   }
@@ -709,6 +773,30 @@ function minecraftToBlockState(
   if (isSolidBlockName(name)) return { type: 'solid', powered: false } as BlockState
 
   return null
+}
+
+// ── コンテナの中身 (#194) ────────────────────────────────────────────────────
+
+/** スタック上限が表に無かったアイテム ID。取り込みごとに集約して警告に出す */
+const unknownStackItems = new Set<string>()
+
+/**
+ * block entity の Items → sim のスロット列 (#194)。
+ *
+ * コンパレーター強度は `Σ(個数/スタック上限) / スロット数` なので**上限が要る**。
+ * 表に無い ID は 64 として扱い、`unknownStackItems` に積んで警告する。
+ */
+function buildSlots(type: BlockType, items: RawItem[] | undefined): ContainerSlots {
+  const slots = emptySlots(type).slice()
+  if (!items) return slots
+  for (const it of items) {
+    if (it.slot < 0 || it.slot >= slots.length) continue
+    const { stack, known } = stackSizeOf(it.id)
+    if (!known) unknownStackItems.add(it.id.replace(/^minecraft:/, ''))
+    const id = it.id.replace(/^minecraft:/, '')
+    slots[it.slot] = { id, stack, count: Math.min(it.count, stack) }
+  }
+  return slots
 }
 
 // ── 非導体ブロック (#184) ────────────────────────────────────────────────────

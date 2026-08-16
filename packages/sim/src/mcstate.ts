@@ -23,6 +23,7 @@ import type {
   BlockState, HDir, Dir6, WireConnectionValue, RailShape, StraightRailShape,
 } from './types.js'
 import { OPPOSITE } from './types.js'
+import { emptySlots } from './blocks/container.js'
 
 export interface ParsedMcState {
   name: string
@@ -264,11 +265,11 @@ export function mcToSim(state: string): BlockState | null {
       return { type: 'container', signal: 0 }
     case 'hopper':
       // vanilla の facing = 送り込み方向 (down または水平) = sim と同一 (非反転)。
-      // count (内容) は blockstate に無いため 0 で取り込む (BE の中身)。
+      // 中身は blockstate に無いため空スロットで取り込む (BE の中身)。
       return {
         type: 'hopper',
         facing: (props.facing ?? 'down') as Dir6,
-        count: 0,
+        slots: emptySlots('hopper'),
         enabled: props.enabled !== 'false',
         cooldownUntil: 0,
       }
@@ -287,7 +288,7 @@ export function mcToSim(state: string): BlockState | null {
       return {
         type: name,
         facing: (props.facing ?? 'north') as Dir6,
-        count: 0,
+        slots: emptySlots(name),
         triggered: props.triggered === 'true',
       }
     case 'stone':

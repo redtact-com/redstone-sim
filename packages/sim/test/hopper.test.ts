@@ -12,16 +12,21 @@
 
 import { describe, it, expect } from 'vitest'
 import { SimWorld } from '../src/world.js'
-import { fillSignal, containerCapacity } from '../src/blocks/container.js'
+import { fillSignal, containerSlots, slotsFromCount } from '../src/blocks/container.js'
 import type {
   HopperState, DropperState, ComparatorState, LeverState,
 } from '../src/types.js'
 
+// count は「64 スタックのアイテムを n 個、slot 0 から詰めた状態」(#194 以前と同じ意味)
 function hopper(facing: HopperState['facing'], count: number): HopperState {
-  return { type: 'hopper', facing, count, enabled: true }
+  return { type: 'hopper', facing, slots: slotsFromCount('hopper', count), enabled: true }
 }
 function dropper(facing: DropperState['facing'], count: number): DropperState {
-  return { type: 'dropper', facing, count, triggered: false }
+  return { type: 'dropper', facing, slots: slotsFromCount('dropper', count), triggered: false }
+}
+/** 旧テストの「個数」比較用: 総個数を数える */
+function itemCount(b: { slots: readonly ({ count: number } | null)[] }): number {
+  return b.slots.reduce((a, s) => a + (s?.count ?? 0), 0)
 }
 function getHopper(w: SimWorld, x: number, y: number, z: number): HopperState {
   const b = w.getBlock(x, y, z)
@@ -30,23 +35,24 @@ function getHopper(w: SimWorld, x: number, y: number, z: number): HopperState {
 }
 
 describe('container.fillSignal (充填率→信号 02 §6)', () => {
+  const h = (n: number) => slotsFromCount('hopper', n)
   it('空=0 / 満杯=15 / 非空は最低 1', () => {
-    expect(fillSignal(0, 320)).toBe(0)
-    expect(fillSignal(320, 320)).toBe(15)
-    expect(fillSignal(1, 320)).toBe(1)
+    expect(fillSignal(h(0), 5)).toBe(0)
+    expect(fillSignal(h(320), 5)).toBe(15)
+    expect(fillSignal(h(1), 5)).toBe(1)
   })
   it('lerpDiscrete = floor(f*14)+1', () => {
-    // 64 個 / 容量 320 → f=0.2 → floor(2.8)+1 = 3
-    expect(fillSignal(64, 320)).toBe(3)
+    // 64 個 = 1 スロット満杯 / 5 スロット → f=0.2 → floor(2.8)+1 = 3
+    expect(fillSignal(h(64), 5)).toBe(3)
     // 半分 (160/320) → f=0.5 → floor(7)+1 = 8
-    expect(fillSignal(160, 320)).toBe(8)
-    // ドロッパー容量 576 の満杯
-    expect(fillSignal(576, 576)).toBe(15)
+    expect(fillSignal(h(160), 5)).toBe(8)
+    // ドロッパー満杯
+    expect(fillSignal(slotsFromCount('dropper', 576), 9)).toBe(15)
   })
-  it('容量ヘルパ', () => {
-    expect(containerCapacity('hopper')).toBe(320)
-    expect(containerCapacity('dropper')).toBe(576)
-    expect(containerCapacity('container')).toBe(1728)
+  it('スロット数ヘルパ', () => {
+    expect(containerSlots('hopper')).toBe(5)
+    expect(containerSlots('dropper')).toBe(9)
+    expect(containerSlots('container')).toBe(27)
   })
 })
 
@@ -60,29 +66,29 @@ describe('ホッパー転送 (eject/クールダウン 8gt)', () => {
 
     // tick1: A→B 1 個 (eject)。B は受信で cooldown 実効 7gt (#89 vanilla -1 補正)
     w.tick()
-    expect(getHopper(w, 0, 1, 0).count).toBe(9)
-    expect(getHopper(w, 0, 0, 0).count).toBe(1)
+    expect(itemCount(getHopper(w, 0, 1, 0))).toBe(9)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(1)
 
     // tick8: B の 7gt cooldown 明け → B が A を suck (A=8, B=2)
     for (let t = 2; t <= 8; t++) w.tick()
-    expect(getHopper(w, 0, 1, 0).count).toBe(8)
-    expect(getHopper(w, 0, 0, 0).count).toBe(2)
+    expect(itemCount(getHopper(w, 0, 1, 0))).toBe(8)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(2)
 
     // tick9: A の 8gt cooldown 明け → A→B eject (A=7, B=3)
     w.tick()
-    expect(getHopper(w, 0, 1, 0).count).toBe(7)
-    expect(getHopper(w, 0, 0, 0).count).toBe(3)
+    expect(itemCount(getHopper(w, 0, 1, 0))).toBe(7)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(3)
     // 縦ペアの eject+suck 二重経路も設置順で実機一致 (#91 で BE 登録順=挿入順を実装済み)
   })
 
   it('空ホッパーは送り込まない / 満杯は受け取らない', () => {
     const w = new SimWorld()
     w.setBlockAt([0, 1, 0], hopper('down', 0))           // 空
-    w.setBlockAt([0, 0, 0], hopper('south', containerCapacity('hopper'))) // 満杯
+    w.setBlockAt([0, 0, 0], hopper('south', 5 * 64)) // 満杯
     w.initialize()
     for (let t = 0; t < 20; t++) w.tick()
-    expect(getHopper(w, 0, 1, 0).count).toBe(0)
-    expect(getHopper(w, 0, 0, 0).count).toBe(containerCapacity('hopper'))
+    expect(itemCount(getHopper(w, 0, 1, 0))).toBe(0)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(5 * 64)
   })
 })
 
@@ -101,15 +107,15 @@ describe('ホッパー ロック (NC 受電で enabled=false)', () => {
 
     // ロック中は何 tick 進めても転送しない
     for (let t = 0; t < 20; t++) w.tick()
-    expect(getHopper(w, 0, 0, 0).count).toBe(10)
-    expect(getHopper(w, 1, 0, 0).count).toBe(0)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(10)
+    expect(itemCount(getHopper(w, 1, 0, 0))).toBe(0)
 
     // レバー OFF → enabled=true → 次 tick で転送再開
     w.activateBlock(0, 1, 0)
     expect(getHopper(w, 0, 0, 0).enabled).toBe(true)
     w.tick()
-    expect(getHopper(w, 0, 0, 0).count).toBe(9)
-    expect(getHopper(w, 1, 0, 0).count).toBe(1)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(9)
+    expect(itemCount(getHopper(w, 1, 0, 0))).toBe(1)
   })
 })
 
@@ -125,13 +131,13 @@ describe('ホッパー チェーン (吸い出し + 送り込み)', () => {
     // 1 tick で X→Y→Z へ素通りする。実機の top-down 配置と一致 (#91)。
     // (bottom-up 配置なら Y がバッファする — 下の placement-order テスト参照)
     w.tick()
-    expect(getHopper(w, 0, 0, 0).count).toBe(1)  // Z が受領
-    expect(getHopper(w, 0, 2, 0).count).toBe(2)  // X から 1 個減
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(1)  // Z が受領
+    expect(itemCount(getHopper(w, 0, 2, 0))).toBe(2)  // X から 1 個減
 
     // 次の 1 個 (#89 -1 補正で受信側 7gt。X は 8gt eject + Y の suck で 2 個目が流下)
     for (let t = 2; t <= 9; t++) w.tick()
-    expect(getHopper(w, 0, 0, 0).count).toBe(2)
-    expect(getHopper(w, 0, 2, 0).count).toBe(0)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(2)
+    expect(itemCount(getHopper(w, 0, 2, 0))).toBe(0)
   })
 
   // #91: 縦チェーンの流下は **設置順 (BE 登録順 = 挿入順)** で変わり、どちらも実機一致。
@@ -149,7 +155,7 @@ describe('ホッパー チェーン (吸い出し + 送り込み)', () => {
       const seq: number[][] = []
       for (let t = 0; t <= 10; t++) {
         if (t > 0) w.tick()
-        seq.push([getHopper(w, 0, 2, 0).count, getHopper(w, 0, 1, 0).count, getHopper(w, 0, 0, 0).count])
+        seq.push([itemCount(getHopper(w, 0, 2, 0)), itemCount(getHopper(w, 0, 1, 0)), itemCount(getHopper(w, 0, 0, 0))])
       }
       return seq
     }
@@ -179,7 +185,7 @@ describe('コンパレーターがホッパー充填率を読む (CU 連動)', (
     w.initialize()
     w.flush(64)
     const c = w.getBlock(1, 0, 0) as ComparatorState
-    expect(c.outputPower).toBe(fillSignal(160, 320))  // 8
+    expect(c.outputPower).toBe(fillSignal(slotsFromCount('hopper', 160), 5))  // 8
     expect(c.powered).toBe(true)
   })
 
@@ -200,7 +206,7 @@ describe('コンパレーターがホッパー充填率を読む (CU 連動)', (
 
     // 1 個転送 → B=1 → 信号 1 → 2gt 後にコンパレーター powered=true
     w.tick()  // BlockEntity フェーズで転送 + CU
-    expect(getHopper(w, 0, 0, 0).count).toBe(1)
+    expect(itemCount(getHopper(w, 0, 0, 0))).toBe(1)
     w.tick(); w.tick()  // コンパレーターの 2gt tile tick を消化
     const c = w.getBlock(1, 0, 0) as ComparatorState
     expect(c.outputPower).toBe(1)
@@ -225,14 +231,14 @@ describe('ドロッパー (前方コンテナへ挿入 / 4gt / QC エッジ)', (
 
     // 4gt 後の tick で dispenseFrom
     w.tick(); w.tick(); w.tick()
-    expect((w.getBlock(0, 0, 0) as DropperState).count).toBe(5)  // まだ
+    expect(itemCount(w.getBlock(0, 0, 0) as DropperState)).toBe(5)  // まだ
     w.tick()  // 4 回目 = 発火
-    expect((w.getBlock(0, 0, 0) as DropperState).count).toBe(4)
-    expect(getHopper(w, 1, 0, 0).count).toBe(1)
+    expect(itemCount(w.getBlock(0, 0, 0) as DropperState)).toBe(4)
+    expect(itemCount(getHopper(w, 1, 0, 0))).toBe(1)
 
     // 受電継続中は再発火しない (エッジトリガ)
     for (let t = 0; t < 10; t++) w.tick()
-    expect((w.getBlock(0, 0, 0) as DropperState).count).toBe(4)
+    expect(itemCount(w.getBlock(0, 0, 0) as DropperState)).toBe(4)
   })
 
   it('前方が非コンテナなら 1 個消費して何も出さない (境界原則 13 §4.2)', () => {
@@ -243,7 +249,7 @@ describe('ドロッパー (前方コンテナへ挿入 / 4gt / QC エッジ)', (
     w.initialize()
     w.activateBlock(0, 1, 0)
     for (let t = 0; t < 5; t++) w.tick()
-    expect((w.getBlock(0, 0, 0) as DropperState).count).toBe(2)  // 1 個消費
+    expect(itemCount(w.getBlock(0, 0, 0) as DropperState)).toBe(2)  // 1 個消費
     expect(w.getBlock(1, 0, 0)).toBe(null)                        // 何も出ない
   })
 })

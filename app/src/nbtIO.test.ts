@@ -3,7 +3,7 @@ import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
 } from 'deepslate/nbt'
 import type { BlockState } from '@redstone/sim'
-import { mcToSim } from '@redstone/sim'
+import { mcToSim, slotsFromCount } from '@redstone/sim'
 import { blockStateToMinecraftStr } from '@redstone/viewer'
 import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
 
@@ -114,14 +114,26 @@ describe('nbtIO: コンテナ / 重量板の既存往復が壊れていない', 
 })
 
 describe('nbtIO: ホッパー / ドロッパーの往復 (#65)', () => {
-  it('hopper は facing/enabled を保持し count=0 で戻る (中身は NBT に無い)', async () => {
-    expect(await roundTrip({ type: 'hopper', facing: 'east', count: 12, enabled: true }))
-      .toMatchObject({ type: 'hopper', facing: 'east', enabled: true, count: 0 })
+  // #194 で中身も往復するようになった (以前は count が 0 に戻っていた)。
+  // 中身を落とすとコンパレーター強度の微調整が失われるため
+  it('hopper は facing/enabled と**中身**を保持して往復する (#194)', async () => {
+    const src = {
+      type: 'hopper', facing: 'east', enabled: true,
+      slots: slotsFromCount('hopper', 12),
+    } as BlockState
+    const back = await roundTrip(src) as { slots: readonly ({ count: number } | null)[] }
+    expect(back).toMatchObject({ type: 'hopper', facing: 'east', enabled: true })
+    expect(back.slots.reduce((a, s) => a + (s?.count ?? 0), 0)).toBe(12)
   })
 
-  it('dropper は facing/triggered を保持し count=0 で戻る', async () => {
-    expect(await roundTrip({ type: 'dropper', facing: 'up', count: 5, triggered: false }))
-      .toMatchObject({ type: 'dropper', facing: 'up', triggered: false, count: 0 })
+  it('dropper も中身を保持して往復する (#194)', async () => {
+    const src = {
+      type: 'dropper', facing: 'up', triggered: false,
+      slots: slotsFromCount('dropper', 5),
+    } as BlockState
+    const back = await roundTrip(src) as { slots: readonly ({ count: number } | null)[] }
+    expect(back).toMatchObject({ type: 'dropper', facing: 'up', triggered: false })
+    expect(back.slots.reduce((a, s) => a + (s?.count ?? 0), 0)).toBe(5)
   })
 
   it('vanilla hopper[facing=down] → hopper 型 import', async () => {

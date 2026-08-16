@@ -1,7 +1,8 @@
 import type {
+  StackSize,
   BlockState, BlockType, Dir6, HDir, WorldSnapshot,
 } from '@redstone/sim'
-import { SimWorld } from '@redstone/sim'
+import { SimWorld, slotsFromCount } from '@redstone/sim'
 import { EditorGrid } from './grid.js'
 import { defaultFacing, isFacingAllowed, toHDir } from './facing.js'
 import { normalizePlaceOptions } from './placeable.js'
@@ -11,6 +12,11 @@ export type PlaceableType = Exclude<BlockType, 'air'>
 export interface PlaceOptions {
   /** 取付面つきの素子 (レバー・ボタン等) は up/down も取る。素子ごとの許容は facing.ts (#111) */
   facing?: Dir6
+  /**
+   * コンテナに入れるアイテムのスタック上限 (#194)。既定 64。
+   * エディタはスタック種別ごとに代表アイテム 1 種だけを扱う
+   */
+  stack?: StackSize
   delay?: 1 | 2 | 3 | 4
   mode?: 'compare' | 'subtract'
   /** 重量感圧板が踏まれたとき出力する信号強度 (1-15)。既定 15 */
@@ -267,16 +273,23 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       return { type: 'container', signal: opts.signal ?? 0 }
     case 'hopper':
       // 物流ホッパー (#65)。facing = 送り込み方向 (editor は水平のみ。既定 down)。
-      // count = 内容個数 (容量 320)。enabled は initialize で受電から確定
-      return { type: 'hopper', facing: dir, count: opts.count ?? 0, enabled: true }
+      // 中身は「スタック種別ごとの代表アイテムを count 個、slot 0 から」(#194)。
+      // enabled は initialize で受電から確定
+      return {
+        type: 'hopper', facing: dir, enabled: true,
+        slots: slotsFromCount('hopper', opts.count ?? 0, opts.stack ?? 64),
+      }
     case 'crafter':
       // 受電部分のみ実装。occupiedSlots はコンパレーターが読む手動値 (#163)
       return { type: 'crafter', facing: dir, triggered: false, occupiedSlots: opts.count ?? 0 }
     case 'dropper':
     case 'dispenser':
       // 物流ドロッパー (#65) / ディスペンサー (#161)。facing = 出力方向。
-      // count = 内容個数 (容量 576)。差は「前方コンテナへ挿入するか」だけ
-      return { type, facing: dir, count: opts.count ?? 0, triggered: false }
+      // 差は「前方コンテナへ挿入するか」だけ
+      return {
+        type, facing: dir, triggered: false,
+        slots: slotsFromCount(type, opts.count ?? 0, opts.stack ?? 64),
+      }
     default:
       return null
   }
