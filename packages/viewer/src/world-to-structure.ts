@@ -163,6 +163,12 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'solid':
       return 'minecraft:stone'
+    // 色 (16 種の stained_glass) は sim で保持しないため無色固定 (#184)
+    case 'glass':
+      return 'minecraft:glass'
+    // 素材は sim で保持しないため smooth_stone 固定 (#184)
+    case 'slab':
+      return `minecraft:smooth_stone_slab[type=${block.half}]`
     case 'air':
       return 'minecraft:air'
   }
@@ -213,6 +219,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:stone',
   'minecraft:cobblestone',
   'minecraft:glass',
+  'minecraft:smooth_stone_slab',
   'minecraft:smooth_stone',
   'minecraft:target',
   'minecraft:slime_block',

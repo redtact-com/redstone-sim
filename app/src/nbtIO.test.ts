@@ -250,7 +250,8 @@ describe('固体ブロックの取り込み (#170)', () => {
     'minecraft:oak_log', 'minecraft:stripped_birch_wood', 'minecraft:crimson_stem',
     'minecraft:iron_ore', 'minecraft:deepslate_redstone_ore',
     'minecraft:oxidized_copper', 'minecraft:waxed_exposed_cut_copper',
-    'minecraft:glowstone', 'minecraft:hay_block', 'minecraft:packed_ice',
+    'minecraft:hay_block', 'minecraft:packed_ice', 'minecraft:blue_ice',
+    'minecraft:soul_sand', 'minecraft:mud', 'minecraft:magma_block', 'minecraft:shroomlight',
   ])('その他の導体フルブロックも solid: %s', async (name) => {
     expect(await importVanilla(name)).toMatchObject(solid)
   })
@@ -262,16 +263,55 @@ describe('固体ブロックの取り込み (#170)', () => {
     }
   })
 
+  // ── 非導体フルブロック (#184) ────────────────────────────────────────
+  //
+  // どれが導体かは**見た目や名前では判別できない**。実機ハーネスで 1 つずつ測って
+  // 確定させた (fixture nonconductor-glass-slab)。実際、事前の推測は半分外れていて
+  // soul_sand / mud / magma_block は導体、ice は非導体だった。
+  // **ice と packed_ice で結果が割れる**のがこの手の推測の危うさを一番よく表している。
+
   it.each([
     'minecraft:glass', 'minecraft:white_stained_glass', 'minecraft:tinted_glass',
-  ])('ガラスは**非導体**なので solid にしない (省略される): %s', async (name) => {
-    expect(await importVanilla(name)).toBeUndefined()
+    'minecraft:glowstone', 'minecraft:sea_lantern', 'minecraft:ice',
+  ])('非導体フルブロックは solid にしない: %s', async (name) => {
+    expect(await importVanilla(name)).toMatchObject({ type: 'glass' })
+  })
+
+  it('ice は非導体だが packed_ice / blue_ice は導体 (名前で仲間にしない)', async () => {
+    expect(await importVanilla('minecraft:ice')).toMatchObject({ type: 'glass' })
+    expect(await importVanilla('minecraft:packed_ice')).toMatchObject({ type: 'solid' })
+    expect(await importVanilla('minecraft:blue_ice')).toMatchObject({ type: 'solid' })
   })
 
   it.each([
     'minecraft:melon_stem', 'minecraft:attached_pumpkin_stem',
   ])('_stem の接尾辞に引っかかる作物は solid にしない: %s', async (name) => {
     expect(await importVanilla(name)).toBeUndefined()
+  })
+
+  // ── ハーフブロック (#184) ──────────────────────────────────────────────
+  //
+  // 単体スラブは**非導体**。#170 では既存挙動を変えないため solid に落としていたが、
+  // 実機で導通しないことを確定させた (fixture nonconductor-glass-slab) ので専用型へ移した。
+  // **二重スラブだけは当たり判定がフルブロック = 導体**で、これも実機で確認済み。
+
+  it.each([
+    ['minecraft:smooth_stone_slab', 'bottom'],
+    ['minecraft:oak_slab', 'top'],
+    ['minecraft:cut_copper_slab', 'bottom'],   // _copper 接尾辞より優先されること
+  ])('単体スラブは非導体の slab になる: %s[type=%s]', async (name, half) => {
+    expect(await importVanilla(name, { type: half })).toMatchObject({ type: 'slab', half })
+  })
+
+  it('二重スラブは導体なので solid になる', async () => {
+    expect(await importVanilla('minecraft:smooth_stone_slab', { type: 'double' }))
+      .toMatchObject({ type: 'solid' })
+  })
+
+  it('type プロパティが無いスラブは bottom として扱う', async () => {
+    // 壊れたファイルや簡略化された palette でも落ちないこと
+    expect(await importVanilla('minecraft:stone_brick_slab'))
+      .toMatchObject({ type: 'slab', half: 'bottom' })
   })
 
   it('専用型を持つブロックは接尾辞判定より優先される', async () => {

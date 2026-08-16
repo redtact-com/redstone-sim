@@ -293,7 +293,23 @@ export function mcToSim(state: string): BlockState | null {
     case 'stone':
     case 'smooth_stone':
     case 'cobblestone':
+    // packed_ice / blue_ice は ice と違い**導体** (#184 で実機確認)。
+    // fixture nonconductor-glass-slab がこの割れ方を押さえている
+    case 'packed_ice':
+    case 'blue_ice':
       return { type: 'solid', powered: false }
+    // 非導体フルブロック (#184)。glowstone / sea_lantern / ice も同じ挙動
+    // (実機で確定。packed_ice / blue_ice は導体なのでここに入れない)
+    case 'glass':
+    case 'glowstone':
+    case 'sea_lantern':
+    case 'ice':
+      return { type: 'glass' }
+    case 'smooth_stone_slab':
+      // 二重スラブは当たり判定がフルブロック = 導体なので solid 扱い (#184)
+      return props.type === 'double'
+        ? { type: 'solid', powered: false }
+        : { type: 'slab', half: props.type === 'top' ? 'top' : 'bottom' }
     default:
       throw new Error(`sim が扱えないブロック: ${name}`)
   }
@@ -335,6 +351,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('moving_piston', { facing: sim.facing, type: sim.kind })
       case 'solid':
         return 'stone'
+      // 非導体フルブロックも可動 (#184)。色・素材は保持しないので代表名で合成する
+      case 'glass':
+        return 'glass'
+      case 'slab':
+        return formatMcState('smooth_stone_slab', { type: sim.half, waterlogged: 'false' })
       case 'redstone_block':
         // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
         return 'redstone_block'
@@ -514,6 +535,9 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'solid':
       break // powered は blockstate に現れない
+    case 'glass':
+    case 'slab':
+      break // 動的プロパティを持たない (#184)。authored の色・素材をそのまま残す
     case 'air':
       return 'air'
   }
