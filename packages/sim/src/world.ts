@@ -482,6 +482,16 @@ export class SimWorld {
     if (into.type === 'observer' && !into.powered && !this.hasScheduledTick(pos, 'observer')) {
       this.schedule(pos, 2, 0)
     }
+    // **点灯したまま運ばれてきた**場合は即消灯する (#221)
+    // [確定: 26.2 ObserverBlock.onPlace — POWERED かつ scheduledTick が無ければ
+    //  setBlock(POWERED=false, flag 18) + updateNeighborsInFront]。
+    // 消灯 tick は移動前の座標に予約されていて移動で失われるため、これが無いと
+    // **二度と消えない**。ユーザ提供の 2 幅ドアで、押されて戻ったオブザーバーが
+    // 点きっぱなしになり 2 往復目が動かなくなっていた
+    if (into.type === 'observer' && into.powered && !this.hasScheduledTick(pos, 'observer')) {
+      this.setBlockAt(pos, { ...into, powered: false })
+      // 前方更新は末尾の propagateChange(pos) が担う (observer の NC 発行経路)
+    }
     // 着地したレールは onPlace が movedByPiston でも走るので、
     //   (1) updateDir(first=true) で形状を決め直し (隣のレールも connectTo で張り替わる)
     //   (2) isStraight なので自分自身に neighborChanged が掛かり powered が再計算される
