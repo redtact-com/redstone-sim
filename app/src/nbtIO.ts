@@ -268,6 +268,11 @@ export async function importFromNbtBytes(
   const nbt = NbtFile.read(structureBytes)
   unknownStackItems.clear()   // #194: 取り込みごとに集計し直す
   const placedBlocks = readVanillaStructureBlocks(nbt.root)
+  // litematic のコンテナ中身は変換で落ちるので元ファイルから補う (#197)
+  let orphanTileEntities = 0
+  if (format === 'litematic') {
+    orphanTileEntities = attachLitematicItems(bytes, placedBlocks)
+  }
 
   const resultBlocks = new Map<string, BlockState>()
   const warnings: string[] = []
@@ -313,6 +318,12 @@ export async function importFromNbtBytes(
   }
 
   if (placedBlocks.length === 0) warnings.push('読み取れるブロックがありませんでした (空の構造ファイル)')
+  if (orphanTileEntities > 0) {
+    // 座標の対応が取れなかった = 変換側との正規化のズレを疑う (#197)
+    warnings.push(
+      `litematic の中身 ${orphanTileEntities} 件をコンテナに対応付けられませんでした`,
+    )
+  }
   if (unknownStackItems.size > 0) {
     // スタック上限が分からないとコンパレーター強度がずれるので黙って進めない (#194)
     const names = [...unknownStackItems].sort()
@@ -774,6 +785,82 @@ function minecraftToBlockState(
 
   return null
 }
+
+// ── litematic のコンテナ中身 (#197) ──────────────────────────────────────────
+//
+// `@taku128/java-schematic` の変換は block entity を落とすので、元の litematic の
+// `Regions.<name>.TileEntities` を直接読んで placed に貼り直す。
+//
+// 座標系: litematic のリージョンは `Position` と `Size` を持ち、**Size は軸ごとに
+// 負になりうる**。ブロック配列も TileEntities も**最小コーナー基準**なので、
+// 最小コーナーを求めて全リージョンの最小コーナーからのオフセットに直す
+// (これは #172 で自前パーサを書いたときに確定させた規則)。
+//
+// 対応付けに失敗した件数を返す。座標系の解釈が違えば 0 にならないので、
+// **黙って取りこぼさず警告に出す**。
+
+/** litematic の TileEntities を placedBlocks に貼り、対応付かなかった件数を返す */
+function attachLitematicItems(bytes: Uint8Array, placed: RawPlacedBlock[]): number {
+  let regions: NbtCompound
+  try {
+    regions = NbtFile.read(bytes).root.getCompound('Regions')
+  } catch {
+    return 0
+  }
+  const names = [...regions.keys()]
+  if (names.length === 0) return 0
+
+  // 各リージョンの最小コーナー (グローバル座標)
+  const mins = names.map((n) => regionMinCorner(regions.getCompound(n)))
+  const gx = Math.min(...mins.map(m => m[0]))
+  const gy = Math.min(...mins.map(m => m[1]))
+  const gz = Math.min(...mins.map(m => m[2]))
+
+  const byPos = new Map<string, RawPlacedBlock>()
+  for (const b of placed) byPos.set(b.pos.join(','), b)
+
+  let orphan = 0
+  names.forEach((n, i) => {
+    const list = regions.getCompound(n).get('TileEntities')
+    if (!(list instanceof NbtList)) return
+    const [mx, my, mz] = mins[i]
+    for (let k = 0; k < list.length; k++) {
+      const te = list.get(k)
+      if (!(te instanceof NbtCompound)) continue
+      const items = readItems(te)
+      if (!items) continue
+      const key = [
+        (te.getNumber('x') ?? 0) + mx - gx,
+        (te.getNumber('y') ?? 0) + my - gy,
+        (te.getNumber('z') ?? 0) + mz - gz,
+      ].join(',')
+      const target = byPos.get(key)
+      // 対応先がコンテナでなければ座標系の解釈が違う → 貼らずに数える
+      if (!target || !isContainerName(target.name)) { orphan++; continue }
+      target.items = items
+    }
+  })
+  return orphan
+}
+
+/** リージョンの最小コーナー。Size が負の軸は Position + Size + 1 が最小になる */
+function regionMinCorner(region: NbtCompound): [number, number, number] {
+  const pos = region.getCompound('Position')
+  const size = region.getCompound('Size')
+  const axis = (k: 'x' | 'y' | 'z'): number => {
+    const p = pos.getNumber(k) ?? 0
+    const s = size.getNumber(k) ?? 0
+    return s < 0 ? p + s + 1 : p
+  }
+  return [axis('x'), axis('y'), axis('z')]
+}
+
+const CONTAINER_NAMES = new Set([
+  'minecraft:hopper', 'minecraft:dropper', 'minecraft:dispenser',
+  'minecraft:barrel', 'minecraft:chest', 'minecraft:trapped_chest',
+])
+const isContainerName = (name: string): boolean =>
+  CONTAINER_NAMES.has(name) || name.endsWith('_shulker_box')
 
 // ── コンテナの中身 (#194) ────────────────────────────────────────────────────
 

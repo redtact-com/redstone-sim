@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString, NbtLongArray, NbtByteArray,
 } from 'deepslate/nbt'
+import { effectiveContainerSignal } from '@redstone/sim'
 import { importFromNbtBytes } from './nbtIO'
 
 // ============================================================
@@ -175,5 +176,138 @@ describe('形式の判別 (#174)', () => {
     const { map, warnings } = await importTypes(notNbt)
     expect(map).toEqual({})
     expect(warnings).toHaveLength(1)
+  })
+})
+
+// ============================================================
+// litematic のコンテナ中身 (#197)
+//
+// `@taku128/java-schematic` の変換は block entity を落とすため、litematic の
+// `Regions.<name>.TileEntities` を元ファイルから直接読んで貼り直している。
+// **座標系 (負サイズのリージョン・複数リージョン) を取り違えると別のブロックに
+// 貼ってしまう**ので、貼り先がコンテナかを確認し、外れたら警告に出す。
+// ============================================================
+
+interface LiteRegion {
+  name?: string
+  position: Vec
+  size: Vec
+  palette: string[]
+  indices: number[]
+  tiles?: { pos: Vec; id: string; items: { slot: number; id: string; count: number }[] }[]
+}
+
+/** TileEntities つきの litematic (単一リージョン) */
+function litematicWithItems(
+  position: Vec, size: Vec, palette: string[], indices: number[],
+  tiles: { pos: Vec; id: string; items: { slot: number; id: string; count: number }[] }[],
+): Uint8Array {
+  return litematicRegions([{ position, size, palette, indices, tiles }])
+}
+
+/** 複数リージョンの litematic。負サイズの検証には**基準リージョンを並べる**のが要る */
+function litematicRegions(regions: LiteRegion[]): Uint8Array {
+  const comp = new NbtCompound()
+  regions.forEach((r, i) => comp.set(r.name ?? `R${i}`, buildLiteRegion(r)))
+  return gz('', new NbtCompound()
+    .set('Version', new NbtInt(6))
+    .set('MinecraftDataVersion', new NbtInt(3700))
+    .set('Metadata', new NbtCompound())
+    .set('Regions', comp))
+}
+
+function buildLiteRegion({ position, size, palette, indices, tiles = [] }: LiteRegion): NbtCompound {
+  const names = ['minecraft:air', ...palette]
+  let bits = 2
+  while (1 << bits < names.length) bits++
+  const teList = new NbtList<NbtCompound>(tiles.map(t => {
+    const c = new NbtCompound()
+      .set('x', new NbtInt(t.pos[0])).set('y', new NbtInt(t.pos[1])).set('z', new NbtInt(t.pos[2]))
+      .set('id', new NbtString(t.id))
+    c.set('Items', new NbtList<NbtCompound>(t.items.map(i =>
+      new NbtCompound()
+        .set('Slot', new NbtInt(i.slot))
+        .set('id', new NbtString(i.id))
+        .set('count', new NbtInt(i.count)))))
+    return c
+  }))
+  return new NbtCompound()
+    .set('Position', xyz(position))
+    .set('Size', xyz(size))
+    .set('BlockStatePalette', new NbtList<NbtCompound>(
+      names.map(n => new NbtCompound().set('Name', new NbtString(n)))))
+    .set('BlockStates', new NbtLongArray(
+      packLongs(indices, bits).map(v => BigInt.asIntN(64, v))))
+    .set('TileEntities', teList)
+}
+
+describe('litematic のコンテナ中身 (#197)', () => {
+  const HOPPER = 'minecraft:hopper'
+
+  it('ホッパーの中身を取り込む (変換で落ちる分を元ファイルから補う)', async () => {
+    const bytes = litematicWithItems([0, 0, 0], [2, 1, 1], [HOPPER], [1, 0], [
+      { pos: [0, 0, 0], id: HOPPER, items: [
+        { slot: 0, id: 'minecraft:player_head', count: 11 },
+        { slot: 1, id: 'minecraft:snowball', count: 3 },
+      ] },
+    ])
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    const h = r.blocks.get('0,0,0') as { slots: readonly ({ id: string; stack: number; count: number } | null)[] }
+    expect(h.slots[0]).toMatchObject({ id: 'player_head', stack: 64, count: 11 })
+    expect(h.slots[1]).toMatchObject({ id: 'snowball', stack: 16, count: 3 })
+    expect(r.warnings).toEqual([])
+  })
+
+  it('**強度が実機と同じ 2 になる** (混載の要点)', async () => {
+    const bytes = litematicWithItems([0, 0, 0], [1, 1, 1], [HOPPER], [1], [
+      { pos: [0, 0, 0], id: HOPPER, items: [
+        { slot: 0, id: 'minecraft:player_head', count: 11 },
+        { slot: 1, id: 'minecraft:snowball', count: 3 },
+      ] },
+    ])
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    expect(effectiveContainerSignal(r.blocks.get('0,0,0') as never)).toBe(2)
+  })
+
+  it('**Size が負のリージョン**でも正しい位置に貼る', async () => {
+    // #172 と同じ罠: 単一リージョンだと符号を間違えても最小コーナー正規化で
+    // 打ち消され結果が変わらない。**基準リージョンを並べて相対位置で検証する**
+    const bytes = litematicRegions([
+      // 基準: x=0 に石 (最小コーナー 0,0,0)
+      { position: [0, 0, 0], size: [1, 1, 1], palette: ['minecraft:stone'], indices: [1] },
+      // 検証対象: Position.y=3 / Size.y=-3 → 最小コーナーは y=1
+      {
+        position: [2, 3, 0], size: [1, -3, 1], palette: [HOPPER], indices: [1, 1, 1],
+        // TileEntity 座標は**リージョン相対** (最小コーナー基準の 0 始まり)
+        tiles: [{ pos: [0, 0, 0], id: HOPPER, items: [{ slot: 0, id: 'minecraft:snowball', count: 5 }] }],
+      },
+    ])
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    // 最小コーナー正規化後、ホッパーは x=2 / y=1..3 に並ぶ。TileEntity は y=1 のもの
+    const at = (k: string) => (r.blocks.get(k as never) as
+      { slots?: readonly ({ count: number } | null)[] } | undefined)?.slots?.filter(Boolean) ?? []
+    // 最小コーナー (y=1) のホッパーにだけ入り、他の 2 つは空であること。
+    // **「他が空」まで見ないと補正を外しても通ってしまう** (ずれ先も同じホッパー種のため)
+    expect(at('2,1,0'), '最小コーナーのホッパーに入っていない').toMatchObject([{ count: 5 }])
+    expect(at('2,2,0'), 'ずれて別のホッパーに入っている').toEqual([])
+    expect(at('2,3,0'), 'ずれて別のホッパーに入っている').toEqual([])
+    expect(r.warnings).toEqual([])
+  })
+
+  it('貼り先がコンテナでなければ**黙って捨てず警告する**', async () => {
+    // TileEntity の座標が石を指している = 座標系の解釈がずれている状況
+    const bytes = litematicWithItems([0, 0, 0], [2, 1, 1], ['minecraft:stone'], [1, 1], [
+      { pos: [0, 0, 0], id: HOPPER, items: [{ slot: 0, id: 'minecraft:snowball', count: 1 }] },
+    ])
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    expect(r.warnings.some(w => w.includes('対応付けられませんでした'))).toBe(true)
+  })
+
+  it('TileEntities が無い litematic は従来どおり', async () => {
+    const bytes = litematicWithItems([0, 0, 0], [1, 1, 1], [HOPPER], [1], [])
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    const h = r.blocks.get('0,0,0') as { slots: readonly unknown[] }
+    expect(h.slots.every(s => s === null)).toBe(true)
+    expect(r.warnings).toEqual([])
   })
 })
