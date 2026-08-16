@@ -492,6 +492,12 @@ export class SimWorld {
       for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
       this.neighborChanged(pos)
     }
+    // 着地は vanilla では setBlock(UPDATE_ALL) なので**隣接 6 マスへ NC が飛ぶ**
+    // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock(..., UPDATE_ALL)]。
+    // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も
+    // 再評価されず伸びないまま」になる (#213 のドアで tick 135 の押し上げが
+    // 起きなかった原因)。実機 fixture door-2wide-open-to-close が回帰を守る
+    this.submitMultiNC(pos)
     this.propagateChange(pos)
     this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
