@@ -6708,6 +6708,6 @@
     "mc": "1.21.1",
     "carpet": "1.21-1.4.147+v240613"
   },
-  "skipUntil": "I-door-push-135",
-  "skipReason": "#213: tick 135 で上向きスティッキーピストンが 2 段の柱を押し上げるのを sim が行わない。tick 134 までは実機と完全一致する"
+  "skipUntil": "I-piston-landing-timing",
+  "skipReason": "#213 の主因 (tick 135 の押し上げが起きない) は解消済み。残るのは着地タイミングの 1 tick ズレ (tick 136 で実機は (0,6,6) が着地済み / sim はまだ moving_piston) と、その影響で tick 148 の押し上げがずれる件 (#216)"
 }
