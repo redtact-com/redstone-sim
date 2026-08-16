@@ -18,14 +18,21 @@ const FACING_OPPOSITE: Record<string, string> = {
 }
 
 /**
- * プロジェクトの BlockState.wall_torch.facing は「土台の方向」（取り付き
- * 面の方向）で、vanilla NBT の facing「torch が向く方向」と逆になっている
- * （redstone-lib の torch.ts コメント参照）。export/import 境界で反転して
- * NBT のみ vanilla 互換にし、内部規約は維持する。
+ * sim の facing と vanilla NBT の facing で**意味が逆になる**素子の変換。
  *
- * repeater / comparator は redstone-lib 内でも facing = 出力方向
- * （isRepeaterInputPowered が OPPOSITE[block.facing] を input dir として
- * いることで確認済）で vanilla と一致するため、ここでは反転しない。
+ * 反転が要るのは 3 種:
+ *   - `wall_torch` — sim は「土台の方向」、vanilla は「torch が向く方向」
+ *   - `repeater` / `comparator` — **sim は出力方向、vanilla は入力側**
+ *     [確定: 実機 fixture `nonconductor-glass-slab` / `dust-block-repeater` —
+ *      `repeater[facing=west]` が西のブロックを読んで東へ出力している]
+ *
+ * 規約の正は `packages/sim/src/mcstate.ts` (実機ハーネスとの変換器) で、
+ * 描画側 `packages/viewer/src/world-to-structure.ts` の `flipDir` も同じ。
+ * **この 3 者は必ず揃えること** (`nbtIO.test.ts` の突き合わせテストが守る)。
+ *
+ * 履歴 (#189): repeater / comparator は「vanilla と一致するので反転不要」と
+ * 誤って書かれており、取り込みで 180° 反転していた。書き出し側も同じ漏れが
+ * あったため往復テストでは打ち消し合って検出できなかった。
  */
 function flipFacingForVanillaNbt(facing: string | undefined): string {
   if (!facing) return 'north'
@@ -322,16 +329,17 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing: flipFacingForVanillaNbt((block as any).facing),
         lit: String((block as any).lit ?? true),
       }]
+    // sim は出力方向、vanilla は入力側なので反転する (#189)
     case 'repeater':
       return ['minecraft:repeater', {
-        facing:  (block as any).facing ?? 'north',
+        facing:  flipFacingForVanillaNbt((block as any).facing),
         delay:   String((block as any).delay ?? 1),
         locked:  'false',
         powered: String((block as any).powered ?? false),
       }]
     case 'comparator':
       return ['minecraft:comparator', {
-        facing:  (block as any).facing ?? 'north',
+        facing:  flipFacingForVanillaNbt((block as any).facing),
         mode:    (block as any).mode ?? 'compare',
         powered: String((block as any).powered ?? false),
       }]
@@ -495,7 +503,8 @@ function minecraftToBlockState(
   }
 
   if (name === 'minecraft:repeater') {
-    const facing = (props.facing ?? 'north') as any
+    // vanilla の facing は入力側、sim は出力方向 (#189)
+    const facing = flipFacingForVanillaNbt(props.facing) as any
     const delay = Number(props.delay ?? 1) as 1 | 2 | 3 | 4
     return {
       type: 'repeater',
@@ -507,7 +516,8 @@ function minecraftToBlockState(
   }
 
   if (name === 'minecraft:comparator') {
-    const facing = (props.facing ?? 'north') as any
+    // vanilla の facing は入力側 (背面)、sim は出力方向 (#189)
+    const facing = flipFacingForVanillaNbt(props.facing) as any
     const mode = (props.mode === 'subtract' ? 'subtract' : 'compare') as 'compare' | 'subtract'
     return {
       type: 'comparator',
