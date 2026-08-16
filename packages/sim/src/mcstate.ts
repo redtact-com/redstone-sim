@@ -24,6 +24,7 @@ import type {
 } from './types.js'
 import { OPPOSITE } from './types.js'
 import { emptySlots } from './blocks/container.js'
+import { classifyPlainBlock } from './blocks/blockNames.js'
 
 export interface ParsedMcState {
   name: string
@@ -56,6 +57,16 @@ export function formatMcState(name: string, props: Record<string, string>): stri
 /** blockstate 文字列を正規形へ (scarpet 側 _canon() と同一形式) */
 export function canonicalize(state: string): string {
   const { name, props } = parseMcState(state)
+  // sim は導体フルブロックを材質ごと `solid` 1 種に潰す (13 §2 の既知の抽象化)。
+  // ピストンで動いた先には authored が無く `stone` として合成されるため、
+  // **実機側の材質も stone に寄せて比較する** (#214)。
+  // 非導体 (glass / slab) も同様に代表名へ寄せる
+  const plain = classifyPlainBlock(name, props)
+  if (plain) {
+    if (plain.type === 'solid') return 'stone'
+    if (plain.type === 'glass') return 'glass'
+    if (plain.type === 'slab') return formatMcState('smooth_stone_slab', { type: plain.half })
+  }
   return formatMcState(name, props)
 }
 
@@ -291,28 +302,14 @@ export function mcToSim(state: string): BlockState | null {
         slots: emptySlots(name),
         triggered: props.triggered === 'true',
       }
-    case 'stone':
-    case 'smooth_stone':
-    case 'cobblestone':
-    // packed_ice / blue_ice は ice と違い**導体** (#184 で実機確認)。
-    // fixture nonconductor-glass-slab がこの割れ方を押さえている
-    case 'packed_ice':
-    case 'blue_ice':
-      return { type: 'solid', powered: false }
-    // 非導体フルブロック (#184)。glowstone / sea_lantern / ice も同じ挙動
-    // (実機で確定。packed_ice / blue_ice は導体なのでここに入れない)
-    case 'glass':
-    case 'glowstone':
-    case 'sea_lantern':
-    case 'ice':
-      return { type: 'glass' }
-    case 'smooth_stone_slab':
-      // 二重スラブは当たり判定がフルブロック = 導体なので solid 扱い (#184)
-      return props.type === 'double'
-        ? { type: 'solid', powered: false }
-        : { type: 'slab', half: props.type === 'top' ? 'top' : 'bottom' }
-    default:
+    default: {
+      // 素材ブロック (固体 / ガラス / スラブ) は nbtIO と**同じ表**で判定する (#214)。
+      // 以前はここで fixture 用に個別列挙し未知は例外にしていたため、実キャプチャを
+      // そのまま fixture にできなかった
+      const plain = classifyPlainBlock(name, props)
+      if (plain) return plain
       throw new Error(`sim が扱えないブロック: ${name}`)
+    }
   }
 }
 

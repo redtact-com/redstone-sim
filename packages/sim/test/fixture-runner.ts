@@ -44,7 +44,9 @@ export function expandExpect(fx: Fixture): StateMap[] {
     cur = new Map(cur)
     for (const c of byTick.get(t) ?? []) {
       if (c.block === 'air') cur.delete(posKey(c.pos))
-      else cur.set(posKey(c.pos), c.block)
+      // authored 側と同じく正規化する。しないと材質の違い (#214 で stone に
+      // 寄せている) が差分に出てしまう
+      else cur.set(posKey(c.pos), canonicalize(c.block))
     }
     states.push(cur)
   }
