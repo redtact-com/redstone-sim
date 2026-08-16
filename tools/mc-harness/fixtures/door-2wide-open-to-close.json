@@ -1,0 +1,2173 @@
+{
+  "name": "door-2wide-open-to-close",
+  "description": "Runa.S の 2 幅ピストンドア (#213)。ユーザ提供の opened / closed の実キャプチャ 2 状態のうち opened を再現し、レバーを ON にして closed になるまでを実機で記録する。sim はこの遷移で最終状態が 10 セルずれる (ドア可動部のみ。制御回路は一致)。レバーは実際にクリックさせる。setblock だとレバーの 6 近傍しか更新されず、取り付け先の壁ブロックの先 (ダスト) に伝わらないため回路が動かない",
+  "mcVersion": "1.21.1",
+  "ticks": 200,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      8,
+      11
+    ]
+  },
+  "player": {
+    "spawn": [
+      6.5,
+      5.0,
+      5.5
+    ],
+    "facing": [
+      90,
+      0
+    ],
+    "lookAt": [
+      4.5,
+      5.5,
+      5.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "observer[facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        5
+      ],
+      "block": "observer[facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        6
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        7
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        8
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        9
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        10
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=south]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        6
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        8
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        9
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        10
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        11
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        5
+      ],
+      "block": "sticky_piston[extended=false,facing=south]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        9
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        10
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        11
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        2
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        3
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        5
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        3
+      ],
+      "block": "note_block[instrument=bass,note=1,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        5
+      ],
+      "block": "target[power=0]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        11
+      ],
+      "block": "note_block[instrument=guitar,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        11
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "observer[facing=east,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        11
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        3
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        7
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        8
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        1
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        3
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        7
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        9
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        10
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        11
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        4
+      ],
+      "block": "observer[facing=east,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        5
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        8
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        9
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        10
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        1
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        3
+      ],
+      "block": "sticky_piston[extended=false,facing=down]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        4
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        7
+      ],
+      "block": "sticky_piston[extended=false,facing=south]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        9
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        10
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        1
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        2
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        3
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        5
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        10
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        1
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        2
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        3
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        5
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        10
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        0
+      ],
+      "block": "observer[facing=east,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        4
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        6
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        7
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        8
+      ],
+      "block": "observer[facing=east,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        9
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        11
+      ],
+      "block": "note_block[instrument=guitar,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=down]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        7
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        10
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        11
+      ],
+      "block": "note_block[instrument=guitar,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        0
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        1
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        2
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        4
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        5
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        7
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        8
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        9
+      ],
+      "block": "target[power=0]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        0
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        1
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        2
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        4
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        5
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        7
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        8
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        9
+      ],
+      "block": "target[power=0]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        0
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        1
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        2
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        3
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        4
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        5
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        9
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        10
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        11
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        3
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        4
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        6
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        7
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        8
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        9
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        10
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        11
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        0
+      ],
+      "block": "piston[extended=false,facing=south]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        1
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        2
+      ],
+      "block": "light_blue_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        3
+      ],
+      "block": "light_blue_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        4
+      ],
+      "block": "black_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        5
+      ],
+      "block": "black_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        8
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        10
+      ],
+      "block": "target[power=0]"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        0
+      ],
+      "block": "piston[extended=false,facing=south]"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        1
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        2
+      ],
+      "block": "light_blue_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        3
+      ],
+      "block": "light_blue_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        4
+      ],
+      "block": "black_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        5
+      ],
+      "block": "black_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        8
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        10
+      ],
+      "block": "target[power=0]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        7
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        8
+      ],
+      "block": "sticky_piston[extended=false,facing=north]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        9
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        3
+      ],
+      "block": "observer[facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        4
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        5
+      ],
+      "block": "diamond_block"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        8
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        11
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        0
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        1
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        2
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        3
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        4
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        5
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        6
+      ],
+      "block": "smooth_quartz"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        7
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        8
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        9
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        10
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        11
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        0
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        1
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        2
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        3
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        4
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        5
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        6
+      ],
+      "block": "smooth_quartz"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        7
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        8
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        9
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        10
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        11
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        0
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        1
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        2
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        3
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        4
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        5
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        6
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        7
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        8
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        9
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        10
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        6,
+        11
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        0
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        1
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        2
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        3
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        4
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        5
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        6
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        7
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        8
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        9
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        10
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        6,
+        11
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        5
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        4
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "block": "activator_rail[powered=false,shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        7
+      ],
+      "block": "activator_rail[powered=false,shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "block": "activator_rail[powered=false,shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        9
+      ],
+      "block": "activator_rail[powered=false,shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        10
+      ],
+      "block": "activator_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        5
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "repeater[delay=1,facing=east,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        10
+      ],
+      "block": "activator_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "repeater[delay=4,facing=north,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        10
+      ],
+      "block": "activator_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        4
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        5
+      ],
+      "block": "repeater[delay=4,facing=north,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        4
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        5
+      ],
+      "block": "repeater[delay=4,facing=north,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        8
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=west,lit=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        3
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        7
+      ],
+      "block": "repeater[delay=1,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        8
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        7
+      ],
+      "block": "repeater[delay=1,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        8
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        9
+      ],
+      "block": "repeater[delay=4,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        10
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        10
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        6
+      ],
+      "block": "repeater[delay=4,facing=north,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        7
+      ],
+      "block": "repeater[delay=4,facing=north,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        8
+      ],
+      "block": "repeater[delay=3,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=true]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        2
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=true]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        9
+      ],
+      "block": "repeater[delay=1,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        11
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        9
+      ],
+      "block": "repeater[delay=1,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        11
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        2
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        3
+      ],
+      "block": "repeater[delay=4,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        4
+      ],
+      "block": "repeater[delay=4,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        5
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        5,
+        10
+      ],
+      "block": "repeater[delay=2,facing=north,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        6
+      ],
+      "block": "repeater[delay=2,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        9
+      ],
+      "block": "repeater[delay=4,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        5,
+        10
+      ],
+      "block": "repeater[delay=3,facing=south,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        5,
+        5
+      ],
+      "block": "lever[face=wall,facing=east,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "hopper[enabled=true,facing=down]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        8
+      ],
+      "block": "hopper[enabled=true,facing=down]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        7
+      ],
+      "block": "dropper[facing=down,triggered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        2
+      ],
+      "block": "hopper[enabled=true,facing=east]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        3
+      ],
+      "block": "comparator[facing=north,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        5
+      ],
+      "block": "hopper[enabled=true,facing=down]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        1
+      ],
+      "block": "comparator[facing=south,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        2
+      ],
+      "block": "hopper[enabled=false,facing=west]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "player_head",
+          "count": 11
+        },
+        {
+          "slot": 1,
+          "id": "snowball",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "pos": [
+        3,
+        3,
+        8
+      ],
+      "block": "hopper[enabled=true,facing=down]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        3
+      ],
+      "block": "dropper[facing=down,triggered=false]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        3
+      ],
+      "block": "dropper[facing=down,triggered=false]"
+    },
+    {
+      "pos": [
+        6,
+        4,
+        5
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        4,
+        5,
+        5
+      ],
+      "action": "use"
+    }
+  ],
+  "skipUntil": "I-piston-landing-timing",
+  "skipReason": "#213 の主因 (tick 135 の押し上げが起きない) は解消済み。残るのは着地タイミングの 1 tick ズレ (tick 136 で実機は (0,6,6) が着地済み / sim はまだ moving_piston) と、その影響で tick 148 の押し上げがずれる件 (#216)"
+}

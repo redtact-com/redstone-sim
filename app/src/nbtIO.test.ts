@@ -427,3 +427,50 @@ describe('向き規約: 書き出しが vanilla 互換になる (#189)', () => {
         .toBe((block as { facing?: string }).facing)
     })
 })
+
+// ============================================================
+// 素材ブロックの分類が 2 つの変換器で一致する (#214)
+//
+// 固体 / ガラス / スラブの判定は #214 で `packages/sim/src/blocks/blockNames.ts`
+// に集約し、`nbtIO` と `mcstate` (実機ハーネス) の両方から使うようにした。
+//
+// それ以前は mcstate 側が fixture で使う分だけを個別に列挙し、未知は例外にして
+// いたため**実キャプチャをそのまま実機 fixture にできなかった** (#213 のドア
+// fixture が light_blue_wool で落ちた)。#189 の「2 つの変換器がドリフトする」
+// のと同じ構図なので、同じ形で突き合わせる。
+// ============================================================
+
+describe('素材ブロックの分類: nbtIO と mcstate が一致する (#214)', () => {
+  const CASES: [string, Record<string, string>][] = [
+    // 実キャプチャ (Runa.S の 2 幅ドア) に出てくるもの
+    ['light_blue_wool', {}], ['white_stained_glass', {}], ['black_stained_glass', {}],
+    ['light_blue_stained_glass', {}], ['diamond_block', {}], ['smooth_quartz', {}],
+    ['stone', {}], ['smooth_stone_slab', { type: 'bottom' }],
+    // #184 で実機測定した割れどころ
+    ['glowstone', {}], ['sea_lantern', {}], ['ice', {}],
+    ['packed_ice', {}], ['blue_ice', {}], ['soul_sand', {}], ['magma_block', {}],
+    ['smooth_stone_slab', { type: 'double' }], ['oak_slab', { type: 'top' }],
+    // 接尾辞判定
+    ['oak_planks', {}], ['deepslate_bricks', {}], ['waxed_exposed_cut_copper', {}],
+  ]
+
+  it.each(CASES)('%s %o が両方で同じ型になる', async (name, props) => {
+    const viaNbt = await importVanilla(`minecraft:${name}`, props)
+    const kv = Object.entries(props).map(([k, v]) => `${k}=${v}`).join(',')
+    const viaHarness = mcToSim(kv ? `${name}[${kv}]` : name)
+    expect(viaNbt, `${name} が nbtIO で取り込めていない`).toBeDefined()
+    expect(viaHarness, `${name} が mcstate で扱えない`).not.toBeNull()
+    expect(viaHarness!.type).toBe((viaNbt as BlockState).type)
+  })
+
+  it('**実キャプチャのブロックで mcToSim が例外を投げない** (#213 の fixture が落ちた原因)', () => {
+    for (const [name, props] of CASES) {
+      const kv = Object.entries(props).map(([k, v]) => `${k}=${v}`).join(',')
+      expect(() => mcToSim(kv ? `${name}[${kv}]` : name), name).not.toThrow()
+    }
+  })
+
+  it('本当に未対応のブロックは従来どおり例外にする (typo 検知を残す)', () => {
+    expect(() => mcToSim('definitely_not_a_block')).toThrow(/扱えないブロック/)
+  })
+})
