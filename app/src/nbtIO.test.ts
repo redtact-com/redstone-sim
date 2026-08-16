@@ -250,7 +250,8 @@ describe('固体ブロックの取り込み (#170)', () => {
     'minecraft:oak_log', 'minecraft:stripped_birch_wood', 'minecraft:crimson_stem',
     'minecraft:iron_ore', 'minecraft:deepslate_redstone_ore',
     'minecraft:oxidized_copper', 'minecraft:waxed_exposed_cut_copper',
-    'minecraft:glowstone', 'minecraft:hay_block', 'minecraft:packed_ice',
+    'minecraft:hay_block', 'minecraft:packed_ice', 'minecraft:blue_ice',
+    'minecraft:soul_sand', 'minecraft:mud', 'minecraft:magma_block', 'minecraft:shroomlight',
   ])('その他の導体フルブロックも solid: %s', async (name) => {
     expect(await importVanilla(name)).toMatchObject(solid)
   })
@@ -262,10 +263,24 @@ describe('固体ブロックの取り込み (#170)', () => {
     }
   })
 
+  // ── 非導体フルブロック (#184) ────────────────────────────────────────
+  //
+  // どれが導体かは**見た目や名前では判別できない**。実機ハーネスで 1 つずつ測って
+  // 確定させた (fixture nonconductor-glass-slab)。実際、事前の推測は半分外れていて
+  // soul_sand / mud / magma_block は導体、ice は非導体だった。
+  // **ice と packed_ice で結果が割れる**のがこの手の推測の危うさを一番よく表している。
+
   it.each([
     'minecraft:glass', 'minecraft:white_stained_glass', 'minecraft:tinted_glass',
-  ])('ガラスは solid にしない (#184 で専用型へ): %s', async (name) => {
+    'minecraft:glowstone', 'minecraft:sea_lantern', 'minecraft:ice',
+  ])('非導体フルブロックは solid にしない: %s', async (name) => {
     expect(await importVanilla(name)).toMatchObject({ type: 'glass' })
+  })
+
+  it('ice は非導体だが packed_ice / blue_ice は導体 (名前で仲間にしない)', async () => {
+    expect(await importVanilla('minecraft:ice')).toMatchObject({ type: 'glass' })
+    expect(await importVanilla('minecraft:packed_ice')).toMatchObject({ type: 'solid' })
+    expect(await importVanilla('minecraft:blue_ice')).toMatchObject({ type: 'solid' })
   })
 
   it.each([

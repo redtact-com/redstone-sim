@@ -323,16 +323,22 @@ export interface SolidState {
 }
 
 /**
- * ガラス系 (glass / *_stained_glass)。**フルブロックだが非導体** (#184)。
+ * **非導体フルブロック** (#184)。代表がガラスなので型名は glass だが、
+ * ガラス系 (glass / tinted_glass / *_stained_glass) のほか
+ * **glowstone / sea_lantern / ice** もここに落ちる。
  *
- * [確定: Blocks.GLASS が `isRedstoneConductor(never)` を明示している]。したがって
+ * [確定: 実機ハーネスで 1 つずつ測定。repeater で強充電して隣の dust を見る]。したがって
  *   - 充電されない・信号を通さない (isConductor=false)
  *   - ワイヤーの上下斜め接続を切らない (isWireCutBlock=false)
  *   - ピストンで押せる (PushReaction 既定 = NORMAL)
  * となり、レッドストーン的には**空気とほぼ同じ**。違いはピストンの押し対象になる点。
  *
- * 既知の抽象化: 色 (16 種の stained_glass) は持たず、すべて無色として描画する。
- * ガラス板 (glass_pane) はフルブロックでないため対象外。
+ * 既知の抽象化: 色・素材を持たず、**すべて無色ガラスとして描画する**
+ * (グロウストーンを取り込むとガラスに見える)。ガラス板 (glass_pane) は
+ * フルブロックでないため対象外。
+ *
+ * 注意: **packed_ice / blue_ice は導体**で、ice とは挙動が違う (実機で確認済み)。
+ * 名前が似ていても仲間にしないこと。
  */
 export interface GlassState {
   type: 'glass'

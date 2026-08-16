@@ -1,6 +1,6 @@
 {
   "name": "nonconductor-glass-slab",
-  "description": "ガラス・単体スラブは非導体で、二重スラブは導体 (#184)。レーンごとに redstone_block → repeater → 被検ブロック → dust。repeater が被検ブロックを強充電し、導体なら隣の dust が 15 になる。dust は接続を持たない (dot) ので水平方向へは給電しない = dust の power がそのまま導通の有無を表す",
+  "description": "どのフルブロックが導体かを実機で確定させる (#184)。レーンごとに redstone_block → repeater → 被検ブロック → dust。repeater が被検ブロックを強充電し、導体なら隣の dust が 15 になる。dust は接続を持たない (dot) ので水平方向へは給電しない = dust の power がそのまま導通の有無を表す。**ice と packed_ice で結果が割れる**のが要点で、名前の似たブロックを推測で仲間にできないことの根拠",
   "mcVersion": "1.21.1",
   "ticks": 8,
   "region": {
@@ -12,14 +12,14 @@
     "to": [
       4,
       1,
-      6
+      14
     ]
   },
   "player": {
     "spawn": [
       0.5,
       1.0,
-      8.5
+      16.5
     ],
     "facing": [
       180,
@@ -28,7 +28,7 @@
     "lookAt": [
       0.5,
       1.35,
-      7.5
+      15.5
     ]
   },
   "blocks": [
@@ -90,6 +90,70 @@
     },
     {
       "pos": [
+        0,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        11
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        13
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        14
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
         1,
         0,
         0
@@ -146,6 +210,70 @@
     },
     {
       "pos": [
+        1,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        11
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        13
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        14
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
         2,
         0,
         0
@@ -202,6 +330,70 @@
     },
     {
       "pos": [
+        2,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        11
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        13
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        14
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
         3,
         0,
         0
@@ -258,6 +450,70 @@
     },
     {
       "pos": [
+        3,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        11
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        13
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        14
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
         4,
         0,
         0
@@ -309,6 +565,70 @@
         4,
         0,
         6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        11
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        13
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        14
       ],
       "block": "stone"
     },
@@ -407,6 +727,102 @@
         6
       ],
       "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "block": "repeater[delay=1,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "glowstone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        8
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        10
+      ],
+      "block": "repeater[delay=1,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        10
+      ],
+      "block": "sea_lantern"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        10
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        12
+      ],
+      "block": "repeater[delay=1,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        12
+      ],
+      "block": "ice"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        12
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        14
+      ],
+      "block": "repeater[delay=1,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        14
+      ],
+      "block": "packed_ice"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        14
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
     }
   ],
   "inputs": [
@@ -446,6 +862,46 @@
         0,
         1,
         6
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        10
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        12
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        14
       ],
       "action": "setblock",
       "block": "redstone_block"

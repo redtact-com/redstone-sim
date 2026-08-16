@@ -706,6 +706,19 @@ function minecraftToBlockState(
 // 「フルブロックだが `isRedstoneConductor` が false」のもの。solid に落とすと
 // **存在しない導通が生まれる**ため、専用の型に割り当てる。
 
+/**
+ * `glass` 型 (= 非導体フルブロック) に集約する名前。
+ *
+ * **実機ハーネスで 1 つずつ測って確定させた** (#184)。見た目や直感では判別できず、
+ * 実際に半分外した:
+ *   - 非導体: glass 系 / glowstone / sea_lantern / **ice**
+ *   - 導体:   **packed_ice** / **blue_ice** / soul_sand / mud / magma_block / shroomlight
+ * ice と packed_ice で結果が割れるので、名前の似ているものを勝手に仲間にしないこと。
+ */
+const GLASS_EXACT = new Set([
+  'glass', 'tinted_glass',
+  'glowstone', 'sea_lantern', 'ice',
+])
 /** 無色ガラスに集約するもの (色は sim で保持しない) */
 const GLASS_SUFFIXES = ['_stained_glass']
 
@@ -714,7 +727,7 @@ function toNonConductiveBlockState(
 ): BlockState | null {
   const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
 
-  if (id === 'glass' || id === 'tinted_glass' || GLASS_SUFFIXES.some(s => id.endsWith(s))) {
+  if (GLASS_EXACT.has(id) || GLASS_SUFFIXES.some(s => id.endsWith(s))) {
     // ガラス板 (_pane) はフルブロックではないので対象外 (この分岐にも来ない)
     return { type: 'glass' } as BlockState
   }
@@ -757,7 +770,8 @@ const SOLID_EXACT = new Set([
   'dirt', 'coarse_dirt', 'rooted_dirt', 'grass_block', 'podzol', 'mycelium',
   'mud', 'packed_mud', 'clay', 'sand', 'red_sand', 'gravel',
   'soul_sand', 'soul_soil', 'snow_block', 'moss_block',
-  'ice', 'packed_ice', 'blue_ice',
+  // ice は非導体 (実機確認済み)。packed_ice / blue_ice は**導体**で挙動が違う
+  'packed_ice', 'blue_ice',
   // 鉱物・金属ブロック (redstone_block は信号源なので上流で処理済み)
   'iron_block', 'gold_block', 'diamond_block', 'emerald_block', 'lapis_block',
   'coal_block', 'netherite_block', 'copper_block', 'amethyst_block',
@@ -765,13 +779,13 @@ const SOLID_EXACT = new Set([
   // 石英・プルプァ・プリズマリン
   'quartz_block', 'smooth_quartz', 'quartz_bricks', 'quartz_pillar', 'chiseled_quartz_block',
   'purpur_block', 'purpur_pillar',
-  'prismarine', 'prismarine_bricks', 'dark_prismarine', 'sea_lantern',
+  'prismarine', 'prismarine_bricks', 'dark_prismarine',   // sea_lantern は非導体
   // 砂岩 (red_sandstone 等は接尾辞側で拾う)
   'sandstone',
   // 有機・その他フルブロック
   'bookshelf', 'chiseled_bookshelf', 'hay_block', 'dried_kelp_block', 'bone_block',
   'sponge', 'wet_sponge', 'melon', 'pumpkin', 'carved_pumpkin', 'jack_o_lantern',
-  'nether_wart_block', 'warped_wart_block', 'shroomlight', 'glowstone',
+  'nether_wart_block', 'warped_wart_block', 'shroomlight',   // glowstone は非導体
   'brown_mushroom_block', 'red_mushroom_block', 'mushroom_stem',
 ])
 

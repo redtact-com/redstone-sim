@@ -293,8 +293,17 @@ export function mcToSim(state: string): BlockState | null {
     case 'stone':
     case 'smooth_stone':
     case 'cobblestone':
+    // packed_ice / blue_ice は ice と違い**導体** (#184 で実機確認)。
+    // fixture nonconductor-glass-slab がこの割れ方を押さえている
+    case 'packed_ice':
+    case 'blue_ice':
       return { type: 'solid', powered: false }
+    // 非導体フルブロック (#184)。glowstone / sea_lantern / ice も同じ挙動
+    // (実機で確定。packed_ice / blue_ice は導体なのでここに入れない)
     case 'glass':
+    case 'glowstone':
+    case 'sea_lantern':
+    case 'ice':
       return { type: 'glass' }
     case 'smooth_stone_slab':
       // 二重スラブは当たり判定がフルブロック = 導体なので solid 扱い (#184)
