@@ -1,0 +1,380 @@
+{
+  "name": "hopper-mixed-stacks",
+  "description": "コンテナのコンパレーター強度はスタック上限で決まる (#194/#196)。4 レーン: 混載 player_head 11 + snowball 3 / player_head 14 (64 スタック) / snowball 14 (16 スタック) / iron_axe 1 (スタック不可)。**前 3 レーンは合計 14 個で同じなのに強度が割れる**のが要点で、個数だけを持つモデルでは再現できない。真下が石なので転送は起きない静的 fixture",
+  "mcVersion": "1.21.1",
+  "ticks": 4,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      3,
+      1,
+      6
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "hopper[enabled=true,facing=down]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "player_head",
+          "count": 11
+        },
+        {
+          "slot": 1,
+          "id": "snowball",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=2,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block": "hopper[enabled=true,facing=down]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "player_head",
+          "count": 14
+        }
+      ]
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=1,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "block": "hopper[enabled=true,facing=down]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "snowball",
+          "count": 14
+        }
+      ]
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "redstone_wire[east=side,north=none,power=3,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "block": "hopper[enabled=true,facing=down]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "iron_axe",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "redstone_wire[east=side,north=none,power=3,south=none,west=side]"
+    }
+  ],
+  "inputs": [],
+  "expect": [],
+  "generated": {
+    "at": "2026-08-16T06:31:58.968Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

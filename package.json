@@ -1,7 +1,7 @@
 {
   "name": "redstone-sim",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.8.1",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -17,9 +17,10 @@
     "ground-truth": "bash tools/mc-harness/scripts/run-fixture.sh",
     "demo-gif": "node tools/demo/demo-gif.mjs",
     "e2e": "playwright test",
-    "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json",
+    "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json app/tsconfig.json",
     "harness:up": "DOCKER_API_VERSION=1.44 docker compose -f tools/mc-harness/docker-compose.yml up -d",
-    "harness:down": "DOCKER_API_VERSION=1.44 docker compose -f tools/mc-harness/docker-compose.yml down"
+    "harness:down": "DOCKER_API_VERSION=1.44 docker compose -f tools/mc-harness/docker-compose.yml down",
+    "gen-item-stacks": "node tools/gen-item-stacks.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

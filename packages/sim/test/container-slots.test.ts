@@ -4,6 +4,7 @@ import {
   fillSignal, slotsFromCount, takeOne, putOne, emptySlots, effectiveContainerSignal,
 } from '../src/blocks/container.js'
 import { stackSizeOf } from '../src/blocks/itemStacks.js'
+import { ITEM_STACK_MC_VERSION, ITEM_STACK_TOTAL } from '../src/blocks/itemStacks.generated.js'
 import type { HopperState, ItemStack, ContainerSlots } from '../src/types.js'
 
 /**
@@ -78,6 +79,32 @@ describe('スタック上限の判定 (#194)', () => {
   it('表に無いアイテムは 64 だが known=false になる (呼び出し側が警告を出す)', () => {
     expect(stackSizeOf('some_unknown_item')).toEqual({ stack: 64, known: false })
     expect(stackSizeOf('cobblestone').known).toBe(true)
+  })
+
+  // #202: 手書きの表を mcmeta 由来の生成表に置き換えた。手書き版は 1333 種中
+  // **25 種を間違えていた**。その 25 種を回帰テストとして固定する
+  it('**旗 16 色は上限 16** — 手書き表は 64 と誤判定していた', () => {
+    for (const c of ['white', 'red', 'black', 'lime', 'light_blue']) {
+      expect(stackSizeOf(`${c}_banner`).stack, `${c}_banner`).toBe(16)
+    }
+  })
+
+  it('手書き表が 64 と誤判定していたスタック不可アイテム', () => {
+    for (const id of ['goat_horn', 'mace', 'minecart', 'shulker_box', 'wolf_armor']) {
+      expect(stackSizeOf(id).stack, id).toBe(1)
+    }
+  })
+
+  it('手書き表が 1 と誤判定していた 64 スタックアイテム', () => {
+    for (const id of ['beacon', 'conduit', 'experience_bottle', 'filled_map']) {
+      expect(stackSizeOf(id).stack, id).toBe(64)
+    }
+  })
+
+  it('生成表がハーネスの実機バージョンと揃っている', () => {
+    // ズレると強度が実機と食い違う。fixture の mcVersion と同じ 1.21.1
+    expect(ITEM_STACK_MC_VERSION).toBe('1.21.1')
+    expect(ITEM_STACK_TOTAL).toBeGreaterThan(1000)
   })
 })
 

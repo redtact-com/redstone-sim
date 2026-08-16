@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { BlockState } from '@redstone/sim'
+import { effectiveContainerSignal } from '@redstone/sim'
 import {
   STORAGE_KEY, STORAGE_VERSION,
   saveCircuit, loadCircuit, clearCircuit, parseCircuit, serializeCircuit,
@@ -103,5 +104,67 @@ describe('circuitStorage', () => {
     expect(out.v).toBe(STORAGE_VERSION)
     expect(out.savedAt).toBe('2026-08-12T00:00:00Z')
     expect(Object.keys(out.blocks)).toHaveLength(3)
+  })
+})
+
+// ============================================================
+// 旧形式コンテナの移行 (#201)
+//
+// v0.8.0 (#194) で `HopperState.count` → `slots` に変えたが移行を入れておらず、
+// **保存済み回路を読み込んだ瞬間に落ちる**状態だった
+// (`slots is not iterable` / `reading 'length'`)。
+// STORAGE_VERSION を上げて捨てれば落ちはしないが回路まで失うので、ここで直す。
+// ============================================================
+
+describe('旧形式コンテナの移行 (#201)', () => {
+  const legacy = (block: Record<string, unknown>): string => JSON.stringify({
+    v: 1, savedAt: '2026-08-16T00:00:00.000Z', blocks: { '0,0,0': block },
+  })
+  const first = (raw: string) => parseCircuit(raw)!.blocks.get('0,0,0') as {
+    slots?: readonly ({ id: string; stack: number; count: number } | null)[]
+    count?: number
+  }
+
+  it('hopper の count を slots に移行する', () => {
+    const b = first(legacy({ type: 'hopper', facing: 'down', count: 14, enabled: true }))
+    expect(b.count, 'count は残さない').toBeUndefined()
+    expect(b.slots![0]).toMatchObject({ stack: 64, count: 14 })
+  })
+
+  it('**移行後もコンパレーター強度が変わらない** (旧モデルは 64 スタック相当だった)', () => {
+    // 旧: f = 100 / (5*64) → floor(0.4375*14)+1 = 7
+    const b = first(legacy({ type: 'hopper', facing: 'down', count: 100, enabled: true }))
+    expect(effectiveContainerSignal(b as never)).toBe(Math.floor((100 / 320) * 14) + 1)
+  })
+
+  it('dropper / dispenser も移行する', () => {
+    for (const type of ['dropper', 'dispenser']) {
+      const b = first(legacy({ type, facing: 'north', count: 70, triggered: false }))
+      expect(b.slots!.filter(Boolean).length, type).toBe(2)   // 64 + 6
+    }
+  })
+
+  it('container の手動 signal モードは slots を持たないまま通す', () => {
+    const b = first(legacy({ type: 'container', signal: 9 }))
+    expect(b.slots).toBeUndefined()
+    expect(effectiveContainerSignal(b as never)).toBe(9)
+  })
+
+  it('現行形式 (slots つき) はそのまま通す', () => {
+    const slots = [{ id: 'snowball', stack: 16, count: 3 }, null, null, null, null]
+    const b = first(legacy({ type: 'hopper', facing: 'down', slots, enabled: true }))
+    expect(b.slots![0]).toMatchObject({ id: 'snowball', stack: 16, count: 3 })
+  })
+
+  it('count も slots も無い壊れたコンテナは空スロットで復旧する', () => {
+    const b = first(legacy({ type: 'hopper', facing: 'down', enabled: true }))
+    expect(b.slots).toHaveLength(5)
+    expect(b.slots!.every(s => s === null)).toBe(true)
+  })
+
+  it('移行しないと落ちること自体を固定する (回帰防止)', () => {
+    // 移行を外すとこの形が sim に渡り、下の呼び出しが TypeError になる
+    const raw = { type: 'hopper', facing: 'down', count: 14, enabled: true } as never
+    expect(() => effectiveContainerSignal(raw)).toThrow(TypeError)
   })
 })

@@ -1,0 +1,166 @@
+{
+  "name": "hopper-mixed-transfer",
+  "description": "混載ホッパーの転送順 (#194/#196)。上段 slot0 に snowball 8 (16 スタック)、slot1 に player_head 32 (64 スタック)。レッドストーンブロックでロックした状態から始め tick 2 で撤去して転送を始める。**先頭の非空スロットから 1 個ずつ**出るので slot0 の snowball が先に全部移り、そのあと player_head が移る。1 個あたりの充填率は snowball が 1/16/5、player_head が 1/64/5 と 4 倍違うため、下段を読むコンパレーターの**強度の上がり方が前半と後半で変わる**。順序を取り違えると系列が合わない",
+  "mcVersion": "1.21.1",
+  "ticks": 176,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      3,
+      2,
+      2
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "hopper[enabled=false,facing=down]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "snowball",
+          "count": 8
+        },
+        {
+          "slot": 1,
+          "id": "player_head",
+          "count": 32
+        }
+      ]
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "hopper[enabled=false,facing=down]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ],
+  "player": {
+    "spawn": [
+      0.5,
+      1.0,
+      2.5
+    ],
+    "facing": [
+      180,
+      40
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      1.5
+    ]
+  }
+}

@@ -1,4 +1,5 @@
-import type { BlockState } from '@redstone/sim'
+import type { BlockState, BlockType } from '@redstone/sim'
+import { slotsFromCount, containerSlotsOf } from '@redstone/sim'
 
 /**
  * 編集中の回路をブラウザに残す (#109)。
@@ -68,9 +69,37 @@ export function parseCircuit(raw: string): RestoredCircuit | null {
     if (!isPosKey(key)) return null
     if (typeof block !== 'object' || block === null) return null
     if (typeof (block as BlockState).type !== 'string') return null
-    map.set(key, block as BlockState)
+    map.set(key, migrateBlock(block as BlockState))
   }
   return { blocks: map, savedAt: typeof savedAt === 'string' ? savedAt : '' }
+}
+
+/**
+ * 保存データのブロックを現行の形へ移行する (#201)。
+ *
+ * v0.8.0 (#194) でコンテナが `count: number` → `slots` に変わった。移行しないと
+ * **読み込んだ瞬間に落ちる** (`slots is not iterable` / `reading 'length'`)。
+ * `STORAGE_VERSION` を上げて捨てる手もあるが、それでは回路まで失うのでここで直す。
+ *
+ * 旧モデルの count は「64 スタックのアイテムが slot0 から詰まっている」意味だったので、
+ * `slotsFromCount` の既定と一致し**コンパレーター強度も変わらない**。
+ */
+function migrateBlock(block: BlockState): BlockState {
+  const type = block.type as BlockType
+  if (type !== 'hopper' && type !== 'dropper' && type !== 'dispenser' && type !== 'container') {
+    return block
+  }
+  // 既に slots を持っていれば現行形式
+  if (containerSlotsOf(block) !== undefined) return block
+  const legacy = block as unknown as { count?: unknown }
+  if (typeof legacy.count !== 'number') {
+    // container の手動 signal モードは slots を持たないのが正しい
+    if (type === 'container') return block
+    // hopper/dropper で count も slots も無い壊れたデータ → 空スロットで復旧
+    return { ...block, slots: slotsFromCount(type, 0) } as BlockState
+  }
+  const { count: _drop, ...rest } = block as unknown as Record<string, unknown>
+  return { ...rest, slots: slotsFromCount(type, legacy.count) } as unknown as BlockState
 }
 
 export type SaveResult = 'saved' | 'unavailable' | 'failed'
