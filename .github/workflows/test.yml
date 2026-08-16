@@ -19,6 +19,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +44,9 @@ jobs:
   # GIF 生成 (npm run demo-gif) はローカル専用で CI には入れない。
   e2e:
     runs-on: ubuntu-latest
+    # #203: playwright install が 40 分ハングする事象が複数回あった。
+    # timeout が無いと GitHub 既定の 6 時間まで居座るので短く切る
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -54,8 +58,29 @@ jobs:
       - name: 依存インストール
         run: npm ci
 
+      # ブラウザをキャッシュしてインストール自体を短縮・安定化する (#203)。
+      # キーに playwright のバージョンを含め、上げたら取り直す
+      - name: Playwright バージョン取得
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Playwright ブラウザのキャッシュ
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      # --with-deps は apt を叩くため遅く、ハングの原因もここだった。
+      # ubuntu-latest には必要な共有ライブラリが既に入っているので通常は付けない。
+      # 足りない場合に備え、キャッシュミス時だけ deps も入れる
       - name: Playwright chromium インストール
-        run: npx playwright install chromium --with-deps
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install chromium
+          else
+            npx playwright install chromium --with-deps
+          fi
 
       - name: e2e (preview ビルドに対して Playwright)
         run: npm run e2e
