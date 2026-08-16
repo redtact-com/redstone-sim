@@ -159,6 +159,15 @@ async function generateFixture(name: string): Promise<void> {
       await sleep(80)
     }
   }
+  // #196: 充填後にもう一度 update を配る。fx_settle() は上で 1 度呼んでいるが
+  // **アイテムを入れる前**なので、コンテナ隣接のコンパレーターが中身を読みに
+  // 行かないままになる (authored は without_updates で置かれるため、
+  // /item replace だけでは comparator の OutputSignal が 0 のまま残る)。
+  // これが無いと混載ホッパーの fixture が settle 照合を通せなかった
+  if (def.blocks.some(b => b.items !== undefined)) {
+    scarpet('fx_settle()')
+    await sleep(200)
+  }
   rcon('tick', 'step', '8')
   await sleep(600)
 
