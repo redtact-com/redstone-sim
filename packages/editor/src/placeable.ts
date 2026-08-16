@@ -94,7 +94,13 @@ export function normalizePlaceOptions(type: BlockType, opts: PlaceOptions = {}):
   }
 
   const cap = maxCount(type)
-  if (cap > 0 && isNum(opts.count)) out.count = clamp(opts.count, 0, cap)
+  if (cap > 0) {
+    // スタック上限 (#194) を先に確定させてから個数を丸める。
+    // 実際に入る個数は スロット数 × スタック上限 が上限になる
+    if (opts.stack === 1 || opts.stack === 16 || opts.stack === 64) out.stack = opts.stack
+    const stack = out.stack ?? 64
+    if (isNum(opts.count)) out.count = clamp(opts.count, 0, containerSlots(type) * stack)
+  }
 
   return out
 }

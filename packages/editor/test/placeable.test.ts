@@ -63,3 +63,24 @@ describe('#115 PLACEABLE_TYPES / normalizePlaceOptions', () => {
     expect(ed.getBlock(1, 1)).toMatchObject({ type: 'repeater', delay: 4, facing: 'north' })
   })
 })
+
+describe('スタック上限オプション (#194)', () => {
+  it('コンテナは stack を受け取り、個数の上限がそれで決まる', () => {
+    // 16 スタック × 5 スロット = 80 が上限
+    expect(normalizePlaceOptions('hopper', { count: 100, stack: 16 }))
+      .toMatchObject({ count: 80, stack: 16 })
+    // スタック不可なら 5 個まで
+    expect(normalizePlaceOptions('hopper', { count: 100, stack: 1 }))
+      .toMatchObject({ count: 5, stack: 1 })
+    // 既定は 64
+    expect(normalizePlaceOptions('hopper', { count: 100 })).toMatchObject({ count: 100 })
+  })
+
+  it('不正な stack は落とす', () => {
+    expect(normalizePlaceOptions('hopper', { count: 1, stack: 32 as never }).stack).toBeUndefined()
+  })
+
+  it('コンテナ以外には stack を付けない', () => {
+    expect(normalizePlaceOptions('repeater', { stack: 16 }).stack).toBeUndefined()
+  })
+})
