@@ -22706,6 +22706,6 @@
     "mc": "1.21.1",
     "carpet": "1.21-1.4.147+v240613"
   },
-  "skipUntil": "I-pushed-observer-landing-fire",
+  "skipUntil": "233",
   "skipReason": "#231: 400 tick 中 **2 tick** の不一致 (t=306-307)。引き戻されて着地したオブザーバー (3,2,6) を sim だけが発火させる。**一般則としては着地発火が正しい**ことを実機で確認済み — observer-pushed (押し) も observer-pulled (引き) も着地の 2gt 後に発火し、sim は両方一致する [確定: 26.2 PistonMovingBlockEntity.finalTick → Block.updateFromNeighbourShapes → ObserverBlock.updateShape の startSignal]。このドアの (3,2,6) だけ実機が発火させない条件が未特定 (運ばれる向きと facing が一致するケース / 予約済み tick の有無 などが候補)。閉じる側 door-5x5-kurigohan は 121 tick 完全一致。"
 }
