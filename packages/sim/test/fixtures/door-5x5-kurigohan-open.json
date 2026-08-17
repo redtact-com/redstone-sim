@@ -22706,6 +22706,6 @@
     "mc": "1.21.1",
     "carpet": "1.21-1.4.147+v240613"
   },
-  "skipUntil": "I-open-t299",
-  "skipReason": "#231: 400 tick 中 17 tick の不一致。最初の食い違いは t=299 の (5,1,4) — 実機は上向き粘着ピストンを伸ばすが sim は伸ばさない。**伸長の予約時に resolve を見る修正 (checkIfExtend 準拠) で 81 → 17 tick に縮んだ**。この fixture がその回帰を守る (判定を外すと 17 → 81 tick に戻る)。閉じる側 door-5x5-kurigohan は 121 tick 完全一致。"
+  "skipUntil": "I-pushed-observer-landing-fire",
+  "skipReason": "#231: 400 tick 中 **2 tick** の不一致 (t=306-307)。押されて着地したオブザーバー (3,2,6) を sim だけが発火させる。sim は着地したオブザーバーを無条件に 1 回発火させている (#119) が、[確定: 26.2 ObserverBlock] onPlace は POWERED を消すだけで**発火は予約しない**。発火するのは updateShape が **facing 側から**来たときだけ (startSignal)。ただし着地発火をそのまま外すと observer-pushed が 2 tick / 閉じる側が 59 tick 崩れるので、「どの更新で着地発火するか」を実機で詰める必要がある。閉じる側 door-5x5-kurigohan は 121 tick 完全一致。"
 }

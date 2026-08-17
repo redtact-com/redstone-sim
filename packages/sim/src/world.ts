@@ -503,6 +503,16 @@ export class SimWorld {
       for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
       this.neighborChanged(pos)
     }
+    // 着地したピストンは**自分自身を再判定する** (#231)
+    // [確定: 26.2 PistonBaseBlock.onPlace —
+    //  `if (!oldState.is(state.getBlock()) && level.getBlockEntity(pos) == null) checkIfExtend(...)`]。
+    // 着地は moving_piston → piston の差し替えなので条件を満たす。
+    // 隣接 6 マスへの NC (下の submitMultiNC) は**自分には飛ばない**ので、
+    // これが無いと「運ばれて着地した直後に受電しているピストン」が伸びない
+    // (5×5 ドアの t=299 で実機だけが伸びていた原因)
+    if (into.type === 'piston' || into.type === 'sticky_piston') {
+      this.neighborChanged(pos)
+    }
     // 着地は vanilla では setBlock(UPDATE_ALL) なので**隣接 6 マスへ NC が飛ぶ**
     // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock(..., UPDATE_ALL)]。
     // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も

@@ -264,3 +264,51 @@ describe('伸長は予約時に押せるかを判定する (#231)', () => {
     expect(w.getBlock(3, -1, 0)).toMatchObject({ extended: true })
   })
 })
+
+/**
+ * **着地したピストンは自分自身を再判定する** (#231)。
+ *
+ * [確定: 26.2 PistonBaseBlock.onPlace —
+ *  `if (!oldState.is(state.getBlock()) && level.getBlockEntity(pos) == null) checkIfExtend(...)`]
+ *
+ * 着地は moving_piston → piston の差し替えなので条件を満たす。
+ * 着地が出す NC は**隣接 6 マス向けで自分には飛ばない**ため、これが無いと
+ * 「運ばれて着地した直後に受電しているピストン」が伸びない
+ * (5×5 ドアの t=299 で実機だけが伸びていた)。
+ *
+ * **ここで固定できるのはタイミングだけ**: 合成回路では他の更新でも再判定されてしまい、
+ * 自己再判定の有無を切り分けられなかった (再判定を外しても同じ tick で伸びる)。
+ * 経路そのものの回帰は実機 fixture door-5x5-kurigohan-open が守る
+ * (外すと不一致が 2 tick → 17 tick に増える)。
+ */
+describe('着地したピストンは自分を再判定する (#231)', () => {
+  it('受電した状態で着地したピストンは着地の翌 tick で伸びる', () => {
+    const w = new SimWorld()
+    // 運び役: レバー(0,0,0) → ピストン(1,0,0,east) が上向き粘着ピストン(2,0,0) を (3,0,0) へ押す
+    w.setBlockAt([0, 0, 0], { type: 'lever', facing: 'up', powered: false } as BlockState)
+    w.setBlockAt([1, 0, 0], { type: 'piston', facing: 'east', extended: false } as BlockState)
+    w.setBlockAt([2, 0, 0], { type: 'sticky_piston', facing: 'up', extended: false } as BlockState)
+    // 着地先 (3,0,0) の隣に電源を置いておく (着地した瞬間から受電している)
+    w.setBlockAt([3, -1, 0], { type: 'redstone_block' } as BlockState)
+    w.setBlockAt([2, 1, 0], { type: 'solid', powered: false } as BlockState)   // 押される弾 (一緒に運ばれる)
+    w.initialize()
+    w.flush(64)
+    expect(w.getBlock(2, 0, 0), '前提: まだ伸びていない').toMatchObject({ extended: false })
+
+    w.activateBlock(0, 0, 0)
+    // **着地した tick と伸びた tick が一致すること**を見る。
+    // 「そのうち伸びる」だけだと、他の更新で再判定されても通ってしまい空振りになる
+    let landTick = -1, extendTick = -1
+    for (let t = 1; t <= 12; t++) {
+      w.tick()
+      const b = w.getBlock(3, 0, 0) as { type: string; extended?: boolean } | null
+      if (b?.type === 'sticky_piston' && landTick < 0) landTick = t
+      if (b?.type === 'sticky_piston' && b.extended && extendTick < 0) extendTick = t
+    }
+    expect(landTick, '運ばれて着地していない').toBeGreaterThan(0)
+    expect(extendTick, '着地しても伸びない').toBeGreaterThan(0)
+    // 着地は phase10 (BlockEntity 相) なので、そこで積んだ BE が走るのは**翌 tick**。
+    // 実機でも t=298 着地 → t=299 伸長 だった
+    expect(extendTick, `着地 t=${landTick} の翌 tick で伸びていない (t=${extendTick})`).toBe(landTick + 1)
+  })
+})
