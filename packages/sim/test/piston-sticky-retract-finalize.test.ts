@@ -222,3 +222,45 @@ describe('音符ブロックの POWERED 変化は NC を出す (#231)', () => {
       .toMatchObject({ extended: false })
   })
 })
+
+/**
+ * **伸長の予約は「押せるか」を予約時に判定する** (#231)。
+ *
+ * [確定: 26.2 PistonBaseBlock.checkIfExtend —
+ *  `if (extend && !EXTENDED) { if (new PistonStructureResolver(...).resolve()) level.blockEvent(...); }`]
+ *
+ * 予約してから実行時にだけ判定すると、**その間に押し先の moving_piston が確定して
+ * 本来押せないはずのタイミングで押せてしまう**。5×5 ドアの t=220 で、実機が伸ばさない
+ * ピストンを sim が伸ばしていた原因。
+ */
+describe('伸長は予約時に押せるかを判定する (#231)', () => {
+  /**
+   * **合成テストでは再現できない**ので前提だけ固定する。
+   * 「予約時は押せないが、同じ BE 相で他のイベントが押し先を確定させ、その後に
+   * 予約が実行される」という順序が要り、それは実回路 (5×5 ドアの t=220) でしか作れなかった。
+   * 実際の回帰は実機 fixture door-5x5-kurigohan-open が守る
+   * (この判定が無いと不一致が 2 tick → 81 tick に増える)。
+   *
+   * 着地そのものは NC を出すので、**押し先が確定したあとに改めて伸びるのは正しい**
+   * (#213 の着地 NC)。ここではそれを固定しておく。
+   */
+  it('押し先が moving のうちは伸びず、着地の更新で伸びる', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, 0, 0], { type: 'lever', facing: 'up', powered: false } as BlockState)
+    w.setBlockAt([1, 0, 0], { type: 'piston', facing: 'east', extended: false } as BlockState)
+    w.setBlockAt([2, 0, 0], { type: 'solid', powered: false } as BlockState)
+    w.setBlockAt([3, -1, 0], { type: 'sticky_piston', facing: 'up', extended: false } as BlockState)
+    w.initialize()
+    w.flush(64)
+
+    w.activateBlock(0, 0, 0)
+    w.tick()
+    expect(w.getBlock(3, 0, 0)?.type, '前提: 押し先が moving').toBe('moving_piston')
+    w.setBlockCommand([3, -2, 0], { type: 'redstone_block' } as BlockState)
+    // moving のうちは伸びない
+    expect(w.getBlock(3, -1, 0), 'moving を押してしまっている').toMatchObject({ extended: false })
+    // 着地すると NC が飛ぶので、そこで伸びる (#213)
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(3, -1, 0)).toMatchObject({ extended: true })
+  })
+})

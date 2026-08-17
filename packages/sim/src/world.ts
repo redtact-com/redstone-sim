@@ -2126,8 +2126,17 @@ export class SimWorld {
         // NC 受信時のみ再評価 (BUD の根拠)。状態不一致なら BE を予約
         const should = this.shouldExtend(pos, block)
         if (should && !block.extended) {
-          this.scheduleBlockEvent(pos, 'extend')
+          // **押せるかをこの時点で判定する** (#231)
+          // [確定: 26.2 PistonBaseBlock.checkIfExtend —
+          //  `if (new PistonStructureResolver(...).resolve()) level.blockEvent(...)`]。
+          // 予約してから実行時に判定すると、その間に押し先の moving_piston が確定して
+          // **本来押せないはずのタイミングで押せてしまう**
+          // (5×5 ドアの t=220 で、実機が伸ばさないピストンを sim が伸ばしていた原因)
+          if (this.resolvePushStructure(pos, block.facing) !== null) {
+            this.scheduleBlockEvent(pos, 'extend')
+          }
         } else if (!should && block.extended) {
+          // 収縮側は vanilla も resolve を通さない (常に予約する)
           this.scheduleBlockEvent(pos, 'retract')
         }
         break

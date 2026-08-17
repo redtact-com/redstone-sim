@@ -2,7 +2,7 @@
   "name": "door-5x5-kurigohan-open",
   "description": "くりごはん 5×5 ピストンドア (#231) の**開ける側**。閉じる側は door-5x5-kurigohan が121 tick 完全一致で守っている。こちらはレバーを 2 回トグル (t=2 で閉じ、t=150 で開ける) して300 tick 記録する。ユーザ報告『開ける時にバグっている』の裏取り。 足場・照準・レバーの扱いは door-5x5-kurigohan と同じ。",
   "mcVersion": "1.21.1",
-  "ticks": 300,
+  "ticks": 400,
   "region": {
     "from": [
       0,
