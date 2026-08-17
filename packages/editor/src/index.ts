@@ -14,5 +14,6 @@ export { DEFAULT_BOARD, BOARD_MIN, BOARD_MAX, normalizeBoardSize, isInsideBoard,
 export type { BoardSize } from './board.js'
 export {
   translateBlocks, normalizeToOrigin, clipToBoard, countOutside, requiredBoardSize, offsetToFitBoard,
+  growthProposal,
 } from './transform.js'
 export type { BlockMap, ClipResult } from './transform.js'

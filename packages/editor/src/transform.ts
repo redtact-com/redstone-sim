@@ -8,7 +8,7 @@
 
 import type { BlockState } from '@redstone/sim'
 import type { BoardSize } from './board.js'
-import { isInsideBoard, blocksExtent } from './board.js'
+import { isInsideBoard, blocksExtent, normalizeBoardSize } from './board.js'
 
 export type BlockMap = Map<string, BlockState>
 
@@ -104,4 +104,23 @@ export function offsetToFitBoard(blocks: BlockMap, board: BoardSize): { dx: numb
     dy: fitAxis(ext.min.y, ext.max.y, board.y),
     dz: fitAxis(ext.min.z, ext.max.z, board.z),
   }
+}
+
+/**
+ * 「盤面を広げますか」の提案サイズ (#226 判断 C)。提案しない場合は null。
+ *
+ * null になるのは 2 通り:
+ * - 今の盤面にすでに収まっている
+ * - **広げても今と同じ** (盤面の上限で頭打ち)。押しても何も変わらないボタンを
+ *   出すと「広げれば入る」と誤解させるので出さない
+ */
+export function growthProposal(current: BoardSize, need: BoardSize): BoardSize | null {
+  if (need.x <= current.x && need.y <= current.y && need.z <= current.z) return null
+  const grown = normalizeBoardSize({
+    x: Math.max(current.x, need.x),
+    y: Math.max(current.y, need.y),
+    z: Math.max(current.z, need.z),
+  })
+  const changes = grown.x !== current.x || grown.y !== current.y || grown.z !== current.z
+  return changes ? grown : null
 }

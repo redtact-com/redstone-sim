@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import type { BlockState } from '@redstone/sim'
 import {
-  translateBlocks, normalizeToOrigin, clipToBoard, countOutside,
-  requiredBoardSize, offsetToFitBoard,
+  clipToBoard, countOutside, growthProposal, normalizeToOrigin, offsetToFitBoard, requiredBoardSize, translateBlocks,
 } from './transform.js'
 import { normalizeBoardSize, isInsideBoard, blocksExtent, DEFAULT_BOARD, BOARD_MAX } from './board.js'
 
-const wire = (): BlockState => ({ type: 'wire', power: 0, dot: false })
+const wire = (): BlockState => ({
+  type: 'wire', power: 0,
+  connections: { north: false, south: false, east: false, west: false },
+})
 const solid = (): BlockState => ({ type: 'solid', powered: false })
 
 /** "x,y,z" のリストからブロック集合を作る */
@@ -211,5 +213,32 @@ describe('座標キーの -0 混入', () => {
   it('移動後のキーに "-0" が現れない', () => {
     const moved = translateBlocks(mk('0,0,0', '3,1,2'), -0, -0, -0)
     for (const k of moved.keys()) expect(k).not.toContain('-0')
+  })
+})
+
+describe('growthProposal — 「広げますか」を出すかどうか (判断 C)', () => {
+  it('収まっているなら提案しない', () => {
+    expect(growthProposal({ x: 16, y: 16, z: 16 }, { x: 10, y: 10, z: 10 })).toBeNull()
+    expect(growthProposal({ x: 16, y: 16, z: 16 }, { x: 16, y: 16, z: 16 })).toBeNull()
+  })
+
+  it('足りない軸だけ広げる (他は今の値を保つ)', () => {
+    expect(growthProposal({ x: 16, y: 16, z: 16 }, { x: 32, y: 10, z: 20 }))
+      .toEqual({ x: 32, y: 16, z: 20 })
+  })
+
+  it('**広げても今と同じなら提案しない** (上限で頭打ち)', () => {
+    // 268 段の回路。上限 64 なのでこれ以上広げられない
+    expect(growthProposal({ x: 32, y: BOARD_MAX, z: 32 }, { x: 19, y: 268, z: 7 })).toBeNull()
+  })
+
+  it('上限に届かない軸があるならそこは広げる', () => {
+    const p = growthProposal({ x: 16, y: BOARD_MAX, z: 16 }, { x: 20, y: 268, z: 7 })
+    expect(p).toEqual({ x: 20, y: BOARD_MAX, z: 16 })
+  })
+
+  it('提案値は必ず盤面の上限内', () => {
+    const p = growthProposal({ x: 16, y: 16, z: 16 }, { x: 999, y: 999, z: 999 })
+    expect(p).toEqual({ x: BOARD_MAX, y: BOARD_MAX, z: BOARD_MAX })
   })
 })

@@ -25,6 +25,7 @@ import {
   CircuitEditor, decideCellTap,
   DEFAULT_BOARD, BOARD_MIN, BOARD_MAX, normalizeBoardSize,
   translateBlocks, normalizeToOrigin, clipToBoard, countOutside, requiredBoardSize, offsetToFitBoard,
+  growthProposal,
 } from '@redstone/editor'
 import type { BoardSize } from '@redstone/editor'
 import type { PlaceableType, PlaceOptions } from '@redstone/editor'
@@ -788,9 +789,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
       const blocks = normalizeToOrigin(raw)
       const need = requiredBoardSize(blocks)
       const fits = need.x <= board.x && need.y <= board.y && need.z <= board.z
-      const suggest = fits ? undefined : normalizeBoardSize({
-        x: Math.max(board.x, need.x), y: Math.max(board.y, need.y), z: Math.max(board.z, need.z),
-      })
+      // 広げても変わらない (上限で頭打ち) なら提案しない — 判断は growthProposal が持つ
+      const suggest = growthProposal(board, need) ?? undefined
+      const canGrow = suggest !== undefined
       setPending({
         kind: 'import', blocks, board,
         label: `インポート (${blocks.size} ブロック / ${need.x}×${need.y}×${need.z})`,
@@ -799,7 +800,10 @@ export function EditorPage({ onBack }: EditorPageProps) {
       setSelectedPos(null)
       rerender()
       const head = `インポート: ${blocks.size} ブロックをプレビュー中`
-      const tail = fits ? '' : `。回路は ${need.x}×${need.y}×${need.z} で現在の盤面に収まりません`
+      const tail = fits
+        ? ''
+        : `。回路は ${need.x}×${need.y}×${need.z} で現在の盤面に収まりません`
+          + (canGrow ? '' : `（盤面の上限 ${BOARD_MAX} を超えているので全部は入りません）`)
       addLog(warnings.length > 0 ? `${head}${tail}（警告: ${warnings.join(', ')}）` : `${head}${tail}`)
     } catch (e) {
       addLog(`インポートエラー: ${e instanceof Error ? e.message : String(e)}`)
