@@ -98,3 +98,62 @@ describe('収縮する粘着ピストンは pos+2 の伸長中 moving を確定�
     ).toBe(true)
   })
 })
+
+/**
+ * **収縮イベントの実行時再判定** (#231)。
+ *
+ * [確定: 26.2 PistonBaseBlock.triggerEvent —
+ *  `if (extend && (b0 == 1 || b0 == 2)) { level.setBlock(pos, extendedState, 2); return false; }`]
+ *
+ * 収縮の予約は「受電が切れた」瞬間の NC で積まれるが、同じ tick の ST 相で
+ * オブザーバー等が再点火すると BE 相の時点では受電が戻っている。そのとき
+ * vanilla は**収縮を取り消して伸びたままにする**。
+ */
+describe('収縮イベントは実行時に受電していたら取り消す (#231)', () => {
+  /**
+   * 収縮を**予約させてから**、実行される前に別の面から受電を戻す。
+   * 予約は「受電が切れた」NC で積まれ、実行は次の tick の BE 相なので、
+   * その間に電源を戻せば vanilla は収縮を取り消す。
+   */
+  function buildQueuedRetractThenRepower(): SimWorld {
+    const w = new SimWorld()
+    w.setBlockAt([1, 0, 0], { type: 'sticky_piston', facing: 'east', extended: false } as BlockState)
+    w.initialize()
+    w.flush(64)
+    // 上から受電させて伸ばす (setBlockCommand = /setblock 相当で近隣更新が飛ぶ)
+    w.setBlockCommand([1, 1, 0], { type: 'redstone_block' } as BlockState)
+    for (let i = 0; i < 4; i++) w.tick()
+    expect(w.getBlock(1, 0, 0), '前提: 伸びている').toMatchObject({ extended: true })
+
+    // 電源を外す → この NC で収縮が予約される (実行は次 tick の BE 相)
+    w.setBlockCommand([1, 1, 0], { type: 'air' })
+    // 実行前に別の面から受電を戻す
+    w.setBlockCommand([1, -1, 0], { type: 'redstone_block' } as BlockState)
+    return w
+  }
+
+  it('**前提**: 電源を戻した時点でピストンはまだ伸びている', () => {
+    const w = buildQueuedRetractThenRepower()
+    expect(w.getBlock(1, 0, 0)).toMatchObject({ extended: true })
+  })
+
+  it('予約済みの収縮が走っても、受電が戻っていれば縮まない', () => {
+    const w = buildQueuedRetractThenRepower()
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(1, 0, 0), '受電が戻っているのに縮んだ').toMatchObject({ extended: true })
+  })
+
+  it('本当に電源が切れれば縮む (取り消しが効きすぎていない)', () => {
+    const w = new SimWorld()
+    w.setBlockAt([1, 0, 0], { type: 'sticky_piston', facing: 'east', extended: false } as BlockState)
+    w.initialize()
+    w.flush(64)
+    w.setBlockCommand([1, 1, 0], { type: 'redstone_block' } as BlockState)
+    for (let i = 0; i < 4; i++) w.tick()
+    expect(w.getBlock(1, 0, 0)).toMatchObject({ extended: true })
+
+    w.setBlockCommand([1, 1, 0], { type: 'air' })
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(1, 0, 0), '電源を切ったのに縮まない').toMatchObject({ extended: false })
+  })
+})

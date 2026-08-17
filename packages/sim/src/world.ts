@@ -4,6 +4,7 @@ import type {
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
   RailShape, BlockType, DetectorRailState, DoorLikeState,
 } from './types.js'
+import { noteInstrumentFor } from './blocks/noteInstrument.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
   isStraightRailShape,
@@ -1516,6 +1517,18 @@ export class SimWorld {
     } else {
       // retract
       if (!piston.extended) return []
+      // **実行時再判定**: 収縮イベントが走る時点でまだ受電していれば収縮を取り消す (#231)
+      // [確定: 26.2 PistonBaseBlock.triggerEvent —
+      //  `if (extend && (b0 == 1 || b0 == 2)) { level.setBlock(pos, extendedState, 2); return false; }`
+      //  flag 2 なので NC は飛ばさない]。
+      // 収縮予約は「受電が切れた」瞬間の NC で積まれるが、同じ tick の ST 相で
+      // オブザーバー等が再点火すると BE 相の時点では受電が戻っている。
+      // これが無いと**伸びたままのはずのピストンが縮んでしまう**
+      // (5×5 ドアで t=20 に早縮みしていた原因)
+      if (this.shouldExtend(ev.pos, piston)) {
+        this.traceProcess('BE', 'Pi', 'r', 0, { failed: true })
+        return []
+      }
       // トレース: BE 実行 (収縮)
       this.traceProcess('BE', 'Pi', 'r', 0)
       // #82: 収縮 BE が伸長中 (head=moving) に到達したら、まず伸長を即確定させる
@@ -1785,6 +1798,16 @@ export class SimWorld {
    */
   private emitShapeUpdate(pos: Pos3D): void {
     if (this.suppressPP) return
+
+    // Y 軸で隣り合う音符ブロックは音色を引き直す (#231)。
+    // [確定: 26.2 NoteBlock.updateShape — `directionToNeighbour.getAxis() == Y` なら
+    //  setInstrument]。**上下どちらの隣が変わっても走る**ので両側を見る
+    //  (音色そのものは常に「下のブロック」から決まるが、引き直しの契機は上下両方)。
+    // **NC ではなく形状更新でしか走らない**。実機の settle (全ブロックへ update) を
+    // 通しても音色は古いままで、最初の形状更新ではじめて更新される
+    // — なので suppressPP (= settle 相当) の後に置く
+    this.refreshNoteInstrument([pos[0], pos[1] + 1, pos[2]])
+    this.refreshNoteInstrument([pos[0], pos[1] - 1, pos[2]])
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)
@@ -1796,6 +1819,22 @@ export class SimWorld {
       if (this.hasScheduledTick(nPos, 'observer')) continue
       this.schedule(nPos, 2, 0)                      // startSignal: 2gt / priority 0
     }
+  }
+
+  /**
+   * 音符ブロックの音色を直下のブロックから引き直す (#231)。
+   *
+   * 変化したら blockstate が変わるので**オブザーバーに検知させる** (emitShapeUpdate)。
+   * 音色は下のブロックの「種別」だけで決まるため連鎖しない (下が音符ブロックなら
+   * その音色に関わらず bass)。
+   */
+  private refreshNoteInstrument(pos: Pos3D): void {
+    const nb = this.getBlockAt(pos)
+    if (nb?.type !== 'note_block') return
+    const next = noteInstrumentFor(this.getBlockAt([pos[0], pos[1] - 1, pos[2]]))
+    if (next === nb.instrument) return
+    this.setBlockAt(pos, { ...nb, instrument: next })
+    this.emitShapeUpdate(pos)
   }
 
   // ── NC 更新の DFS 実行 ───────────────────────────────────
