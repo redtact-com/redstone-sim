@@ -1,0 +1,129 @@
+{
+  "name": "qc-noteblock-strong",
+  "description": "QC の源が**強充電された音符ブロック**でもピストンが伸びるかの単独検証 (#231)。 ピストン P(2,1,2,west) の 1 個上 (2,2,2) の北隣 (2,2,1) に音符ブロックを置き、その上のレバー (2,3,1, 床付け) で強充電する。QC は BUD なので P には通知が飛ばない — t=20 に P の隣へ setblock して NC を起こし、そこで伸びるかを見る。 5×5 ドアの t=220 で sim だけが伸ばしていた組み合わせを最小構成にしたもの。 プレイヤーは (2,0,3) の石の上に立たせる (足場が無いと落ちてクリックが当たらない)。",
+  "mcVersion": "1.21.1",
+  "ticks": 40,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      4,
+      4,
+      4
+    ]
+  },
+  "player": {
+    "spawn": [
+      2.5,
+      1.0,
+      3.5
+    ],
+    "facing": [
+      0,
+      -20
+    ],
+    "lookAt": [
+      2.5,
+      3.35,
+      1.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "sticky_piston[extended=false,facing=west]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        1
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        1
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        3,
+        1
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 20,
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "stone",
+      "action": "setblock"
+    }
+  ]
+}
