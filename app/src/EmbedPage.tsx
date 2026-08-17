@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CircuitEditor } from '@redstone/editor'
+import { CircuitEditor, DEFAULT_BOARD } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState, Pos3D } from '@redstone/sim'
 import { IsometricView } from '@redstone/viewer'
@@ -32,10 +32,14 @@ import {
 import { TRIGGER_META, TRIGGER_TYPES, isTriggerOn } from './palette'
 import type { TriggerEntry } from './palette'
 
-const GRID_W = 16
-const GRID_H = 16
-/** EditorPage.tsx の同名定数と揃える (#179 で 8 → 16) */
-const GRID_LAYERS = 16
+/**
+ * 埋め込み表示の盤面は固定 (#97)。**値の正は @redstone/editor の DEFAULT_BOARD** で、
+ * 以前は EditorPage.tsx にも同じ 16 が別に置かれていて揃え忘れが起きる形だった
+ * (定数の二重管理で #189 / #214 を踏んでいる)。エディタ側は #226 で可変になった。
+ */
+const GRID_W = DEFAULT_BOARD.x
+const GRID_H = DEFAULT_BOARD.z
+const GRID_LAYERS = DEFAULT_BOARD.y
 
 
 const GRID_BOUNDS: WorldSnapshot['bounds'] = {

@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { BlockState } from '@redstone/sim'
 import { effectiveContainerSignal } from '@redstone/sim'
-import {
-  STORAGE_KEY, STORAGE_VERSION,
-  saveCircuit, loadCircuit, clearCircuit, parseCircuit, serializeCircuit,
-} from './circuitStorage'
+import { MAX_SAVED_BLOCKS, STORAGE_KEY, STORAGE_VERSION, clearCircuit, loadCircuit, parseCircuit, saveCircuit, serializeCircuit } from './circuitStorage'
 
 /** localStorage の代役。throw する版も作れるようにしてある */
 function fakeStorage(opts: { throwOnSet?: boolean; throwOnGet?: boolean } = {}): Storage {
@@ -85,9 +82,17 @@ describe('circuitStorage', () => {
   })
 
   it('ブロック数が上限を超えたら捨てる', () => {
+    // 上限は最大盤面の体積 (#226)。旧 4096 固定では 16×16×16 より大きい盤面が保存できない
     const blocks: Record<string, unknown> = {}
-    for (let i = 0; i < 4097; i++) blocks[`${i},0,0`] = { type: 'wire' }
+    for (let i = 0; i <= MAX_SAVED_BLOCKS; i++) blocks[`${i},0,0`] = { type: 'wire' }
     expect(parseCircuit(JSON.stringify({ v: STORAGE_VERSION, savedAt: '', blocks }))).toBeNull()
+  })
+
+  it('旧上限 (4096) を超える回路は捨てない (盤面を広げた分が保存できる)', () => {
+    const blocks: Record<string, unknown> = {}
+    for (let i = 0; i < 5000; i++) blocks[`${i},0,0`] = { type: 'wire' }
+    const r = parseCircuit(JSON.stringify({ v: STORAGE_VERSION, savedAt: '', blocks }))
+    expect(r?.blocks.size).toBe(5000)
   })
 
   // ── ストレージが使えない環境で落ちないこと ──────────────────────
@@ -166,5 +171,40 @@ describe('旧形式コンテナの移行 (#201)', () => {
     // 移行を外すとこの形が sim に渡り、下の呼び出しが TypeError になる
     const raw = { type: 'hopper', facing: 'down', count: 14, enabled: true } as never
     expect(() => effectiveContainerSignal(raw)).toThrow(TypeError)
+  })
+})
+
+describe('盤面サイズの保存 (#226)', () => {
+  it('保存した盤面サイズが復元される', () => {
+    const s = fakeStorage()
+    saveCircuit(sample(), '2026-08-17T00:00:00Z', s, { x: 32, y: 24, z: 20 })
+    expect(loadCircuit(s)?.board).toEqual({ x: 32, y: 24, z: 20 })
+  })
+
+  it('**盤面サイズが無い古い保存データも読める** (回路を捨てない)', () => {
+    const s = fakeStorage()
+    // board フィールドを持たない v1 のデータ
+    s.setItem(STORAGE_KEY, JSON.stringify({
+      v: STORAGE_VERSION, savedAt: '2026-08-16T00:00:00Z',
+      blocks: { '0,0,0': wire(15) },
+    }))
+    const r = loadCircuit(s)
+    expect(r?.blocks.size).toBe(1)
+    expect(r?.board).toEqual({ x: 16, y: 16, z: 16 })
+  })
+
+  it('壊れた盤面サイズは既定に落とす (回路は生かす)', () => {
+    const s = fakeStorage()
+    s.setItem(STORAGE_KEY, JSON.stringify({
+      v: STORAGE_VERSION, savedAt: '', blocks: { '0,0,0': wire(1) },
+      board: { x: 9999, y: 'abc', z: -3 },
+    }))
+    const r = loadCircuit(s)
+    expect(r?.blocks.size).toBe(1)
+    expect(r?.board).toEqual({ x: 64, y: 16, z: 1 })
+  })
+
+  it('盤面サイズを渡さずに保存すると既定が入る', () => {
+    expect(serializeCircuit(sample(), '2026-08-17T00:00:00Z').board).toEqual({ x: 16, y: 16, z: 16 })
   })
 })
