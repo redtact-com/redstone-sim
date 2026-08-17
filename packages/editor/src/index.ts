@@ -10,3 +10,9 @@ export type { SessionOptions, SettleOutcome } from './session.js'
 export { PLACEABLE_TYPES, isPlaceableType, PLACE_OPTION_RANGES, maxCount, normalizePlaceOptions } from './placeable.js'
 export { decideTap, decideCellTap, nextFacing } from './tap.js'
 export type { TapAction, TapOptions, TapPhase, SameTypePolicy, CellTapAction } from './tap.js'
+export { DEFAULT_BOARD, BOARD_MIN, BOARD_MAX, normalizeBoardSize, isInsideBoard, blocksExtent } from './board.js'
+export type { BoardSize } from './board.js'
+export {
+  translateBlocks, normalizeToOrigin, clipToBoard, countOutside, requiredBoardSize, offsetToFitBoard,
+} from './transform.js'
+export type { BlockMap, ClipResult } from './transform.js'

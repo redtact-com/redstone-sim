@@ -12,7 +12,7 @@
  * IsometricView の cameraStateRef でカメラ状態を取得し、
  * 透明 canvas オーバーレイに RAF ループでグリッド線を描画する。
  * topDown 座標変換: scale = FOV_F * canvasH / (2 * depth)
- * depth = camDist + GRID_LAYERS/2 - activeLayer (structureY=GRID_LAYERS)
+ * depth = camDist + board.y/2 - activeLayer (structureY=board.y)
  *
  * ── 3D 編集 ──
  * 2D の編集操作はそのままに、右側の高さパネルで編集対象レイヤー (Y) を
@@ -21,7 +21,12 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { CircuitEditor, decideCellTap } from '@redstone/editor'
+import {
+  CircuitEditor, decideCellTap,
+  DEFAULT_BOARD, BOARD_MIN, BOARD_MAX, normalizeBoardSize,
+  translateBlocks, normalizeToOrigin, clipToBoard, countOutside, requiredBoardSize, offsetToFitBoard,
+} from '@redstone/editor'
+import type { BoardSize } from '@redstone/editor'
 import type { PlaceableType, PlaceOptions } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState } from '@redstone/sim'
@@ -53,6 +58,10 @@ export interface EditorTestApi {
   tapCell: (x: number, z: number) => void
   /** パレット選択を切り替える (tapCell 前のツール指定用) */
   selectTool: (type: PaletteType) => void
+  /** 現在の盤面サイズ (#226) */
+  getBoard: () => BoardSize
+  /** プレビュー中なら候補の盤面外ブロック数、プレビューでなければ null (#226) */
+  getPendingOutside: () => number | null
 }
 
 declare global {
@@ -63,15 +72,58 @@ declare global {
 
 // ── 定数 ──────────────────────────────────────────────────────────────────────
 
-const GRID_W = 16
-const GRID_H = 16
 /**
- * 編集可能なレイヤー数 (Y = 0 .. GRID_LAYERS-1)
+ * 盤面サイズは **state** (#226)。既定値・上限は @redstone/editor の board.ts が正。
+ * 以前は EditorPage と EmbedPage に同じ 16 の定数が別々に置かれていた
+ * (定数の二重管理で #189 / #214 を踏んでいる)。
  *
- * 8 では配布されている実回路が入りきらず、取り込み時に上部が切り落とされていた (#179)。
- * EmbedPage.tsx にも同じ定数があるので**両方揃えて変える**こと。
+ * 高さは 8 では実回路が入りきらず取り込み時に切り落とされていた (#179) ので既定 16。
  */
-const GRID_LAYERS = 16
+
+/** 高さパネルの 1 ページに並べる段数 (#226 判断 A: ページネーション + 直接入力) */
+const LAYER_PAGE = 8
+
+/** 確定前の変更 (#226)。スライド・サイズ変更・インポートで共有する */
+interface PendingChange {
+  kind: 'slide' | 'resize' | 'import'
+  /** 適用候補のブロック。**盤面の外に出たものも含む** */
+  blocks: Map<string, BlockState>
+  /** 適用候補の盤面サイズ */
+  board: BoardSize
+  /** 何をしようとしているかの表示 */
+  label: string
+  /**
+   * 盤面を広げれば全部入る場合の提案サイズ (#226 判断 C)。
+   * インポートで収まらなかったときに「広げますか」の確認として出す。
+   */
+  suggest?: BoardSize
+  /**
+   * スライドの累積移動量。連続で押したときに**合計**を出すために持つ
+   * (最後の 1 回だけ出すと「今どれだけ動いているか」が分からない)
+   */
+  moved?: { dx: number; dy: number; dz: number }
+}
+
+/**
+ * 盤面と実際の占有範囲の和を bounds にする。
+ *
+ * プレビュー中は盤面の外にもブロックが居る。viewer は `px = x - minX` で
+ * 構造内の位置を出すので、bounds を盤面に固定すると**外のブロックが描けない**。
+ */
+function unionBounds(board: BoardSize, blocks: ReadonlyMap<string, BlockState>): WorldSnapshot['bounds'] {
+  let minX = 0, minY = 0, minZ = 0
+  let maxX = board.x - 1, maxY = board.y - 1, maxZ = board.z - 1
+  for (const key of blocks.keys()) {
+    const [x, y, z] = key.split(',').map(Number)
+    if (x < minX) minX = x
+    if (y < minY) minY = y
+    if (z < minZ) minZ = z
+    if (x > maxX) maxX = x
+    if (y > maxY) maxY = y
+    if (z > maxZ) maxZ = z
+  }
+  return { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] }
+}
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -106,6 +158,27 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const editorRef = useRef(new CircuitEditor(0))
   const [, forceUpdate] = useState(0)
   const rerender = useCallback(() => forceUpdate(n => n + 1), [])
+
+  // ── 盤面サイズ (#226) ────────────────────────────────────────────────
+  const [board, setBoard] = useState<BoardSize>({ ...DEFAULT_BOARD })
+  /**
+   * オートセーブの購読は 1 回だけ張るので、盤面サイズは ref 経由で読む
+   * (state を直接掴むと購読時点の古い値で保存され続ける)
+   */
+  const boardRef = useRef(board)
+  boardRef.current = board
+
+  /**
+   * 確定前の変更 (#226 判断 B/C)。スライド・サイズ変更・インポートで共有する。
+   *
+   * **盤面の外に出たブロックをここでは捨てない**。プレビューとして見せて
+   * 「確定すると N ブロック失われる」と警告し、切り捨ては確定の瞬間だけ行う。
+   * 行き過ぎても取消・逆方向のスライドで戻せる。
+   */
+  const [pending, setPending] = useState<PendingChange | null>(null)
+  /** e2e から覗くための最新値 (window.__editorTest は 1 回だけ張るため) */
+  const pendingRef = useRef<PendingChange | null>(null)
+  pendingRef.current = pending
 
   // モード
   const [mode, setMode] = useState<'edit' | 'sim'>('edit')
@@ -156,7 +229,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   // ── 編集レイヤー切替 ─────────────────────────────────────────────────
   const changeLayer = useCallback((y: number) => {
-    const clamped = Math.max(0, Math.min(GRID_LAYERS - 1, y))
+    // **盤面の高さは ref から読む** (#226)。useCallback の deps に入れていないと
+    // 初回レンダの高さで丸めてしまい、広げた後の段へ飛べない
+    const clamped = Math.max(0, Math.min(boardRef.current.y - 1, y))
     editorRef.current.setActiveLayer(clamped)
     setActiveLayer(clamped)
     setSelectedPos(null)
@@ -172,30 +247,47 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // 実ブロックのスナップショット + bounds を GRID サイズに固定。
   // 編集モードで上層カットが有効なとき activeLayer より上を非表示にする。
   const rawSnapshot = simWorld?.snapshot() ?? editorRef.current.getSnapshot()
-  let visibleBlocks = rawSnapshot.blocks
+  // プレビュー中は候補を見せる (#226)。盤面サイズも候補側
+  const viewBoard = pending?.board ?? board
+  // pending 側は editor と同じ Map<string, …>。snapshot のキー型に合わせて見做す
+  let visibleBlocks: ReadonlyMap<`${number},${number},${number}`, BlockState> =
+    pending
+      ? (pending.blocks as ReadonlyMap<`${number},${number},${number}`, BlockState>)
+      : rawSnapshot.blocks
   if (mode === 'edit' && cutUpper) {
     const filtered = new Map<`${number},${number},${number}`, BlockState>()
-    for (const [key, b] of rawSnapshot.blocks) {
+    for (const [key, b] of visibleBlocks) {
       if (Number(key.split(',')[1]) <= activeLayer) filtered.set(key, b)
     }
     visibleBlocks = filtered
   }
+  // **bounds は盤面と占有範囲の和**。プレビュー中は盤面外のブロックも描きたいので、
+  // 盤面だけに固定すると viewer の座標変換 (px = x - minX) から外れて描けない
   const snapshot: WorldSnapshot = {
     blocks: visibleBlocks,
-    bounds: { x: [0, GRID_W - 1], y: [0, GRID_LAYERS - 1], z: [0, GRID_H - 1] },
+    bounds: unionBounds(viewBoard, visibleBlocks),
   }
 
   // レイヤーごとのブロック数（高さパネルのインジケーター用）
   const layerCounts = (() => {
-    const counts = new Array<number>(GRID_LAYERS).fill(0)
-    for (const key of editorRef.current.getAllBlocks().keys()) {
+    const counts = new Array<number>(viewBoard.y).fill(0)
+    const source = pending ? pending.blocks : editorRef.current.getAllBlocks()
+    for (const key of source.keys()) {
       const y = Number(key.split(',')[1])
-      if (y >= 0 && y < GRID_LAYERS) counts[y]++
+      if (y >= 0 && y < viewBoard.y) counts[y]++
     }
     return counts
   })()
 
   // ── グリッドオーバーレイ RAF ─────────────────────────────────────────
+
+  /**
+   * RAF ループから読む盤面サイズ。**ref 経由にするのは、ループを張り直さずに
+   * サイズ変更を反映させたいため** (deps に入れると毎回 RAF を作り直す)。
+   * プレビュー中は候補サイズの枠を描く。
+   */
+  const viewBoardRef = useRef(viewBoard)
+  viewBoardRef.current = viewBoard
 
   useEffect(() => {
     if (mode !== 'edit') return
@@ -213,25 +305,30 @@ export function EditorPage({ onBack }: EditorPageProps) {
       }
       const ctx = canvas.getContext('2d')!
       ctx.clearRect(0, 0, w, h)
-      // depth = camDist + sy/2 - placementY  (sy=GRID_LAYERS, placementY=activeLayer)
-      const depth = cam.distance + GRID_LAYERS / 2 - activeLayer
+      // depth = camDist + sy/2 - placementY  (sy=盤面の高さ, placementY=activeLayer)
+      const vb = viewBoardRef.current
+      const depth = cam.distance + vb.y / 2 - activeLayer
       const scale = FOV_F * h / (2 * depth)
-      const gridLeft = w / 2 - (GRID_W / 2 + cam.panX) * scale
-      const gridTop  = h / 2 - (GRID_H / 2 + cam.panZ) * scale
+      const gridLeft = w / 2 - (vb.x / 2 + cam.panX) * scale
+      const gridTop  = h / 2 - (vb.z / 2 + cam.panZ) * scale
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
       ctx.lineWidth = 0.5
       ctx.beginPath()
-      for (let x = 0; x <= GRID_W; x++) {
+      for (let x = 0; x <= vb.x; x++) {
         const cx = gridLeft + x * scale
         ctx.moveTo(cx, gridTop)
-        ctx.lineTo(cx, gridTop + GRID_H * scale)
+        ctx.lineTo(cx, gridTop + vb.z * scale)
       }
-      for (let z = 0; z <= GRID_H; z++) {
+      for (let z = 0; z <= vb.z; z++) {
         const cy = gridTop + z * scale
         ctx.moveTo(gridLeft, cy)
-        ctx.lineTo(gridLeft + GRID_W * scale, cy)
+        ctx.lineTo(gridLeft + vb.x * scale, cy)
       }
       ctx.stroke()
+      // 盤面の外枠だけ濃く描く。プレビュー中は「どこから外か」が要点になる
+      ctx.strokeStyle = 'rgba(255, 190, 90, 0.75)'
+      ctx.lineWidth = 1.5
+      ctx.strokeRect(gridLeft, gridTop, vb.x * scale, vb.z * scale)
       raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)
@@ -307,12 +404,19 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // ── ブロッククリック（edit + sim 共通） ─────────────────────────────────
 
   // useCallback の deps を最小化して IsometricView への参照を安定させる
-  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count })
-  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count }
+  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending })
+  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending }
 
   const handleBlockClick = useCallback((pos: Pos3D, button: 'left' | 'right') => {
-    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count } = stateRef.current
+    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending } = stateRef.current
     const [x, , z] = pos
+
+    // プレビュー中の編集は受けない (#226)。候補と実体が混ざると
+    // 「確定したら何が残るのか」が説明できなくなる
+    if (pending) {
+      addLog('プレビュー中です。確定または取消してから編集してください')
+      return
+    }
 
     // ── シミュレーションモード: レバーのみ操作 ──────────────────────────
     if (mode === 'sim') {
@@ -575,10 +679,99 @@ export function EditorPage({ onBack }: EditorPageProps) {
 
   const handleExportNbt = useCallback(() => {
     const blocks = editorRef.current.getAllBlocks()
-    const bytes = exportToNbtBytes(blocks, GRID_W, GRID_H)
+    const bytes = exportToNbtBytes(blocks, board.x, board.z)
     downloadNbt(bytes, 'circuit.nbt')
     addLog('NBT エクスポート完了')
-  }, [addLog])
+  }, [addLog, board.x, board.z])
+
+  // ── 平行移動 / 盤面サイズ (#226) ────────────────────────────────────────
+  //
+  // どちらも **確定するまで切り捨てない**。プレビューを見せて警告し、
+  // 「確定」で盤面外を捨て、「取消」で元に戻す。
+
+  /** プレビューの元になるブロック (プレビュー中なら重ねて動かす) */
+  const previewSource = useCallback(
+    (): Map<string, BlockState> => new Map(pending ? pending.blocks : editorRef.current.getAllBlocks()),
+    [pending],
+  )
+
+  const slideBy = useCallback((dx: number, dy: number, dz: number) => {
+    const src = previewSource()
+    if (src.size === 0) { addLog('動かす回路がありません'); return }
+    const nextBoard = pending?.board ?? board
+    const blocks = translateBlocks(src, dx, dy, dz)
+    const outside = countOutside(blocks, nextBoard)
+    // 連続で押したら足し込む。インポート等の別種プレビューからの続きは 0 から数える
+    const base = pending?.moved ?? { dx: 0, dy: 0, dz: 0 }
+    const moved = { dx: base.dx + dx, dy: base.dy + dy, dz: base.dz + dz }
+    const sign = (v: number) => `${v >= 0 ? '+' : ''}${v}`
+    setPending({
+      ...(pending ?? {}),
+      kind: 'slide', blocks, board: nextBoard, moved,
+      label: `スライド 合計 (${sign(moved.dx)}, ${sign(moved.dy)}, ${sign(moved.dz)})`,
+    })
+    addLog(outside > 0
+      ? `スライド (${sign(moved.dx)}, ${sign(moved.dy)}, ${sign(moved.dz)}): 盤面外 ${outside} ブロック（確定すると失われます）`
+      : `スライド (${sign(moved.dx)}, ${sign(moved.dy)}, ${sign(moved.dz)}): プレビュー中`)
+  }, [previewSource, pending, board, addLog])
+
+  /** はみ出している分を盤面の中へ寄せる */
+  const slideIntoBoard = useCallback(() => {
+    const src = previewSource()
+    if (src.size === 0) { addLog('動かす回路がありません'); return }
+    const nextBoard = pending?.board ?? board
+    const { dx, dy, dz } = offsetToFitBoard(src, nextBoard)
+    if (dx === 0 && dy === 0 && dz === 0) { addLog('すでに盤面の中に収まっています'); return }
+    slideBy(dx, dy, dz)
+  }, [previewSource, pending, board, slideBy, addLog])
+
+  const previewBoardSize = useCallback((next: Partial<BoardSize>) => {
+    const nextBoard = normalizeBoardSize({ ...(pending?.board ?? board), ...next })
+    const blocks = previewSource()
+    const outside = countOutside(blocks, nextBoard)
+    setPending({
+      ...(pending ?? {}),
+      kind: 'resize', blocks, board: nextBoard,
+      label: `盤面 ${nextBoard.x}×${nextBoard.y}×${nextBoard.z}`,
+    })
+    addLog(outside > 0
+      ? `盤面 ${nextBoard.x}×${nextBoard.y}×${nextBoard.z}: 盤面外 ${outside} ブロック（確定すると失われます）`
+      : `盤面 ${nextBoard.x}×${nextBoard.y}×${nextBoard.z}: プレビュー中`)
+  }, [pending, board, previewSource, addLog])
+
+  /** 回路がちょうど入る大きさに広げる */
+  const previewFitBoard = useCallback(() => {
+    const blocks = previewSource()
+    if (blocks.size === 0) { addLog('回路がありません'); return }
+    previewBoardSize(requiredBoardSize(blocks))
+  }, [previewSource, previewBoardSize, addLog])
+
+  /** 確定: 盤面外を切り捨てて適用する。**捨てるのはここだけ** */
+  const commitPending = useCallback(() => {
+    if (!pending) return
+    const { kept, dropped } = clipToBoard(pending.blocks, pending.board)
+    setBoard(pending.board)
+    editorRef.current.resetToBlocks(kept)
+    // 盤面が縮んで編集レイヤーが外に出たら引き戻す
+    if (editorRef.current.activeLayer >= pending.board.y) {
+      const y = pending.board.y - 1
+      editorRef.current.setActiveLayer(y)
+      setActiveLayer(y)
+    }
+    setPending(null)
+    setSelectedPos(null)
+    rerender()
+    addLog(dropped.size > 0
+      ? `確定: ${pending.label} — 盤面外 ${dropped.size} ブロックを切り捨てました`
+      : `確定: ${pending.label}`)
+  }, [pending, addLog, rerender])
+
+  const cancelPending = useCallback(() => {
+    if (!pending) return
+    setPending(null)
+    rerender()
+    addLog(`取消: ${pending.label}`)
+  }, [pending, addLog, rerender])
 
   // ── NBT インポート ────────────────────────────────────────────────────
 
@@ -587,16 +780,31 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const handleImportNbt = useCallback(async (file: File) => {
     try {
       const bytes = await readFileAsUint8Array(file)
-      const { blocks, warnings } = await importFromNbtBytes(bytes, { gridW: GRID_W, gridH: GRID_H, maxLayers: GRID_LAYERS })
-      editorRef.current.resetToBlocks(blocks)
+      // **bounds を渡さない** (#226)。盤面に入らない分もいったん全部受け取り、
+      // 原点寄せ → プレビュー → 確定で切り捨て、という流れに乗せる。
+      // ここで捨ててしまうと後からスライドしても戻ってこない
+      const { blocks: raw, warnings } = await importFromNbtBytes(bytes)
+      // 判断 D: 最小座標を原点へ寄せる (端に寄った回路をスライドで直す手数を省く)
+      const blocks = normalizeToOrigin(raw)
+      const need = requiredBoardSize(blocks)
+      const fits = need.x <= board.x && need.y <= board.y && need.z <= board.z
+      const suggest = fits ? undefined : normalizeBoardSize({
+        x: Math.max(board.x, need.x), y: Math.max(board.y, need.y), z: Math.max(board.z, need.z),
+      })
+      setPending({
+        kind: 'import', blocks, board,
+        label: `インポート (${blocks.size} ブロック / ${need.x}×${need.y}×${need.z})`,
+        suggest,
+      })
       setSelectedPos(null)
       rerender()
-      if (warnings.length > 0) addLog(`インポート完了（警告: ${warnings.join(', ')}）`)
-      else addLog(`インポート完了 (${blocks.size} ブロック)`)
+      const head = `インポート: ${blocks.size} ブロックをプレビュー中`
+      const tail = fits ? '' : `。回路は ${need.x}×${need.y}×${need.z} で現在の盤面に収まりません`
+      addLog(warnings.length > 0 ? `${head}${tail}（警告: ${warnings.join(', ')}）` : `${head}${tail}`)
     } catch (e) {
       addLog(`インポートエラー: ${e instanceof Error ? e.message : String(e)}`)
     }
-  }, [addLog, rerender])
+  }, [addLog, rerender, board])
 
   // ── ブラウザ内オートセーブ (#109) ──────────────────────────────────────
   // リロードやタブを閉じても編集中の回路が消えないようにする。
@@ -604,13 +812,16 @@ export function EditorPage({ onBack }: EditorPageProps) {
   useEffect(() => {
     const editor = editorRef.current
     const restored = loadCircuit()
+    // 盤面サイズは回路が空でも戻す (盤面だけ変えて置いた場合)
+    if (restored) setBoard(restored.board)
     if (restored && restored.blocks.size > 0) {
       // resetToBlocks 自体が change を発火するので、購読前のここで済ませる。
       // 描画とログ更新は次のフレームへ逃がす (effect 内の同期 setState を避ける)
       editor.resetToBlocks(restored.blocks)
       queueMicrotask(() => {
         rerender()
-        addLog(`前回の回路を復元しました (${restored.blocks.size} ブロック)`)
+        const b = restored.board
+        addLog(`前回の回路を復元しました (${restored.blocks.size} ブロック / 盤面 ${b.x}×${b.y}×${b.z})`)
       })
     }
 
@@ -618,7 +829,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
     let timer: ReturnType<typeof setTimeout> | null = null
     const flush = () => {
       if (timer) { clearTimeout(timer); timer = null }
-      saveCircuit(editor.getAllBlocks())
+      // 盤面サイズも一緒に保存する (#226)。プレビュー中の候補は保存しない
+      saveCircuit(editor.getAllBlocks(), undefined, undefined, boardRef.current)
     }
     const unsubscribe = editor.on('change', () => {
       if (timer) clearTimeout(timer)
@@ -629,13 +841,29 @@ export function EditorPage({ onBack }: EditorPageProps) {
     window.addEventListener('pagehide', flush)
     document.addEventListener('visibilitychange', onHide)
 
+    // 盤面サイズの変更は editor の change を発火しないので、ここから拾えない。
+    // 保存の入口を 1 つに保つため flush を ref に出して board 用の effect から呼ぶ
+    saveFlushRef.current = flush
+
     return () => {
       unsubscribe()
       window.removeEventListener('pagehide', flush)
       document.removeEventListener('visibilitychange', onHide)
       if (timer) clearTimeout(timer)
+      saveFlushRef.current = null
     }
   }, [addLog, rerender])
+
+  /**
+   * 盤面サイズだけを変えたときも保存する (#226)。
+   * **復元が済むまでは書かない** (既定値で上書きして保存を潰してしまう)。
+   */
+  const saveFlushRef = useRef<(() => void) | null>(null)
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (!restoredRef.current) { restoredRef.current = true; return }
+    saveFlushRef.current?.()
+  }, [board])
 
   // ── 手動トリガ一覧スキャン ────────────────────────────────────────────
   // sim の 3D ビューはカメラ回転優先でブロッククリックが届かないため、
@@ -663,6 +891,11 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // ── シミュレーション開始 ─────────────────────────────────────────────
 
   const handleStart = useCallback(() => {
+    // プレビュー中に開始すると、画面の見た目と動かす回路が食い違う (#226)
+    if (pendingRef.current) {
+      addLog('プレビュー中です。確定または取消してから開始してください')
+      return
+    }
     const world = editorRef.current.buildSimWorld()
     world.initialize()
     // 音符ブロックの発音イベント (BE フェーズ) をログへ可視化 (C5 #38)
@@ -820,6 +1053,11 @@ export function EditorPage({ onBack }: EditorPageProps) {
       getMode: () => modeRef.current,
       tapCell: (x, z) => handleBlockClick([x, editorRef.current.activeLayer, z], 'left'),
       selectTool: (type) => handleSelectType(type),
+      getBoard: () => ({ ...boardRef.current }),
+      getPendingOutside: () => {
+        const p = pendingRef.current
+        return p ? countOutside(p.blocks, p.board) : null
+      },
     }
     return () => { delete window.__editorTest }
   }, [handleClear, handleBlockClick, handleSelectType, rerender])
@@ -1023,6 +1261,20 @@ export function EditorPage({ onBack }: EditorPageProps) {
       </div>
 
       {/* IsometricView（2D） */}
+        {/* 確定前の変更バー (#226)。プレビュー中だけ出す */}
+        {pending && (
+          <PreviewBar
+            label={pending.label}
+            outside={countOutside(pending.blocks, pending.board)}
+            board={pending.board}
+            suggest={pending.suggest}
+            onGrow={() => pending.suggest && previewBoardSize(pending.suggest)}
+            onFit={slideIntoBoard}
+            onCommit={commitPending}
+            onCancel={cancelPending}
+          />
+        )}
+
       <div className="flex-1 min-h-0" style={{ position: 'relative' }}>
         <IsometricView
           snapshot={snapshot}
@@ -1041,6 +1293,15 @@ export function EditorPage({ onBack }: EditorPageProps) {
             width: '100%', height: '100%',
             pointerEvents: 'none',
           }}
+        />
+
+        {/* 盤面サイズ / スライド操作パネル (#226) */}
+        <BoardPanel
+          board={pending?.board ?? board}
+          previewing={pending !== null}
+          onSlide={slideBy}
+          onResize={previewBoardSize}
+          onFitBoard={previewFitBoard}
         />
 
         {/* 高さ操作パネル */}
@@ -1365,6 +1626,152 @@ function EditorPalette({ selected, onSelect }: {
   )
 }
 
+// ── PreviewBar (#226) ─────────────────────────────────────────────────────────
+
+/**
+ * 確定前の変更を知らせるバー。
+ *
+ * **盤面の外に出たブロックはまだ捨てていない**。ここで個数を見せて、
+ * 「確定」で切り捨て、「取消」で元に戻す (判断 B/C)。
+ */
+function PreviewBar({
+  label, outside, board, suggest, onGrow, onFit, onCommit, onCancel,
+}: {
+  label: string
+  outside: number
+  board: BoardSize
+  suggest?: BoardSize
+  onGrow: () => void
+  onFit: () => void
+  onCommit: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div
+      className="shrink-0 flex items-center px-3 py-1.5 flex-wrap"
+      data-testid="preview-bar"
+      style={{
+        gap: 8, background: outside > 0 ? '#3a2a0a' : '#0a2a1a',
+        borderTop: '2px solid', borderBottom: '2px solid',
+        borderColor: outside > 0 ? '#8a6a1a' : '#1a6a3a',
+      }}
+    >
+      <span className="font-pixel shrink-0" style={{ fontSize: 11, color: '#ffcc66' }}>プレビュー</span>
+      {/* ラベルは長くなるので縮ませる。ボタンが画面外へ押し出されないようにする */}
+      <span className="font-mono truncate" style={{ fontSize: 11, color: '#ddd', minWidth: 0 }}
+            data-testid="preview-label" title={label}>{label}</span>
+      <span className="font-mono shrink-0" style={{ fontSize: 11, color: '#888' }}>
+        盤面 {board.x}×{board.y}×{board.z}
+      </span>
+      {outside > 0 && (
+        <span className="font-mono shrink-0" data-testid="preview-outside"
+              style={{ fontSize: 11, color: '#ffaa44' }}>
+          盤面外 {outside} ブロック（確定すると失われます）
+        </span>
+      )}
+
+      <div className="flex-1" style={{ minWidth: 4 }} />
+
+      {suggest && (
+        <button onClick={onGrow} data-testid="preview-grow"
+                className="mc-btn h-7 px-2 text-xs font-mono">
+          盤面を {suggest.x}×{suggest.y}×{suggest.z} に広げる
+        </button>
+      )}
+      {outside > 0 && (
+        <button onClick={onFit} data-testid="preview-fit"
+                className="mc-btn h-7 px-2 text-xs font-mono">
+          中へ寄せる
+        </button>
+      )}
+      <button onClick={onCommit} data-testid="preview-commit"
+              className="mc-btn h-7 px-3 text-xs font-mono"
+              style={{ background: '#1a4a1a', borderColor: '#4a8a4a #0a2a0a #0a2a0a #4a8a4a' }}>
+        確定
+      </button>
+      <button onClick={onCancel} data-testid="preview-cancel"
+              className="mc-btn h-7 px-3 text-xs font-mono">
+        取消
+      </button>
+    </div>
+  )
+}
+
+// ── BoardPanel (#226) ─────────────────────────────────────────────────────────
+
+/**
+ * 回路全体のスライドと盤面サイズの変更。
+ * どちらも押した時点ではプレビューで、確定するまで切り捨てない。
+ */
+function BoardPanel({ board, previewing, onSlide, onResize, onFitBoard }: {
+  board: BoardSize
+  previewing: boolean
+  onSlide: (dx: number, dy: number, dz: number) => void
+  onResize: (next: Partial<BoardSize>) => void
+  onFitBoard: () => void
+}) {
+  const axis = (key: 'x' | 'y' | 'z', label: string) => (
+    <label className="flex items-center" style={{ gap: 3 }}>
+      <span className="font-pixel" style={{ fontSize: 9, color: '#888', width: 10 }}>{label}</span>
+      <input
+        type="number"
+        min={BOARD_MIN}
+        max={BOARD_MAX}
+        value={board[key]}
+        data-testid={`board-${key}`}
+        onChange={e => onResize({ [key]: Number(e.target.value) })}
+        className="font-mono"
+        style={{ width: 40, height: 18, fontSize: 10, textAlign: 'center',
+                 background: '#111', color: '#ddd', border: '1px solid #444' }}
+      />
+    </label>
+  )
+
+  const nudge = (label: string, dx: number, dy: number, dz: number, testid: string) => (
+    <button onClick={() => onSlide(dx, dy, dz)} data-testid={testid}
+            title={`${label} へ 1 マス`}
+            className="mc-btn" style={{ width: 22, height: 20, fontSize: 10 }}>
+      {label}
+    </button>
+  )
+
+  return (
+    <div
+      className="flex flex-col"
+      data-testid="board-panel"
+      style={{
+        position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+        gap: 4, zIndex: 10, padding: 5,
+        background: 'rgba(29,29,29,0.92)',
+        border: '2px solid', borderColor: previewing ? '#8a6a1a' : '#444',
+      }}
+    >
+      <span className="font-pixel" style={{ fontSize: 9, color: '#666', letterSpacing: 1 }}>盤面</span>
+      {axis('x', 'X')}
+      {axis('y', 'Y')}
+      {axis('z', 'Z')}
+      <button onClick={onFitBoard} data-testid="board-fit"
+              className="mc-btn" style={{ height: 18, fontSize: 9 }}>
+        回路に合わせる
+      </button>
+
+      <div style={{ height: 1, background: '#3a3a3a', margin: '2px 0' }} />
+
+      <span className="font-pixel" style={{ fontSize: 9, color: '#666', letterSpacing: 1 }}>移動</span>
+      {/* X/Z は十字、Y は上下 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 22px)', gap: 2, justifyContent: 'center' }}>
+        <span />{nudge('↑', 0, 0, -1, 'slide-nz')}<span />
+        {nudge('←', -1, 0, 0, 'slide-nx')}<span />{nudge('→', 1, 0, 0, 'slide-px')}
+        <span />{nudge('↓', 0, 0, 1, 'slide-pz')}<span />
+      </div>
+      <div className="flex" style={{ gap: 2, justifyContent: 'center' }}>
+        {nudge('Y+', 0, 1, 0, 'slide-py')}
+        {nudge('Y-', 0, -1, 0, 'slide-ny')}
+      </div>
+    </div>
+  )
+}
+
 // ── HeightPanel ───────────────────────────────────────────────────────────────
 
 interface HeightPanelProps {
@@ -1379,11 +1786,32 @@ interface HeightPanelProps {
  * 編集レイヤー (Y) の操作パネル。
  * ▲▼ で1段ずつ移動、レイヤーセル直接クリックでジャンプ、
  * 👁 で activeLayer より上のレイヤーの表示カットを切り替える。
+ *
+ * 盤面の高さは可変 (最大 64) になったので、**段を LAYER_PAGE 段ずつのページで出す**
+ * (#226 判断 A)。全段を縦に並べると画面に収まらない。あわせて Y を直接打てる欄も置く。
  */
 function HeightPanel({
   activeLayer, layerCounts, cutUpper, onChangeLayer, onToggleCutUpper,
 }: HeightPanelProps) {
-  const layers = Array.from({ length: layerCounts.length }, (_, i) => layerCounts.length - 1 - i)
+  const total = layerCounts.length
+  const pageCount = Math.max(1, Math.ceil(total / LAYER_PAGE))
+  // 編集中の段を含むページを開く (段を移動したら勝手に追従する)
+  const [page, setPage] = useState(() => Math.floor(activeLayer / LAYER_PAGE))
+  const activePage = Math.min(pageCount - 1, Math.floor(activeLayer / LAYER_PAGE))
+  useEffect(() => { setPage(activePage) }, [activePage])
+  const shownPage = Math.min(page, pageCount - 1)
+
+  const from = shownPage * LAYER_PAGE
+  const to = Math.min(total, from + LAYER_PAGE)
+  // 上=最上層で並べる
+  const layers = Array.from({ length: to - from }, (_, i) => to - 1 - i)
+
+  const [jump, setJump] = useState('')
+  const submitJump = () => {
+    const y = Number(jump)
+    if (Number.isFinite(y)) onChangeLayer(Math.max(0, Math.min(total - 1, Math.floor(y))))
+    setJump('')
+  }
 
   return (
     <div
@@ -1395,6 +1823,32 @@ function HeightPanel({
       }}
     >
       <span className="font-pixel" style={{ fontSize: 10, color: '#666', letterSpacing: 1 }}>Y</span>
+
+      {/* ページ送り (段数が 1 ページに収まらないときだけ) */}
+      {pageCount > 1 && (
+        <div className="flex items-center" style={{ gap: 2 }}>
+          <button
+            onClick={() => setPage(p => Math.max(0, Math.min(p, pageCount - 1) - 1))}
+            disabled={shownPage <= 0}
+            title="下のページへ"
+            data-testid="layer-page-prev"
+            className="mc-btn"
+            style={{ width: 18, height: 16, fontSize: 9 }}
+          >◀</button>
+          <span className="font-mono" data-testid="layer-page-label"
+                style={{ fontSize: 9, color: '#888', minWidth: 30, textAlign: 'center' }}>
+            {from}-{to - 1}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+            disabled={shownPage >= pageCount - 1}
+            title="上のページへ"
+            data-testid="layer-page-next"
+            className="mc-btn"
+            style={{ width: 18, height: 16, fontSize: 9 }}
+          >▶</button>
+        </div>
+      )}
 
       {/* 1段上へ */}
       <button
@@ -1454,6 +1908,25 @@ function HeightPanel({
       >
         {activeLayer}
       </div>
+
+      {/* Y の直接入力 (#226 判断 A)。ページ送りだけでは遠い段が面倒 */}
+      <input
+        type="number"
+        min={0}
+        max={total - 1}
+        value={jump}
+        placeholder="Y"
+        data-testid="layer-jump"
+        onChange={e => setJump(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') submitJump() }}
+        onBlur={submitJump}
+        title="Y を直接入力して移動"
+        className="font-mono"
+        style={{
+          width: 40, height: 20, fontSize: 10, textAlign: 'center',
+          background: '#111', color: '#ddd', border: '1px solid #444',
+        }}
+      />
 
       {/* 上層カットトグル */}
       <button

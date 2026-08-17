@@ -49,6 +49,14 @@ test('editor: NBT エクスポート/インポートの往復でブロックが�
     buffer: bytes,
   })
 
+  // #226 でインポートは**いったんプレビュー**になった。確定するまで盤面には入らない
+  await expect(page.getByTestId('preview-bar')).toBeVisible()
+  expect(
+    await page.evaluate(() => window.__editorTest!.getEditorBlockAt(0, 0, 0)),
+    '確定前なのに盤面へ入っている',
+  ).toBeNull()
+
+  await page.getByTestId('preview-commit').click()
   await page.waitForFunction(() => window.__editorTest!.getEditorBlockAt(0, 0, 0)?.type === 'wire')
   expect(await page.evaluate(() => window.__editorTest!.getEditorBlockAt(1, 0, 0)?.type)).toBe('lever')
   expect(await page.evaluate(() => window.__editorTest!.getEditorBlockAt(2, 0, 0)?.type)).toBe('repeater')
