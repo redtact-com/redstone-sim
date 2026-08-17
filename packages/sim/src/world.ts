@@ -4,6 +4,7 @@ import type {
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
   RailShape, BlockType, DetectorRailState, DoorLikeState,
 } from './types.js'
+import { noteInstrumentFor } from './blocks/noteInstrument.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
   isStraightRailShape,
@@ -500,6 +501,16 @@ export class SimWorld {
     //  rail-piston-push-powered (電源から押し離すと着地の時点で off)]
     if (isRail(into)) {
       for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
+      this.neighborChanged(pos)
+    }
+    // 着地したピストンは**自分自身を再判定する** (#231)
+    // [確定: 26.2 PistonBaseBlock.onPlace —
+    //  `if (!oldState.is(state.getBlock()) && level.getBlockEntity(pos) == null) checkIfExtend(...)`]。
+    // 着地は moving_piston → piston の差し替えなので条件を満たす。
+    // 隣接 6 マスへの NC (下の submitMultiNC) は**自分には飛ばない**ので、
+    // これが無いと「運ばれて着地した直後に受電しているピストン」が伸びない
+    // (5×5 ドアの t=299 で実機だけが伸びていた原因)
+    if (into.type === 'piston' || into.type === 'sticky_piston') {
       this.neighborChanged(pos)
     }
     // 着地は vanilla では setBlock(UPDATE_ALL) なので**隣接 6 マスへ NC が飛ぶ**
@@ -1450,13 +1461,15 @@ export class SimWorld {
     // 相当を行うため、ここでの一律 no-op ガードは撤去した (mid-retract の base=moving は
     // ev.pos のブロック種チェック (block.type !== piston) で既に弾かれている)。
 
-    const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
+    const setMoving = (
+      pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState, extending: boolean,
+    ) => {
       // #80: 確定は ST 相の tile tick でなく BlockEntity 相 (finalizeDue) で行う。
       // ST (phase4) は BE (phase8) の前なので、旧実装では確定ブロックが同 tick 内で
       // 下流ピストンを起動していた (実機と 1tick ズレ)。vanilla は
       // PistonMovingBlockEntity.tick (phase10) で確定するため下流 BE は翌 tick 発火。
       this.setBlockAt(pos, {
-        type: 'moving_piston', facing: piston.facing, kind, into,
+        type: 'moving_piston', facing: piston.facing, kind, into, extending,
         finalizeDue: this.currentTick + 2, seq: this.seqCounter++,
       })
       changed.push(posKey(pos))
@@ -1487,7 +1500,7 @@ export class SimWorld {
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
       for (let i = pushList.length - 1; i >= 0; i--) {
-        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i])
+        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i], true)
       }
       // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
       // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
@@ -1501,7 +1514,7 @@ export class SimWorld {
       // head セル (= 最近接 src と同座標) を head 行きの moving に
       setMoving(headPos, sticky ? 'sticky' : 'normal', {
         type: 'piston_head', facing: piston.facing, sticky,
-      })
+      }, true)
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
       this.traceOpenUpdate(ev.pos)
@@ -1514,6 +1527,18 @@ export class SimWorld {
     } else {
       // retract
       if (!piston.extended) return []
+      // **実行時再判定**: 収縮イベントが走る時点でまだ受電していれば収縮を取り消す (#231)
+      // [確定: 26.2 PistonBaseBlock.triggerEvent —
+      //  `if (extend && (b0 == 1 || b0 == 2)) { level.setBlock(pos, extendedState, 2); return false; }`
+      //  flag 2 なので NC は飛ばさない]。
+      // 収縮予約は「受電が切れた」瞬間の NC で積まれるが、同じ tick の ST 相で
+      // オブザーバー等が再点火すると BE 相の時点では受電が戻っている。
+      // これが無いと**伸びたままのはずのピストンが縮んでしまう**
+      // (5×5 ドアで t=20 に早縮みしていた原因)
+      if (this.shouldExtend(ev.pos, piston)) {
+        this.traceProcess('BE', 'Pi', 'r', 0, { failed: true })
+        return []
+      }
       // トレース: BE 実行 (収縮)
       this.traceProcess('BE', 'Pi', 'r', 0)
       // #82: 収縮 BE が伸長中 (head=moving) に到達したら、まず伸長を即確定させる
@@ -1539,13 +1564,37 @@ export class SimWorld {
         // これでスライム/蜂蜜にくっついた塊ごと引き戻せる
         const pullDir = OPPOSITE[piston.facing]
         const pullFrom = neighbor(headPos, piston.facing)
+
+        // #231: pos+2 が**同じ向きで伸長中**の moving なら、その場で確定させて
+        // 引き戻しは行わない
+        // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) の isSticky 分岐 —
+        //  twoPos の PistonMovingBlockEntity が getDirection()==direction かつ
+        //  isExtending() なら entity.finalTick() を呼び pistonPiece=true にして
+        //  引き戻し (moveBlocks(..., false)) を飛ばす]。
+        // **確定が BE 相で起きる**のが要点で、phase10 任せにすると
+        // 「そのセルを押したい下流ピストン」が翌 tick までずれる。
+        // ユーザ提供の 5×5 ドアで tick 18 の押し上げが 1 tick 遅れていた原因
+        const twoBlock = this.getBlockAt(pullFrom)
+        if (twoBlock?.type === 'moving_piston'
+          && twoBlock.facing === piston.facing && twoBlock.extending) {
+          const finalized = new Set<string>()
+          this.finalizeMovingPiston(pullFrom, twoBlock, finalized)
+          for (const k of finalized) changed.push(k)
+          // pistonPiece 相当: 引き戻しはしない
+          setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
+          this.traceOpenUpdate(ev.pos)
+          this.afterPistonMove(affected)
+          this.traceCloseUpdate('Pi', 'r', 0, 'BE')
+          return changed
+        }
+
         const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom)
         const pullList = pulled ? pulled.toPush : []
         if (pullList.length > 0) {
           const payloads = pullList.map(q => this.getBlockAt(q)!)
           // 近い順に行き先 (piston 側) へ moving を置く
           for (let i = 0; i < pullList.length; i++) {
-            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i])
+            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i], false)
           }
           const destKeys = new Set(pullList.map(q => posKey(neighbor(q, pullDir))))
           for (const src of pullList) {
@@ -1558,7 +1607,7 @@ export class SimWorld {
         }
       }
       // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
-      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false })
+      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
       this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(affected)
       this.traceCloseUpdate('Pi', 'r', 0, 'BE')
@@ -1759,6 +1808,16 @@ export class SimWorld {
    */
   private emitShapeUpdate(pos: Pos3D): void {
     if (this.suppressPP) return
+
+    // Y 軸で隣り合う音符ブロックは音色を引き直す (#231)。
+    // [確定: 26.2 NoteBlock.updateShape — `directionToNeighbour.getAxis() == Y` なら
+    //  setInstrument]。**上下どちらの隣が変わっても走る**ので両側を見る
+    //  (音色そのものは常に「下のブロック」から決まるが、引き直しの契機は上下両方)。
+    // **NC ではなく形状更新でしか走らない**。実機の settle (全ブロックへ update) を
+    // 通しても音色は古いままで、最初の形状更新ではじめて更新される
+    // — なので suppressPP (= settle 相当) の後に置く
+    this.refreshNoteInstrument([pos[0], pos[1] + 1, pos[2]])
+    this.refreshNoteInstrument([pos[0], pos[1] - 1, pos[2]])
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)
@@ -1770,6 +1829,22 @@ export class SimWorld {
       if (this.hasScheduledTick(nPos, 'observer')) continue
       this.schedule(nPos, 2, 0)                      // startSignal: 2gt / priority 0
     }
+  }
+
+  /**
+   * 音符ブロックの音色を直下のブロックから引き直す (#231)。
+   *
+   * 変化したら blockstate が変わるので**オブザーバーに検知させる** (emitShapeUpdate)。
+   * 音色は下のブロックの「種別」だけで決まるため連鎖しない (下が音符ブロックなら
+   * その音色に関わらず bass)。
+   */
+  private refreshNoteInstrument(pos: Pos3D): void {
+    const nb = this.getBlockAt(pos)
+    if (nb?.type !== 'note_block') return
+    const next = noteInstrumentFor(this.getBlockAt([pos[0], pos[1] - 1, pos[2]]))
+    if (next === nb.instrument) return
+    this.setBlockAt(pos, { ...nb, instrument: next })
+    this.emitShapeUpdate(pos)
   }
 
   // ── NC 更新の DFS 実行 ───────────────────────────────────
@@ -1979,13 +2054,18 @@ export class SimWorld {
         //     if (signal) playNote(...)      ← 立ち上がり (false→true) でのみ発音
         //     setBlock(POWERED=signal, flag3) ← POWERED 更新 + PP/NC
         //   }
-        // note block は信号を出力しないため下流への NC 伝播は不要 (lamp と同じく
-        // emitShapeUpdate = オブザーバー起動用の PP のみ発行する。G15)。
+        // **flag 3 なので近隣更新 (NC) も飛ぶ** (#231)。以前は「音符ブロックは信号を
+        // 出力しないから NC 不要」としていたが、UPDATE_NEIGHBORS は出力の有無と関係なく
+        // 隣接 6 マスへ neighborChanged を配る。QC で音符ブロック越しに受電している
+        // ピストンは**この NC でしか電源断を知れない**
+        // (5×5 ドアで (2,8,6) の収縮が 1 tick 遅れていた原因)。
+        // ランプは flag 2 なので NC を出さない [確定: 26.2 RedstoneLampBlock] — 揃えないこと
         const signal = isBlockPowered(this, pos)
         if (signal !== block.powered) {
           if (signal) this.playNote(pos, block)   // 発音 BE を予約 (被覆条件つき)
           this.setBlockAt(pos, { ...block, powered: signal })
-          this.emitShapeUpdate(pos)               // POWERED 変化 → PP (flag3 相当)
+          this.emitShapeUpdate(pos)               // POWERED 変化 → PP
+          this.submitMultiNC(pos)                 // flag3 の UPDATE_NEIGHBORS 相当
         }
         break
       }
@@ -2035,13 +2115,38 @@ export class SimWorld {
         }
         break
       }
+      case 'piston_head': {
+        // **ヘッドが受けた NC は基部のピストンへ転送する** (#231)
+        // [確定: 26.2 PistonHeadBlock.neighborChanged —
+        //  `if (state.canSurvive(...)) level.neighborChanged(pos.relative(FACING.getOpposite()), ...)`]。
+        // QC で受電しているピストンは、電源側の変化が「1 個上のマスの隣」で起きるため
+        // 基部に直接 NC が届かない。ヘッド経由のこの転送が唯一の通知経路になる
+        // (5×5 ドアで、電源が切れているのにピストンが縮まないままだった原因)
+        const basePos = neighbor(pos, OPPOSITE[block.facing])
+        const base = this.getBlockAt(basePos)
+        // canSurvive 相当: 基部が同じ向きで伸びているピストンのときだけ転送する
+        if ((base?.type === 'piston' || base?.type === 'sticky_piston')
+          && base.extended && base.facing === block.facing) {
+          this.neighborChanged(basePos)
+        }
+        break
+      }
       case 'piston':
       case 'sticky_piston': {
         // NC 受信時のみ再評価 (BUD の根拠)。状態不一致なら BE を予約
         const should = this.shouldExtend(pos, block)
         if (should && !block.extended) {
-          this.scheduleBlockEvent(pos, 'extend')
+          // **押せるかをこの時点で判定する** (#231)
+          // [確定: 26.2 PistonBaseBlock.checkIfExtend —
+          //  `if (new PistonStructureResolver(...).resolve()) level.blockEvent(...)`]。
+          // 予約してから実行時に判定すると、その間に押し先の moving_piston が確定して
+          // **本来押せないはずのタイミングで押せてしまう**
+          // (5×5 ドアの t=220 で、実機が伸ばさないピストンを sim が伸ばしていた原因)
+          if (this.resolvePushStructure(pos, block.facing) !== null) {
+            this.scheduleBlockEvent(pos, 'extend')
+          }
         } else if (!should && block.extended) {
+          // 収縮側は vanilla も resolve を通さない (常に予約する)
           this.scheduleBlockEvent(pos, 'retract')
         }
         break

@@ -1,3 +1,5 @@
+import type { NoteInstrument } from './blocks/noteInstrument.js'
+
 // ============================================================
 // 基本型
 // ============================================================
@@ -138,6 +140,12 @@ export interface NoteBlockState {
   powered: boolean
   /** 音程 0-24 (vanilla NOTE)。sim は発音しないが blockstate として保持する */
   note: number
+  /**
+   * 音色。**直下のブロックで決まり、変わるとオブザーバーに検知される** (#231)。
+   * 音そのものは sim の対象外だが blockstate なので保持する。
+   * 決め方は blocks/noteInstrument.ts [確定: 26.2 NoteBlock.setInstrument]
+   */
+  instrument: NoteInstrument
 }
 
 /**
@@ -342,6 +350,12 @@ export interface HoneyBlockState {
 export interface SolidState {
   type: 'solid'
   /**
+   * 上の音符ブロックへ与える音色 (#231)。sim は材質を潰しているのでここで持つ。
+   * 取り込み時に実ブロック名から載せる (羊毛=guitar / 木=bass など)。
+   * 無ければ正規形 stone の basedrum
+   */
+  instrument?: NoteInstrument
+  /**
    * このブロックが充電されているか（弱/強を問わない）。
    * 表示用の派生値であり、判定ロジックは power.ts の純クエリ
    * (isSolidPowered / getStrongPower) を使う。伝播処理の最後に更新される。
@@ -369,6 +383,8 @@ export interface SolidState {
  */
 export interface GlassState {
   type: 'glass'
+  /** 上の音符ブロックへ与える音色 (#231)。取り込み時に実ブロック名から載せる */
+  instrument?: NoteInstrument
 }
 
 /**
@@ -389,6 +405,8 @@ export interface GlassState {
 export interface SlabState {
   type: 'slab'
   half: 'top' | 'bottom'
+  /** 上の音符ブロックへ与える音色 (#231)。取り込み時に実ブロック名から載せる */
+  instrument?: NoteInstrument
 }
 
 /**
@@ -432,6 +450,12 @@ export interface MovingPistonState {
   facing: Dir6
   kind: 'normal' | 'sticky'
   into: BlockState
+  /**
+   * 押し出し中か引き戻し中か [確定: 26.2 PistonMovingBlockEntity.isExtending]。
+   * 収縮する粘着ピストンは pos+2 の**伸長中**の moving だけを強制確定するので、
+   * 向きだけでは足りず区別が要る (#231)
+   */
+  extending: boolean
   /** 確定 (into へ遷移) する gt。移動開始 tick + 2gt [#80: BlockEntity 相で確定] */
   finalizeDue: number
   /** 同 tick に複数の moving_piston が確定するときの順序 (旧 ST 相 tile tick の seq 相当) */
@@ -694,6 +718,8 @@ export type BlockState =
   | AirState
 
 export type BlockType = BlockState['type']
+
+export type { NoteInstrument } from './blocks/noteInstrument.js'
 
 // ============================================================
 // WorldSnapshot — sim / editor / viewer 間の共通受け渡し型

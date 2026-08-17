@@ -71,11 +71,11 @@ trace strict {
 
 state {
   # レイアウト A: 西ピストン伸長 (t3) → 2gt 後にヘッド確定 (t5)。音符は NC で即 powered。
-  t2 (5,1,0) note_block[note=0,powered=true]
+  t2 (5,1,0) note_block[instrument=harp,note=0,powered=true]
   t3 (1,1,0) piston[extended=true,facing=west]
   t5 (0,1,0) piston_head[facing=west,short=false,type=normal]
   # レイアウト B: 東ピストン伸長 (t11) → ヘッド確定 (t13)。音符は t10 で powered。
-  t10 (11,1,0) note_block[note=0,powered=true]
+  t10 (11,1,0) note_block[instrument=harp,note=0,powered=true]
   t11 (15,1,0) piston[extended=true,facing=east]
   t13 (16,1,0) piston_head[facing=east,short=false,type=normal]
 }

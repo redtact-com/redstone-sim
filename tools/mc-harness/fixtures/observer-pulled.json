@@ -1,8 +1,8 @@
 {
   "name": "observer-pulled",
-  "description": "#119 粘着ピストンで押して引いたオブザーバー。lever(0,1,0) → dust → sticky_piston(2,1,0,facing=east) の前に observer(3,1,0,facing=east)。レバー ON で押し出し、OFF で引き戻す。伸長と収縮は別経路なので、引き戻し着地でも発火するかを実機で確定させる。",
+  "description": "#231 ピストンに**引き戻された**オブザーバーが着地で発火するかの実機確認。 observer-pushed (押し) の続きで、レバーを t=2 で ON にして押し出し、t=12 で OFF にして粘着ピストンで引き戻す。押しでは着地の 2gt 後に発火する (#119) が、引きでも同じかを確定させる。5×5 ドアの t=304 で、引き戻されて着地したオブザーバーをsim だけが発火させていた。",
   "mcVersion": "1.21.1",
-  "ticks": 26,
+  "ticks": 30,
   "region": {
     "from": [
       0,

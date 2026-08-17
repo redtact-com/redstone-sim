@@ -194,8 +194,9 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
     case 'lamp':
       return { type: 'lamp', lit: false }
     case 'note_block':
-      // 発音は BE フック経由 (音自体はスコープ外)。初期は消灯・note=0
-      return { type: 'note_block', powered: false, note: 0 }
+      // 発音は BE フック経由 (音自体はスコープ外)。初期は消灯・note=0。
+      // instrument は置いた時点では harp で、直下のブロックに応じて sim 側が引き直す (#231)
+      return { type: 'note_block', powered: false, note: 0, instrument: 'harp' }
     case 'piston':
     case 'sticky_piston':
       return { type, facing: dir, extended: false }

@@ -19,6 +19,7 @@
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
 // ============================================================
 
+import { toNoteInstrument } from './blocks/noteInstrument.js'
 import type {
   BlockState, HDir, Dir6, WireConnectionValue, RailShape, StraightRailShape,
 } from './types.js'
@@ -166,9 +167,16 @@ export function mcToSim(state: string): BlockState | null {
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
     case 'note_block':
-      // instrument は sim で保持しない (発音は BE フックで通知するのみ)。
-      // note (0-24) と powered のみ取り込む [確定: 26.2 NoteBlock]
-      return { type: 'note_block', powered: props.powered === 'true', note: Number(props.note ?? '0') }
+      // instrument も取り込む。**直下のブロックで決まり、変化はオブザーバーに
+      // 検知される**ので blockstate として持つ必要がある (#231)。
+      // 取り込み時は文字列をそのまま採る (実機の「まだ再計算されていない古い音色」を
+      // 再現するため。ここで計算し直すと authored 照合が合わなくなる)
+      return {
+        type: 'note_block',
+        powered: props.powered === 'true',
+        note: Number(props.note ?? '0'),
+        instrument: toNoteInstrument(props.instrument),
+      }
     case 'piston':
     case 'sticky_piston':
       // vanilla の facing = 伸長方向 = sim と同一 (反転不要)
@@ -408,9 +416,8 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'note_block':
-        // instrument は authored に無いため harp 既定で合成する (発音音色は sim 無関係)
         return formatMcState('note_block',
-          { instrument: 'harp', note: String(sim.note), powered: String(sim.powered) })
+          { instrument: sim.instrument, note: String(sim.note), powered: String(sim.powered) })
       case 'pressure_plate_wood':
         return formatMcState('oak_pressure_plate', { powered: String(sim.powered) })
       case 'pressure_plate_stone':
@@ -468,9 +475,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.lit = String(sim.lit)
       break
     case 'note_block':
-      // 動的プロパティは powered のみ (note は tune で変わるが sim は tune しない)。
-      // authored の instrument/note は保持する
+      // note は tune で変わるが sim は tune しない (authored 保持)。
+      // instrument は直下のブロックで動的に変わるので sim 側の値で上書きする (#231)
       props.powered = String(sim.powered)
+      props.instrument = sim.instrument
       break
     case 'piston':
     case 'sticky_piston':

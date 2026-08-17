@@ -11,6 +11,7 @@
 // 「2 つの変換器がドリフトする」構図そのものだった。
 // ============================================================
 
+import { noteInstrumentOfBlockName } from './noteInstrument.js'
 import type { BlockState } from '../types.js'
 
 // ── 非導体ブロック (#184) ────────────────────────────────────────────────────
@@ -133,8 +134,14 @@ export function isSolidBlockName(name: string): boolean {
 export function classifyPlainBlock(
   name: string, props: Record<string, string> = {},
 ): BlockState | null {
+  // sim は材質を潰すが、**上の音符ブロックの音色は材質で決まる** ので
+  // ここで拾って state に載せる (#231)。羊毛=guitar / 木=bass など
+  const instrument = noteInstrumentOfBlockName(name)
+  const withInstrument = <T extends BlockState>(b: T): T =>
+    instrument === 'harp' ? b : { ...b, instrument }
+
   const nonConductive = toNonConductiveBlockState(name, props)
-  if (nonConductive) return nonConductive
-  if (isSolidBlockName(name)) return { type: 'solid', powered: false }
+  if (nonConductive) return withInstrument(nonConductive)
+  if (isSolidBlockName(name)) return withInstrument({ type: 'solid', powered: false })
   return null
 }
