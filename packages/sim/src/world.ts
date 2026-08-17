@@ -2044,13 +2044,18 @@ export class SimWorld {
         //     if (signal) playNote(...)      ← 立ち上がり (false→true) でのみ発音
         //     setBlock(POWERED=signal, flag3) ← POWERED 更新 + PP/NC
         //   }
-        // note block は信号を出力しないため下流への NC 伝播は不要 (lamp と同じく
-        // emitShapeUpdate = オブザーバー起動用の PP のみ発行する。G15)。
+        // **flag 3 なので近隣更新 (NC) も飛ぶ** (#231)。以前は「音符ブロックは信号を
+        // 出力しないから NC 不要」としていたが、UPDATE_NEIGHBORS は出力の有無と関係なく
+        // 隣接 6 マスへ neighborChanged を配る。QC で音符ブロック越しに受電している
+        // ピストンは**この NC でしか電源断を知れない**
+        // (5×5 ドアで (2,8,6) の収縮が 1 tick 遅れていた原因)。
+        // ランプは flag 2 なので NC を出さない [確定: 26.2 RedstoneLampBlock] — 揃えないこと
         const signal = isBlockPowered(this, pos)
         if (signal !== block.powered) {
           if (signal) this.playNote(pos, block)   // 発音 BE を予約 (被覆条件つき)
           this.setBlockAt(pos, { ...block, powered: signal })
-          this.emitShapeUpdate(pos)               // POWERED 変化 → PP (flag3 相当)
+          this.emitShapeUpdate(pos)               // POWERED 変化 → PP
+          this.submitMultiNC(pos)                 // flag3 の UPDATE_NEIGHBORS 相当
         }
         break
       }
@@ -2097,6 +2102,22 @@ export class SimWorld {
         const newPowered = newOutput > 0
         if (newOutput !== block.outputPower || newPowered !== block.powered) {
           this.schedule(pos, 2, this.diodeTickPriority(pos, block, false))
+        }
+        break
+      }
+      case 'piston_head': {
+        // **ヘッドが受けた NC は基部のピストンへ転送する** (#231)
+        // [確定: 26.2 PistonHeadBlock.neighborChanged —
+        //  `if (state.canSurvive(...)) level.neighborChanged(pos.relative(FACING.getOpposite()), ...)`]。
+        // QC で受電しているピストンは、電源側の変化が「1 個上のマスの隣」で起きるため
+        // 基部に直接 NC が届かない。ヘッド経由のこの転送が唯一の通知経路になる
+        // (5×5 ドアで、電源が切れているのにピストンが縮まないままだった原因)
+        const basePos = neighbor(pos, OPPOSITE[block.facing])
+        const base = this.getBlockAt(basePos)
+        // canSurvive 相当: 基部が同じ向きで伸びているピストンのときだけ転送する
+        if ((base?.type === 'piston' || base?.type === 'sticky_piston')
+          && base.extended && base.facing === block.facing) {
+          this.neighborChanged(basePos)
         }
         break
       }

@@ -157,3 +157,68 @@ describe('収縮イベントは実行時に受電していたら取り消す (#2
     expect(w.getBlock(1, 0, 0), '電源を切ったのに縮まない').toMatchObject({ extended: false })
   })
 })
+
+/**
+ * **ピストンヘッドが受けた NC は基部へ転送する** (#231)。
+ *
+ * [確定: 26.2 PistonHeadBlock.neighborChanged —
+ *  `if (state.canSurvive(...)) level.neighborChanged(pos.relative(FACING.getOpposite()), ...)`]
+ *
+ * QC で受電しているピストンは、電源側の変化が「1 個上のマスの隣」で起きるため
+ * 基部に直接 NC が届かない。ヘッド経由のこの転送が唯一の通知経路になる。
+ */
+describe('ピストンヘッドは NC を基部へ転送する (#231)', () => {
+  it('ヘッドの隣で電源が消えると基部が縮む', () => {
+    const w = new SimWorld()
+    // 上向き粘着ピストン。**QC 源は最初から置いておく** — 後から置いても
+    // 斜めの位置には NC が飛ばないので伸びない (それが QC/BUD の性質)
+    w.setBlockAt([0, 0, 0], { type: 'sticky_piston', facing: 'up', extended: false } as BlockState)
+    w.setBlockAt([0, 1, 0], { type: 'solid', powered: false } as BlockState)   // 押される石
+    w.setBlockAt([1, 1, 0], { type: 'redstone_block' } as BlockState)          // 1 個上のマスの隣 = QC
+    w.initialize()
+    w.flush(64)
+    // QC は「隣に置いただけ」では基部に NC が届かないので、BUD を 1 回起こして起動させる
+    w.setBlockCommand([0, 0, 1], { type: 'solid', powered: false } as BlockState)
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(0, 0, 0), '前提: QC で伸びている').toMatchObject({ extended: true })
+    expect(w.getBlock(0, 1, 0), '前提: ヘッドが出ている').toMatchObject({ type: 'piston_head' })
+
+    // 電源を消す。基部 (0,0,0) は電源の隣ではないので直接 NC は届かず、
+    // **ヘッド (0,1,0) が受けた NC の転送**でしか伝わらない
+    w.setBlockCommand([1, 1, 0], { type: 'air' })
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(0, 0, 0), 'ヘッド経由の NC が届かず縮んでいない')
+      .toMatchObject({ extended: false })
+  })
+})
+
+/**
+ * **音符ブロックの POWERED 変化は近隣更新 (NC) を出す** (#231)。
+ *
+ * [確定: 26.2 NoteBlock.neighborChanged — `level.setBlock(pos, ..., 3)` の
+ *  flag 3 = UPDATE_NEIGHBORS|UPDATE_CLIENTS]。
+ * 「信号を出力しないから NC 不要」ではない。UPDATE_NEIGHBORS は出力の有無と関係なく
+ * 隣接 6 マスへ配られ、**真下のピストン**はこれで電源断を知る。
+ * ランプは flag 2 なので NC を出さない — 揃えないこと。
+ */
+describe('音符ブロックの POWERED 変化は NC を出す (#231)', () => {
+  it('真上の音符ブロックの受電が切れるとピストンが縮む', () => {
+    const w = new SimWorld()
+    // 北向きピストンの 1 個上が音符ブロック。その隣の電源が QC 源かつ音符ブロックの電源
+    w.setBlockAt([0, 0, 0], { type: 'sticky_piston', facing: 'north', extended: false } as BlockState)
+    w.setBlockAt([0, 1, 0], { type: 'note_block', powered: false, note: 0, instrument: 'harp' } as BlockState)
+    w.setBlockAt([1, 1, 0], { type: 'redstone_block' } as BlockState)
+    w.initialize()
+    w.flush(64)
+    w.setBlockCommand([0, 0, 1], { type: 'solid', powered: false } as BlockState)   // BUD
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(0, 1, 0), '前提: 音符ブロックが受電している').toMatchObject({ powered: true })
+    expect(w.getBlock(0, 0, 0), '前提: QC で伸びている').toMatchObject({ extended: true })
+
+    w.setBlockCommand([1, 1, 0], { type: 'air' })
+    for (let i = 0; i < 6; i++) w.tick()
+    expect(w.getBlock(0, 1, 0)).toMatchObject({ powered: false })
+    expect(w.getBlock(0, 0, 0), '音符ブロックからの NC が無く縮んでいない')
+      .toMatchObject({ extended: false })
+  })
+})
