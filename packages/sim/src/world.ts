@@ -1450,13 +1450,15 @@ export class SimWorld {
     // 相当を行うため、ここでの一律 no-op ガードは撤去した (mid-retract の base=moving は
     // ev.pos のブロック種チェック (block.type !== piston) で既に弾かれている)。
 
-    const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
+    const setMoving = (
+      pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState, extending: boolean,
+    ) => {
       // #80: 確定は ST 相の tile tick でなく BlockEntity 相 (finalizeDue) で行う。
       // ST (phase4) は BE (phase8) の前なので、旧実装では確定ブロックが同 tick 内で
       // 下流ピストンを起動していた (実機と 1tick ズレ)。vanilla は
       // PistonMovingBlockEntity.tick (phase10) で確定するため下流 BE は翌 tick 発火。
       this.setBlockAt(pos, {
-        type: 'moving_piston', facing: piston.facing, kind, into,
+        type: 'moving_piston', facing: piston.facing, kind, into, extending,
         finalizeDue: this.currentTick + 2, seq: this.seqCounter++,
       })
       changed.push(posKey(pos))
@@ -1487,7 +1489,7 @@ export class SimWorld {
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
       for (let i = pushList.length - 1; i >= 0; i--) {
-        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i])
+        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i], true)
       }
       // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
       // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
@@ -1501,7 +1503,7 @@ export class SimWorld {
       // head セル (= 最近接 src と同座標) を head 行きの moving に
       setMoving(headPos, sticky ? 'sticky' : 'normal', {
         type: 'piston_head', facing: piston.facing, sticky,
-      })
+      }, true)
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
       this.traceOpenUpdate(ev.pos)
@@ -1539,13 +1541,37 @@ export class SimWorld {
         // これでスライム/蜂蜜にくっついた塊ごと引き戻せる
         const pullDir = OPPOSITE[piston.facing]
         const pullFrom = neighbor(headPos, piston.facing)
+
+        // #231: pos+2 が**同じ向きで伸長中**の moving なら、その場で確定させて
+        // 引き戻しは行わない
+        // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) の isSticky 分岐 —
+        //  twoPos の PistonMovingBlockEntity が getDirection()==direction かつ
+        //  isExtending() なら entity.finalTick() を呼び pistonPiece=true にして
+        //  引き戻し (moveBlocks(..., false)) を飛ばす]。
+        // **確定が BE 相で起きる**のが要点で、phase10 任せにすると
+        // 「そのセルを押したい下流ピストン」が翌 tick までずれる。
+        // ユーザ提供の 5×5 ドアで tick 18 の押し上げが 1 tick 遅れていた原因
+        const twoBlock = this.getBlockAt(pullFrom)
+        if (twoBlock?.type === 'moving_piston'
+          && twoBlock.facing === piston.facing && twoBlock.extending) {
+          const finalized = new Set<string>()
+          this.finalizeMovingPiston(pullFrom, twoBlock, finalized)
+          for (const k of finalized) changed.push(k)
+          // pistonPiece 相当: 引き戻しはしない
+          setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
+          this.traceOpenUpdate(ev.pos)
+          this.afterPistonMove(affected)
+          this.traceCloseUpdate('Pi', 'r', 0, 'BE')
+          return changed
+        }
+
         const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom)
         const pullList = pulled ? pulled.toPush : []
         if (pullList.length > 0) {
           const payloads = pullList.map(q => this.getBlockAt(q)!)
           // 近い順に行き先 (piston 側) へ moving を置く
           for (let i = 0; i < pullList.length; i++) {
-            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i])
+            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i], false)
           }
           const destKeys = new Set(pullList.map(q => posKey(neighbor(q, pullDir))))
           for (const src of pullList) {
@@ -1558,7 +1584,7 @@ export class SimWorld {
         }
       }
       // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
-      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false })
+      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
       this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(affected)
       this.traceCloseUpdate('Pi', 'r', 0, 'BE')

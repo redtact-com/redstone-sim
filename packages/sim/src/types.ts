@@ -432,6 +432,12 @@ export interface MovingPistonState {
   facing: Dir6
   kind: 'normal' | 'sticky'
   into: BlockState
+  /**
+   * 押し出し中か引き戻し中か [確定: 26.2 PistonMovingBlockEntity.isExtending]。
+   * 収縮する粘着ピストンは pos+2 の**伸長中**の moving だけを強制確定するので、
+   * 向きだけでは足りず区別が要る (#231)
+   */
+  extending: boolean
   /** 確定 (into へ遷移) する gt。移動開始 tick + 2gt [#80: BlockEntity 相で確定] */
   finalizeDue: number
   /** 同 tick に複数の moving_piston が確定するときの順序 (旧 ST 相 tile tick の seq 相当) */
