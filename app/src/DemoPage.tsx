@@ -37,6 +37,8 @@ export interface DemoApi {
   getTick: () => number
   getStateAt: (x: number, y: number, z: number) => string
   fitCamera: () => void
+  /** カメラを明示指定する (面を見せる GIF 用)。省略値は現状維持 */
+  setCamera: (opts: Partial<CameraInput>) => void
   getFixtureName: () => string
   getMaxTicks: () => number
   isDone: () => boolean
@@ -105,6 +107,17 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
     cameraInputRef.current = { distance, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
   }, [])
 
+  /**
+   * カメラを明示指定する (#231)。fitCamera の等角ビューだと面が斜めで、
+   * 「ドアのどこが欠けているか」のような**面を見せたい GIF**が撮れない。
+   * 省略した値は今の値を保つ
+   */
+  const setCamera = useCallback((opts: Partial<CameraInput>) => {
+    const cur = cameraInputRef.current
+      ?? { distance: 20, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
+    cameraInputRef.current = { ...cur, ...opts }
+  }, [])
+
   const step = useCallback((): { tick: number } => {
     const r = runnerRef.current
     if (!r) return { tick: 0 }
@@ -130,13 +143,14 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
       getTick: () => runnerRef.current?.tick ?? 0,
       getStateAt: (x, y, z) => runnerRef.current?.getStateAt(x, y, z) ?? 'air',
       fitCamera,
+      setCamera,
       getFixtureName: () => runnerRef.current?.fixture.name ?? '',
       getMaxTicks: () => runnerRef.current?.maxTicks ?? 0,
       isDone: () => runnerRef.current?.done ?? true,
     }
     window.__demo = api
     return () => { delete window.__demo }
-  }, [loadFixture, step, fitCamera])
+  }, [loadFixture, step, fitCamera, setCamera])
 
   const onViewerReady = useCallback(() => {
     setReady(true)
