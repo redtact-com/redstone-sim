@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import type { BlockState } from '@redstone/sim'
 import {
-  clipToBoard, countOutside, growthProposal, normalizeToOrigin, offsetToFitBoard, requiredBoardSize, translateBlocks,
+  translateBlocks, normalizeToOrigin, clipToBoard, countOutside,
+  requiredBoardSize, offsetToFitBoard, growthProposal,
 } from './transform.js'
-import { normalizeBoardSize, isInsideBoard, blocksExtent, DEFAULT_BOARD, BOARD_MAX } from './board.js'
+import {
+  normalizeBoardSize, isInsideBoard, blocksExtent, boundsWithBlocks,
+  DEFAULT_BOARD, BOARD_MAX,
+} from './board.js'
 
 const wire = (): BlockState => ({
   type: 'wire', power: 0,
@@ -240,5 +244,33 @@ describe('growthProposal — 「広げますか」を出すかどうか (判断 
   it('提案値は必ず盤面の上限内', () => {
     const p = growthProposal({ x: 16, y: 16, z: 16 }, { x: 999, y: 999, z: 999 })
     expect(p).toEqual({ x: BOARD_MAX, y: BOARD_MAX, z: BOARD_MAX })
+  })
+})
+
+describe('boundsWithBlocks — プレビューで盤面外も描くための bounds', () => {
+  const board = { x: 16, y: 16, z: 16 }
+
+  it('盤面に収まっていれば盤面ぴったり', () => {
+    expect(boundsWithBlocks(board, mk('0,0,0', '15,15,15')))
+      .toEqual({ x: [0, 15], y: [0, 15], z: [0, 15] })
+  })
+
+  it('空でも盤面ぴったり', () => {
+    expect(boundsWithBlocks(board, new Map())).toEqual({ x: [0, 15], y: [0, 15], z: [0, 15] })
+  })
+
+  it('**盤面の外へ出たブロックを含むまで広がる** (含まないと描けない)', () => {
+    expect(boundsWithBlocks(board, mk('-3,0,0', '20,0,0')))
+      .toEqual({ x: [-3, 20], y: [0, 15], z: [0, 15] })
+  })
+
+  it('下や奥へ出ても広がる', () => {
+    expect(boundsWithBlocks(board, mk('0,-2,0', '0,0,30')))
+      .toEqual({ x: [0, 15], y: [-2, 15], z: [0, 30] })
+  })
+
+  it('盤面より小さい回路でも盤面は必ず入る (枠を描くため)', () => {
+    expect(boundsWithBlocks({ x: 32, y: 8, z: 32 }, mk('1,1,1')))
+      .toEqual({ x: [0, 31], y: [0, 7], z: [0, 31] })
   })
 })

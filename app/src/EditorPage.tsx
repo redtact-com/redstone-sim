@@ -25,6 +25,7 @@ import {
   CircuitEditor, decideCellTap,
   DEFAULT_BOARD, BOARD_MIN, BOARD_MAX, normalizeBoardSize,
   translateBlocks, normalizeToOrigin, clipToBoard, countOutside, requiredBoardSize, offsetToFitBoard,
+  boundsWithBlocks,
   growthProposal,
 } from '@redstone/editor'
 import type { BoardSize } from '@redstone/editor'
@@ -105,26 +106,6 @@ interface PendingChange {
   moved?: { dx: number; dy: number; dz: number }
 }
 
-/**
- * 盤面と実際の占有範囲の和を bounds にする。
- *
- * プレビュー中は盤面の外にもブロックが居る。viewer は `px = x - minX` で
- * 構造内の位置を出すので、bounds を盤面に固定すると**外のブロックが描けない**。
- */
-function unionBounds(board: BoardSize, blocks: ReadonlyMap<string, BlockState>): WorldSnapshot['bounds'] {
-  let minX = 0, minY = 0, minZ = 0
-  let maxX = board.x - 1, maxY = board.y - 1, maxZ = board.z - 1
-  for (const key of blocks.keys()) {
-    const [x, y, z] = key.split(',').map(Number)
-    if (x < minX) minX = x
-    if (y < minY) minY = y
-    if (z < minZ) minZ = z
-    if (x > maxX) maxX = x
-    if (y > maxY) maxY = y
-    if (z > maxZ) maxZ = z
-  }
-  return { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] }
-}
 
 // ── 型 ────────────────────────────────────────────────────────────────────────
 
@@ -266,7 +247,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // 盤面だけに固定すると viewer の座標変換 (px = x - minX) から外れて描けない
   const snapshot: WorldSnapshot = {
     blocks: visibleBlocks,
-    bounds: unionBounds(viewBoard, visibleBlocks),
+    bounds: boundsWithBlocks(viewBoard, visibleBlocks),
   }
 
   // レイヤーごとのブロック数（高さパネルのインジケーター用）
@@ -289,6 +270,14 @@ export function EditorPage({ onBack }: EditorPageProps) {
    */
   const viewBoardRef = useRef(viewBoard)
   viewBoardRef.current = viewBoard
+  /**
+   * viewer に渡している bounds。**枠の描画はこれを基準にする**。
+   * viewer の座標は構造ローカル (bounds の min が原点) なので、
+   * プレビューで bounds が盤面より広がると原点が動く。盤面基準のまま描くと
+   * グリッド枠とブロックがずれる (#226 実装中にスクリーンショットで気付いた)
+   */
+  const viewBoundsRef = useRef(snapshot.bounds)
+  viewBoundsRef.current = snapshot.bounds
 
   useEffect(() => {
     if (mode !== 'edit') return
@@ -308,10 +297,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
       ctx.clearRect(0, 0, w, h)
       // depth = camDist + sy/2 - placementY  (sy=盤面の高さ, placementY=activeLayer)
       const vb = viewBoardRef.current
-      const depth = cam.distance + vb.y / 2 - activeLayer
+      const bounds = viewBoundsRef.current
+      const [minX, maxX] = bounds.x
+      const [minY, maxY] = bounds.y
+      const [minZ, maxZ] = bounds.z
+      // 構造のサイズと、構造ローカルでの編集レイヤー
+      const sx = maxX - minX + 1
+      const sy = maxY - minY + 1
+      const sz = maxZ - minZ + 1
+      const localY = activeLayer - minY
+      const depth = cam.distance + sy / 2 - localY
+      if (depth <= 0) { raf = requestAnimationFrame(draw); return }
       const scale = FOV_F * h / (2 * depth)
-      const gridLeft = w / 2 - (vb.x / 2 + cam.panX) * scale
-      const gridTop  = h / 2 - (vb.z / 2 + cam.panZ) * scale
+      // 構造ローカル原点 (bounds の min) の画面位置
+      const originLeft = w / 2 - (sx / 2 + cam.panX) * scale
+      const originTop  = h / 2 - (sz / 2 + cam.panZ) * scale
+      // 盤面の左上 (絶対 0,0) は min の分だけずれる
+      const gridLeft = originLeft + (0 - minX) * scale
+      const gridTop  = originTop  + (0 - minZ) * scale
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)'
       ctx.lineWidth = 0.5
       ctx.beginPath()
@@ -1283,7 +1286,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
         <IsometricView
           snapshot={snapshot}
           topDown={true}
-          placementY={activeLayer}
+          // viewer は構造ローカル座標で見る。プレビューで bounds が下へ伸びると
+          // 絶対 Y のままではレイヤーがずれる
+          placementY={activeLayer - snapshot.bounds.y[0]}
           onBlockClick={selectedType === 'move' ? undefined : handleBlockClick}
           cameraStateRef={cameraStateRef}
           panMode={selectedType === 'move'}

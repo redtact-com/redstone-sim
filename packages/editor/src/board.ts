@@ -77,3 +77,35 @@ export function blocksExtent(blocks: Map<string, BlockState>): {
     size: { x: maxX - minX + 1, y: maxY - minY + 1, z: maxZ - minZ + 1 },
   }
 }
+
+/** WorldSnapshot の bounds と同じ形 */
+export interface SnapshotBoundsLike {
+  x: [number, number]
+  y: [number, number]
+  z: [number, number]
+}
+
+/**
+ * 盤面と実際の占有範囲の和を bounds にする。
+ *
+ * プレビュー中は盤面の外にもブロックが居る。viewer の座標は**構造ローカル**
+ * (bounds の min が原点) なので、bounds を盤面に固定すると外のブロックが描けない。
+ * 逆に bounds を広げると viewer の原点が動くため、**グリッド枠の描画も
+ * この bounds を基準に置き直す必要がある** (盤面基準のままだとブロックとずれる)。
+ */
+export function boundsWithBlocks(
+  board: BoardSize, blocks: ReadonlyMap<string, BlockState>,
+): SnapshotBoundsLike {
+  let minX = 0, minY = 0, minZ = 0
+  let maxX = board.x - 1, maxY = board.y - 1, maxZ = board.z - 1
+  for (const key of blocks.keys()) {
+    const [x, y, z] = key.split(',').map(Number)
+    if (x < minX) minX = x
+    if (y < minY) minY = y
+    if (z < minZ) minZ = z
+    if (x > maxX) maxX = x
+    if (y > maxY) maxY = y
+    if (z > maxZ) maxZ = z
+  }
+  return { x: [minX, maxX], y: [minY, maxY], z: [minZ, maxZ] }
+}
