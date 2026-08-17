@@ -1,5 +1,7 @@
 import type { BlockState, BlockType } from '@redstone/sim'
 import { slotsFromCount, containerSlotsOf } from '@redstone/sim'
+import { normalizeBoardSize, BOARD_MAX } from '@redstone/editor'
+import type { BoardSize } from '@redstone/editor'
 
 /**
  * 編集中の回路をブラウザに残す (#109)。
@@ -14,18 +16,30 @@ import { slotsFromCount, containerSlotsOf } from '@redstone/sim'
 export const STORAGE_KEY = 'rdsim:editor:circuit'
 export const STORAGE_VERSION = 1
 
-/** 異常なデータで固まらないための上限 (16×16×8 = 2048 が現行の最大) */
-const MAX_BLOCKS = 4096
+/**
+ * 異常なデータで固まらないための上限。
+ * 盤面は可変になったので上限は最大盤面の体積 (#226)。実際は localStorage の
+ * 容量の方が先に尽きるが、そちらは saveCircuit が静かに諦める。
+ */
+export const MAX_SAVED_BLOCKS = BOARD_MAX ** 3
 
 export interface SavedCircuit {
   v: number
   savedAt: string
   blocks: Record<string, BlockState>
+  /**
+   * 盤面サイズ (#226)。**version は上げない**。
+   * これが無い古い保存データは既定の 16×16×16 として読む (#201 と同じ方針で、
+   * フィールドが増えただけで回路を捨てるのは損が大きい)
+   */
+  board?: BoardSize
 }
 
 export interface RestoredCircuit {
   blocks: Map<string, BlockState>
   savedAt: string
+  /** 保存に盤面サイズが無ければ既定値 */
+  board: BoardSize
 }
 
 /** localStorage は「アクセスした瞬間に throw する」環境がある (Safari のプライベート等) */
@@ -42,10 +56,12 @@ const isPosKey = (key: string): boolean => {
   return parts.length === 3 && parts.every(p => p !== '' && Number.isFinite(Number(p)))
 }
 
-export function serializeCircuit(blocks: Map<string, BlockState>, savedAt: string): SavedCircuit {
+export function serializeCircuit(
+  blocks: Map<string, BlockState>, savedAt: string, board?: BoardSize,
+): SavedCircuit {
   const out: Record<string, BlockState> = {}
   for (const [key, block] of blocks) out[key] = block
-  return { v: STORAGE_VERSION, savedAt, blocks: out }
+  return { v: STORAGE_VERSION, savedAt, blocks: out, board: normalizeBoardSize(board) }
 }
 
 /** 壊れた保存データを弾く。1 ブロックでも形が違えば全体を捨てる (中途半端な復元をしない) */
@@ -57,12 +73,12 @@ export function parseCircuit(raw: string): RestoredCircuit | null {
     return null
   }
   if (typeof data !== 'object' || data === null) return null
-  const { v, savedAt, blocks } = data as Partial<SavedCircuit>
+  const { v, savedAt, blocks, board } = data as Partial<SavedCircuit>
   if (v !== STORAGE_VERSION) return null
   if (typeof blocks !== 'object' || blocks === null) return null
 
   const entries = Object.entries(blocks)
-  if (entries.length > MAX_BLOCKS) return null
+  if (entries.length > MAX_SAVED_BLOCKS) return null
 
   const map = new Map<string, BlockState>()
   for (const [key, block] of entries) {
@@ -71,7 +87,12 @@ export function parseCircuit(raw: string): RestoredCircuit | null {
     if (typeof (block as BlockState).type !== 'string') return null
     map.set(key, migrateBlock(block as BlockState))
   }
-  return { blocks: map, savedAt: typeof savedAt === 'string' ? savedAt : '' }
+  return {
+    blocks: map,
+    savedAt: typeof savedAt === 'string' ? savedAt : '',
+    // 盤面サイズが無い古い保存は既定 (16×16×16) として読む
+    board: normalizeBoardSize(board),
+  }
 }
 
 /**
@@ -108,11 +129,12 @@ export function saveCircuit(
   blocks: Map<string, BlockState>,
   now: string = new Date().toISOString(),
   storage?: Storage,
+  board?: BoardSize,
 ): SaveResult {
   const s = safeStorage(storage)
   if (!s) return 'unavailable'
   try {
-    s.setItem(STORAGE_KEY, JSON.stringify(serializeCircuit(blocks, now)))
+    s.setItem(STORAGE_KEY, JSON.stringify(serializeCircuit(blocks, now, board)))
     return 'saved'
   } catch {
     // 容量超過など。次の保存で回復する可能性があるので消さずに諦める

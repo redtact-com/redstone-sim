@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { TRIGGERABLE_TYPES } from '@redstone/sim'
-import { PLACEABLE_TYPES, CircuitEditor } from '@redstone/editor'
+import { PLACEABLE_TYPES, CircuitEditor, DEFAULT_BOARD, BOARD_MAX } from '@redstone/editor'
 import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS } from '@redstone/viewer'
 import { BLOCK_PALETTE, TRIGGER_META } from './palette'
 
@@ -63,20 +63,38 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
  * どちらもモジュール私有で export していないため、型でもインポートでも守られない。
  * 片方だけ変えると「エディタでは置けるのに埋め込みでは切り落とされる」がテスト全緑で通る。
  */
-describe('盤面サイズ定数のドリフト検知 (#179)', () => {
-  const constOf = (file: string, name: string): number => {
-    const src = readFileSync(new URL(file, import.meta.url), 'utf8')
-    const m = src.match(new RegExp(`const ${name} = (\\d+)`))
-    if (!m) throw new Error(`${file} に ${name} の定義が見つからない`)
-    return Number(m[1])
-  }
+describe('盤面サイズ定数のドリフト検知 (#179 → #226)', () => {
+  // #226 でエディタの盤面は可変になり、定数の正は @redstone/editor の DEFAULT_BOARD に移した。
+  // 検知したいのは「また別ファイルに数値が書き足されていないか」なので、
+  // 一致比較ではなく **literal が復活していないこと** を見る。
+  const srcOf = (file: string): string => readFileSync(new URL(file, import.meta.url), 'utf8')
 
-  it.each(['GRID_W', 'GRID_H', 'GRID_LAYERS'])('%s が EditorPage と EmbedPage で一致する', (name) => {
-    expect(constOf('./EmbedPage.tsx', name)).toBe(constOf('./EditorPage.tsx', name))
+  it.each(['GRID_W', 'GRID_H', 'GRID_LAYERS'])('%s に数値リテラルを書き戻していない', (name) => {
+    for (const file of ['./EditorPage.tsx', './EmbedPage.tsx']) {
+      expect(srcOf(file), `${file} の ${name} が数値リテラルに戻っている`)
+        .not.toMatch(new RegExp(`const ${name} = \\d`))
+    }
   })
 
-  it('高さは実回路が入る段数を確保している', () => {
+  it('EmbedPage の盤面は DEFAULT_BOARD から引いている', () => {
+    const src = srcOf('./EmbedPage.tsx')
+    expect(src).toMatch(/const GRID_W = DEFAULT_BOARD\.x/)
+    expect(src).toMatch(/const GRID_H = DEFAULT_BOARD\.z/)
+    expect(src).toMatch(/const GRID_LAYERS = DEFAULT_BOARD\.y/)
+  })
+
+  it('EditorPage に盤面の定数を持たせていない (state と ref だけで持つ)', () => {
+    const src = srcOf('./EditorPage.tsx')
+    expect(src, 'GRID_* の別名が復活している').not.toMatch(/const GRID_[A-Z]+ =/)
+    expect(src).toMatch(/useState<BoardSize>/)
+  })
+
+  it('既定の高さは実回路が入る段数を確保している', () => {
     // 8 段だった頃、配布回路 (12 段) が取り込み時に 34% 切り落とされていた (#179)
-    expect(constOf('./EditorPage.tsx', 'GRID_LAYERS')).toBeGreaterThanOrEqual(12)
+    expect(DEFAULT_BOARD.y).toBeGreaterThanOrEqual(12)
+  })
+
+  it('盤面の上限は既定より大きい (#226 で広げられる)', () => {
+    expect(BOARD_MAX).toBeGreaterThan(DEFAULT_BOARD.y)
   })
 })
