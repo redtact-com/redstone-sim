@@ -12,6 +12,7 @@ import type { Pos3D } from '@redstone/sim'
 import {
   worldSnapshotToStructure,
   VIEWER_PRELOAD_BLOCKS,
+  extraPreloadNames,
 } from './world-to-structure.js'
 import { buildResources } from './renderer/buildResources.js'
 import { useCamera } from './renderer/useCamera.js'
@@ -304,7 +305,24 @@ export function IsometricView({
     return () => canvas.removeEventListener('wheel', handleWheel)
   }, [topDown, placementY, cameraRef])
 
-  // ─── WebGL 初期化（マウント時に一度だけ） ─────────────────────────────────
+  // ─── プリロードに無いブロック名の収集 (#234) ──────────────────────────────
+  // 装飾は取り込み元の名前をそのまま持つので固定表に列挙できない。ここで拾って
+  // buildResources に渡さないと**エラーも出さずに消えて見える**。名前が増えたときだけ
+  // extraKey を動かし、下の初期化を作り直す
+  const extraNamesRef = useRef<string[]>([])
+  const [extraKey, setExtraKey] = useState('')
+
+  useEffect(() => {
+    const found = extraPreloadNames(snapshot)
+    const merged = [...new Set([...extraNamesRef.current, ...found])].sort()
+    const key = merged.join(',')
+    if (key !== extraNamesRef.current.join(',')) {
+      extraNamesRef.current = merged
+      setExtraKey(key)
+    }
+  }, [snapshot])
+
+  // ─── WebGL 初期化（マウント時 + 未知ブロック名が増えたとき） ─────────────
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -325,7 +343,8 @@ export function IsometricView({
         setStatus('loading')
         setLoadingMsg('Loading textures...')
 
-        const resources = await buildResources(VIEWER_PRELOAD_BLOCKS)
+        const resources = await buildResources(
+          [...VIEWER_PRELOAD_BLOCKS, ...extraNamesRef.current])
         if (cancelled) return
 
         // 初回スナップショットで Structure を構築
@@ -417,7 +436,7 @@ export function IsometricView({
       prevSnapshotRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // 初回マウント時のみ
+  }, [extraKey]) // 初回マウント時 + 未知ブロック名が増えたとき (#234)
 
   // ─── snapshot 変化時に構造を再構築 ──────────────────────────────────────
 

@@ -253,7 +253,35 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:oak_fence_gate',
   'minecraft:oak_door',
   'minecraft:iron_door',
+  // #234 ガラスエレベーター。**ここに無い名前は deepslate が描けず消えて見える**
+  'minecraft:lodestone',
+  'minecraft:stone_brick_wall',
+  'minecraft:soul_sand',
+  'minecraft:water',
+  'minecraft:bubble_column',
+  'minecraft:water_cauldron',
+  'minecraft:composter',
 ]
+
+/**
+ * スナップショットに出てくる「プリロード表に無いブロック名」(#234)。
+ *
+ * 装飾 (`decor`) は**取り込み元の名前をそのまま保持する**ため名前の集合が閉じておらず、
+ * 固定表に列挙できない。ここで拾って `buildResources` に足さないと、
+ * その装飾は**エラーにならず静かに消える** (実際、壁が透明なまま GIF に写って気づいた)。
+ */
+export function extraPreloadNames(
+  snapshot: { blocks: ReadonlyMap<string, BlockState> },
+): string[] {
+  const known = new Set(VIEWER_PRELOAD_BLOCKS)
+  const found = new Set<string>()
+  for (const block of snapshot.blocks.values()) {
+    if (block.type !== 'decor') continue     // 他の型は固定表で足りる
+    const name = blockStateToMinecraftStr(block).split('[')[0]
+    if (!known.has(name)) found.add(name)
+  }
+  return [...found].sort()
+}
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────
 
