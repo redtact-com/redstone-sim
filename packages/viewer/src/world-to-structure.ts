@@ -65,6 +65,16 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
+    // ── #234 ──────────────────────────────────────────────────────────
+    case 'lodestone':
+      return 'minecraft:lodestone'
+    case 'decor':
+      // 取り込み元の名前で描く (判断 E)。名前空間が無ければ補う
+      return block.name.startsWith('minecraft:') ? block.name : `minecraft:${block.name}`
+    case 'cauldron':
+      return `minecraft:water_cauldron[level=${block.level}]`
+    case 'composter':
+      return `minecraft:composter[level=${block.level}]`
     case 'note_block':
       // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
       return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`

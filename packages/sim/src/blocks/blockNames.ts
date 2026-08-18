@@ -131,9 +131,53 @@ export function isSolidBlockName(name: string): boolean {
  * 判定順は **非導体が先**。`_slab` は `_planks` 等の接尾辞判定に引っかかるため、
  * 先に見ないと誤って solid になる。
  */
+/**
+ * レッドストーン的に何もしない装飾ブロック (#234)。
+ * **非導体・非信号源・ワイヤーを切らない**性質が同じものをここへ集約する。
+ * 見た目だけは区別したいので取り込み元の文字列を保持する (判断 E)。
+ *
+ * `lectern` は本来コンパレーターで読める (階数指定に使われている) が、
+ * 読み取りは未実装のため当面ここに入れる。
+ */
+const DECOR_SUFFIXES = ['_stairs', '_hanging_sign', '_sign', '_banner', '_carpet']
+const DECOR_EXACT = new Set([
+  'end_rod', 'lectern', 'lightning_rod', 'flower_pot', 'chain', 'ladder',
+])
+
+const stripNs = (name: string): string =>
+  name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
+
+export function isDecorBlockName(name: string): boolean {
+  const id = stripNs(name)
+  return DECOR_EXACT.has(id) || DECOR_SUFFIXES.some(sfx => id.endsWith(sfx))
+}
+
+/** blockstate の数値プロパティを範囲内に収めて取り込む */
+function clampLevel(v: string | undefined, min: number, max: number): number {
+  const n = Number(v ?? min)
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.floor(n))) : min
+}
+
 export function classifyPlainBlock(
   name: string, props: Record<string, string> = {},
 ): BlockState | null {
+  // #234 ガラスエレベーターで要るもの。**取り込みの入口はここ 1 か所**にする
+  // (nbtIO と mcstate に別々の変換器があり、#189 / #214 で 2 回ドリフト事故を起こしている)
+  const id = stripNs(name)
+  if (id === 'lodestone') {
+    // 石 (導体) だがピストンで押せない [確定: 26.2 pushReaction(BLOCK)]
+    return { type: 'lodestone', powered: false }
+  }
+  if (id === 'water_cauldron') {
+    // コンパレーターは LEVEL をそのまま読む [確定: 26.2 LayeredCauldronBlock]
+    return { type: 'cauldron', level: clampLevel(props.level, 0, 3) }
+  }
+  if (id === 'composter') {
+    // 同上 [確定: 26.2 ComposterBlock]
+    return { type: 'composter', level: clampLevel(props.level, 0, 8) }
+  }
+  if (isDecorBlockName(id)) return { type: 'decor', name: formatDecorName(id, props) }
+
   // sim は材質を潰すが、**上の音符ブロックの音色は材質で決まる** ので
   // ここで拾って state に載せる (#231)。羊毛=guitar / 木=bass など
   const instrument = noteInstrumentOfBlockName(name)
@@ -144,4 +188,10 @@ export function classifyPlainBlock(
   if (nonConductive) return withInstrument(nonConductive)
   if (isSolidBlockName(name)) return withInstrument({ type: 'solid', powered: false })
   return null
+}
+
+/** 装飾の描画用に blockstate 文字列を組み立て直す (プロパティはキー昇順) */
+function formatDecorName(id: string, props: Record<string, string>): string {
+  const keys = Object.keys(props).sort()
+  return keys.length === 0 ? id : `${id}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
 }

@@ -112,6 +112,10 @@ export function abbrOf(b: BlockState): string {
     case 'door_wood':
     case 'door_iron':      return 'Do'
     case 'moving_piston':  return abbrOf(b.into)
+    case 'lodestone':      return 'Lo'
+    case 'decor':          return 'De'
+    case 'cauldron':       return 'Ca'
+    case 'composter':      return 'Co'
     case 'air':            return 'Ai'
   }
 }

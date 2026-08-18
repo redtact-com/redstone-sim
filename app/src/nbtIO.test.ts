@@ -336,8 +336,13 @@ describe('固体ブロックの取り込み (#170)', () => {
     expect(await importVanilla('minecraft:redstone_block')).toMatchObject({ type: 'redstone_block' })
   })
 
-  it('装飾ブロックは従来どおり省略される', async () => {
-    expect(await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })).toBeUndefined()
+  it('装飾ブロックは decor として取り込む (#234)', async () => {
+    // 以前は省略していた。レッドストーン的には無関係だが、
+    // **見た目が欠けると回路の理解を損ねる**ので 1 型に集約して取り込む。
+    // 元のブロック名は保持する (判断 E)
+    const sign = await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })
+    expect(sign).toMatchObject({ type: 'decor' })
+    expect((sign as { name: string }).name).toContain('oak_wall_sign')
   })
 })
 

@@ -89,6 +89,27 @@ type UpdateEntry =
 // SimWorld 実装
 // ============================================================
 
+/**
+ * コンパレーターが読む「アナログ出力」 (vanilla の hasAnalogOutputSignal / getAnalogOutputSignal)。
+ * 持たないブロックは null。**直後と導体 1 個越しの両方で同じ判定を使う**
+ * [確定: 26.2 ComparatorBlock.calculateOutputSignal]。
+ */
+function analogOutputOf(block: BlockState | null | undefined): number | null {
+  if (!block) return null
+  // コンテナ (hopper/dropper/dispenser/barrel 等) は充填率 → 信号
+  if (isContainerType(block.type)) return effectiveContainerSignal(block)
+  // クラフターは「埋まっているスロット数」0-9 (充填率ではない)
+  // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal]
+  if (block.type === 'crafter') return block.occupiedSlots
+  // 銅の電球が読ませるのは **lit** で powered ではない
+  // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+  if (block.type === 'copper_bulb') return block.lit ? 15 : 0
+  // 水入り大釜 / コンポスターは LEVEL をそのまま返す (#234)
+  // [確定: 26.2 LayeredCauldronBlock / ComposterBlock の getAnalogOutputSignal]
+  if (block.type === 'cauldron' || block.type === 'composter') return block.level
+  return null
+}
+
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
@@ -1286,6 +1307,10 @@ export class SimWorld {
     // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
     // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
     if (isRail(block)) return true
+    // 装飾・大釜・コンポスターは PushReaction 既定 = NORMAL で可動 (#234)。
+    // **lodestone はここに入れない** — pushReaction(BLOCK) で押せない
+    // [確定: 26.2 Blocks.LODESTONE]
+    if (block.type === 'decor' || block.type === 'cauldron' || block.type === 'composter') return true
     return false
   }
 
@@ -2398,25 +2423,21 @@ export class SimWorld {
     const backPos = neighbor(pos, backDir)
     const back = this.getBlockAt(backPos)
 
-    // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
-    //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
-    if (isContainerType(back?.type)) return effectiveContainerSignal(back)
-    // クラフターは「埋まっているスロット数」0-9 を返す (充填率ではない)
-    // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal — 空でない or 無効化されたスロット数]
-    if (back?.type === 'crafter') return back.occupiedSlots
-    // 銅の電球も hasAnalogOutputSignal を持つ。読むのは **lit** で powered ではない
-    // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
-    if (back?.type === 'copper_bulb') return back.lit ? 15 : 0
+    // 1. 背面直後の「アナログ出力を持つブロック」は通常信号を上書きする
+    const direct = analogOutputOf(back)
+    if (direct !== null) return direct
 
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
     if (back?.type === 'wire') i = Math.max(i, back.power)
     else if (isConductor(back)) i = Math.max(i, getSolidPower(this, backPos))
 
-    // 3. 導体 1 個越しのコンテナ読み
+    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読む
+    // [確定: 26.2 ComparatorBlock.calculateOutputSignal — hasAnalogOutputSignal を
+    //  直後と導体 1 個越しの両方で見る]
     if (i < 15 && isConductor(back)) {
-      const far = this.getBlockAt(neighbor(backPos, backDir))
-      if (isContainerType(far?.type)) i = Math.max(i, effectiveContainerSignal(far))
+      const far = analogOutputOf(this.getBlockAt(neighbor(backPos, backDir)))
+      if (far !== null) i = Math.max(i, far)
     }
     return i
   }

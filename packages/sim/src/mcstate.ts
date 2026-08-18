@@ -166,6 +166,7 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+
     case 'note_block':
       // instrument も取り込む。**直下のブロックで決まり、変化はオブザーバーに
       // 検知される**ので blockstate として持つ必要がある (#231)。
@@ -415,6 +416,15 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState(sim.type, { facing: sim.facing, triggered: String(sim.triggered) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
+      case 'lodestone':
+        return 'lodestone'
+      case 'decor':
+        // 取り込み元の文字列をそのまま返す (判断 E: 名前を保持して描き分ける)
+        return sim.name
+      case 'cauldron':
+        return formatMcState('water_cauldron', { level: String(sim.level) })
+      case 'composter':
+        return formatMcState('composter', { level: String(sim.level) })
       case 'note_block':
         return formatMcState('note_block',
           { instrument: sim.instrument, note: String(sim.note), powered: String(sim.powered) })
@@ -473,6 +483,15 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'lamp':
       props.lit = String(sim.lit)
+      break
+    case 'cauldron':
+    case 'composter':
+      // level は固定 (汲む/入れる操作は sim のスコープ外。判断 D)
+      props.level = String(sim.level)
+      break
+    case 'lodestone':
+    case 'decor':
+      // 動的プロパティを持たない
       break
     case 'note_block':
       // note は tune で変わるが sim は tune しない (authored 保持)。

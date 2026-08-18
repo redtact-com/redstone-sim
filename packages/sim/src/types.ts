@@ -694,6 +694,10 @@ export type BlockState =
   | NoteBlockState
   | PressurePlateState
   | WeightedPressurePlateState
+  | LodestoneState
+  | DecorState
+  | CauldronState
+  | ComposterState
   | ContainerState
   | HopperState
   | DropperState
@@ -716,6 +720,53 @@ export type BlockState =
   | DoorState
   | CrafterState
   | AirState
+
+/**
+ * ロードストーン (#234)。**石 (導体) だがピストンで押せない**
+ * [確定: 26.2 Blocks.LODESTONE — pushReaction(PushReaction.BLOCK)]。
+ * スライムにもくっつかない (不動なので塊収集から自然に外れる)。
+ * ガラスエレベーターはこの 3 点だけを使っている。
+ */
+export interface LodestoneState {
+  type: 'lodestone'
+  /** 充電されているか (表示用の派生値。solid と同じ扱い) */
+  powered: boolean
+}
+
+/**
+ * 装飾ブロック (#234)。レッドストーン的には**非導体・非可動源・信号に無関係**で、
+ * 置いてあるだけのもの (end_rod / 階段 / 壁掛け看板 など) をここへ集約する。
+ *
+ * 見た目だけは区別したいので**取り込み元のブロック名を持つ** (判断 E)。
+ * ピストンでは押せる (どれも PushReaction NORMAL)。
+ */
+export interface DecorState {
+  type: 'decor'
+  /** 取り込み元の blockstate 文字列 (例 `end_rod[facing=up]`)。描画に使う */
+  name: string
+}
+
+/**
+ * 水入り大釜 (#234)。**コンパレーターが中身の量を読む**
+ * [確定: 26.2 LayeredCauldronBlock.getAnalogOutputSignal — LEVEL をそのまま返す]。
+ * 汲む/注ぐ操作は sim のスコープ外なので level は取り込んだ値で固定 (判断 D)。
+ */
+export interface CauldronState {
+  type: 'cauldron'
+  /** 水位 1-3 (0 は空の大釜 = 別ブロック扱いだが取り込みでは 0 も許す) */
+  level: number
+}
+
+/**
+ * コンポスター (#234)。**コンパレーターが堆肥の量を読む**
+ * [確定: 26.2 ComposterBlock.getAnalogOutputSignal — LEVEL をそのまま返す]。
+ * 投入操作は sim のスコープ外なので level は取り込んだ値で固定 (判断 D)。
+ */
+export interface ComposterState {
+  type: 'composter'
+  /** 堆肥の量 0-8 */
+  level: number
+}
 
 export type BlockType = BlockState['type']
 
@@ -852,6 +903,11 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   slab: false,
   slime_block: false,
   honey_block: false,
+  // #234 で追加。どれも手動トリガの対象ではない
+  lodestone: false,
+  decor: false,
+  cauldron: false,
+  composter: false,
   air: false,
 }
 
