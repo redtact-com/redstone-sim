@@ -1,4 +1,5 @@
 import type {
+  WallSide,
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
@@ -115,6 +116,34 @@ function sameColumnState(a: BlockState, b: BlockState): boolean {
   if (a.type !== b.type) return false
   if (a.type === 'bubble_column' && b.type === 'bubble_column') return a.drag === b.drag
   return true
+}
+
+/**
+ * 見た目がフルキューブか (塀の接続判定 / 側面の tall 判定に使う)。
+ * vanilla の `isFaceSturdy` 相当の近似 [確定: 26.2 WallBlock.connectsTo]。
+ */
+/** 塀の指定辺の値を取り出す */
+function sideValue(w: { north: WallSide; east: WallSide; south: WallSide; west: WallSide }, dir: Dir6): WallSide {
+  switch (dir) {
+    case 'north': return w.north
+    case 'south': return w.south
+    case 'east':  return w.east
+    case 'west':  return w.west
+    default:      return 'none'
+  }
+}
+
+function isFullCube(b: BlockState | null | undefined): boolean {
+  if (!b) return false
+  switch (b.type) {
+    case 'solid': case 'lodestone': case 'soul_sand': case 'note_block': case 'target':
+    case 'glass': case 'redstone_block': case 'lamp': case 'copper_bulb':
+    case 'dropper': case 'dispenser': case 'crafter': case 'slime_block': case 'observer':
+    case 'piston': case 'sticky_piston':
+      return true
+    default:
+      return false
+  }
 }
 
 export class SimWorld {
@@ -1704,6 +1733,68 @@ export class SimWorld {
   }
 
   /**
+   * 塀の形状を近傍から計算し直す (#234)。[確定: 26.2 WallBlock]
+   *
+   * - 各辺: 隣が塀 or フルブロックなら繋がる。**上にフルブロック/塀があれば tall**、無ければ low
+   * - `up` (中央の柱): **上の塀が up=true なら自分も true**
+   *   [確定: shouldRaisePost の先頭 `topNeighbourHasPost`] ← これが下方向の無遅延伝播の正体。
+   *   次に「角がある」なら true、南北 or 東西が両方 tall なら false、
+   *   それ以外は上のブロック次第
+   *
+   * 変わったら形状更新を出し (オブザーバーが検知)、**下の塀を再帰的に計算し直す**。
+   * 実機では上端の 1 か所を変えると柱の全段が同じ tick で反転する。
+   */
+  private refreshWall(pos: Pos3D, depth = 0): void {
+    if (depth > 512) return                       // 暴走よけ (実回路は 140 段)
+    const w = this.getBlockAt(pos)
+    if (w?.type !== 'wall') return
+
+    const above = this.getBlockAt([pos[0], pos[1] + 1, pos[2]])
+    /**
+     * その辺を tall にするか。[確定: 26.2 WallBlock.makeWallState —
+     * 上のブロックの当たり判定が**その辺の位置**を覆っていれば tall]。
+     * 上がフルブロックなら全辺 tall。上が塀なら**同じ辺が繋がっているときだけ** tall
+     * (塀の当たり判定は中央の柱 + 繋がっている辺だけなので、
+     *  上の塀が none の辺は下の辺を持ち上げない)。実機で確認:
+     * 上端の北を切ると、その 1 つ下だけ north=low に落ちる
+     */
+    const tallOn = (dir: Dir6): boolean => {
+      if (isFullCube(above)) return true
+      if (above?.type === 'wall') return sideValue(above, dir) !== 'none'
+      return false
+    }
+    const sideOf = (dir: Dir6): WallSide => {
+      const nb = this.getBlockAt(neighbor(pos, dir))
+      const connects = nb?.type === 'wall' || isFullCube(nb)
+      return !connects ? 'none' : tallOn(dir) ? 'tall' : 'low'
+    }
+    const north = sideOf('north'), south = sideOf('south')
+    const east = sideOf('east'), west = sideOf('west')
+
+    // up の判定 [確定: shouldRaisePost]
+    let up: boolean
+    if (above?.type === 'wall' && above.up) {
+      up = true                                   // ← 上の塀と同期する
+    } else {
+      const nN = north === 'none', nS = south === 'none'
+      const nE = east === 'none', nW = west === 'none'
+      const hasCorner = (nN && nS && nE && nW) || nN !== nS || nE !== nW
+      if (hasCorner) up = true
+      else if ((north === 'tall' && south === 'tall') || (east === 'tall' && west === 'tall')) up = false
+      else up = isFullCube(above)
+    }
+
+    if (w.north === north && w.south === south && w.east === east && w.west === west && w.up === up) return
+    this.setBlockAt(pos, { ...w, north, south, east, west, up })
+    this.emitShapeUpdate(pos)                     // オブザーバーが検知する
+    // 下と横の塀へ連鎖 (updateShape の伝播に相当)。**同じ tick で全段が変わる**
+    this.refreshWall([pos[0], pos[1] - 1, pos[2]], depth + 1)
+    for (const d of ['north', 'south', 'east', 'west'] as const) {
+      this.refreshWall(neighbor(pos, d), depth + 1)
+    }
+  }
+
+  /**
    * ピストン移動後の後処理: 影響座標の周辺ワイヤー網を再計算し、
    * 各座標から NC を発行する (移動は回路トポロジーを変える)
    */
@@ -1905,6 +1996,9 @@ export class SimWorld {
     // — なので suppressPP (= settle 相当) の後に置く
     this.refreshNoteInstrument([pos[0], pos[1] + 1, pos[2]])
     this.refreshNoteInstrument([pos[0], pos[1] - 1, pos[2]])
+    // 隣の塀は形状を計算し直す (#234)。自分自身も (置き換わった直後のため)
+    for (const d of ALL_DIRS) this.refreshWall(neighbor(pos, d))
+    this.refreshWall(pos)
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)

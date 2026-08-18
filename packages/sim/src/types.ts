@@ -698,6 +698,7 @@ export type BlockState =
   | DecorState
   | CauldronState
   | ComposterState
+  | StoneWallState
   | SoulSandState
   | WaterState
   | BubbleColumnState
@@ -769,6 +770,33 @@ export interface ComposterState {
   type: 'composter'
   /** 堆肥の量 0-8 */
   level: number
+}
+
+/** 塀の 1 辺の高さ [確定: 26.2 WallSide] */
+export type WallSide = 'none' | 'low' | 'tall'
+
+/**
+ * 塀 (#234)。**形状変化で下方向へ無遅延に信号を送る**のに使われる。
+ *
+ * 仕掛けは [確定: 26.2 WallBlock.shouldRaisePost] の先頭:
+ * ```java
+ * boolean topNeighbourHasPost = topNeighbour.getBlock() instanceof WallBlock
+ *   && topNeighbour.getValue(UP);
+ * if (topNeighbourHasPost) return true;
+ * ```
+ * **上の塀が up=true なら自分も up=true** になる。updateShape は隣へ連鎖するので、
+ * 上端の 1 か所を変えると柱の全段が同じ tick で反転する
+ * (実機で確認: 7 段の柱が t=0 で全段 false → true、下端のオブザーバーが 2gt 後に発火)。
+ */
+export interface StoneWallState {
+  type: 'wall'
+  north: WallSide
+  east: WallSide
+  south: WallSide
+  west: WallSide
+  /** 中央の柱を立てるか。**上の塀と同期する**のが無遅延伝播の要 */
+  up: boolean
+  waterlogged: boolean
 }
 
 /**
@@ -948,6 +976,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   decor: false,
   cauldron: false,
   composter: false,
+  wall: false,
   soul_sand: false,
   water: false,
   bubble_column: false,

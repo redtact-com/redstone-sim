@@ -418,6 +418,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'lodestone':
         return 'lodestone'
+      case 'wall':
+        return formatMcState('stone_brick_wall', {
+          east: sim.east, north: sim.north, south: sim.south, up: String(sim.up),
+          waterlogged: String(sim.waterlogged), west: sim.west,
+        })
       case 'soul_sand':
         return 'soul_sand'
       case 'water':
@@ -498,6 +503,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
     case 'bubble_column':
       // drag は下のブロックで決まる (#234)
       props.drag = String(sim.drag)
+      break
+    case 'wall':
+      // 形状は近傍で決まる (#234)。上の塀と同期する up が無遅延伝播の要
+      props.north = sim.north; props.east = sim.east
+      props.south = sim.south; props.west = sim.west
+      props.up = String(sim.up); props.waterlogged = String(sim.waterlogged)
       break
     case 'lodestone':
     case 'decor':

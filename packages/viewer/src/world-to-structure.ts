@@ -68,6 +68,9 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     // ── #234 ──────────────────────────────────────────────────────────
     case 'lodestone':
       return 'minecraft:lodestone'
+    case 'wall':
+      return `minecraft:stone_brick_wall[east=${block.east},north=${block.north},`
+        + `south=${block.south},up=${block.up},waterlogged=${block.waterlogged},west=${block.west}]`
     case 'soul_sand':
       return 'minecraft:soul_sand'
     case 'water':

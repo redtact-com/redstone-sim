@@ -176,6 +176,20 @@ export function classifyPlainBlock(
     // 同上 [確定: 26.2 ComposterBlock]
     return { type: 'composter', level: clampLevel(props.level, 0, 8) }
   }
+  if (id.endsWith('_wall') && !id.endsWith('_wall_sign') && !id.endsWith('_wall_hanging_sign')
+    && !id.endsWith('_wall_torch') && !id.endsWith('_wall_fan') && !id.endsWith('_wall_head')
+    && !id.endsWith('_wall_banner') && !id.endsWith('_wall_skull')) {
+    // 塀 (#234)。材質は潰す (レッドストーン的な差は無い)
+    const side = (v: string | undefined): 'none' | 'low' | 'tall' =>
+      v === 'low' || v === 'tall' ? v : 'none'
+    return {
+      type: 'wall',
+      north: side(props.north), east: side(props.east),
+      south: side(props.south), west: side(props.west),
+      up: props.up !== 'false',
+      waterlogged: props.waterlogged === 'true',
+    }
+  }
   if (id === 'soul_sand') {
     // 導体だが泡柱の源なので solid に潰さない (#234)
     return { type: 'soul_sand', powered: false }
