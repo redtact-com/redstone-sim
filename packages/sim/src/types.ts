@@ -937,6 +937,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   weighted_pressure_plate_heavy: true,
   target: true,          // 投射物命中の折衷
   detector_rail: true,   // トロッコ検出の折衷 (#146)
+  container: true,       // 樽/チェストの中身を手で出し入れする折衷 (#236)
 
   // 受電・観測でしか動かない素子
   wire: false,
@@ -961,7 +962,6 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   rail: false,
   powered_rail: false,
   activator_rail: false,
-  container: false,
   hopper: false,
   dropper: false,
   dispenser: false,

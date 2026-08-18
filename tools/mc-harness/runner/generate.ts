@@ -229,6 +229,18 @@ async function generateFixture(name: string): Promise<void> {
         rcon('summon', 'minecart',
           String(input.pos[0] + 0.5), String(input.pos[1]), String(input.pos[2] + 0.5))
         await sleep(200)
+      } else if (input.action === 'item') {
+        // コンテナの中身を差し替える (#236)。プレイヤーが GUI で動かすのと同じ
+        // `Container.setItem → setChanged` を通る [確定: 26.2 ItemCommands.setBlockItem]
+        // ので、**中身の変化がレッドストーンに伝わる経路**をそのまま実機で撮れる。
+        // 中身は blockstate に出ないため、dump に現れるのは下流の変化だけになる
+        const slot = input.slot ?? 0
+        const count = input.count ?? 1
+        const item = input.item ?? 'minecraft:stone'
+        rcon('item', 'replace', 'block',
+          String(input.pos[0]), String(input.pos[1]), String(input.pos[2]),
+          `container.${slot}`, 'with', item, String(count))
+        await sleep(200)
       } else if (input.action === 'kill') {
         // 対象座標の近傍のカートだけを消す (他の fixture 要素を巻き込まないため)
         rcon('kill', `@e[type=minecart,x=${input.pos[0]},y=${input.pos[1]},z=${input.pos[2]},`

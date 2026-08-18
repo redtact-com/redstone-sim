@@ -9,6 +9,7 @@
  */
 
 import type { PlaceableType } from '@redstone/editor'
+import { effectiveContainerSignal } from '@redstone/sim'
 
 /** パレットアイテムの型。PlaceableType + 消しゴム + 移動 */
 export type PaletteType = PlaceableType | 'eraser' | 'move'
@@ -33,13 +34,23 @@ export const TRIGGER_META: Record<string, { abbr: string; log: string; momentary
   fence_gate:                      { abbr: 'Fg', log: 'フェンスゲート を開閉',   momentary: false },
   door_wood:                       { abbr: 'Do', log: 'ドア(木) を開閉',       momentary: false },
   detector_rail:                   { abbr: 'Dt', log: 'ディテクターレールにトロッコ', momentary: true },
+  container:                       { abbr: 'Cn', log: 'コンテナの中身を 1 段増やす', momentary: false },
 }
 export const TRIGGER_TYPES = new Set(Object.keys(TRIGGER_META))
 
-/** トリガ素子の作動中表示 (lever/plate=powered, target=outputPower>0) */
+/** トリガ素子の作動中表示 (lever/plate=powered, target=outputPower>0, container=中身あり) */
 export function isTriggerOn(b: { type: string; powered?: boolean; outputPower?: number }): boolean {
   if (b.type === 'target') return (b.outputPower ?? 0) > 0
+  if (b.type === 'container') return containerTriggerValue(b) > 0
   return b.powered ?? false
+}
+
+/**
+ * コンテナのトリガ表示に出す信号値 (0-15) (#236)。
+ * ボタンに現在値を出さないと、押して何段目にいるのか分からない。
+ */
+export function containerTriggerValue(b: unknown): number {
+  return effectiveContainerSignal(b as never)
 }
 
 export interface BlockMeta {

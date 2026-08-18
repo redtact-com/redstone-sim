@@ -25,11 +25,11 @@ import {
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import {
   isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
-  takeOne, putOne, totalItems, containerSlotsOf,
+  takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal, emptySlots,
 } from './blocks/container.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
-  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState,
+  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState, ItemStack,
 } from './types.js'
 
 /** 音符ブロック発音イベント (C5 #38)。BE フェーズの triggerEvent 相当で発火する */
@@ -1030,7 +1030,62 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Wp', 'n', 0, 'PI')
       this.schedule(pos, 10, 0)  // [確定: 26.2 WeightedPressurePlateBlock.getPressedTime]
+    } else if (block.type === 'container') {
+      // 樽/チェストの中身を手で 1 段階増やす (#236)。15 の次は 0 に戻る。
+      // vanilla に「1 回叩くと 1 段上がる」操作は無く、これは**プレイヤーが
+      // 中身を出し入れする行為の折衷**。信号の変わり方 (CU) だけは実物と揃える
+      this.setContainerSignal(x, y, z, (effectiveContainerSignal(block) + 1) % 16)
     }
+  }
+
+  /**
+   * コンテナの中身を差し替えて、コンパレーターに伝える (#236)。
+   *
+   * [確定: 26.2 BlockEntity.setChanged → Level.updateNeighbourForOutputSignal]
+   * 中身は BlockEntity の情報なので **blockstate は変わらない**。したがって
+   * PP (オブザーバー起動) も NC も出ず、**水平 4 方向のコンパレーターにだけ**
+   * 更新が飛ぶ (直接隣接、または導体 1 個越し)。真上のコンパレーターは反応しない。
+   *
+   * `slots` を持つコンテナ (物流モード) は、その信号になる最小個数へ組み替える。
+   */
+  /**
+   * コンテナの 1 スロットを差し替える (`/item replace block <pos> container.<n>` 相当。#236)。
+   *
+   * [確定: 26.2 ItemCommands.setBlockItem → Container.setItem →
+   *  BaseContainerBlockEntity.setItem の末尾 `this.setChanged()`]
+   * プレイヤーが GUI でアイテムを動かしたときと**同じ経路**なので、実機 fixture の
+   * 入力にこれを使える。伝わるのは `setContainerSignal` と同じ CU だけ。
+   */
+  setContainerSlot(x: number, y: number, z: number, slot: number, item: ItemStack | null): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || !isContainerType(block.type)) return
+    const slots = (containerSlotsOf(block) ?? emptySlots(block.type)).slice()
+    if (slot < 0 || slot >= slots.length) return
+    slots[slot] = item
+    this.setBlockAt(pos, { ...block, slots } as BlockState)
+    this.traceProcess('PI', abbrOf(block), 'n', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate(abbrOf(block), 'n', 0, 'PI')
+  }
+
+  setContainerSignal(x: number, y: number, z: number, signal: number): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || block.type !== 'container') return
+    const s = Math.max(0, Math.min(15, Math.floor(signal)))
+    // 値が変わらなくても CU は飛ばす。vanilla の setChanged は**中身が動いたら
+    // 無条件**に updateNeighbourForOutputSignal を呼ぶ (同じ強度のまま 1 個入れ替えても
+    // 呼ばれる)。コンパレーター側が出力差分で予約するので観測結果は変わらない
+    const next: ContainerState = block.slots !== undefined
+      ? { ...block, slots: slotsForSignal('container', s) }
+      : { ...block, signal: s }
+    this.setBlockAt(pos, next)
+    this.traceProcess('PI', 'Cn', s > 0 ? 'n' : 'f', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate('Cn', s > 0 ? 'n' : 'f', 0, 'PI')
   }
 
   // ── 状態クエリ ───────────────────────────────────────────

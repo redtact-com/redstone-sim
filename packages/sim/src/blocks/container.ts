@@ -177,6 +177,27 @@ export function effectiveContainerSignal(block: BlockState | null | undefined): 
 }
 
 /**
+ * 指定のコンパレーター信号 (0-15) になる**最小個数**のスロット列を作る (#236)。
+ *
+ * `fillSignal` の逆写像。`f = 総個数 / 容量`, `signal = floor(f*14)+1` を解いて
+ * `count = ceil((signal-1) * 容量 / 14)`。**15 は容量いっぱい**でしか出ない
+ * (`f >= 1` が要る)、**1 は 1 個でよい**、という両端が直感に反する。
+ *
+ * **容量が 14 個未満だと刻めない信号が出る** (スタック不可アイテムだけの
+ * ホッパーは 5 個しか入らず、信号 1・2 を作れない)。そのときは切り上げた分だけ
+ * 上の信号になる — 樽 (27 スロット) では起きない。
+ */
+export function slotsForSignal(
+  type: BlockType, signal: number, stack: StackSize = STACK_SIZE, id?: string,
+): ContainerSlots {
+  const slotCount = containerSlots(type)
+  const s = Math.max(0, Math.min(15, Math.floor(signal)))
+  if (s === 0 || slotCount === 0) return emptySlots(type)
+  const cap = slotCount * stack
+  return slotsFromCount(type, Math.max(1, Math.ceil(((s - 1) * cap) / 14)), stack, id)
+}
+
+/**
  * 「同じアイテムを n 個、slot 0 から詰める」スロット列を作る (#194)。
  *
  * エディタ (スタック種別ごとに代表アイテム 1 種) と、実機 fixture の

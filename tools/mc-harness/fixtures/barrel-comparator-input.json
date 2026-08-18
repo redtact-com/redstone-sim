@@ -1,0 +1,46 @@
+{
+  "name": "barrel-comparator-input",
+  "description": "樽の中身を /item replace (= プレイヤーが GUI で動かすのと同じ Container.setItem → setChanged 経路) で変え、隣のコンパレーターが読むことと、隣のオブザーバーが鳴らないことを実機で採る (#236)。中身は blockstate に出ないので dump に現れるのは下流だけ。",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": { "from": [-1, 0, -1], "to": [5, 2, 3] },
+  "player": { "spawn": [4.5, 1.0, 2.5], "facing": [180, 30], "lookAt": [0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [-1, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [0, 0, 2], "block": "stone" },
+    { "pos": [4, 0, 2], "block": "stone" },
+
+    { "pos": [0, 1, 0], "block": "barrel[facing=north,open=false]" },
+    { "pos": [1, 1, 0], "block": "comparator[facing=west,mode=compare,powered=false]" },
+    { "pos": [2, 1, 0], "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]" },
+    { "pos": [3, 1, 0], "block": "redstone_lamp[lit=false]" },
+
+    { "pos": [0, 1, 1], "block": "observer[facing=north,powered=false]" },
+    { "pos": [0, 1, 2], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2,  "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 0 },
+
+    { "tick": 6,  "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 1 },
+    { "tick": 6,  "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 2 },
+    { "tick": 6,  "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 3 },
+
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 4 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 5 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 6 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 7 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 8 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 9 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 10 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 11 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 12 },
+    { "tick": 10, "pos": [0, 1, 0], "action": "item", "item": "minecraft:stone", "count": 64, "slot": 13 },
+
+    { "tick": 15, "pos": [0, 1, 0], "action": "item", "item": "minecraft:air", "count": 1, "slot": 0 }
+  ]
+}
