@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { isConductor } from '@redstone/sim'
 import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
 } from 'deepslate/nbt'
@@ -265,9 +266,17 @@ describe('固体ブロックの取り込み (#170)', () => {
     'minecraft:iron_ore', 'minecraft:deepslate_redstone_ore',
     'minecraft:oxidized_copper', 'minecraft:waxed_exposed_cut_copper',
     'minecraft:hay_block', 'minecraft:packed_ice', 'minecraft:blue_ice',
-    'minecraft:soul_sand', 'minecraft:mud', 'minecraft:magma_block', 'minecraft:shroomlight',
+    'minecraft:mud', 'minecraft:magma_block', 'minecraft:shroomlight',
   ])('その他の導体フルブロックも solid: %s', async (name) => {
     expect(await importVanilla(name)).toMatchObject(solid)
+  })
+
+  it('soul_sand は導体だが独立した型 (#234)', async () => {
+    // 泡柱の源になるので solid に潰さない。導体であることは変わらない
+    // (実機ハーネスで測定済み)
+    const b = await importVanilla('minecraft:soul_sand')
+    expect(b).toMatchObject({ type: 'soul_sand' })
+    expect(isConductor(b as BlockState)).toBe(true)
   })
 
   it('従来から solid だったものは維持される', async () => {
@@ -336,8 +345,13 @@ describe('固体ブロックの取り込み (#170)', () => {
     expect(await importVanilla('minecraft:redstone_block')).toMatchObject({ type: 'redstone_block' })
   })
 
-  it('装飾ブロックは従来どおり省略される', async () => {
-    expect(await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })).toBeUndefined()
+  it('装飾ブロックは decor として取り込む (#234)', async () => {
+    // 以前は省略していた。レッドストーン的には無関係だが、
+    // **見た目が欠けると回路の理解を損ねる**ので 1 型に集約して取り込む。
+    // 元のブロック名は保持する (判断 E)
+    const sign = await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })
+    expect(sign).toMatchObject({ type: 'decor' })
+    expect((sign as { name: string }).name).toContain('oak_wall_sign')
   })
 })
 

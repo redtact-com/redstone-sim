@@ -1,4 +1,5 @@
 import type {
+  WallSide,
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
@@ -88,6 +89,62 @@ type UpdateEntry =
 // ============================================================
 // SimWorld 実装
 // ============================================================
+
+/**
+ * コンパレーターが読む「アナログ出力」 (vanilla の hasAnalogOutputSignal / getAnalogOutputSignal)。
+ * 持たないブロックは null。**直後と導体 1 個越しの両方で同じ判定を使う**
+ * [確定: 26.2 ComparatorBlock.calculateOutputSignal]。
+ */
+function analogOutputOf(block: BlockState | null | undefined): number | null {
+  if (!block) return null
+  // コンテナ (hopper/dropper/dispenser/barrel 等) は充填率 → 信号
+  if (isContainerType(block.type)) return effectiveContainerSignal(block)
+  // クラフターは「埋まっているスロット数」0-9 (充填率ではない)
+  // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal]
+  if (block.type === 'crafter') return block.occupiedSlots
+  // 銅の電球が読ませるのは **lit** で powered ではない
+  // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+  if (block.type === 'copper_bulb') return block.lit ? 15 : 0
+  // 水入り大釜 / コンポスターは LEVEL をそのまま返す (#234)
+  // [確定: 26.2 LayeredCauldronBlock / ComposterBlock の getAnalogOutputSignal]
+  if (block.type === 'cauldron' || block.type === 'composter') return block.level
+  return null
+}
+
+/** 泡柱の状態が同じか (水 ⇔ 泡柱 / drag 違いを区別する) */
+function sameColumnState(a: BlockState, b: BlockState): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === 'bubble_column' && b.type === 'bubble_column') return a.drag === b.drag
+  return true
+}
+
+/**
+ * 見た目がフルキューブか (塀の接続判定 / 側面の tall 判定に使う)。
+ * vanilla の `isFaceSturdy` 相当の近似 [確定: 26.2 WallBlock.connectsTo]。
+ */
+/** 塀の指定辺の値を取り出す */
+function sideValue(w: { north: WallSide; east: WallSide; south: WallSide; west: WallSide }, dir: Dir6): WallSide {
+  switch (dir) {
+    case 'north': return w.north
+    case 'south': return w.south
+    case 'east':  return w.east
+    case 'west':  return w.west
+    default:      return 'none'
+  }
+}
+
+function isFullCube(b: BlockState | null | undefined): boolean {
+  if (!b) return false
+  switch (b.type) {
+    case 'solid': case 'lodestone': case 'soul_sand': case 'note_block': case 'target':
+    case 'glass': case 'redstone_block': case 'lamp': case 'copper_bulb':
+    case 'dropper': case 'dispenser': case 'crafter': case 'slime_block': case 'observer':
+    case 'piston': case 'sticky_piston':
+      return true
+    default:
+      return false
+  }
+}
 
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
@@ -1159,6 +1216,10 @@ export class SimWorld {
         // 点灯中で基無給電 (遷移なし)。刈った履歴と burnedOut 表示を整える。
         this.setBlockAt(pos, { ...block, recentToggles: toggles, burnedOut: false })
       }
+    } else if (block.type === 'bubble_column') {
+      // [確定: 26.2 BubbleColumnBlock.tick → updateColumn]
+      // 予約が来たら柱を評価し直す。書き換えは updateBubbleColumn が同期で行う
+      for (const k of this.updateBubbleColumn(pos)) changed.push(k)
     } else if (block.type === 'lamp') {
       // vanilla RedstoneLampBlock.tick: 消灯 tick は「LIT かつ無入力」なら消灯。
       // 点灯は neighborChanged で即時なので、ここでは消灯のみ扱う。
@@ -1341,6 +1402,12 @@ export class SimWorld {
     // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
     // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
     if (isRail(block)) return true
+    // 装飾・大釜・コンポスターは PushReaction 既定 = NORMAL で可動 (#234)。
+    // **lodestone はここに入れない** — pushReaction(BLOCK) で押せない
+    // [確定: 26.2 Blocks.LODESTONE]
+    if (block.type === 'decor' || block.type === 'cauldron' || block.type === 'composter') return true
+    // ソウルサンドは PushReaction 既定 = NORMAL
+    if (block.type === 'soul_sand') return true
     return false
   }
 
@@ -1672,6 +1739,117 @@ export class SimWorld {
   }
 
   /**
+   * 泡柱の評価 (#234)。[確定: 26.2 BubbleColumnBlock.updateColumn]
+   *
+   * ```java
+   * if (canOccupy(bubbleColumn, occupyState)) {
+   *    BlockState columnState = getColumnState(bubbleColumn, belowState, occupyState);
+   *    level.setBlock(occupyAt, columnState, 2);
+   *    while (canOccupy(bubbleColumn, level.getBlockState(pos.move(UP)))) {
+   *       if (!level.setBlock(pos, columnState, 2)) return;
+   *    }
+   * }
+   * ```
+   *
+   * **上へ while ループで同期的に書き換える**ので、140 段でも 1 tick で全段が変わる
+   * (これが「無遅延の縦バス」の正体)。flag 2 なので**近隣更新は出さないが
+   * 形状更新は配られる** = 隣のオブザーバーは検知する。
+   */
+  private updateBubbleColumn(pos: Pos3D): string[] {
+    const changed: string[] = []
+    // 占有できるのは「泡柱」か「水」。sim は流体を持たないのでこの 2 種だけ
+    const canOccupy = (b: BlockState | null): boolean =>
+      b?.type === 'bubble_column' || b?.type === 'water'
+    if (!canOccupy(this.getBlockAt(pos))) return changed
+
+    // 柱の状態は**真下**で決まる: ソウルサンド → 上向き / 泡柱 → 同じ向き /
+    // それ以外 → 柱ではなくなる (水に戻る)
+    const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
+    const next: BlockState = below?.type === 'soul_sand'
+      ? { type: 'bubble_column', drag: false }
+      : below?.type === 'bubble_column'
+        ? { type: 'bubble_column', drag: below.drag }
+        : { type: 'water' }
+
+    // 起点から上へ、占有できる限り同じ状態を書き込む
+    const p: Pos3D = [pos[0], pos[1], pos[2]]
+    for (;;) {
+      const cur = this.getBlockAt(p)
+      if (!canOccupy(cur)) break
+      if (cur && !sameColumnState(cur, next)) {
+        this.setBlockAt(p, next)
+        changed.push(posKey(p))
+        // flag 2 = 近隣更新なし・形状更新あり → オブザーバーだけが気づく
+        this.emitShapeUpdate(p)
+      }
+      p[1] += 1
+    }
+    return changed
+  }
+
+  /**
+   * 塀の形状を近傍から計算し直す (#234)。[確定: 26.2 WallBlock]
+   *
+   * - 各辺: 隣が塀 or フルブロックなら繋がる。**上にフルブロック/塀があれば tall**、無ければ low
+   * - `up` (中央の柱): **上の塀が up=true なら自分も true**
+   *   [確定: shouldRaisePost の先頭 `topNeighbourHasPost`] ← これが下方向の無遅延伝播の正体。
+   *   次に「角がある」なら true、南北 or 東西が両方 tall なら false、
+   *   それ以外は上のブロック次第
+   *
+   * 変わったら形状更新を出し (オブザーバーが検知)、**下の塀を再帰的に計算し直す**。
+   * 実機では上端の 1 か所を変えると柱の全段が同じ tick で反転する。
+   */
+  private refreshWall(pos: Pos3D, depth = 0): void {
+    if (depth > 512) return                       // 暴走よけ (実回路は 140 段)
+    const w = this.getBlockAt(pos)
+    if (w?.type !== 'wall') return
+
+    const above = this.getBlockAt([pos[0], pos[1] + 1, pos[2]])
+    /**
+     * その辺を tall にするか。[確定: 26.2 WallBlock.makeWallState —
+     * 上のブロックの当たり判定が**その辺の位置**を覆っていれば tall]。
+     * 上がフルブロックなら全辺 tall。上が塀なら**同じ辺が繋がっているときだけ** tall
+     * (塀の当たり判定は中央の柱 + 繋がっている辺だけなので、
+     *  上の塀が none の辺は下の辺を持ち上げない)。実機で確認:
+     * 上端の北を切ると、その 1 つ下だけ north=low に落ちる
+     */
+    const tallOn = (dir: Dir6): boolean => {
+      if (isFullCube(above)) return true
+      if (above?.type === 'wall') return sideValue(above, dir) !== 'none'
+      return false
+    }
+    const sideOf = (dir: Dir6): WallSide => {
+      const nb = this.getBlockAt(neighbor(pos, dir))
+      const connects = nb?.type === 'wall' || isFullCube(nb)
+      return !connects ? 'none' : tallOn(dir) ? 'tall' : 'low'
+    }
+    const north = sideOf('north'), south = sideOf('south')
+    const east = sideOf('east'), west = sideOf('west')
+
+    // up の判定 [確定: shouldRaisePost]
+    let up: boolean
+    if (above?.type === 'wall' && above.up) {
+      up = true                                   // ← 上の塀と同期する
+    } else {
+      const nN = north === 'none', nS = south === 'none'
+      const nE = east === 'none', nW = west === 'none'
+      const hasCorner = (nN && nS && nE && nW) || nN !== nS || nE !== nW
+      if (hasCorner) up = true
+      else if ((north === 'tall' && south === 'tall') || (east === 'tall' && west === 'tall')) up = false
+      else up = isFullCube(above)
+    }
+
+    if (w.north === north && w.south === south && w.east === east && w.west === west && w.up === up) return
+    this.setBlockAt(pos, { ...w, north, south, east, west, up })
+    this.emitShapeUpdate(pos)                     // オブザーバーが検知する
+    // 下と横の塀へ連鎖 (updateShape の伝播に相当)。**同じ tick で全段が変わる**
+    this.refreshWall([pos[0], pos[1] - 1, pos[2]], depth + 1)
+    for (const d of ['north', 'south', 'east', 'west'] as const) {
+      this.refreshWall(neighbor(pos, d), depth + 1)
+    }
+  }
+
+  /**
    * ピストン移動後の後処理: 影響座標の周辺ワイヤー網を再計算し、
    * 各座標から NC を発行する (移動は回路トポロジーを変える)
    */
@@ -1873,6 +2051,9 @@ export class SimWorld {
     // — なので suppressPP (= settle 相当) の後に置く
     this.refreshNoteInstrument([pos[0], pos[1] + 1, pos[2]])
     this.refreshNoteInstrument([pos[0], pos[1] - 1, pos[2]])
+    // 隣の塀は形状を計算し直す (#234)。自分自身も (置き換わった直後のため)
+    for (const d of ALL_DIRS) this.refreshWall(neighbor(pos, d))
+    this.refreshWall(pos)
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)
@@ -2100,6 +2281,14 @@ export class SimWorld {
         // updateAroundWire 側で行う (G4)。
         const powered = isSolidPowered(this, pos)
         if (block.powered !== powered) this.setBlockAt(pos, { ...block, powered })
+        break
+      }
+      case 'bubble_column': {
+        // [確定: 26.2 BubbleColumnBlock.updateShape —
+        //  下から来た更新 / 上が塞がった等で `scheduleTick(pos, this, 5)`]
+        // 5gt 後に柱を評価し直す。**即時に書き換えないのが要点**で、
+        // 実機でも柱を断ち切ってから 5gt 後に崩れる
+        if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
         break
       }
       case 'note_block': {
@@ -2453,25 +2642,21 @@ export class SimWorld {
     const backPos = neighbor(pos, backDir)
     const back = this.getBlockAt(backPos)
 
-    // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
-    //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
-    if (isContainerType(back?.type)) return effectiveContainerSignal(back)
-    // クラフターは「埋まっているスロット数」0-9 を返す (充填率ではない)
-    // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal — 空でない or 無効化されたスロット数]
-    if (back?.type === 'crafter') return back.occupiedSlots
-    // 銅の電球も hasAnalogOutputSignal を持つ。読むのは **lit** で powered ではない
-    // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
-    if (back?.type === 'copper_bulb') return back.lit ? 15 : 0
+    // 1. 背面直後の「アナログ出力を持つブロック」は通常信号を上書きする
+    const direct = analogOutputOf(back)
+    if (direct !== null) return direct
 
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
     if (back?.type === 'wire') i = Math.max(i, back.power)
     else if (isConductor(back)) i = Math.max(i, getSolidPower(this, backPos))
 
-    // 3. 導体 1 個越しのコンテナ読み
+    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読む
+    // [確定: 26.2 ComparatorBlock.calculateOutputSignal — hasAnalogOutputSignal を
+    //  直後と導体 1 個越しの両方で見る]
     if (i < 15 && isConductor(back)) {
-      const far = this.getBlockAt(neighbor(backPos, backDir))
-      if (isContainerType(far?.type)) i = Math.max(i, effectiveContainerSignal(far))
+      const far = analogOutputOf(this.getBlockAt(neighbor(backPos, backDir)))
+      if (far !== null) i = Math.max(i, far)
     }
     return i
   }

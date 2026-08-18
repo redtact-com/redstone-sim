@@ -43,9 +43,11 @@ export function isConductor(block: BlockState | null): boolean {
   // 出さない (getSignal / getDirectSignal とも非 override) [確定: 26.2
   // PoweredRailBlock]。動力を「受ける」だけの素子で、出力に相当するのは
   // powered 変化時に真下のブロックへ配る近隣更新のみ (world.ts の neighborChanged)。
+  // lodestone は石と同じフルブロックなので導体。押せないだけ (#234)
   return !!block && (
     block.type === 'solid' || block.type === 'target' ||
-    block.type === 'note_block' || block.type === 'slime_block'
+    block.type === 'note_block' || block.type === 'slime_block' ||
+    block.type === 'lodestone' || block.type === 'soul_sand'
   )
 }
 
