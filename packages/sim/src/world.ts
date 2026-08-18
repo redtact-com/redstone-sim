@@ -24,7 +24,7 @@ import {
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import {
   isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
-  takeOne, putOne, totalItems, containerSlotsOf,
+  takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal,
 } from './blocks/container.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
@@ -973,7 +973,40 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Wp', 'n', 0, 'PI')
       this.schedule(pos, 10, 0)  // [確定: 26.2 WeightedPressurePlateBlock.getPressedTime]
+    } else if (block.type === 'container') {
+      // 樽/チェストの中身を手で 1 段階増やす (#236)。15 の次は 0 に戻る。
+      // vanilla に「1 回叩くと 1 段上がる」操作は無く、これは**プレイヤーが
+      // 中身を出し入れする行為の折衷**。信号の変わり方 (CU) だけは実物と揃える
+      this.setContainerSignal(x, y, z, (effectiveContainerSignal(block) + 1) % 16)
     }
+  }
+
+  /**
+   * コンテナの中身を差し替えて、コンパレーターに伝える (#236)。
+   *
+   * [確定: 26.2 BlockEntity.setChanged → Level.updateNeighbourForOutputSignal]
+   * 中身は BlockEntity の情報なので **blockstate は変わらない**。したがって
+   * PP (オブザーバー起動) も NC も出ず、**水平 4 方向のコンパレーターにだけ**
+   * 更新が飛ぶ (直接隣接、または導体 1 個越し)。真上のコンパレーターは反応しない。
+   *
+   * `slots` を持つコンテナ (物流モード) は、その信号になる最小個数へ組み替える。
+   */
+  setContainerSignal(x: number, y: number, z: number, signal: number): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || block.type !== 'container') return
+    const s = Math.max(0, Math.min(15, Math.floor(signal)))
+    // 値が変わらなくても CU は飛ばす。vanilla の setChanged は**中身が動いたら
+    // 無条件**に updateNeighbourForOutputSignal を呼ぶ (同じ強度のまま 1 個入れ替えても
+    // 呼ばれる)。コンパレーター側が出力差分で予約するので観測結果は変わらない
+    const next: ContainerState = block.slots !== undefined
+      ? { ...block, slots: slotsForSignal('container', s) }
+      : { ...block, signal: s }
+    this.setBlockAt(pos, next)
+    this.traceProcess('PI', 'Cn', s > 0 ? 'n' : 'f', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate('Cn', s > 0 ? 'n' : 'f', 0, 'PI')
   }
 
   // ── 状態クエリ ───────────────────────────────────────────

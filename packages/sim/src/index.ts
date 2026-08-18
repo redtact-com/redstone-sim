@@ -80,7 +80,7 @@ export {
   HOPPER_SLOTS, DROPPER_SLOTS, CONTAINER_SLOTS,
   isContainerType, containerSlots, emptySlots, fillSignal, totalItems,
   takeOne, putOne, containerSlotsOf, canContainerAcceptItem, slotsFromCount,
-  containerParticipates, effectiveContainerSignal,
+  containerParticipates, effectiveContainerSignal, slotsForSignal,
 } from './blocks/container.js'
 export { stackSizeOf, REPRESENTATIVE_ITEM } from './blocks/itemStacks.js'
 export { classifyPlainBlock, isSolidBlockName, toNonConductiveBlockState } from './blocks/blockNames.js'

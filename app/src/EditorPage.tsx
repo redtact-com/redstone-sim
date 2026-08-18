@@ -33,12 +33,12 @@ import type { PlaceableType, PlaceOptions } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState } from '@redstone/sim'
 import type { Dir6, HDir, Pos3D, StackSize } from '@redstone/sim'
-import { totalItems } from '@redstone/sim'
+import { totalItems, effectiveContainerSignal } from '@redstone/sim'
 import { IsometricView } from '@redstone/viewer'
 import type { CameraState } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import {
-  BLOCK_PALETTE, TRIGGER_META, TRIGGER_TYPES, isTriggerOn,
+  BLOCK_PALETTE, TRIGGER_META, TRIGGER_TYPES, isTriggerOn, containerTriggerValue,
 } from './palette'
 import type { PaletteType, TriggerEntry } from './palette'
 import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
@@ -447,6 +447,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
           // 感圧板は手動トリガ (踏まれ ON → 持続 gt で自動 OFF)
           simWorld.activateBlock(x, pos[1], z)
           addLog(`感圧板を踏む (${x}, ${pos[1]}, ${z})`)
+          rerender()
+        } else if (b?.type === 'container') {
+          // コンテナは中身を 1 段増やす (#236)。15 の次は 0
+          simWorld.activateBlock(x, pos[1], z)
+          const v = effectiveContainerSignal(simWorld.getBlockAt(pos))
+          addLog(`コンテナの中身 (${x}, ${pos[1]}, ${z}): ${v}`)
           rerender()
         }
       }
@@ -958,12 +964,24 @@ export function EditorPage({ onBack }: EditorPageProps) {
       simWorld.activateBlock(x, y, z)
       const on = (simWorld.getBlockAt([x, y, z]) as { powered?: boolean })?.powered ?? false
       addLog(`レバー (${x}, ${y}, ${z}): ${on ? 'ON' : 'OFF'}`)
+    } else if (b!.type === 'container') {
+      simWorld.activateBlock(x, y, z)
+      const v = effectiveContainerSignal(simWorld.getBlockAt([x, y, z]))
+      addLog(`コンテナ (${x}, ${y}, ${z}): ${v}`)
     } else {
       // 単発系 (感圧板/ターゲット): 作動中は activateBlock が no-op
       const wasOn = isTriggerOn(b!)
       simWorld.activateBlock(x, y, z)
       addLog(wasOn ? `${meta.log} (${x}, ${y}, ${z}) — 作動中` : `${meta.log} (${x}, ${y}, ${z})`)
     }
+    rerender()
+  }, [simWorld, addLog, rerender])
+
+  /** コンテナの中身を直接指定する (#236)。階数指定のように値が離れているとき用 */
+  const handleContainerSignal = useCallback((x: number, y: number, z: number, v: number) => {
+    if (!simWorld) return
+    simWorld.setContainerSignal(x, y, z, v)
+    addLog(`コンテナ (${x}, ${y}, ${z}): ${effectiveContainerSignal(simWorld.getBlockAt([x, y, z]))}`)
     rerender()
   }, [simWorld, addLog, rerender])
 
@@ -1158,6 +1176,45 @@ export function EditorPage({ onBack }: EditorPageProps) {
               const b = simWorld?.getBlockAt([x, y, z])
               const on = b ? isTriggerOn(b) : false
               const abbr = TRIGGER_META[type]?.abbr ?? '?'
+              // コンテナは現在値を出し、直接入力も付ける (#236)。
+              // 階数指定のように離れた値を入れたいとき、+1 を 12 回押させない
+              if (type === 'container') {
+                const value = containerTriggerValue(b)
+                return (
+                  <div key={`${x},${y},${z}`} className="shrink-0 flex items-center gap-1">
+                    <button onClick={() => handleTrigger(x, y, z)} disabled={!simWorld}
+                            data-testid={`trigger-${x}-${y}-${z}`}
+                            title={`${TRIGGER_META[type]?.log} — クリックで +1 (15 の次は 0)`}
+                            className="mc-btn shrink-0 h-10 px-3 flex items-center gap-2"
+                            style={{
+                              background: on ? '#7a4400' : '#2a2a2a',
+                              borderColor: on ? '#cc8800 #553300 #553300 #cc8800' : '#555 #222 #222 #555',
+                              opacity: !simWorld ? 0.4 : 1,
+                            }}>
+                      <span style={{
+                        display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                        background: on ? '#ffcc00' : '#333',
+                        boxShadow: on ? '0 0 8px #ffaa00, 0 0 2px #ff8800' : 'none',
+                        border: `1px solid ${on ? '#ff9900' : '#222'}`,
+                      }} />
+                      <span className="font-mono text-xs" style={{ color: on ? '#ffcc00' : '#666' }}>
+                        {abbr} {x},{y},{z}
+                      </span>
+                    </button>
+                    <input type="number" min={0} max={15} value={value} disabled={!simWorld}
+                           data-testid={`container-signal-${x}-${y}-${z}`}
+                           title="中身の強度 (0-15) を直接指定"
+                           onChange={e => handleContainerSignal(
+                             x, y, z, Math.max(0, Math.min(15, Math.floor(Number(e.target.value) || 0))))}
+                           className="mc-btn font-mono font-bold text-center"
+                           style={{
+                             width: 48, height: 40, fontSize: 12,
+                             background: '#3a3a3a', color: on ? '#ffcc00' : '#ddd',
+                             borderColor: '#666 #222 #222 #666',
+                           }} />
+                  </div>
+                )
+              }
               return (
                 <button key={`${x},${y},${z}`} onClick={() => handleTrigger(x, y, z)} disabled={!simWorld}
                         data-testid={`trigger-${x}-${y}-${z}`}
