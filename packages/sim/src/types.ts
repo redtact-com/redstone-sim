@@ -698,6 +698,9 @@ export type BlockState =
   | DecorState
   | CauldronState
   | ComposterState
+  | SoulSandState
+  | WaterState
+  | BubbleColumnState
   | ContainerState
   | HopperState
   | DropperState
@@ -766,6 +769,43 @@ export interface ComposterState {
   type: 'composter'
   /** 堆肥の量 0-8 */
   level: number
+}
+
+/**
+ * ソウルサンド (#234)。**導体** (実機ハーネスで測定済み) だが、
+ * 泡柱の源になるので `solid` に潰さず独立した型で持つ。
+ * [確定: 26.2 SoulSandBlock.tick → BubbleColumnBlock.updateColumn で上へ柱を作る]
+ */
+export interface SoulSandState {
+  type: 'soul_sand'
+  /** 充電されているか (表示用の派生値。solid と同じ扱い) */
+  powered: boolean
+}
+
+/**
+ * 水 (#234)。**流体としては実装しない**。泡柱が消えた跡を表すための不活性ブロックで、
+ * レッドストーン的には何もしない (非導体・非信号源)。
+ * ユーザ判断 B「水の実装は一旦よくて縦バスでいい」に沿った最小の持ち方。
+ */
+export interface WaterState {
+  type: 'water'
+}
+
+/**
+ * 泡柱 (ソウルサンド / マグマ + 水) (#234)。
+ *
+ * **縦の無遅延バス**として使われる。仕組みは
+ * [確定: 26.2 BubbleColumnBlock.updateColumn] —
+ * 起点セルから**上へ while ループで同期的に setBlock(flag 2)** するので、
+ * 柱の全段が同じ tick で書き換わる (140 段でも 1 tick)。flag 2 は近隣更新を出さないが
+ * 形状更新は配られるため、**隣のオブザーバーが検知できる**。
+ *
+ * 乱されたときは [確定: updateShape] `scheduleTick(pos, this, 5)` で 5gt 後に評価する。
+ */
+export interface BubbleColumnState {
+  type: 'bubble_column'
+  /** true = 下向き (マグマ) / false = 上向き (ソウルサンド) */
+  drag: boolean
 }
 
 export type BlockType = BlockState['type']
@@ -908,6 +948,9 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   decor: false,
   cauldron: false,
   composter: false,
+  soul_sand: false,
+  water: false,
+  bubble_column: false,
   air: false,
 }
 

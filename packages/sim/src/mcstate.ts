@@ -418,6 +418,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
       case 'lodestone':
         return 'lodestone'
+      case 'soul_sand':
+        return 'soul_sand'
+      case 'water':
+        return formatMcState('water', { level: '0' })
+      case 'bubble_column':
+        return formatMcState('bubble_column', { drag: String(sim.drag) })
       case 'decor':
         // 取り込み元の文字列をそのまま返す (判断 E: 名前を保持して描き分ける)
         return sim.name
@@ -489,8 +495,14 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       // level は固定 (汲む/入れる操作は sim のスコープ外。判断 D)
       props.level = String(sim.level)
       break
+    case 'bubble_column':
+      // drag は下のブロックで決まる (#234)
+      props.drag = String(sim.drag)
+      break
     case 'lodestone':
     case 'decor':
+    case 'water':
+    case 'soul_sand':
       // 動的プロパティを持たない
       break
     case 'note_block':

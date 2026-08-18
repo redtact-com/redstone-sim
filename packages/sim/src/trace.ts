@@ -116,6 +116,9 @@ export function abbrOf(b: BlockState): string {
     case 'decor':          return 'De'
     case 'cauldron':       return 'Ca'
     case 'composter':      return 'Co'
+    case 'soul_sand':      return 'Ss'
+    case 'water':          return 'Wa'
+    case 'bubble_column':  return 'Bc'
     case 'air':            return 'Ai'
   }
 }

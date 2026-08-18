@@ -176,6 +176,18 @@ export function classifyPlainBlock(
     // 同上 [確定: 26.2 ComposterBlock]
     return { type: 'composter', level: clampLevel(props.level, 0, 8) }
   }
+  if (id === 'soul_sand') {
+    // 導体だが泡柱の源なので solid に潰さない (#234)
+    return { type: 'soul_sand', powered: false }
+  }
+  if (id === 'water') {
+    // 流体は実装しない。泡柱が消えた跡を表す不活性ブロック (#234 判断 B)
+    return { type: 'water' }
+  }
+  if (id === 'bubble_column') {
+    // 縦の無遅延バス [確定: 26.2 BubbleColumnBlock]
+    return { type: 'bubble_column', drag: props.drag === 'true' }
+  }
   if (isDecorBlockName(id)) return { type: 'decor', name: formatDecorName(id, props) }
 
   // sim は材質を潰すが、**上の音符ブロックの音色は材質で決まる** ので

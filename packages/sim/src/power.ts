@@ -47,7 +47,7 @@ export function isConductor(block: BlockState | null): boolean {
   return !!block && (
     block.type === 'solid' || block.type === 'target' ||
     block.type === 'note_block' || block.type === 'slime_block' ||
-    block.type === 'lodestone'
+    block.type === 'lodestone' || block.type === 'soul_sand'
   )
 }
 

@@ -68,6 +68,12 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     // ── #234 ──────────────────────────────────────────────────────────
     case 'lodestone':
       return 'minecraft:lodestone'
+    case 'soul_sand':
+      return 'minecraft:soul_sand'
+    case 'water':
+      return 'minecraft:water[level=0]'
+    case 'bubble_column':
+      return `minecraft:bubble_column[drag=${block.drag}]`
     case 'decor':
       // 取り込み元の名前で描く (判断 E)。名前空間が無ければ補う
       return block.name.startsWith('minecraft:') ? block.name : `minecraft:${block.name}`

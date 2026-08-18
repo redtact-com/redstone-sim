@@ -110,6 +110,13 @@ function analogOutputOf(block: BlockState | null | undefined): number | null {
   return null
 }
 
+/** 泡柱の状態が同じか (水 ⇔ 泡柱 / drag 違いを区別する) */
+function sameColumnState(a: BlockState, b: BlockState): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === 'bubble_column' && b.type === 'bubble_column') return a.drag === b.drag
+  return true
+}
+
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
@@ -1125,6 +1132,10 @@ export class SimWorld {
         // 点灯中で基無給電 (遷移なし)。刈った履歴と burnedOut 表示を整える。
         this.setBlockAt(pos, { ...block, recentToggles: toggles, burnedOut: false })
       }
+    } else if (block.type === 'bubble_column') {
+      // [確定: 26.2 BubbleColumnBlock.tick → updateColumn]
+      // 予約が来たら柱を評価し直す。書き換えは updateBubbleColumn が同期で行う
+      for (const k of this.updateBubbleColumn(pos)) changed.push(k)
     } else if (block.type === 'lamp') {
       // vanilla RedstoneLampBlock.tick: 消灯 tick は「LIT かつ無入力」なら消灯。
       // 点灯は neighborChanged で即時なので、ここでは消灯のみ扱う。
@@ -1311,6 +1322,8 @@ export class SimWorld {
     // **lodestone はここに入れない** — pushReaction(BLOCK) で押せない
     // [確定: 26.2 Blocks.LODESTONE]
     if (block.type === 'decor' || block.type === 'cauldron' || block.type === 'composter') return true
+    // ソウルサンドは PushReaction 既定 = NORMAL
+    if (block.type === 'soul_sand') return true
     return false
   }
 
@@ -1638,6 +1651,55 @@ export class SimWorld {
       this.traceCloseUpdate('Pi', 'r', 0, 'BE')
     }
 
+    return changed
+  }
+
+  /**
+   * 泡柱の評価 (#234)。[確定: 26.2 BubbleColumnBlock.updateColumn]
+   *
+   * ```java
+   * if (canOccupy(bubbleColumn, occupyState)) {
+   *    BlockState columnState = getColumnState(bubbleColumn, belowState, occupyState);
+   *    level.setBlock(occupyAt, columnState, 2);
+   *    while (canOccupy(bubbleColumn, level.getBlockState(pos.move(UP)))) {
+   *       if (!level.setBlock(pos, columnState, 2)) return;
+   *    }
+   * }
+   * ```
+   *
+   * **上へ while ループで同期的に書き換える**ので、140 段でも 1 tick で全段が変わる
+   * (これが「無遅延の縦バス」の正体)。flag 2 なので**近隣更新は出さないが
+   * 形状更新は配られる** = 隣のオブザーバーは検知する。
+   */
+  private updateBubbleColumn(pos: Pos3D): string[] {
+    const changed: string[] = []
+    // 占有できるのは「泡柱」か「水」。sim は流体を持たないのでこの 2 種だけ
+    const canOccupy = (b: BlockState | null): boolean =>
+      b?.type === 'bubble_column' || b?.type === 'water'
+    if (!canOccupy(this.getBlockAt(pos))) return changed
+
+    // 柱の状態は**真下**で決まる: ソウルサンド → 上向き / 泡柱 → 同じ向き /
+    // それ以外 → 柱ではなくなる (水に戻る)
+    const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
+    const next: BlockState = below?.type === 'soul_sand'
+      ? { type: 'bubble_column', drag: false }
+      : below?.type === 'bubble_column'
+        ? { type: 'bubble_column', drag: below.drag }
+        : { type: 'water' }
+
+    // 起点から上へ、占有できる限り同じ状態を書き込む
+    const p: Pos3D = [pos[0], pos[1], pos[2]]
+    for (;;) {
+      const cur = this.getBlockAt(p)
+      if (!canOccupy(cur)) break
+      if (cur && !sameColumnState(cur, next)) {
+        this.setBlockAt(p, next)
+        changed.push(posKey(p))
+        // flag 2 = 近隣更新なし・形状更新あり → オブザーバーだけが気づく
+        this.emitShapeUpdate(p)
+      }
+      p[1] += 1
+    }
     return changed
   }
 
@@ -2070,6 +2132,14 @@ export class SimWorld {
         // updateAroundWire 側で行う (G4)。
         const powered = isSolidPowered(this, pos)
         if (block.powered !== powered) this.setBlockAt(pos, { ...block, powered })
+        break
+      }
+      case 'bubble_column': {
+        // [確定: 26.2 BubbleColumnBlock.updateShape —
+        //  下から来た更新 / 上が塞がった等で `scheduleTick(pos, this, 5)`]
+        // 5gt 後に柱を評価し直す。**即時に書き換えないのが要点**で、
+        // 実機でも柱を断ち切ってから 5gt 後に崩れる
+        if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
         break
       }
       case 'note_block': {
