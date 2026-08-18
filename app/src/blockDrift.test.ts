@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { TRIGGERABLE_TYPES } from '@redstone/sim'
 import { PLACEABLE_TYPES, CircuitEditor, DEFAULT_BOARD, BOARD_MAX } from '@redstone/editor'
-import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS } from '@redstone/viewer'
+import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS, extraPreloadNames } from '@redstone/viewer'
+import { classifyPlainBlock } from '@redstone/sim'
+import type { BlockState } from '@redstone/sim'
 import { BLOCK_PALETTE, TRIGGER_META } from './palette'
 
 /**
@@ -45,6 +47,34 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
       if (!VIEWER_PRELOAD_BLOCKS.includes(name)) missing.push(`${type} → ${name}`)
     }
     expect(missing, 'VIEWER_PRELOAD_BLOCKS への追加漏れ').toEqual([])
+  })
+
+  it('取り込み専用のブロックもプリロード対象になっている (#234)', () => {
+    // パレットに無い = 配置できないが**取り込みでは現れる**ブロック。表に無い名前は
+    // deepslate が描画をスキップし、エラーも出さずに**消えて見える**
+    // (エレベーターの塀 280 個が透明なまま GIF に写って気づいた)
+    const imported = ['lodestone', 'stone_brick_wall', 'soul_sand', 'water',
+      'bubble_column', 'water_cauldron', 'composter']
+    const missing: string[] = []
+    for (const id of imported) {
+      const block = classifyPlainBlock(id)
+      expect(block, `${id} が取り込めない`).not.toBeNull()
+      const name = blockStateToMinecraftStr(block as BlockState).split('[')[0]
+      if (!VIEWER_PRELOAD_BLOCKS.includes(name)) missing.push(`${id} → ${name}`)
+    }
+    expect(missing, 'VIEWER_PRELOAD_BLOCKS への追加漏れ').toEqual([])
+  })
+
+  it('装飾はスナップショットから拾ってプリロードに足される (#234)', () => {
+    // 装飾は取り込み元の名前を保持する = 名前の集合が閉じないので固定表に列挙できない
+    const decor = classifyPlainBlock('oak_stairs', { facing: 'north' })
+    expect(decor?.type, 'oak_stairs が装飾として取り込めない').toBe('decor')
+    const blocks = new Map<string, BlockState>([['0,0,0', decor as BlockState]])
+    expect(extraPreloadNames({ blocks })).toEqual(['minecraft:oak_stairs'])
+
+    // 固定表にある名前は二重に足さない
+    const stone = new Map<string, BlockState>([['0,0,0', { type: 'solid', powered: false }]])
+    expect(extraPreloadNames({ blocks: stone })).toEqual([])
   })
 
   it('パレットのラベルとテクスチャが空でない', () => {

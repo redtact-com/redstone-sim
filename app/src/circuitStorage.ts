@@ -1,6 +1,6 @@
 import type { BlockState, BlockType } from '@redstone/sim'
 import { slotsFromCount, containerSlotsOf } from '@redstone/sim'
-import { normalizeBoardSize, BOARD_MAX } from '@redstone/editor'
+import { normalizeBoardSize } from '@redstone/editor'
 import type { BoardSize } from '@redstone/editor'
 
 /**
@@ -18,10 +18,12 @@ export const STORAGE_VERSION = 1
 
 /**
  * 異常なデータで固まらないための上限。
- * 盤面は可変になったので上限は最大盤面の体積 (#226)。実際は localStorage の
- * 容量の方が先に尽きるが、そちらは saveCircuit が静かに諦める。
+ *
+ * 最大盤面の体積 (256³ = 1677 万) を使うと**ガード自体が現実的でない**
+ * (テストで上限超えを作るだけで固まる)。実回路は大きいものでも 1 万ブロック程度、
+ * localStorage の容量 (5MB 前後) の方が先に尽きるので、桁として十分な 20 万にする (#234)。
  */
-export const MAX_SAVED_BLOCKS = BOARD_MAX ** 3
+export const MAX_SAVED_BLOCKS = 200_000
 
 export interface SavedCircuit {
   v: number

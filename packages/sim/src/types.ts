@@ -694,6 +694,14 @@ export type BlockState =
   | NoteBlockState
   | PressurePlateState
   | WeightedPressurePlateState
+  | LodestoneState
+  | DecorState
+  | CauldronState
+  | ComposterState
+  | StoneWallState
+  | SoulSandState
+  | WaterState
+  | BubbleColumnState
   | ContainerState
   | HopperState
   | DropperState
@@ -716,6 +724,117 @@ export type BlockState =
   | DoorState
   | CrafterState
   | AirState
+
+/**
+ * ロードストーン (#234)。**石 (導体) だがピストンで押せない**
+ * [確定: 26.2 Blocks.LODESTONE — pushReaction(PushReaction.BLOCK)]。
+ * スライムにもくっつかない (不動なので塊収集から自然に外れる)。
+ * ガラスエレベーターはこの 3 点だけを使っている。
+ */
+export interface LodestoneState {
+  type: 'lodestone'
+  /** 充電されているか (表示用の派生値。solid と同じ扱い) */
+  powered: boolean
+}
+
+/**
+ * 装飾ブロック (#234)。レッドストーン的には**非導体・非可動源・信号に無関係**で、
+ * 置いてあるだけのもの (end_rod / 階段 / 壁掛け看板 など) をここへ集約する。
+ *
+ * 見た目だけは区別したいので**取り込み元のブロック名を持つ** (判断 E)。
+ * ピストンでは押せる (どれも PushReaction NORMAL)。
+ */
+export interface DecorState {
+  type: 'decor'
+  /** 取り込み元の blockstate 文字列 (例 `end_rod[facing=up]`)。描画に使う */
+  name: string
+}
+
+/**
+ * 水入り大釜 (#234)。**コンパレーターが中身の量を読む**
+ * [確定: 26.2 LayeredCauldronBlock.getAnalogOutputSignal — LEVEL をそのまま返す]。
+ * 汲む/注ぐ操作は sim のスコープ外なので level は取り込んだ値で固定 (判断 D)。
+ */
+export interface CauldronState {
+  type: 'cauldron'
+  /** 水位 1-3 (0 は空の大釜 = 別ブロック扱いだが取り込みでは 0 も許す) */
+  level: number
+}
+
+/**
+ * コンポスター (#234)。**コンパレーターが堆肥の量を読む**
+ * [確定: 26.2 ComposterBlock.getAnalogOutputSignal — LEVEL をそのまま返す]。
+ * 投入操作は sim のスコープ外なので level は取り込んだ値で固定 (判断 D)。
+ */
+export interface ComposterState {
+  type: 'composter'
+  /** 堆肥の量 0-8 */
+  level: number
+}
+
+/** 塀の 1 辺の高さ [確定: 26.2 WallSide] */
+export type WallSide = 'none' | 'low' | 'tall'
+
+/**
+ * 塀 (#234)。**形状変化で下方向へ無遅延に信号を送る**のに使われる。
+ *
+ * 仕掛けは [確定: 26.2 WallBlock.shouldRaisePost] の先頭:
+ * ```java
+ * boolean topNeighbourHasPost = topNeighbour.getBlock() instanceof WallBlock
+ *   && topNeighbour.getValue(UP);
+ * if (topNeighbourHasPost) return true;
+ * ```
+ * **上の塀が up=true なら自分も up=true** になる。updateShape は隣へ連鎖するので、
+ * 上端の 1 か所を変えると柱の全段が同じ tick で反転する
+ * (実機で確認: 7 段の柱が t=0 で全段 false → true、下端のオブザーバーが 2gt 後に発火)。
+ */
+export interface StoneWallState {
+  type: 'wall'
+  north: WallSide
+  east: WallSide
+  south: WallSide
+  west: WallSide
+  /** 中央の柱を立てるか。**上の塀と同期する**のが無遅延伝播の要 */
+  up: boolean
+  waterlogged: boolean
+}
+
+/**
+ * ソウルサンド (#234)。**導体** (実機ハーネスで測定済み) だが、
+ * 泡柱の源になるので `solid` に潰さず独立した型で持つ。
+ * [確定: 26.2 SoulSandBlock.tick → BubbleColumnBlock.updateColumn で上へ柱を作る]
+ */
+export interface SoulSandState {
+  type: 'soul_sand'
+  /** 充電されているか (表示用の派生値。solid と同じ扱い) */
+  powered: boolean
+}
+
+/**
+ * 水 (#234)。**流体としては実装しない**。泡柱が消えた跡を表すための不活性ブロックで、
+ * レッドストーン的には何もしない (非導体・非信号源)。
+ * ユーザ判断 B「水の実装は一旦よくて縦バスでいい」に沿った最小の持ち方。
+ */
+export interface WaterState {
+  type: 'water'
+}
+
+/**
+ * 泡柱 (ソウルサンド / マグマ + 水) (#234)。
+ *
+ * **縦の無遅延バス**として使われる。仕組みは
+ * [確定: 26.2 BubbleColumnBlock.updateColumn] —
+ * 起点セルから**上へ while ループで同期的に setBlock(flag 2)** するので、
+ * 柱の全段が同じ tick で書き換わる (140 段でも 1 tick)。flag 2 は近隣更新を出さないが
+ * 形状更新は配られるため、**隣のオブザーバーが検知できる**。
+ *
+ * 乱されたときは [確定: updateShape] `scheduleTick(pos, this, 5)` で 5gt 後に評価する。
+ */
+export interface BubbleColumnState {
+  type: 'bubble_column'
+  /** true = 下向き (マグマ) / false = 上向き (ソウルサンド) */
+  drag: boolean
+}
 
 export type BlockType = BlockState['type']
 
@@ -852,6 +971,15 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   slab: false,
   slime_block: false,
   honey_block: false,
+  // #234 で追加。どれも手動トリガの対象ではない
+  lodestone: false,
+  decor: false,
+  cauldron: false,
+  composter: false,
+  wall: false,
+  soul_sand: false,
+  water: false,
+  bubble_column: false,
   air: false,
 }
 

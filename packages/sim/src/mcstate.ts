@@ -166,6 +166,7 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+
     case 'note_block':
       // instrument も取り込む。**直下のブロックで決まり、変化はオブザーバーに
       // 検知される**ので blockstate として持つ必要がある (#231)。
@@ -415,6 +416,26 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState(sim.type, { facing: sim.facing, triggered: String(sim.triggered) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
+      case 'lodestone':
+        return 'lodestone'
+      case 'wall':
+        return formatMcState('stone_brick_wall', {
+          east: sim.east, north: sim.north, south: sim.south, up: String(sim.up),
+          waterlogged: String(sim.waterlogged), west: sim.west,
+        })
+      case 'soul_sand':
+        return 'soul_sand'
+      case 'water':
+        return formatMcState('water', { level: '0' })
+      case 'bubble_column':
+        return formatMcState('bubble_column', { drag: String(sim.drag) })
+      case 'decor':
+        // 取り込み元の文字列をそのまま返す (判断 E: 名前を保持して描き分ける)
+        return sim.name
+      case 'cauldron':
+        return formatMcState('water_cauldron', { level: String(sim.level) })
+      case 'composter':
+        return formatMcState('composter', { level: String(sim.level) })
       case 'note_block':
         return formatMcState('note_block',
           { instrument: sim.instrument, note: String(sim.note), powered: String(sim.powered) })
@@ -473,6 +494,27 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'lamp':
       props.lit = String(sim.lit)
+      break
+    case 'cauldron':
+    case 'composter':
+      // level は固定 (汲む/入れる操作は sim のスコープ外。判断 D)
+      props.level = String(sim.level)
+      break
+    case 'bubble_column':
+      // drag は下のブロックで決まる (#234)
+      props.drag = String(sim.drag)
+      break
+    case 'wall':
+      // 形状は近傍で決まる (#234)。上の塀と同期する up が無遅延伝播の要
+      props.north = sim.north; props.east = sim.east
+      props.south = sim.south; props.west = sim.west
+      props.up = String(sim.up); props.waterlogged = String(sim.waterlogged)
+      break
+    case 'lodestone':
+    case 'decor':
+    case 'water':
+    case 'soul_sand':
+      // 動的プロパティを持たない
       break
     case 'note_block':
       // note は tune で変わるが sim は tune しない (authored 保持)。
