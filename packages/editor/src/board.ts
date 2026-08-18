@@ -21,12 +21,15 @@ export const DEFAULT_BOARD: BoardSize = { x: 16, y: 16, z: 16 }
 /**
  * 盤面の下限・上限。
  *
- * 上限を 64 にできるのは `SimWorld` (Map) も deepslate の `Structure`
+ * 上限を大きく取れるのは `SimWorld` (Map) も deepslate の `Structure`
  * (blocks 配列 + blocksMap) も**疎で、体積に比例した確保をしていない**ため。
  * 広げるコストはブロック数とグリッド線の本数に比例する。
+ *
+ * 256 はバニラの建築高さ相当 (#234)。146 段のガラスエレベーターを入れるのに
+ * 64 では足りなかった。
  */
 export const BOARD_MIN = 1
-export const BOARD_MAX = 64
+export const BOARD_MAX = 256
 
 const clampAxis = (v: number): number => {
   if (!Number.isFinite(v)) return DEFAULT_BOARD.x
