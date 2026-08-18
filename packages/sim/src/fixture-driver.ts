@@ -31,10 +31,20 @@ export interface FixtureInput {
    * 'summon'   … 実機でマインカートを召喚する (#146)。detector_rail の検出トリガ。
    *              sim にエンティティは無いので activateBlock (手動トリガ) へ写像する。
    * 'kill'     … 実機でカートを消す。sim では auto-off が予約済みなので no-op。
+   * 'item'     … `/item replace block <pos> container.<slot>` 相当 (#236)。コンテナの
+   *              中身を差し替える。プレイヤーが GUI で動かすのと同じ `setChanged` 経路
+   *              [確定: 26.2 ItemCommands.setBlockItem → BaseContainerBlockEntity.setItem]。
+   *              **中身は blockstate に出ない**ので、観測できるのは下流の変化だけ。
    */
-  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill'
+  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill' | 'item'
   /** action='setblock' で置く blockstate 文字列 ('air' 可) */
   block?: string
+  /** action='item': 入れるアイテム ID (`minecraft:` 省略可)。空にすると空スロット */
+  item?: string
+  /** action='item': 個数 (既定 1) */
+  count?: number
+  /** action='item': スロット番号 (既定 0) */
+  slot?: number
 }
 
 export interface FixtureChange {
@@ -149,6 +159,11 @@ export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): F
     if (input.action === 'setblock') {
       if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
       world.setBlockCommand(input.pos, mcToSim(input.block) ?? { type: 'air' })
+    } else if (input.action === 'item') {
+      const id = (input.item ?? '').replace(/^minecraft:/, '').replace(/^air$/, '')
+      const count = input.count ?? 1
+      world.setContainerSlot(input.pos[0], input.pos[1], input.pos[2], input.slot ?? 0,
+        id === '' || count <= 0 ? null : { id, stack: stackSizeOf(id).stack, count })
     } else if (input.action === 'kill' || input.action === 'summon') {
       // kill … 実機ではカートを消す操作。sim は折衷モデル (トリガ時に持続 gt を予約し、
       //         実行時に「もう乗っていない」とみなして OFF) なので何もしない

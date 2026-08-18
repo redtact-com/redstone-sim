@@ -24,11 +24,11 @@ import {
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import {
   isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
-  takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal,
+  takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal, emptySlots,
 } from './blocks/container.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
-  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState,
+  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState, ItemStack,
 } from './types.js'
 
 /** 音符ブロック発音イベント (C5 #38)。BE フェーズの triggerEvent 相当で発火する */
@@ -991,6 +991,28 @@ export class SimWorld {
    *
    * `slots` を持つコンテナ (物流モード) は、その信号になる最小個数へ組み替える。
    */
+  /**
+   * コンテナの 1 スロットを差し替える (`/item replace block <pos> container.<n>` 相当。#236)。
+   *
+   * [確定: 26.2 ItemCommands.setBlockItem → Container.setItem →
+   *  BaseContainerBlockEntity.setItem の末尾 `this.setChanged()`]
+   * プレイヤーが GUI でアイテムを動かしたときと**同じ経路**なので、実機 fixture の
+   * 入力にこれを使える。伝わるのは `setContainerSignal` と同じ CU だけ。
+   */
+  setContainerSlot(x: number, y: number, z: number, slot: number, item: ItemStack | null): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || !isContainerType(block.type)) return
+    const slots = (containerSlotsOf(block) ?? emptySlots(block.type)).slice()
+    if (slot < 0 || slot >= slots.length) return
+    slots[slot] = item
+    this.setBlockAt(pos, { ...block, slots } as BlockState)
+    this.traceProcess('PI', abbrOf(block), 'n', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate(abbrOf(block), 'n', 0, 'PI')
+  }
+
   setContainerSignal(x: number, y: number, z: number, signal: number): void {
     const pos: Pos3D = [x, y, z]
     const block = this.getBlockAt(pos)
