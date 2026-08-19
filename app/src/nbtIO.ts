@@ -349,6 +349,35 @@ export async function importFromNbtBytes(
   return { blocks: resultBlocks, warnings, size }
 }
 
+// ── 生ブロック読み取り (sim を経由しない経路) ───────────────────────────────
+
+export type { RawPlacedBlock, RawItem }
+
+/**
+ * 構造ファイル (.nbt / .litematic / .schem) → **sim へ落とす前の生ブロック列**。
+ *
+ * `importFromNbtBytes` は `minecraftToBlockState` を通すため、sim が型を持たない
+ * ブロックが黙って消える (エディタの盤面に置けないので正しい挙動)。実機ダンプの
+ * 正解ファイルを扱う経路では**消えては困る**ので、name / props / block entity の
+ * Items をそのまま返す口を分けて用意する。
+ *
+ * 形式判別・litematic のコンテナ中身補完 (#197) は `importFromNbtBytes` と同じ
+ * 関数を共有する。UI 向けではないので、読めない形式や壊れた NBT は警告ではなく
+ * **例外**にする (黙って 0 ブロックを返さない)。litematic で対応付かなかった
+ * TileEntities の件数はここでは捨てる (警告の受け手が居ないため)。
+ */
+export async function readRawPlacedBlocks(bytes: Uint8Array): Promise<RawPlacedBlock[]> {
+  const format = sniffFormat(bytes).format   // NBT として読めなければそのまま throw
+  const unsupported = UNSUPPORTED_FORMAT_MESSAGE[format]
+  if (unsupported) throw new Error(unsupported)
+
+  // バニラ構造 NBT は変換不要 (再エンコード + 再パースの往復を挟まない)
+  const structureBytes = format === 'structure' ? bytes : (await convertBuffer(bytes)).nbt
+  const placedBlocks = readVanillaStructureBlocks(NbtFile.read(structureBytes).root)
+  if (format === 'litematic') attachLitematicItems(bytes, placedBlocks)
+  return placedBlocks
+}
+
 // ── BlockState → Minecraft 変換 ─────────────────────────────────────────────
 
 /**

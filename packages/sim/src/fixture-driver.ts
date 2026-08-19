@@ -35,8 +35,12 @@ export interface FixtureInput {
    *              中身を差し替える。プレイヤーが GUI で動かすのと同じ `setChanged` 経路
    *              [確定: 26.2 ItemCommands.setBlockItem → BaseContainerBlockEntity.setItem]。
    *              **中身は blockstate に出ない**ので、観測できるのは下流の変化だけ。
+   * 'container' … コンテナの中身をコンパレーター強度 `signal` (0-15) 相当にする (#236)。
+   *              実機側は scarpet で中身を作り `/item replace` で確定させる。
+   * 'tp'       … 実機で fake player を動かす。**sim にエンティティは無いので no-op**
+   *              (13 §2 の境界)。プレイヤーが動いた結果のブロック変化だけを突き合わせる。
    */
-  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill' | 'item'
+  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill' | 'item' | 'container' | 'tp'
   /** action='setblock' で置く blockstate 文字列 ('air' 可) */
   block?: string
   /** action='item': 入れるアイテム ID (`minecraft:` 省略可)。空にすると空スロット */
@@ -45,6 +49,12 @@ export interface FixtureInput {
   count?: number
   /** action='item': スロット番号 (既定 0) */
   slot?: number
+  /** action='container': コンパレーター強度 (0-15) */
+  signal?: number
+  /** action='tp': 移動先 (sim では使わない) */
+  to?: [number, number, number]
+  /** action='use'/'tp': 対象のプレイヤー名 (sim では使わない) */
+  player?: string
 }
 
 export interface FixtureChange {
@@ -143,7 +153,9 @@ export function fixtureInputsAt(fx: Fixture, t: number): FixtureInput[] {
 }
 
 /** その tick の入力を world へ適用する ('use'/'step' は activateBlock、'setblock' は差し替え) */
-export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): FixtureInput[] {
+export function applyFixtureInputsAt(
+  world: SimWorld, fx: Fixture, t: number, authored?: Map<string, string>,
+): FixtureInput[] {
   const inputs = fixtureInputsAt(fx, t)
 
   // 実機は freeze 中に entityInside が走らないため、カート召喚の検出は
@@ -159,11 +171,19 @@ export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): F
     if (input.action === 'setblock') {
       if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
       world.setBlockCommand(input.pos, mcToSim(input.block) ?? { type: 'air' })
+      // **authored を差し替える**。simToMc は「その座標の元の名前」から
+      // blockstate を組み直すので、種類が変わる setblock (書見台 → 樽 等) の後に
+      // 古い名前のままだと `型不一致で合成不能` で落ちる (実機キャプチャで踏んだ)
+      authored?.set(posKey(input.pos), input.block)
     } else if (input.action === 'item') {
       const id = (input.item ?? '').replace(/^minecraft:/, '').replace(/^air$/, '')
       const count = input.count ?? 1
       world.setContainerSlot(input.pos[0], input.pos[1], input.pos[2], input.slot ?? 0,
         id === '' || count <= 0 ? null : { id, stack: stackSizeOf(id).stack, count })
+    } else if (input.action === 'container') {
+      world.setContainerSignal(input.pos[0], input.pos[1], input.pos[2], input.signal ?? 0)
+    } else if (input.action === 'tp') {
+      // 実機では fake player が動く。sim にエンティティは無いので何もしない
     } else if (input.action === 'kill' || input.action === 'summon') {
       // kill … 実機ではカートを消す操作。sim は折衷モデル (トリガ時に持続 gt を予約し、
       //         実行時に「もう乗っていない」とみなして OFF) なので何もしない
@@ -203,7 +223,7 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
   const states: StateMap[] = []
   for (let t = 0; t <= fx.ticks; t++) {
     if (t > 0) world.tick()
-    applyFixtureInputsAt(world, fx, t)
+    applyFixtureInputsAt(world, fx, t, authored)
     states.push(snapshotFixtureRegion(world, fx, authored))
   }
   return states
@@ -237,7 +257,7 @@ export class FixtureRunner {
     // settle 完了後にフックを付けてから tick 0 の入力を適用する。
     // (settle 中の発音は「起点前」の雑音として捨てる)
     if (opts.onNotePlay) this.world.onNotePlay(opts.onNotePlay)
-    applyFixtureInputsAt(this.world, this.fixture, 0)
+    applyFixtureInputsAt(this.world, this.fixture, 0, this.authored)
   }
 
   get tick(): number { return this._tick }
@@ -249,7 +269,7 @@ export class FixtureRunner {
     if (this._tick >= this.fixture.ticks) return { tick: this._tick, inputs: [] }
     this._tick++
     this.world.tick()
-    const inputs = applyFixtureInputsAt(this.world, this.fixture, this._tick)
+    const inputs = applyFixtureInputsAt(this.world, this.fixture, this._tick, this.authored)
     return { tick: this._tick, inputs }
   }
 

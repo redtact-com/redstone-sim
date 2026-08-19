@@ -193,10 +193,15 @@ fx_cap_reframe() -> (
   cur = _scan_region();
   ch = _cap_diff(global_cap_prev, cur);
   if(length(ch) > 0,
-    // 同じ tick の frame があれば置き換える
-    last = if(length(global_cap_frames) > 0, global_cap_frames:(-1), null);
-    if(last != null && last:'tick' == global_cap_tick,
-      global_cap_frames:(-1) = {'tick' -> global_cap_tick, 'changes' -> last:'changes' + ch},
+    // 同じ tick の frame があれば**そこへ足す** (frame が同 tick で 2 つあると
+    // 突き合わせ側が片方を捨ててしまう)。
+    // scarpet の `+` はリスト同士だと**要素ごとの加算**なので連結には使えない。
+    // 長さが違うと 'Cannot add two lists of uneven sizes' で落ちる (実機で踏んだ)
+    n = length(global_cap_frames);
+    if(n > 0 && global_cap_frames:(n - 1):'tick' == global_cap_tick,
+      merged = global_cap_frames:(n - 1):'changes';
+      for(ch, merged += _);
+      put(global_cap_frames, n - 1, {'tick' -> global_cap_tick, 'changes' -> merged}),
       global_cap_frames += {'tick' -> global_cap_tick, 'changes' -> ch}
     );
     global_cap_prev = cur
@@ -273,4 +278,29 @@ fx_read_items() -> (
   );
   write_file('items', 'shared_json', {'items' -> out});
   length(out)
+);
+
+// コンテナの中身をコンパレーター強度 s (0-15) 相当にする (#236 の入力を実機で作る)。
+// f = 総個数 / 容量、signal = floor(f*14)+1 なので count = ceil((s-1)*容量/14)
+//
+// **注意**: `inventory_set` は vanilla の `Container.setItem` → `setChanged` を通らないので、
+// これだけではコンパレーターが更新されない (空にしても出力が前の値のまま残る — 実測)。
+// **slot 0 の最終的な中身だけはホスト側が `/item replace block` で置き直す**こと。
+// 戻り値の [スロット数, slot0 の個数] はそのために返している
+fx_set_signal(pos, s) -> (
+  sz = inventory_size(pos);
+  if(sz == null, exit('コンテナではない'));
+  c_for(i = 0, i < sz, i += 1, inventory_set(pos, i, 0));
+  first = 0;
+  if(s > 0,
+    cap = sz * 64;
+    n = max(1, ceil((s - 1) * cap / 14));
+    c_for(i = 0, i < sz && n > 0, i += 1,
+      c = min(n, 64);
+      inventory_set(pos, i, c, 'cobblestone');
+      if(i == 0, first = c);
+      n = n - c
+    )
+  );
+  [sz, first]
 );

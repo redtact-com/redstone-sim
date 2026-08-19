@@ -3,3 +3,5 @@ data/
 
 # scarpet との受け渡し用 shared JSON (実行時生成物)
 scripts/shared/
+# キャプチャの多重実行を防ぐロック (プロセスが落ちると残る)
+.lock
