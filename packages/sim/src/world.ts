@@ -685,15 +685,20 @@ export class SimWorld {
    * tick=0 の起点を呼び出し側に委ねることで、発振回路も正しく駆動できる
    * （fixture-runner は initialize() 後に flush(64) を明示的に呼んで settle する）。
    */
-  initialize(): void {
+  initialize(opts: { trustAuthored?: boolean } = {}): void {
+    // trustAuthored: **動いている機械のスナップショットをそのまま出発点にする** (#240)。
+    // 既定 (false) は「静止した authored 状態」を前提に動的値を捨てて組み直す。
+    // クロックが回っている実機を撮ると、コンパレーターの powered などは
+    // 「予約 tick が実行された結果」なので、捨てると tick 0 から実機と食い違う
+    const trust = opts.trustAuthored === true
     this.scheduledTicks = []
     this.blockEvents = []
     this.seqCounter = 0
     // 初期組み立て中は PP を抑止 (オブザーバーは authored 安定状態のまま発火しない)
     this.suppressPP = true
 
-    // Step 1: 動的状態をリセット
-    for (const [key, block] of this.blocks) {
+    // Step 1: 動的状態をリセット (trustAuthored なら丸ごと飛ばす)
+    for (const [key, block] of trust ? [] : this.blocks) {
       if (block.type === 'wire') {
         this.blocks.set(key, { ...block, power: 0 })
       } else if (block.type === 'lamp') {
@@ -744,7 +749,7 @@ export class SimWorld {
     // （BFS だと処理順依存になるため、全体パスを繰り返す。
     //   固体の充電状態は power.ts の純クエリで都度計算されるため
     //   反復対象はワイヤーのみでよい）
-    let changed = true
+    let changed = !trust
     let pass = 0
     while (changed && pass < 100) {
       changed = false
@@ -762,7 +767,7 @@ export class SimWorld {
     }
 
     // Step 3: ランプと固体（表示用 powered）の状態を更新
-    for (const [key, block] of this.blocks) {
+    for (const [key, block] of trust ? [] : this.blocks) {
       const pos = keyToPos(key)
       if (block.type === 'lamp') {
         const lit = isBlockPowered(this, pos)
@@ -791,7 +796,7 @@ export class SimWorld {
     // Step 3b: パワードレールの powered を収束するまで繰り返し計算。
     // 連鎖は「隣接レールが powered」を条件にするため 1 パスでは広がらない。
     // Step 1 で false に落としてあるので単調増加として収束する (ワイヤーと同趣旨)。
-    let railChanged = true
+    let railChanged = !trust
     let railPass = 0
     while (railChanged && railPass < 100) {
       railChanged = false
@@ -811,7 +816,9 @@ export class SimWorld {
     // turn_on を、入力のあるコンパレーターは出力を schedule する。
     // ここを抜くとクロック回路（torch + repeater のフィードバック）が
     // tick=0 で何もスケジュールされず発振開始しない。
-    for (const [key] of this.blocks) {
+    // trustAuthored のときはここも飛ばす。**実機から読んだ予約を後から積む**ので、
+    // sim が自前で予約を組み直すと二重になる
+    for (const [key] of trust ? [] : this.blocks) {
       const pos = keyToPos(key)
       const b = this.getBlockAt(pos)
       if (
@@ -831,6 +838,31 @@ export class SimWorld {
 
     // 初期組み立て完了。以降 (tick / flush / activateBlock) の状態変化は PP を発行する
     this.suppressPP = false
+  }
+
+  /**
+   * 実機から読んだ予約 tick をそのまま積む (#240)。
+   *
+   * **ブロック状態だけでは動いている機械を再現できない**。リピーターの
+   * 「あと 5gt で ON」のような予約は blockstate に出ないため、実機のスナップショットを
+   * そのまま読ませても出発点が揃わない。実機側は保存データ (チャンク NBT の
+   * `block_ticks`) から残り遅延と優先度を読める
+   * [確定: 26.2 SavedTick — codec は i=type / t=delay / p=priority、
+   *  unpack が `currentTick + delay` を発火 tick にする]。
+   *
+   * `initialize()` の**後**に呼ぶこと (initialize は予約を空にする)。
+   */
+  seedScheduledTick(pos: Pos3D, delay: number, priority: number): boolean {
+    const block = this.getBlockAt(pos)
+    if (!block || block.type === 'air') return false
+    this.scheduledTicks.push({
+      pos: [...pos] as Pos3D,
+      blockType: block.type,
+      dueTick: this.currentTick + Math.max(0, Math.floor(delay)),
+      priority,
+      seq: this.seqCounter++,
+    })
+    return true
   }
 
   /**

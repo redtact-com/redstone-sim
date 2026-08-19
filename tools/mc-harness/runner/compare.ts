@@ -73,6 +73,8 @@ export interface Capture {
   /** 差分のみ。消滅は "block": "air" */
   frames?: FixtureExpectEntry[]
   players?: CapturePlayer[]
+  /** 実機の予約 tick (#240)。blockstate に出ない「あと N gt で発火」を持ち込む */
+  scheduled?: { pos: Pos3D; delay: number; priority: number; block?: string }[]
   /** 元ファイルと実機の安定状態のズレ (実機が正。参考情報) */
   settleDrift?: { pos: string; source: string; settled: string }[]
   generated?: { at: string; mc: string; carpet: string }
@@ -97,7 +99,7 @@ function parsePosKey(key: string): Pos3D {
  * (moving_piston の除外もここではやらない。compareCapture が受け持つ)。
  * players は sim に対応物が無いので捨てる。
  */
-export function captureToFixture(cap: Capture): Fixture {
+export function captureToFixture(cap: Capture, trustAuthored = false): Fixture {
   // items は座標で引けるようにしておく (authored の走査中に引き当てる)
   const itemsByPos = new Map<string, CaptureSlot[]>()
   for (const it of cap.items ?? []) itemsByPos.set(posKey(it.pos), it.slots)
@@ -122,6 +124,9 @@ export function captureToFixture(cap: Capture): Fixture {
     blocks,
     inputs: cap.inputs ?? [],
     expect: cap.frames ?? [],
+    // **動いている機械**は authored をそのまま出発点にし、実機の予約 tick を積む。
+    // そうしないと tick 0 から食い違って以降の差分が雪崩れる (#240)
+    ...(trustAuthored ? { trustAuthored: true, scheduled: cap.scheduled ?? [] } : {}),
     ...(cap.generated ? { generated: cap.generated } : {}),
   }
 }
@@ -274,8 +279,8 @@ function captureWarnings(cap: Capture, fx: Fixture): string[] {
  *   2. 最初の食い違いへの絞り込みと周囲 6 方向の添付
  * の 2 点。
  */
-export function compareCapture(cap: Capture): CompareReport {
-  const fx = captureToFixture(cap)
+export function compareCapture(cap: Capture, opts: { trustAuthored?: boolean } = {}): CompareReport {
+  const fx = captureToFixture(cap, opts.trustAuthored === true)
 
   // authored に moving_piston があると mcToSim が throw する (過渡状態は復元不能)
   // ので world 構築からは外す。どのみち比較不能座標なので結果には影響しない。
@@ -445,13 +450,30 @@ function main(argv: string[]): number {
     return 1
   }
 
-  const report = compareCapture(cap)
-  console.log(formatReport(report))
+  // **2 通りで測る**。どちらが落ちたかで原因の切り分けが変わる:
+  //   静的  … 実機の状態を sim が「組み直せる」か (initialize の再現性)
+  //   動的  … 実機の状態をそのまま出発点にして、**動きが合う**か
+  // 動いている機械 (クロック持ち) は静的が落ちて当たり前なので、
+  // 終了コードは**動的**で決める
+  let staticReport: CompareReport
+  let dynamicReport: CompareReport
+  try {
+    staticReport = compareCapture(cap)
+    dynamicReport = compareCapture(cap, { trustAuthored: true })
+  } catch (e) {
+    console.error(`突き合わせに失敗: ${(e as Error).message}`)
+    return 1
+  }
+  console.log('── 静的: 実機の状態を sim が組み直せるか ' + '─'.repeat(30))
+  console.log(formatReport(staticReport))
+  console.log('')
+  console.log('── 動的: 実機の状態を出発点にして動きが合うか ' + '─'.repeat(26))
+  console.log(formatReport(dynamicReport))
   if (jsonOut) {
-    writeFileSync(jsonOut, `${JSON.stringify(report, null, 2)}\n`)
+    writeFileSync(jsonOut, `${JSON.stringify({ static: staticReport, dynamic: dynamicReport }, null, 2)}\n`)
     console.log(`  レポート: ${jsonOut}`)
   }
-  return report.ok ? 0 : 1
+  return dynamicReport.ok ? 0 : 1
 }
 
 // テストから import しても CLI が走らないようにする (run.ts と違いここは両用)

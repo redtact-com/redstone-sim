@@ -67,6 +67,17 @@ export interface FixtureExpectEntry {
   changes: FixtureChange[]
 }
 
+/** 実機から読んだ予約 tick (#240)。動いている機械を再現するのに要る */
+export interface FixtureScheduledTick {
+  pos: Pos3D
+  /** 残り遅延 (gt) */
+  delay: number
+  /** 優先度 (小さいほど先) */
+  priority: number
+  /** 参考: 実機側のブロック ID */
+  block?: string
+}
+
 export interface Fixture {
   name: string
   description?: string
@@ -75,6 +86,14 @@ export interface Fixture {
   skipReason?: string
   ticks: number
   region: { from: Pos3D; to: Pos3D }
+  /**
+   * **動いている機械のスナップショットをそのまま出発点にする** (#240)。
+   * 既定 (false) は動的値を捨てて組み直すので、クロックが回っている実機とは
+   * tick 0 から食い違う。
+   */
+  trustAuthored?: boolean
+  /** 実機の予約 tick。trustAuthored と併用する */
+  scheduled?: FixtureScheduledTick[]
   /**
    * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
    * items で初期の中身を与えられる (アイテムは blockstate に現れないため)。
@@ -142,8 +161,14 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
       world.setBlockAt(b.pos, sim)
     }
   }
-  world.initialize()
-  world.flush(64)
+  world.initialize({ trustAuthored: fx.trustAuthored === true })
+  // 実機から読んだ予約を積む (initialize が予約を空にした後でないといけない)
+  for (const st of fx.scheduled ?? []) {
+    world.seedScheduledTick(st.pos, st.delay, st.priority)
+  }
+  // **trustAuthored のときは flush しない**。flush は予約を全部消化してしまうので、
+  // 「あと 5gt で ON」を積んだ意味が消え、実機のスナップショットとも食い違う
+  if (fx.trustAuthored !== true) world.flush(64)
   return { world, authored }
 }
 

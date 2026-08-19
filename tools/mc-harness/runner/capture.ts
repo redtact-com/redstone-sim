@@ -35,6 +35,7 @@ import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rcon, scarpet, withHarnessLock, sleep } from './rcon.js'
 import type { Capture } from './compare.js'
+import { readScheduledTicks } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -266,6 +267,20 @@ export async function capture(defPath: string): Promise<Capture> {
     if (settleDrift.length > 8) console.log(`    … 他 ${settleDrift.length - 8} 件`)
   }
 
+  // 3b. **実機の予約 tick を読む** (#240)。
+  // 「あと 5gt で ON」のような予約は blockstate に出ないので、これが無いと
+  // 動いている機械の出発点を sim 側で再現できない
+  rcon('save-all', 'flush')
+  await sleep(1500)
+  const scheduled = readScheduledTicks(
+    join(repoRoot, 'tools', 'mc-harness', 'data', 'world'), region.from, region.to)
+  if (scheduled.length > 0) {
+    console.log(`[capture] 実機の予約 tick: ${scheduled.length} 件`)
+    for (const st of scheduled.slice(0, 5)) {
+      console.log(`    ${st.pos.join(',')} ${st.block.replace('minecraft:', '')} 残り ${st.delay}gt 優先度 ${st.priority}`)
+    }
+  }
+
   // 4. プレイヤーを置く
   const players = def.players ?? []
   for (const p of players) {
@@ -322,6 +337,7 @@ export async function capture(defPath: string): Promise<Capture> {
       pos: [p.pos[0], p.pos[1], p.pos[2]],
       onGround: p.on_ground,
     })),
+    ...(scheduled.length > 0 ? { scheduled } : {}),
     ...(settleDrift.length > 0 ? { settleDrift } : {}),
     generated: { at: new Date().toISOString(), mc: MC_VERSION, carpet: readCarpetVersion() },
   }

@@ -744,7 +744,7 @@
     "1,4,8": "white_stained_glass",
     "1,4,9": "white_stained_glass",
     "1,5,0": "light_gray_stained_glass",
-    "1,5,10": "observer[facing=north,powered=false]",
+    "1,5,10": "observer[facing=north,powered=true]",
     "1,5,11": "repeater[delay=2,facing=north,locked=false,powered=false]",
     "1,5,12": "white_concrete",
     "1,5,13": "redstone_wire[east=side,north=side,power=0,south=side,west=side]",
@@ -1586,12 +1586,12 @@
     "2,2,14": "piston_head[facing=west,short=false,type=sticky]",
     "2,2,15": "white_concrete",
     "2,2,16": "light_gray_stained_glass",
-    "2,2,2": "comparator[facing=north,mode=compare,powered=true]",
+    "2,2,2": "comparator[facing=north,mode=compare,powered=false]",
     "2,2,3": "white_concrete",
     "2,2,4": "comparator[facing=west,mode=subtract,powered=false]",
     "2,2,5": "redstone_wire[east=none,north=side,power=1,south=side,west=none]",
     "2,2,8": "white_concrete",
-    "2,2,9": "observer[facing=south,powered=false]",
+    "2,2,9": "observer[facing=south,powered=true]",
     "2,20,1": "gray_stained_glass",
     "2,21,1": "gray_stained_glass",
     "2,22,1": "gray_stained_glass",
@@ -1605,7 +1605,7 @@
     "2,3,0": "light_gray_stained_glass",
     "2,3,15": "redstone_wire[east=side,north=none,power=0,south=none,west=side]",
     "2,3,16": "light_gray_stained_glass",
-    "2,3,3": "redstone_wire[east=side,north=none,power=15,south=up,west=none]",
+    "2,3,3": "redstone_wire[east=side,north=none,power=14,south=up,west=none]",
     "2,3,4": "white_stained_glass",
     "2,3,5": "white_concrete",
     "2,3,6": "white_stained_glass",
@@ -1624,10 +1624,10 @@
     "2,4,1": "white_concrete",
     "2,4,10": "white_stained_glass",
     "2,4,16": "light_gray_stained_glass",
-    "2,4,4": "redstone_wire[east=none,north=side,power=14,south=side,west=none]",
-    "2,4,5": "redstone_wire[east=none,north=side,power=13,south=side,west=none]",
-    "2,4,6": "redstone_wire[east=none,north=side,power=12,south=side,west=none]",
-    "2,4,7": "redstone_wire[east=none,north=side,power=11,south=side,west=none]",
+    "2,4,4": "redstone_wire[east=none,north=side,power=13,south=side,west=none]",
+    "2,4,5": "redstone_wire[east=none,north=side,power=12,south=side,west=none]",
+    "2,4,6": "redstone_wire[east=none,north=side,power=11,south=side,west=none]",
+    "2,4,7": "redstone_wire[east=none,north=side,power=10,south=side,west=none]",
     "2,4,8": "white_concrete",
     "2,4,9": "redstone_wall_torch[facing=south,lit=false]",
     "2,40,1": "gray_stained_glass",
@@ -1642,7 +1642,7 @@
     "2,49,1": "gray_stained_glass",
     "2,5,0": "light_gray_stained_glass",
     "2,5,1": "white_stained_glass",
-    "2,5,10": "comparator[facing=north,mode=compare,powered=false]",
+    "2,5,10": "comparator[facing=north,mode=compare,powered=true]",
     "2,5,11": "white_concrete",
     "2,5,13": "white_concrete",
     "2,5,16": "light_gray_stained_glass",
@@ -1694,7 +1694,7 @@
     "2,59,9": "tinted_glass",
     "2,6,0": "light_gray_stained_glass",
     "2,6,1": "white_stained_glass",
-    "2,6,11": "redstone_wire[east=up,north=none,power=0,south=none,west=side]",
+    "2,6,11": "redstone_wire[east=up,north=none,power=3,south=none,west=side]",
     "2,6,16": "light_gray_stained_glass",
     "2,6,5": "white_stained_glass",
     "2,6,6": "white_stained_glass",
@@ -2487,12 +2487,12 @@
     "3,3,15": "redstone_wire[east=up,north=none,power=0,south=none,west=side]",
     "3,3,16": "light_gray_stained_glass",
     "3,3,3": "redstone_wire[east=none,north=none,power=15,south=side,west=side]",
-    "3,3,4": "observer[facing=south,powered=true]",
+    "3,3,4": "observer[facing=south,powered=false]",
     "3,3,5": "redstone_wire[east=none,north=side,power=1,south=side,west=none]",
     "3,3,6": "comparator[facing=north,mode=compare,powered=true]",
     "3,3,7": "white_concrete",
-    "3,3,8": "redstone_wire[east=side,north=none,power=1,south=side,west=none]",
-    "3,3,9": "comparator[facing=north,mode=subtract,powered=true]",
+    "3,3,8": "redstone_wire[east=side,north=none,power=15,south=side,west=none]",
+    "3,3,9": "comparator[facing=north,mode=subtract,powered=false]",
     "3,30,0": "gray_stained_glass",
     "3,30,1": "bubble_column[drag=false]",
     "3,30,2": "gray_stained_glass",
@@ -2525,7 +2525,7 @@
     "3,39,2": "gray_stained_glass",
     "3,4,0": "light_gray_stained_glass",
     "3,4,1": "redstone_wire[east=side,north=side,power=0,south=side,west=side]",
-    "3,4,10": "redstone_wire[east=none,north=up,power=15,south=side,west=none]",
+    "3,4,10": "redstone_wire[east=none,north=up,power=0,south=side,west=none]",
     "3,4,11": "repeater[delay=1,facing=north,locked=false,powered=false]",
     "3,4,12": "white_concrete",
     "3,4,13": "redstone_wire[east=side,north=side,power=15,south=side,west=side]",
@@ -2569,7 +2569,7 @@
     "3,5,16": "light_gray_stained_glass",
     "3,5,2": "white_stained_glass",
     "3,5,8": "target[power=0]",
-    "3,5,9": "redstone_wire[east=none,north=side,power=14,south=side,west=none]",
+    "3,5,9": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
     "3,50,0": "gray_stained_glass",
     "3,50,1": "bubble_column[drag=false]",
     "3,50,2": "gray_stained_glass",
@@ -2653,13 +2653,13 @@
     "3,60,9": "slime_block",
     "3,61,0": "gray_stained_glass",
     "3,61,1": "bubble_column[drag=false]",
-    "3,61,10": "piston_head[facing=down,short=false,type=sticky]",
+    "3,61,10": "moving_piston[facing=down,type=sticky]",
     "3,61,11": "redstone_wire[east=side,north=none,power=1,south=none,west=side]",
     "3,61,12": "repeater[delay=4,facing=east,locked=false,powered=true]",
     "3,61,13": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
     "3,61,15": "repeater[delay=1,facing=west,locked=false,powered=false]",
     "3,61,2": "gray_stained_glass",
-    "3,61,5": "piston_head[facing=down,short=false,type=sticky]",
+    "3,61,5": "moving_piston[facing=down,type=sticky]",
     "3,62,0": "gray_stained_glass",
     "3,62,1": "bubble_column[drag=false]",
     "3,62,10": "sticky_piston[extended=true,facing=down]",
@@ -2695,14 +2695,14 @@
     "3,64,5": "sticky_piston[extended=true,facing=up]",
     "3,65,0": "gray_stained_glass",
     "3,65,1": "bubble_column[drag=false]",
-    "3,65,10": "piston_head[facing=up,short=false,type=sticky]",
+    "3,65,10": "moving_piston[facing=up,type=sticky]",
     "3,65,11": "lodestone",
     "3,65,12": "green_concrete",
     "3,65,13": "green_concrete",
     "3,65,14": "powered_rail[powered=false,shape=ascending_north,waterlogged=false]",
     "3,65,15": "cyan_concrete",
     "3,65,2": "gray_stained_glass",
-    "3,65,5": "piston_head[facing=up,short=false,type=sticky]",
+    "3,65,5": "moving_piston[facing=up,type=sticky]",
     "3,66,0": "gray_stained_glass",
     "3,66,1": "bubble_column[drag=false]",
     "3,66,10": "slime_block",
@@ -2739,7 +2739,7 @@
     "3,69,3": "green_concrete",
     "3,7,0": "light_gray_stained_glass",
     "3,7,1": "bubble_column[drag=false]",
-    "3,7,11": "redstone_wire[east=side,north=none,power=0,south=none,west=side]",
+    "3,7,11": "redstone_wire[east=side,north=none,power=2,south=none,west=side]",
     "3,7,15": "white_concrete",
     "3,7,16": "light_gray_stained_glass",
     "3,7,2": "white_stained_glass",
@@ -3456,8 +3456,8 @@
     "4,3,16": "light_gray_stained_glass",
     "4,3,2": "white_stained_glass",
     "4,3,3": "white_concrete",
-    "4,3,4": "observer[facing=south,powered=false]",
-    "4,3,5": "observer[facing=west,powered=true]",
+    "4,3,4": "observer[facing=south,powered=true]",
+    "4,3,5": "observer[facing=west,powered=false]",
     "4,3,7": "white_concrete",
     "4,3,8": "comparator[facing=south,mode=subtract,powered=false]",
     "4,3,9": "redstone_wire[east=side,north=side,power=0,south=side,west=side]",
@@ -3529,13 +3529,13 @@
     "4,4,14": "white_concrete",
     "4,4,15": "redstone_wire[east=side,north=none,power=0,south=none,west=side]",
     "4,4,16": "light_gray_stained_glass",
-    "4,4,2": "repeater[delay=1,facing=west,locked=false,powered=false]",
+    "4,4,2": "repeater[delay=1,facing=west,locked=false,powered=true]",
     "4,4,4": "white_concrete",
     "4,4,5": "repeater[delay=1,facing=south,locked=false,powered=false]",
     "4,4,6": "white_concrete",
     "4,4,7": "redstone_wire[east=none,north=side,power=0,south=up,west=none]",
     "4,4,8": "white_concrete",
-    "4,4,9": "sticky_piston[extended=true,facing=up]",
+    "4,4,9": "sticky_piston[extended=false,facing=up]",
     "4,40,0": "gray_stained_glass",
     "4,40,1": "stone_brick_wall[east=none,north=tall,south=tall,up=false,waterlogged=true,west=none]",
     "4,40,13": "gray_stained_glass",
@@ -3607,7 +3607,7 @@
     "4,5,2": "white_stained_glass",
     "4,5,6": "redstone_torch[lit=true]",
     "4,5,8": "redstone_wire[east=none,north=side,power=0,south=none,west=side]",
-    "4,5,9": "moving_piston[facing=up,type=sticky]",
+    "4,5,9": "water_cauldron[level=3]",
     "4,50,0": "gray_stained_glass",
     "4,50,1": "stone_brick_wall[east=none,north=tall,south=tall,up=false,waterlogged=true,west=none]",
     "4,50,13": "gray_stained_glass",
@@ -3697,7 +3697,6 @@
     "4,6,16": "light_gray_stained_glass",
     "4,6,2": "white_stained_glass",
     "4,6,6": "white_concrete",
-    "4,6,9": "moving_piston[facing=up,type=normal]",
     "4,60,0": "gray_stained_glass",
     "4,60,1": "stone_brick_wall[east=none,north=tall,south=tall,up=false,waterlogged=true,west=none]",
     "4,60,10": "honey_block",
@@ -5004,13 +5003,13 @@
     "5,39,16": "gray_stained_glass",
     "5,39,2": "gray_stained_glass",
     "5,4,0": "light_gray_stained_glass",
-    "5,4,1": "redstone_wire[east=side,north=side,power=0,south=side,west=side]",
+    "5,4,1": "redstone_wire[east=side,north=side,power=15,south=side,west=side]",
     "5,4,12": "sticky_piston[extended=false,facing=down]",
     "5,4,16": "light_gray_stained_glass",
     "5,4,2": "white_concrete",
-    "5,4,3": "redstone_wall_torch[facing=south,lit=true]",
-    "5,4,4": "redstone_wire[east=none,north=side,power=15,south=side,west=none]",
-    "5,4,5": "redstone_wire[east=none,north=side,power=14,south=side,west=none]",
+    "5,4,3": "redstone_wall_torch[facing=south,lit=false]",
+    "5,4,4": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
+    "5,4,5": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
     "5,4,6": "white_concrete",
     "5,4,7": "repeater[delay=1,facing=north,locked=false,powered=true]",
     "5,4,8": "redstone_wire[east=none,north=side,power=15,south=side,west=none]",
@@ -5361,20 +5360,22 @@
     "5,69,8": "light_gray_stained_glass",
     "5,69,9": "gray_glazed_terracotta[facing=east]",
     "5,7,0": "light_gray_stained_glass",
-    "5,7,10": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
-    "5,7,11": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
+    "5,7,1": "bubble_column[drag=false]",
+    "5,7,10": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
+    "5,7,11": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
     "5,7,12": "observer[facing=north,powered=false]",
     "5,7,13": "dispenser[facing=south,triggered=false]",
+    "5,7,14": "bubble_column[drag=false]",
     "5,7,15": "bubble_column[drag=false]",
     "5,7,16": "light_gray_stained_glass",
     "5,7,2": "dispenser[facing=north,triggered=false]",
     "5,7,3": "redstone_wire[east=side,north=side,power=0,south=side,west=side]",
     "5,7,4": "white_concrete",
     "5,7,5": "observer[facing=south,powered=false]",
-    "5,7,6": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
-    "5,7,7": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
-    "5,7,8": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
-    "5,7,9": "powered_rail[powered=false,shape=north_south,waterlogged=false]",
+    "5,7,6": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
+    "5,7,7": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
+    "5,7,8": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
+    "5,7,9": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
     "5,70,0": "gray_stained_glass",
     "5,70,1": "bubble_column[drag=false]",
     "5,70,10": "obsidian",
@@ -8167,6 +8168,22 @@
         {
           "pos": [
             3,
+            4,
+            11
+          ],
+          "block": "repeater[delay=1,facing=north,locked=false,powered=false]"
+        },
+        {
+          "pos": [
+            3,
+            4,
+            13
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            3,
             3,
             3
           ],
@@ -8222,6 +8239,14 @@
         },
         {
           "pos": [
+            3,
+            5,
+            13
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        },
+        {
+          "pos": [
             5,
             1,
             12
@@ -8239,10 +8264,34 @@
         {
           "pos": [
             4,
+            4,
+            9
+          ],
+          "block": "sticky_piston[extended=false,facing=up]"
+        },
+        {
+          "pos": [
+            4,
             3,
             4
           ],
           "block": "observer[facing=south,powered=false]"
+        },
+        {
+          "pos": [
+            5,
+            4,
+            7
+          ],
+          "block": "repeater[delay=1,facing=north,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            5,
+            4,
+            8
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
         },
         {
           "pos": [
@@ -10544,11 +10593,43 @@
         },
         {
           "pos": [
+            4,
+            4,
+            12
+          ],
+          "block": "repeater[delay=1,facing=south,locked=false,powered=false]"
+        },
+        {
+          "pos": [
+            4,
+            4,
+            11
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+        },
+        {
+          "pos": [
             2,
             2,
             1
           ],
           "block": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            5,
+            13
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            1,
+            5,
+            11
+          ],
+          "block": "repeater[delay=2,facing=north,locked=false,powered=false]"
         }
       ]
     },
@@ -10803,6 +10884,14 @@
         {
           "pos": [
             3,
+            4,
+            13
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            3,
             3,
             3
           ],
@@ -10815,6 +10904,22 @@
             14
           ],
           "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            3,
+            5,
+            13
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        },
+        {
+          "pos": [
+            4,
+            3,
+            10
+          ],
+          "block": "comparator[facing=south,mode=subtract,powered=false]"
         },
         {
           "pos": [
@@ -10831,6 +10936,14 @@
             14
           ],
           "block": "redstone_wall_torch[facing=south,lit=false]"
+        },
+        {
+          "pos": [
+            4,
+            3,
+            9
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
         },
         {
           "pos": [
@@ -11860,11 +11973,43 @@
       "changes": [
         {
           "pos": [
+            3,
+            4,
+            10
+          ],
+          "block": "redstone_wire[east=none,north=up,power=1,south=side,west=none]"
+        },
+        {
+          "pos": [
+            3,
+            3,
+            9
+          ],
+          "block": "comparator[facing=north,mode=subtract,powered=true]"
+        },
+        {
+          "pos": [
             2,
             2,
             14
           ],
           "block": "target[power=0]"
+        },
+        {
+          "pos": [
+            4,
+            4,
+            9
+          ],
+          "block": "sticky_piston[extended=true,facing=up]"
+        },
+        {
+          "pos": [
+            4,
+            5,
+            9
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
         },
         {
           "pos": [
@@ -11884,11 +12029,35 @@
         },
         {
           "pos": [
+            4,
+            4,
+            12
+          ],
+          "block": "repeater[delay=1,facing=south,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            4,
+            4,
+            11
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
             2,
             2,
             1
           ],
           "block": "redstone_wire[east=none,north=side,power=13,south=side,west=none]"
+        },
+        {
+          "pos": [
+            5,
+            3,
+            10
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=none,west=side]"
         }
       ]
     },
@@ -15559,10 +15728,26 @@
         {
           "pos": [
             3,
+            4,
+            11
+          ],
+          "block": "repeater[delay=1,facing=north,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            3,
             3,
             3
           ],
           "block": "redstone_wire[east=none,north=none,power=12,south=side,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            5,
+            9
+          ],
+          "block": "piston_head[facing=up,short=false,type=sticky]"
         },
         {
           "pos": [
@@ -36469,6 +36654,14 @@
           "pos": [
             4,
             3,
+            10
+          ],
+          "block": "comparator[facing=south,mode=subtract,powered=true]"
+        },
+        {
+          "pos": [
+            4,
+            3,
             9
           ],
           "block": "redstone_wire[east=side,north=side,power=1,south=side,west=side]"
@@ -40574,6 +40767,178 @@
     }
   ],
   "players": [],
+  "scheduled": [
+    {
+      "pos": [
+        3,
+        61,
+        12
+      ],
+      "block": "minecraft:repeater",
+      "delay": 2,
+      "priority": -2
+    },
+    {
+      "pos": [
+        1,
+        5,
+        11
+      ],
+      "block": "minecraft:repeater",
+      "delay": 2,
+      "priority": -1
+    },
+    {
+      "pos": [
+        3,
+        4,
+        11
+      ],
+      "block": "minecraft:repeater",
+      "delay": 2,
+      "priority": -1
+    },
+    {
+      "pos": [
+        2,
+        4,
+        9
+      ],
+      "block": "minecraft:redstone_wall_torch",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        3,
+        2,
+        2
+      ],
+      "block": "minecraft:comparator",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        3,
+        3,
+        4
+      ],
+      "block": "minecraft:observer",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        3,
+        3,
+        9
+      ],
+      "block": "minecraft:comparator",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        3,
+        6,
+        12
+      ],
+      "block": "minecraft:redstone_wall_torch",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        4,
+        3,
+        4
+      ],
+      "block": "minecraft:observer",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        4,
+        3,
+        5
+      ],
+      "block": "minecraft:observer",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        4,
+        3,
+        10
+      ],
+      "block": "minecraft:comparator",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        5,
+        3,
+        9
+      ],
+      "block": "minecraft:comparator",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        5,
+        4,
+        3
+      ],
+      "block": "minecraft:redstone_wall_torch",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        5,
+        7,
+        5
+      ],
+      "block": "minecraft:observer",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        5,
+        7,
+        12
+      ],
+      "block": "minecraft:observer",
+      "delay": 2,
+      "priority": 0
+    },
+    {
+      "pos": [
+        5,
+        8,
+        1
+      ],
+      "block": "minecraft:bubble_column",
+      "delay": 5,
+      "priority": 0
+    },
+    {
+      "pos": [
+        5,
+        8,
+        14
+      ],
+      "block": "minecraft:bubble_column",
+      "delay": 5,
+      "priority": 0
+    }
+  ],
   "settleDrift": [
     {
       "pos": "2,2,1",
@@ -40581,19 +40946,19 @@
       "settled": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
     },
     {
-      "pos": "2,2,2",
-      "source": "comparator[facing=north,mode=compare,powered=false]",
-      "settled": "comparator[facing=north,mode=compare,powered=true]"
-    },
-    {
       "pos": "3,2,2",
       "source": "comparator[facing=south,mode=compare,powered=false]",
       "settled": "comparator[facing=south,mode=compare,powered=true]"
     },
     {
+      "pos": "2,2,9",
+      "source": "observer[facing=south,powered=false]",
+      "settled": "observer[facing=south,powered=true]"
+    },
+    {
       "pos": "2,3,3",
       "source": "redstone_wire[east=side,north=none,power=0,south=up,west=none]",
-      "settled": "redstone_wire[east=side,north=none,power=15,south=up,west=none]"
+      "settled": "redstone_wire[east=side,north=none,power=14,south=up,west=none]"
     },
     {
       "pos": "3,3,3",
@@ -40601,19 +40966,14 @@
       "settled": "redstone_wire[east=none,north=none,power=15,south=side,west=side]"
     },
     {
-      "pos": "3,3,4",
+      "pos": "4,3,4",
       "source": "observer[facing=south,powered=false]",
       "settled": "observer[facing=south,powered=true]"
     },
     {
-      "pos": "4,3,5",
-      "source": "observer[facing=west,powered=false]",
-      "settled": "observer[facing=west,powered=true]"
-    },
-    {
-      "pos": "3,3,9",
-      "source": "comparator[facing=north,mode=subtract,powered=false]",
-      "settled": "comparator[facing=north,mode=subtract,powered=true]"
+      "pos": "3,3,8",
+      "source": "redstone_wire[east=side,north=none,power=1,south=side,west=none]",
+      "settled": "redstone_wire[east=side,north=none,power=15,south=side,west=none]"
     },
     {
       "pos": "4,3,9",
@@ -40626,39 +40986,54 @@
       "settled": "redstone_wire[east=none,north=side,power=15,south=none,west=side]"
     },
     {
-      "pos": "2,4,4",
-      "source": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
-      "settled": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+      "pos": "5,4,1",
+      "source": "redstone_wire[east=side,north=side,power=0,south=side,west=side]",
+      "settled": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
     },
     {
-      "pos": "2,4,5",
+      "pos": "4,4,2",
+      "source": "repeater[delay=1,facing=west,locked=false,powered=false]",
+      "settled": "repeater[delay=1,facing=west,locked=false,powered=true]"
+    },
+    {
+      "pos": "5,4,3",
+      "source": "redstone_wall_torch[facing=south,lit=true]",
+      "settled": "redstone_wall_torch[facing=south,lit=false]"
+    },
+    {
+      "pos": "2,4,4",
       "source": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
       "settled": "redstone_wire[east=none,north=side,power=13,south=side,west=none]"
     },
     {
-      "pos": "2,4,6",
+      "pos": "5,4,4",
+      "source": "redstone_wire[east=none,north=side,power=15,south=side,west=none]",
+      "settled": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": "2,4,5",
       "source": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
       "settled": "redstone_wire[east=none,north=side,power=12,south=side,west=none]"
     },
     {
-      "pos": "2,4,7",
+      "pos": "5,4,5",
+      "source": "redstone_wire[east=none,north=side,power=14,south=side,west=none]",
+      "settled": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": "2,4,6",
       "source": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
       "settled": "redstone_wire[east=none,north=side,power=11,south=side,west=none]"
+    },
+    {
+      "pos": "2,4,7",
+      "source": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
+      "settled": "redstone_wire[east=none,north=side,power=10,south=side,west=none]"
     },
     {
       "pos": "2,4,9",
       "source": "redstone_wall_torch[facing=south,lit=true]",
       "settled": "redstone_wall_torch[facing=south,lit=false]"
-    },
-    {
-      "pos": "4,4,9",
-      "source": "sticky_piston[extended=false,facing=up]",
-      "settled": "sticky_piston[extended=true,facing=up]"
-    },
-    {
-      "pos": "3,4,10",
-      "source": "redstone_wire[east=none,north=up,power=0,south=side,west=none]",
-      "settled": "redstone_wire[east=none,north=up,power=15,south=side,west=none]"
     },
     {
       "pos": "2,5,8",
@@ -40671,69 +41046,9 @@
       "settled": "hopper[enabled=true,facing=north]"
     },
     {
-      "pos": "3,5,9",
-      "source": "redstone_wire[east=none,north=side,power=0,south=side,west=none]",
-      "settled": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
-    },
-    {
-      "pos": "4,5,9",
-      "source": "water_cauldron[level=3]",
-      "settled": "moving_piston[facing=up,type=sticky]"
-    },
-    {
-      "pos": "2,5,10",
-      "source": "comparator[facing=north,mode=compare,powered=true]",
-      "settled": "comparator[facing=north,mode=compare,powered=false]"
-    },
-    {
-      "pos": "2,6,11",
-      "source": "redstone_wire[east=up,north=none,power=3,south=none,west=side]",
-      "settled": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
-    },
-    {
-      "pos": "5,7,1",
-      "source": "bubble_column[drag=false]",
-      "settled": "air"
-    },
-    {
-      "pos": "5,7,6",
-      "source": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
-      "settled": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
-    },
-    {
-      "pos": "5,7,7",
-      "source": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
-      "settled": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
-    },
-    {
-      "pos": "5,7,8",
-      "source": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
-      "settled": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
-    },
-    {
-      "pos": "5,7,9",
-      "source": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
-      "settled": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
-    },
-    {
-      "pos": "5,7,10",
-      "source": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
-      "settled": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
-    },
-    {
-      "pos": "3,7,11",
-      "source": "redstone_wire[east=side,north=none,power=2,south=none,west=side]",
-      "settled": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
-    },
-    {
-      "pos": "5,7,11",
-      "source": "powered_rail[powered=true,shape=north_south,waterlogged=false]",
-      "settled": "powered_rail[powered=false,shape=north_south,waterlogged=false]"
-    },
-    {
-      "pos": "5,7,14",
-      "source": "bubble_column[drag=false]",
-      "settled": "air"
+      "pos": "1,5,10",
+      "source": "observer[facing=north,powered=false]",
+      "settled": "observer[facing=north,powered=true]"
     },
     {
       "pos": "4,56,5",
@@ -40796,9 +41111,19 @@
       "settled": "stripped_dark_oak_wood[axis=y]"
     },
     {
+      "pos": "3,61,5",
+      "source": "piston_head[facing=down,short=false,type=sticky]",
+      "settled": "moving_piston[facing=down,type=sticky]"
+    },
+    {
       "pos": "4,61,5",
       "source": "piston_head[facing=down,short=false,type=sticky]",
       "settled": "honey_block"
+    },
+    {
+      "pos": "3,61,10",
+      "source": "piston_head[facing=down,short=false,type=sticky]",
+      "settled": "moving_piston[facing=down,type=sticky]"
     },
     {
       "pos": "4,61,10",
@@ -40816,6 +41141,16 @@
       "settled": "sticky_piston[extended=false,facing=down]"
     },
     {
+      "pos": "3,65,5",
+      "source": "piston_head[facing=up,short=false,type=sticky]",
+      "settled": "moving_piston[facing=up,type=sticky]"
+    },
+    {
+      "pos": "3,65,10",
+      "source": "piston_head[facing=up,short=false,type=sticky]",
+      "settled": "moving_piston[facing=up,type=sticky]"
+    },
+    {
       "pos": "4,57,7",
       "source": "air",
       "settled": "white_concrete"
@@ -40824,11 +41159,6 @@
       "pos": "4,57,8",
       "source": "air",
       "settled": "white_concrete"
-    },
-    {
-      "pos": "4,6,9",
-      "source": "air",
-      "settled": "moving_piston[facing=up,type=normal]"
     },
     {
       "pos": "4,61,6",
@@ -40852,7 +41182,7 @@
     }
   ],
   "generated": {
-    "at": "2026-08-19T19:51:45.356Z",
+    "at": "2026-08-19T20:21:28.195Z",
     "mc": "1.21.1",
     "carpet": "unknown"
   }
