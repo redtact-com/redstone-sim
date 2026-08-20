@@ -510,6 +510,51 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         note: String((block as any).note ?? 0),
         powered: String((block as any).powered ?? false),
       }]
+    // ── #234 以降に足した型 (#245) ──────────────────────────────────
+    // **書き出しに case が無いと default で air に潰れる**。
+    // 取り込んだ回路を保存すると塀・泡柱・書見台などが消えていた (実測: 9 種すべて消滅)
+    case 'wall':
+      return ['minecraft:stone_brick_wall', {
+        north: (block as any).north, east: (block as any).east,
+        south: (block as any).south, west: (block as any).west,
+        up: String((block as any).up ?? false),
+        waterlogged: String((block as any).waterlogged ?? false),
+      }]
+    case 'bubble_column':
+      return ['minecraft:bubble_column', { drag: String((block as any).drag ?? false) }]
+    case 'soul_sand':
+      return ['minecraft:soul_sand', {}]
+    case 'water':
+      return ['minecraft:water', { level: '0' }]
+    case 'lodestone':
+      return ['minecraft:lodestone', {}]
+    case 'cauldron':
+      return ['minecraft:water_cauldron', { level: String((block as any).level ?? 1) }]
+    case 'composter':
+      return ['minecraft:composter', { level: String((block as any).level ?? 0) }]
+    case 'lectern':
+      // ページ数と現在ページは BE 側なので blockstate には出ない (#240)。
+      // 保存すると階数指定が失われる — 既知の穴として #245 に書いてある
+      return ['minecraft:lectern', {
+        facing: (block as any).facing ?? 'north',
+        has_book: String((block as any).hasBook ?? false),
+        powered: 'false',
+      }]
+    case 'decor': {
+      // 取り込み元の名前をそのまま持っている (判断 E)。'name[k=v,...]' を分解して戻す
+      const raw = String((block as any).name ?? '')
+      const i = raw.indexOf('[')
+      const id = (i === -1 ? raw : raw.slice(0, i)).replace(/^minecraft:/, '')
+      const props: Record<string, string> = {}
+      if (i !== -1) {
+        for (const kv of raw.slice(i + 1, -1).split(',')) {
+          const eq = kv.indexOf('=')
+          if (eq !== -1) props[kv.slice(0, eq)] = kv.slice(eq + 1)
+        }
+      }
+      return [`minecraft:${id}`, props]
+    }
+
     case 'slime_block':
       return ['minecraft:slime_block', {}]
     case 'honey_block':
