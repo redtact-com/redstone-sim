@@ -134,6 +134,14 @@ export function isImmovableSolidName(name: string): boolean {
   return IMMOVABLE_SOLID.has(stripNs(name))
 }
 
+/**
+ * **押せるが引けない**導体フルブロックか (#255)。
+ * [確定: 26.2 — 釉薬テラコッタ 16 色は pushReaction(PUSH_ONLY)]
+ */
+export function isPushOnlySolidName(name: string): boolean {
+  return stripNs(name).endsWith('_glazed_terracotta')
+}
+
 export function isSolidBlockName(name: string): boolean {
   const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
   if (NOT_SOLID_EXACT.has(id)) return false
@@ -245,9 +253,13 @@ export function classifyPlainBlock(
   const nonConductive = toNonConductiveBlockState(name, props)
   if (nonConductive) return withInstrument(nonConductive)
   if (isSolidBlockName(name)) {
-    return withInstrument(isImmovableSolidName(name)
-      ? { type: 'solid', powered: false, immovable: true }
-      : { type: 'solid', powered: false })
+    if (isImmovableSolidName(name)) {
+      return withInstrument({ type: 'solid', powered: false, immovable: true })
+    }
+    if (isPushOnlySolidName(name)) {
+      return withInstrument({ type: 'solid', powered: false, pushOnly: true })
+    }
+    return withInstrument({ type: 'solid', powered: false })
   }
   return null
 }
