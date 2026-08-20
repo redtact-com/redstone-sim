@@ -444,11 +444,21 @@ export class SimWorld {
    * の順で走ったときに**余計な予約が 1 本残り**、2gt 後に空撃ちして実機より早く遷移する
    * (ガラスエレベーターでトーチが実機より 2gt 早く点いていた原因 — #264)。
    *
-   * **数えるのは「まだ走っていない」分だけ**。自分の発火のあとに戻ってきた近隣更新まで
-   * 抑止するとトーチクロックが止まる (実機 fixture torch-clock)。
+   * **数えるのは「まだ走っていない」分だけ**。これは vanilla からの逸脱ではなく同型で、
+   * `LevelTicks.runCollectedTicks` は取り出した予約をその場で `toRunThisTickSet` から外す
+   * [確定: 26.2]。数え続けると自分の発火のあとに戻ってきた近隣更新まで抑止してしまい、
+   * トーチクロックが止まる (実機 fixture torch-clock)。
+   *
+   * vanilla の `willTickThisTick` は `hasScheduledTick` を含まないが、
+   * `scheduleTick` 側が `LevelChunkTicks` で (pos, type) の先勝ち dedup をするので、
+   * ここの「取り出し済み ∪ 未実行の予約」は合成として等価。
    *
    * **`hasScheduledTick` の側を広げてはいけない**。オブザーバー・泡柱・ピストンは
    * vanilla でも取り出し済みを数えないので、まとめて変えると 58 本のテストが落ちる。
+   *
+   * **これを見るのはトーチ・リピーター・コンパレーターの 3 つだけ** (#264)。
+   * 26.2 でブロック側から `willTickThisTick` を呼ぶのは
+   * `RedstoneTorchBlock` / `DiodeBlock` / `ComparatorBlock` の 3 クラスに限られる。
    */
   willTickThisTick(pos: Pos3D, blockType: BlockState['type']): boolean {
     if (this.runningThisTick.has(`${posKey(pos)}|${blockType}`)) return true
@@ -2716,7 +2726,7 @@ export class SimWorld {
         // (ロック解除時の入出力不整合はここで拾われる)
         if (nowLocked) break
         const inputPowered = this.isRepeaterInputPowered(pos, cur)
-        if (inputPowered !== cur.powered) {
+        if (inputPowered !== cur.powered && !this.willTickThisTick(pos, cur.type)) {
           this.schedule(pos, cur.delay * 2, this.diodeTickPriority(pos, cur, cur.powered))
         }
         break
@@ -2726,7 +2736,8 @@ export class SimWorld {
         // キャンセル・再予約はしない (02 §2 [確定]: 予約は pos+block で常に 1 件)
         const newOutput = this.computeComparatorOutput(pos, block)
         const newPowered = newOutput > 0
-        if (newOutput !== block.outputPower || newPowered !== block.powered) {
+        if (!this.willTickThisTick(pos, block.type)
+          && (newOutput !== block.outputPower || newPowered !== block.powered)) {
           this.schedule(pos, 2, this.diodeTickPriority(pos, block, false))
         }
         break
