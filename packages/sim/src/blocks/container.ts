@@ -31,6 +31,13 @@ import { REPRESENTATIVE_ITEM } from './itemStacks.js'
 export const HOPPER_COOLDOWN = 8
 
 /**
+ * 水の流動 tick (gt) [確定: 26.2 WaterFluid — オーバーワールドの水は 5]。
+ * 下が空いてから水が落ちてくるまでの遅れがこれ
+ * (実機 elev-ride: tick 52 に汲み上げ → tick 57 に落下水)。
+ */
+export const WATER_TICK_DELAY = 5
+
+/**
  * ドロッパー/ディスペンサーの発火遅延 (gt)
  * [確定: 26.2 DispenserBlock.neighborChanged — 4gt の tile tick を予約する]。
  * 立ち上がり受電で TRIGGERED を立て、この遅延の tile tick で dispenseFrom を実行。

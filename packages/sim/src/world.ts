@@ -25,8 +25,10 @@ import {
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import {
   isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
+  WATER_TICK_DELAY,
   takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal, emptySlots,
 } from './blocks/container.js'
+import { stackSizeOf } from './blocks/itemStacks.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
   BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState, ItemStack,
@@ -1350,6 +1352,9 @@ export class SimWorld {
       // [確定: 26.2 BubbleColumnBlock.tick → updateColumn]
       // 予約が来たら柱を評価し直す。書き換えは updateBubbleColumn が同期で行う
       for (const k of this.updateBubbleColumn(pos)) changed.push(k)
+      for (const k of this.updateWaterFlow(pos)) changed.push(k)
+    } else if (block.type === 'water') {
+      for (const k of this.updateWaterFlow(pos)) changed.push(k)
     } else if (block.type === 'lamp') {
       // vanilla RedstoneLampBlock.tick: 消灯 tick は「LIT かつ無入力」なら消灯。
       // 点灯は neighborChanged で即時なので、ここでは消灯のみ扱う。
@@ -1431,6 +1436,28 @@ export class SimWorld {
       if (taken) {
         const destPos = neighbor(pos, block.facing)
         const dest = this.getBlockAt(destPos)
+        // **バケツはワールドを書き換える** (#252)。射出ではなく前方のブロックを
+        // 置く / 汲み上げるので、通常の射出経路より先に処理する
+        // [確定: 26.2 DispenseItemBehavior — バケツは専用の DispenseItemBehavior を持ち、
+        //  失敗したときだけ既定の射出に落ちる]
+        if (block.type === 'dispenser' && (taken.item.id === 'water_bucket' || taken.item.id === 'bucket')) {
+          const swapped = this.dispenseBucket(destPos, taken.item.id)
+          if (swapped !== null) {
+            // **スタック上限も持ち替える** (bucket=16 / water_bucket=1)。
+            // これを間違えるとコンパレーターの読みがずれる
+            const slots = putOne(taken.slots,
+              { ...taken.item, id: swapped, stack: stackSizeOf(swapped).stack })
+            // 入れ替え先が無い (満杯) ことは 1 個抜いた直後なので起きないが、
+            // 起きたら何もしなかったことにする (バケツを消さない)
+            if (slots !== null) {
+              this.setBlockAt(pos, { ...block, slots })
+              changed.push(posKey(pos), posKey(destPos))
+              this.emitComparatorUpdate(pos)
+            }
+            return changed
+          }
+          // 置けない / 汲めない → 既定の射出へ落ちる (vanilla と同じ)
+        }
         const destSlots = containerSlotsOf(dest)
         const put = destSlots !== undefined ? putOne(destSlots, taken.item) : null
         if (block.type === 'dropper' && dest && put) {
@@ -1880,19 +1907,22 @@ export class SimWorld {
    */
   private updateBubbleColumn(pos: Pos3D): string[] {
     const changed: string[] = []
-    // 占有できるのは「泡柱」か「水」。sim は流体を持たないのでこの 2 種だけ
+    // 占有できるのは「泡柱」か「**水源**」。
+    // **落下水 (level 8) には柱が立たない** (#252)。これがガラスエレベーターの
+    // 階指定の正体で、ディスペンサーが水源を汲み上げると柱がそこで切れ、
+    // 上から落ちてきた水では柱が戻らない。水源が置き直されるまで切れたまま
     const canOccupy = (b: BlockState | null): boolean =>
-      b?.type === 'bubble_column' || b?.type === 'water'
+      b?.type === 'bubble_column' || (b?.type === 'water' && b.level === 0)
     if (!canOccupy(this.getBlockAt(pos))) return changed
 
     // 柱の状態は**真下**で決まる: ソウルサンド → 上向き / 泡柱 → 同じ向き /
-    // それ以外 → 柱ではなくなる (水に戻る)
+    // それ以外 → 柱ではなくなる (水源に戻る)
     const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
     const next: BlockState = below?.type === 'soul_sand'
       ? { type: 'bubble_column', drag: false }
       : below?.type === 'bubble_column'
         ? { type: 'bubble_column', drag: below.drag }
-        : { type: 'water' }
+        : { type: 'water', level: 0 }
 
     // 起点から上へ、占有できる限り同じ状態を書き込む
     const p: Pos3D = [pos[0], pos[1], pos[2]]
@@ -1908,6 +1938,99 @@ export class SimWorld {
       p[1] += 1
     }
     return changed
+  }
+
+  /** 泡柱を含む「水として振る舞うもの」か (落下水も含む) */
+  private isWaterish(b: BlockState | null): boolean {
+    return b?.type === 'water' || b?.type === 'bubble_column'
+  }
+
+  /** この位置の水が流動 tick を必要とするか (要らないなら予約しない) */
+  private waterNeedsFlowTick(pos: Pos3D): boolean {
+    const b = this.getBlockAt(pos)
+    if (!this.isWaterish(b)) return false
+    const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
+    if (below === null || below.type === 'air') return true
+    // 供給が絶たれた落下水は消える番
+    return b?.type === 'water' && b.level === 8
+      && !this.isWaterish(this.getBlockAt([pos[0], pos[1] + 1, pos[2]]))
+  }
+
+  /**
+   * 水の流動 (#252)。**縦だけ**。
+   *
+   * ガラスエレベーターの階指定はこの経路そのもの:
+   * ディスペンサーが水源を汲み上げる → 泡柱がそこで切れる →
+   * 5gt 後に上から水が落ちてくるが、**落下水では柱が戻らない** →
+   * 水源が置き直されるまで人が落ちる。
+   *
+   * 横方向の広がり (level 1-7) は実装していない (types.ts の WaterState 参照)。
+   * [確定: 26.2 WaterFluid — 水の流動 tick は 5gt / FlowingFluid.spreadTo は flag 3 で置く]
+   */
+  private updateWaterFlow(pos: Pos3D): string[] {
+    const changed: string[] = []
+    const block = this.getBlockAt(pos)
+    if (!this.isWaterish(block)) return changed
+
+    // 供給が絶たれた落下水は消える (水源は消えない)
+    if (block?.type === 'water' && block.level === 8
+      && !this.isWaterish(this.getBlockAt([pos[0], pos[1] + 1, pos[2]]))) {
+      this.setBlockAt(pos, { type: 'air' })
+      changed.push(posKey(pos))
+      this.emitShapeUpdate(pos)   // 下の「落下水は近隣更新を出さない」と同じ扱い
+      return changed
+    }
+
+    // 下が空いていれば落とす
+    const belowPos: Pos3D = [pos[0], pos[1] - 1, pos[2]]
+    const below = this.getBlockAt(belowPos)
+    if (below === null || below.type === 'air') {
+      this.setBlockAt(belowPos, { type: 'water', level: 8 })
+      changed.push(posKey(belowPos))
+      // **落下水が来ても泡柱は予約し直さない**。形状更新だけ出す (泡柱と同じ flag 2 扱い)。
+      // [実機 fixture bubble-column-refill-fast: 穴に落下水が来た t7 ではなく、
+      //  水源を置き直した t8 の 5gt 後 = t13 に柱が戻る]。
+      // 近隣更新まで出すと柱が t12 に戻ってしまい、実機と 1 tick ずれる
+      // (ガラスエレベーターはディスペンサーが落下水の 1 tick 後に水源を置くので、
+      //  ここがちょうど効く)。**消えるときも同じ扱いにしてある** (こちらは未測定)
+      this.emitShapeUpdate(belowPos)
+      // さらに下へ続く分は、この形状更新を受けた水自身が予約する
+      this.neighborChanged(belowPos)
+    }
+    return changed
+  }
+
+  /**
+   * ディスペンサーのバケツ (#252)。成功したら**入れ替わった後のアイテム ID**、
+   * 何もできなければ null を返す (呼び出し側は既定の射出へ落ちる)。
+   *
+   * - `water_bucket` … 前が空気なら**水源**を置く → `bucket` になる
+   * - `bucket` … 前が水源か泡柱なら汲み上げて空気にする → `water_bucket` になる
+   *
+   * ガラスエレベーターはこれで泡柱を切ったり戻したりして階を決めている
+   * (実機 elev-ride: tick 52 に汲み上げ → 柱が即座に切れる)。
+   * **落下水は汲めない** (水源ではないため)。
+   */
+  private dispenseBucket(destPos: Pos3D, itemId: string): string | null {
+    const dest = this.getBlockAt(destPos)
+    if (itemId === 'water_bucket') {
+      // **落下水の上からでも置ける**。水は置き換え可能なので、汲み上げた穴に
+      // 上から水が落ちてきた後でも水源を置き直せる
+      // (実機 elev-ride: tick 1 に落下水 → tick 2 にディスペンサーが水源を置く)
+      if (dest?.type === 'bubble_column') return 'bucket'   // 既に水源 → 空になるだけ
+      if (dest !== null && dest.type !== 'air' && dest.type !== 'water') return null
+      this.setBlockAt(destPos, { type: 'water', level: 0 })
+    } else {
+      const isSource = dest?.type === 'bubble_column' || (dest?.type === 'water' && dest.level === 0)
+      if (!isSource) return null
+      this.setBlockAt(destPos, { type: 'air' })
+    }
+    // vanilla は setBlock flag 3 相当。泡柱は近隣更新で 5gt の予約が入り、
+    // 面しているオブザーバーは形状更新で気づく
+    this.neighborChanged(destPos)
+    this.emitShapeUpdate(destPos)
+    this.submitMultiNC(destPos)
+    return itemId === 'water_bucket' ? 'bucket' : 'water_bucket'
   }
 
   /**
@@ -2412,6 +2535,18 @@ export class SimWorld {
         // 5gt 後に柱を評価し直す。**即時に書き換えないのが要点**で、
         // 実機でも柱を断ち切ってから 5gt 後に崩れる
         if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
+        // 泡柱も水なので、下が空いたら落ちる (柱を汲み上げた直後の穴を埋めるのはこれ)
+        if (this.waterNeedsFlowTick(pos) && !this.hasScheduledTick(pos, 'bubble_column')) {
+          this.schedule(pos, WATER_TICK_DELAY, 0)
+        }
+        break
+      }
+      case 'water': {
+        // [確定: 26.2 WaterFluid — 水の流動 tick は 5gt]。
+        // **やるのは縦だけ** (#252)。下が空いたら落とし、供給が絶たれた落下水は消す
+        if (this.waterNeedsFlowTick(pos) && !this.hasScheduledTick(pos, 'water')) {
+          this.schedule(pos, WATER_TICK_DELAY, 0)
+        }
         break
       }
       case 'note_block': {
