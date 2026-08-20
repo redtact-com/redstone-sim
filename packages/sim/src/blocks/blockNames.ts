@@ -195,8 +195,10 @@ export function classifyPlainBlock(
     return { type: 'soul_sand', powered: false }
   }
   if (id === 'water') {
-    // 流体は実装しない。泡柱が消えた跡を表す不活性ブロック (#234 判断 B)
-    return { type: 'water' }
+    // 持つのは水源 (0) と落下水 (8) だけ。**横に広がる流水 (1-7) は実装しない** (#252)。
+    // 1-7 が来たら落下水と同じ「泡柱が立たない水」として扱う (どちらも水源ではない)
+    const level = Number(props.level ?? 0)
+    return { type: 'water', level: level === 0 ? 0 : 8 }
   }
   if (id === 'bubble_column') {
     // 縦の無遅延バス [確定: 26.2 BubbleColumnBlock]

@@ -35,7 +35,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
-import type { Capture } from './compare.js'
+import type { Capture, CaptureItems } from './compare.js'
 import { readScheduledTicks, readComparatorOutputs } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
@@ -489,7 +489,12 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   }
 
   // 1. 共有 JSON へ (rcon のコマンド長 1014 文字を超えられないのでファイル経由)
-  const items = blocks
+  //
+  // **これは実機へ入れる用**。キャプチャに載せる中身は settle 後に実機から読み直す
+  // (#252)。settle 中に機械が動いてコンテナの中身が変わることがあり、
+  // 元ファイルの中身を出発点にすると sim だけ違う持ち物で始まってしまう
+  // (ガラスエレベーターのディスペンサーは空バケツ ⇄ 水バケツで入れ替わる)
+  const placeItems = blocks
     .filter(b => b.items && b.items.length > 0)
     .map(b => ({ pos: b.pos, slots: b.items!.map(i => ({ slot: i.slot, id: i.id.replace(/^minecraft:/, ''), count: i.count })) }))
   mkdirSync(sharedDir, { recursive: true })
@@ -499,9 +504,10 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     // ブロックが region の外に残って実機側だけを動かすのを防ぐ)
     clear: fullRegion,
     blocks: blocks.map(b => ({ pos: b.pos, name: b.name, props: b.props })),
-    items,
+    items: placeItems,
   }))
-  log(`[capture] コンテナ ${items.length} 個 / スロット ${items.reduce((n, i) => n + i.slots.length, 0)}`)
+  log(`[capture] コンテナ ${placeItems.length} 個`
+    + ` / スロット ${placeItems.reduce((n, i) => n + i.slots.length, 0)}`)
 
   // 書見台の本 (#240)。**本が無いと出力が 14 に張り付いて階数指定が効かない**
   const { books: lecternBooks, noBook } = collectLecternBooks(blocks)
@@ -527,7 +533,7 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   rcon('kill', '@e[type=!player]')
   await waitForDrain(DRAIN_TICKS)
   scarpet('fx_setup()')
-  if (items.length > 0) {
+  if (placeItems.length > 0) {
     const n = scarpet('fx_items()')
     log(`[capture] 中身を投入: ${n.trim()}`)
     scarpet('fx_settle()')   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
@@ -607,6 +613,26 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
       log(`    ${st.pos.join(',')} ${st.block.replace('minecraft:', '')} 残り ${st.delay}gt 優先度 ${st.priority}`)
     }
   }
+  // コンテナの中身 (#252)。**元ファイルではなく実機から読む**。
+  // settle 中に機械が動いて中身が変わることがあり、そこがずれると
+  // 「sim だけ違う持ち物で始まる」ことになる
+  // (エレベーターのディスペンサーは空バケツ ⇄ 水バケツで入れ替わる)
+  scarpet('fx_read_items()')
+  const items = (JSON.parse(readFileSync(join(sharedDir, 'items.json'), 'utf-8')) as {
+    items: CaptureItems[]
+  }).items
+  // **キーの並び順で差が出ないように正規化して比べる**
+  // (実機から読んだ側は {count,id,slot}、元ファイル側は {slot,id,count} の順で来る)
+  const slotsOf = (list: CaptureItems[], pos: number[]): string =>
+    JSON.stringify((list.find(i => i.pos.join(',') === pos.join(','))?.slots ?? [])
+      .map(x => [x.slot, x.id, x.count]))
+  const drifted = items.filter(i => slotsOf(placeItems, i.pos) !== slotsOf(items, i.pos))
+  log(`[capture] コンテナの中身を実機から読み直した: ${items.length} 個`
+    + `${drifted.length > 0 ? ` (元ファイルとズレ ${drifted.length} 個)` : ''}`)
+  for (const d of drifted.slice(0, 5)) {
+    log(`    ${d.pos.join(',')}: ファイル=${slotsOf(placeItems, d.pos)} 実機=${slotsOf(items, d.pos)}`)
+  }
+
   // コンパレーターが保持している出力強度 (#249)。0 のものは sim 側の既定と同じなので落とす
   const comparators = readComparatorOutputs(worldDir, region.from, region.to)
     .filter(c => c.output !== 0)

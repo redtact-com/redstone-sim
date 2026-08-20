@@ -426,7 +426,7 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'soul_sand':
         return 'soul_sand'
       case 'water':
-        return formatMcState('water', { level: '0' })
+        return formatMcState('water', { level: String(sim.level) })
       case 'bubble_column':
         return formatMcState('bubble_column', { drag: String(sim.drag) })
       case 'decor':
@@ -516,9 +516,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.south = sim.south; props.west = sim.west
       props.up = String(sim.up); props.waterlogged = String(sim.waterlogged)
       break
+    case 'water':
+      // level は動く (水源 0 ⇄ 落下水 8)。#252
+      props.level = String(sim.level)
+      break
     case 'lodestone':
     case 'decor':
-    case 'water':
     case 'soul_sand':
       // 動的プロパティを持たない
       break

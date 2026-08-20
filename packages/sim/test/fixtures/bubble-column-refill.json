@@ -1,0 +1,397 @@
+{
+  "name": "bubble-column-refill",
+  "description": "泡柱を水源の抜き差しで切って戻す (#252)。ガラスエレベーターの階指定と同じ経路を最小化したもの。穴が空いてから上の水が落ちてくるまでと、水源を置き直してから柱が戻るまでの tick を実機で測る",
+  "mcVersion": "1.21.1",
+  "ticks": 40,
+  "region": {
+    "from": [
+      -1,
+      -1,
+      -1
+    ],
+    "to": [
+      1,
+      7,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "soul_sand"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        -1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        3,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        4,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        5,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        0
+      ],
+      "block": "water[level=0]"
+    },
+    {
+      "pos": [
+        -1,
+        6,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        7,
+        0
+      ],
+      "block": "glass"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 20,
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "water[level=0]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            3,
+            0
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 7,
+      "changes": [
+        {
+          "pos": [
+            0,
+            3,
+            0
+          ],
+          "block": "water[level=8]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "water[level=0]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            0
+          ],
+          "block": "water[level=0]"
+        }
+      ]
+    },
+    {
+      "tick": 20,
+      "changes": [
+        {
+          "pos": [
+            0,
+            3,
+            0
+          ],
+          "block": "water[level=0]"
+        }
+      ]
+    },
+    {
+      "tick": 25,
+      "changes": [
+        {
+          "pos": [
+            0,
+            3,
+            0
+          ],
+          "block": "bubble_column[drag=false]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "bubble_column[drag=false]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            0
+          ],
+          "block": "bubble_column[drag=false]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            0
+          ],
+          "block": "bubble_column[drag=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-20T13:42:31.235Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

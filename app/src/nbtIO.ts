@@ -525,7 +525,8 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'soul_sand':
       return ['minecraft:soul_sand', {}]
     case 'water':
-      return ['minecraft:water', { level: '0' }]
+      // 水源 0 / 落下水 8 (#252)。以前は常に 0 で、汲み上げた跡が水源に化けていた
+      return ['minecraft:water', { level: String((block as any).level ?? 0) }]
     case 'lodestone':
       return ['minecraft:lodestone', {}]
     case 'cauldron':
