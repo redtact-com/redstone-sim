@@ -136,6 +136,20 @@ export function scarpet(expr: string): string {
   return out
 }
 
+/**
+ * dump.sc をディスクから読み直す。
+ *
+ * **必ず unload → load にする**。読み込み済みのまま `script load` を撃つと
+ * carpet は「もう入っている」と答えるだけで**ファイルを読み直さない**ので、
+ * dump.sc を直したのに古い関数が動き続ける。
+ * (#248 の作業中に実際に踏んだ: 引数を増やした関数が「1 引数しか取らない」と言われた)
+ */
+export function reloadDumpApp(): void {
+  rcon('script', 'unload', 'dump')
+  const loaded = rcon('script', 'load', 'dump')
+  if (!/reloaded|loaded/.test(loaded)) throw new Error(`dump.sc をロードできない: ${loaded}`)
+}
+
 interface LockInfo {
   pid: number
   /** 取得時刻 (epoch ms) */

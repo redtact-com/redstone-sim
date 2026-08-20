@@ -256,3 +256,15 @@ npx tsx tools/mc-harness/runner/run.ts <fixture名>
 - **authored は `without_updates` で置かれる**ので、`onPlace` で自己補正する素子
   (ランプ・ピストン等) 以外は「実機に自然には存在しない状態」を作れてしまう。
   実プレイで到達できる状態かどうかは自分で担保すること
+- **初期状態 (authored) と frames の基準時刻は必ず同じにする** (#248)。
+  `fx_cap_start` が差分の基準 `global_cap_prev` と**同じ 1 回のスキャン**から
+  `authored.json` を書き出すのはこのため。別々に撮ると、その間に進んだ tick の変化が
+  どの frame にも現れず、sim 側は永久に追いつけない。
+  しかも食い違いは**ずれた座標ではなく下流**に出るので「sim のバグ」に見える
+  (実際 5 ブロック先のコンパレーターで 1 周誤診した)
+- **初期状態に `moving_piston` が 1 つでもあれば、そのキャプチャは捨てる** (#248)。
+  運んでいる中身が BlockEntity にあって blockstate に出ないため sim 側で復元できない。
+  capture / compare のどちらもエラーで止まる (以前は黙って air に落としていた)
+- **dump.sc を直したら `unload` → `load`**。読み込み済みのまま `script load` を撃つと
+  carpet は「もう入っている」と答えるだけで**ファイルを読み直さない**。
+  `reloadDumpApp()` (runner/rcon.ts) を使うこと

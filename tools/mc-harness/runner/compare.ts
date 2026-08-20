@@ -299,15 +299,25 @@ function captureWarnings(cap: Capture, fx: Fixture): string[] {
 export function compareCapture(cap: Capture, opts: { trustAuthored?: boolean } = {}): CompareReport {
   const fx = captureToFixture(cap, opts.trustAuthored === true)
 
-  // authored に moving_piston があると mcToSim が throw する (過渡状態は復元不能)
-  // ので world 構築からは外す。どのみち比較不能座標なので結果には影響しない。
+  // **初期状態の moving_piston は落とさず、落とす** (#248)。
+  //
+  // 以前はここで黙って world 構築から外していた。「どのみち比較不能座標なので
+  // 結果には影響しない」と書いてあったが、**影響する**。moving_piston が導体なら
+  // それが air になって給電経路がまるごと消え、食い違いは
+  // **その座標ではなく下流**に出る。実際 #248 では 5 ブロック先のコンパレーターが
+  // 食い違い、tick 内の順序の問題だと 1 周誤診した。
+  // tick 途中に現れる moving_piston の (tick, 座標) 単位の除外は下でそのまま続ける
   const authoredMoving = fx.blocks.filter(b => isMovingPiston(b.block))
-  const simFx: Fixture = authoredMoving.length === 0
-    ? fx
-    : { ...fx, blocks: fx.blocks.filter(b => !isMovingPiston(b.block)) }
+  if (authoredMoving.length > 0) {
+    throw new Error(
+      `初期状態に moving_piston が ${authoredMoving.length} 個あります `
+      + `(${authoredMoving.slice(0, 5).map(b => b.pos.join(',')).join(' ')})。`
+      + 'sim 側で復元できないので、このキャプチャは比較に使えません。'
+      + 'ピストンが動き終わってから撮り直してください (npm run capture)')
+  }
 
   const expected = expandExpect(fx)
-  const actual = runFixtureOnSim(simFx)
+  const actual = runFixtureOnSim(fx)
 
   // 除外は **(tick, 座標) 単位**。その tick に実機か sim のどちらかが moving_piston の
   // ときだけ落とす。authored の moving_piston は tick 0 の分だけ落ちる

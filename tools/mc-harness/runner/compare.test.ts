@@ -201,12 +201,13 @@ describe('compareCapture — moving_piston の除外', () => {
     expect(r.excluded.suppressedDiffs).toBeGreaterThan(0)
   })
 
-  it('名前空間つき (minecraft:moving_piston) でも除外できる', () => {
+  it('名前空間つき (minecraft:moving_piston) も初期状態にあれば同じく弾く', () => {
     // 実機ダンプ由来の authored は minecraft: が付き得る。
-    // 付いていると mcToSim が throw して CLI がスタックトレースで死ぬ
+    // 付いていても isMovingPiston が拾えていないと、mcToSim の
+    // 「復元不能」例外がそのままスタックトレースで出て原因が分からなくなる
     const cap = clone(PISTON)
     cap.authored['4,1,0'] = 'minecraft:moving_piston[facing=east,type=normal]'
-    expect(() => compareCapture(cap)).not.toThrow()
+    expect(() => compareCapture(cap)).toThrow(/初期状態に moving_piston/)
   })
 
   it('コンテナ入力 (action=container) は指定した強度になる', () => {
@@ -280,13 +281,21 @@ describe('compareCapture — moving_piston の除外', () => {
     expect(r.excluded.suppressedDiffs).toBeGreaterThan(0)
   })
 
-  it('authored に moving_piston があっても落ちずに除外扱いにする', () => {
-    // mcToSim は moving_piston を投げる (過渡状態は復元不能) ので world から外す必要がある
+  it('**初期状態の moving_piston は黙って除外せずエラーにする** (#248)', () => {
+    // 以前はここで world 構築から外し「どのみち比較不能座標なので影響しない」と
+    // していたが、**影響する**。外された座標が導体なら給電経路がまるごと消え、
+    // 食い違いは**その座標ではなく下流**に出る。
+    // 実機のエレベーターではコンパレーターが 5 ブロック先で食い違い、
+    // tick 内の順序の問題だと 1 周誤診した。座標が分からないと直せないので
+    // メッセージに載せる
     const cap = clone(PISTON)
     cap.authored['4,1,0'] = 'moving_piston[facing=east,type=normal]'
-    const r = compareCapture(cap)
-    expect(r.excluded.positions).toContain('4,1,0')
-    expect(r.ok).toBe(true)
+    expect(() => compareCapture(cap)).toThrow(/4,1,0/)
+  })
+
+  it('初期状態に moving_piston が無ければ従来どおり比較できる', () => {
+    // 上の 2 件が「常に throw する」だけの空振りでない証拠
+    expect(() => compareCapture(clone(PISTON))).not.toThrow()
   })
 })
 
