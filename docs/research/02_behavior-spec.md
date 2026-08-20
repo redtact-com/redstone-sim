@@ -292,9 +292,14 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - 演算式 [確定: ComparatorBlock.calculateOutputSignal のデコンパイルで最終確定 (従来 3 源とも一致)]:
   - `back == 0 → 0` / `side > back → 0` / compare: `back` / subtract: `back − side` (side = `max(side_L, side_R)`)
 - 遅延 **2 gt 固定** (`getDelay` が定数 2) [確定: 未解明 #4 解消]。priority -1/0 (2.2 表) [確定]。
-- **NC 時の予約規則** [確定: ComparatorBlock.checkTickOnNeighbor]: `willTickThisTick` でなく、
-  「計算出力 != BlockEntity 保持値 or POWERED != shouldTurnOn」のとき **2gt の tile tick** を
+- **NC 時の予約規則** [確定: ComparatorBlock.checkTickOnNeighbor]: **`willTickThisTick` が偽のとき**、
+  「計算出力 != BlockEntity 保持値 or POWERED != shouldTurnOn」なら **2gt の tile tick** を
   priority (shouldPrioritize なら -1、でなければ 0) で予約する。
+  **`willTickThisTick` を最外の条件として持つ** (リピーターと同じ形。checkTickOnNeighbor は
+  ComparatorBlock 側で override されていて、DiodeBlock.neighborChanged から呼ばれる)。
+  > **旧記述は誤りだった** (#264)。「`willTickThisTick` でなく」と [確定] 付きで書いてあったが、
+  > 26.2 の実物とも実機 1.21.1 とも食い違う。実機 fixture `comparator-nc-own-tick` /
+  > `repeater-nc-own-tick` が正で、ガードが無いと**遷移が 1gt 早まる**。
   tick で `refreshOutputState`: 出力値を ComparatorBlockEntity に保存し、POWERED を更新して前方更新。
 - 側面入力 [確定: SignalGetter.getControlInputSignal(diodesOnly=false)]: ワイヤ (POWER 直読)・レッドストーンブロック (15)・
   その他は **direct signal (強出力) がその方向を向くもの** = リピーター/コンパレーター/**オブザーバー**。
