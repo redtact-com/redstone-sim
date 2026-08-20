@@ -1,0 +1,196 @@
+{
+  "name": "elevator-observer-min",
+  "description": "実機と sim の食い違いを自動最小化した記録 (対象 3,3,4)。元定義 tools/mc-harness/captures/elevator-obs2.def.json / 16 ブロックまで削っても食い違いが残ることを実機で確認済み。tick 6 で 実機=observer[facing=south,powered=false] / sim=observer[facing=south,powered=true]",
+  "mcVersion": "1.21.1",
+  "ticks": 6,
+  "skipReason": "自動最小化 (#240) で 6393 → 16 ブロックまで縮めた実機記録。コンパレーターの出力強度は BE 値で blockstate に出ないため、実機スナップショットからの 復元で 0 になり下流のダストが丸ごと 0 になっていた回帰",
+  "region": {
+    "from": [
+      1,
+      0,
+      2
+    ],
+    "to": [
+      6,
+      5,
+      7
+    ]
+  },
+  "trustAuthored": true,
+  "scheduled": [
+    {
+      "pos": [
+        3,
+        3,
+        4
+      ],
+      "block": "minecraft:observer",
+      "delay": 2,
+      "priority": 0
+    }
+  ],
+  "blocks": [
+    {
+      "pos": [
+        2,
+        0,
+        6
+      ],
+      "block": "light_gray_stained_glass"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "repeater[delay=2,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        5
+      ],
+      "block": "white_concrete"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "light_gray_stained_glass"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "comparator[facing=west,mode=subtract,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        3
+      ],
+      "block": "white_concrete"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        5
+      ],
+      "block": "white_concrete"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        4
+      ],
+      "block": "observer[facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        3,
+        5
+      ],
+      "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        4,
+        5
+      ],
+      "block": "white_concrete"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        5
+      ],
+      "block": "white_stained_glass"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        6
+      ],
+      "block": "white_concrete"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        5
+      ],
+      "block": "comparator[facing=east,mode=subtract,powered=true]"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        6
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        4,
+        3,
+        4
+      ],
+      "block": "observer[facing=south,powered=false]"
+    },
+    {
+      "pos": [
+        5,
+        2,
+        5
+      ],
+      "block": "redstone_block"
+    }
+  ],
+  "inputs": [],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            3,
+            3,
+            4
+          ],
+          "block": "observer[facing=south,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            3,
+            3,
+            4
+          ],
+          "block": "observer[facing=south,powered=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-20T01:49:46.233Z",
+    "mc": "1.21.1",
+    "carpet": "unknown"
+  }
+}

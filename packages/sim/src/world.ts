@@ -855,6 +855,21 @@ export class SimWorld {
       }
     }
 
+    // Step 4b: **blockstate に出ない値だけは trustAuthored でも組み直す** (#240)。
+    //
+    // コンパレーターの出力強度は BlockEntity の OutputSignal で、blockstate には
+    // powered (0 か否か) しか出ない。実機のスナップショットを読んでも強度が分からず、
+    // 0 のままだと下流のダストが丸ごと 0 になる
+    // (実機の最小再現 elevator-observer-min: 実機 15 / sim 0 で発覚)。
+    // powered=true なら**今の入力から計算し直す**のが実機の BE 値に一致する
+    if (trust) {
+      for (const [key, block] of this.blocks) {
+        if (block.type !== 'comparator') continue
+        const out = block.powered ? this.computeComparatorOutput(keyToPos(key), block) : 0
+        if (block.outputPower !== out) this.blocks.set(key, { ...block, outputPower: out })
+      }
+    }
+
     // Step 5: スケジュール済みティックを処理して安定化（クロック回路では呼ばない）
     // initialize() 後は tick=0 の初期状態から手動で進める想定のため flush は行わない
 
