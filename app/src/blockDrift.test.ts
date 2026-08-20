@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { TRIGGERABLE_TYPES } from '@redstone/sim'
 import { PLACEABLE_TYPES, CircuitEditor, DEFAULT_BOARD, BOARD_MAX } from '@redstone/editor'
 import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS, extraPreloadNames } from '@redstone/viewer'
-import { classifyPlainBlock } from '@redstone/sim'
+import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
+import { classifyPlainBlock, mcToSim } from '@redstone/sim'
 import type { BlockState } from '@redstone/sim'
 import { BLOCK_PALETTE, TRIGGER_META } from './palette'
 
@@ -75,6 +76,36 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
     // 固定表にある名前は二重に足さない
     const stone = new Map<string, BlockState>([['0,0,0', { type: 'solid', powered: false }]])
     expect(extraPreloadNames({ blocks: stone })).toEqual([])
+  })
+
+  it('**取り込めるブロックは書き出しても消えない** (#245)', async () => {
+    // 書き出しに case が無いと `default` で air に潰れる。
+    // 取り込んだ回路を保存すると塀・泡柱・書見台などが**黙って消えていた** (実測: 9 種すべて)
+    const names = [
+      'stone', 'glass', 'redstone_wire', 'repeater', 'comparator', 'redstone_torch',
+      'lever', 'redstone_lamp', 'note_block', 'observer', 'piston', 'sticky_piston',
+      'hopper', 'dropper', 'barrel', 'target', 'redstone_block', 'slime_block',
+      // #234 以降に足した型
+      'stone_brick_wall', 'bubble_column', 'soul_sand', 'water', 'lodestone',
+      'water_cauldron', 'composter', 'lectern', 'oak_stairs',
+    ]
+    const blocks = new Map<string, BlockState>()
+    const want = new Map<string, string>()   // 座標 → 期待する型
+    names.forEach((n, i) => {
+      const b = mcToSim(n)
+      if (b === null) return
+      blocks.set(`${i},0,0`, b)
+      want.set(`${i},0,0`, b.type)
+    })
+    const back = await importFromNbtBytes(exportToNbtBytes(blocks as never, names.length, 1, 1))
+    // **型まで見る**。存在だけ見ると、隣の case へ落ちて別のブロックになっていても気付けない
+    const broken: string[] = []
+    for (const [key, type] of want) {
+      const got = back.blocks.get(key)
+      if (got === undefined) broken.push(`${type}: 消えた`)
+      else if (got.type !== type) broken.push(`${type}: ${got.type} になった`)
+    }
+    expect(broken, '書き出し → 読み直しで壊れたブロック').toEqual([])
   })
 
   it('パレットのラベルとテクスチャが空でない', () => {
