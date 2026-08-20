@@ -110,6 +110,18 @@ describe('captureToFixture', () => {
     expect(r.warnings.join('\n')).toContain('5,1,1')
   })
 
+  it('コンパレーターの保持出力は trustAuthored のときだけ持ち込む (#249)', () => {
+    // **blockstate に出ない値**なので、これを落とすと sim は「今の入力から計算し直す」
+    // しかなくなり、周回しながら減衰する機械が止まる。
+    // 静的モード (実機の状態を組み直せるかを見る側) では逆に持ち込んではいけない
+    const cap = clone(PISTON)
+    cap.comparators = [{ pos: [1, 1, 0], output: 7 }]
+    expect(captureToFixture(cap, true).comparators).toEqual([{ pos: [1, 1, 0], output: 7 }])
+    expect(captureToFixture(cap, false).comparators).toBeUndefined()
+    // 実機に 1 つも無ければ空配列 (undefined と取り違えない)
+    expect(captureToFixture(clone(PISTON), true).comparators).toEqual([])
+  })
+
   it('座標キーが壊れていたら投げる', () => {
     const cap = clone(PISTON)
     cap.authored = { '0,1': 'stone' }

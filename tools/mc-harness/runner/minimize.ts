@@ -226,7 +226,13 @@ export function buildMinimizedFixture(
     ticks: base.ticks,
     ...(opts.skipUntil !== null ? { skipUntil: opts.skipUntil, skipReason } : {}),
     region: base.region,
-    ...(base.trustAuthored ? { trustAuthored: true, scheduled: base.scheduled ?? [] } : {}),
+    ...(base.trustAuthored
+      ? {
+        trustAuthored: true,
+        scheduled: base.scheduled ?? [],
+        comparators: base.comparators ?? [],
+      }
+      : {}),
     blocks: base.blocks,
     inputs: base.inputs,
     expect: base.expect,

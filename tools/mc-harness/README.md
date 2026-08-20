@@ -265,6 +265,15 @@ npx tsx tools/mc-harness/runner/run.ts <fixture名>
 - **初期状態に `moving_piston` が 1 つでもあれば、そのキャプチャは捨てる** (#248)。
   運んでいる中身が BlockEntity にあって blockstate に出ないため sim 側で復元できない。
   capture / compare のどちらもエラーで止まる (以前は黙って air に落としていた)
+- **ブロック状態に出ない値は保存データから読む** (`runner/scheduled-ticks.ts`)。
+  今のところ 2 つ: 予約 tick (`block_ticks`、#240) と
+  **コンパレーターの保持出力** (`block_entities` の `OutputSignal`、#249)。
+  どちらも `/save-all flush` の後に読む。**記録開始と同じ瞬間に読むこと** (#248 と同じ穴)
+- **コンパレーターの出力を「今の入力から計算し直す」でよいのは止まっている回路だけ** (#249)。
+  信号が周回しながら 1 ずつ減る機械では、コンパレーターは
+  「まだ書き換わっていない古い値」を保持していて、予約 tick の発火でようやく落ちる。
+  計算し直すと最初から新しい値になり、発火しても何も変わらず**機械が止まる**
+  (エレベーターで実測: 実機は 15→14→13 と減衰、sim は 15 のまま不動)
 - **dump.sc を直したら `unload` → `load`**。読み込み済みのまま `script load` を撃つと
   carpet は「もう入っている」と答えるだけで**ファイルを読み直さない**。
   `reloadDumpApp()` (runner/rcon.ts) を使うこと
