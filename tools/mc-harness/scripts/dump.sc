@@ -198,17 +198,28 @@ _cap_players(t) -> (
   )
 );
 
-// 記録開始。region は fx_setup 済みのものを使う
-fx_cap_start(watch) -> (
+// 記録開始。region は fx_setup 済みのものを使う。
+//
+// **初期状態 (authored) はここで撮る** (#248)。差分の基準 global_cap_prev と
+// **同じ 1 回のスキャン**を使うのが肝で、こうすると
+// 「authored ≡ 記録開始時点」が構造的に保証される。
+// 以前は別関数 fx_cap_authored を先に呼んでいたが、その後に
+// 「ピストンが動き終わるまで待つ」ループが tick を進めていたため、
+// **initial state が記録の基準より古い**キャプチャが出来ていた。
+// ずれたぶんの変化はどの frame にも現れないので、
+// sim 側は永久に追いつけず「sim のバグ」に見える (#248 で 5 ブロック下流まで波及した)。
+fx_cap_start(watch, name) -> (
   if(global_region == null, exit('fx_setup が先'));
   global_cap_on = true;
-  global_cap_prev = _scan_region();
+  base = _scan_region();
+  global_cap_prev = base;
+  write_file('authored', 'shared_json', {'name' -> name, 'blocks' -> base});
   global_cap_frames = [];
   global_cap_players = [];
   global_cap_tick = 0;
   global_cap_watch = watch;
   _cap_players(0);
-  'ok'
+  length(base)
 );
 
 // 記録停止 (入力を挟むときに一時停止する用途)
@@ -265,11 +276,8 @@ fx_cap_save(name) -> (
   [global_cap_tick, length(global_cap_frames), length(global_cap_players)]
 );
 
-// tick 0 の状態 (= settled) を別ファイルに書く。差分の基準になる
-fx_cap_authored(name) -> (
-  write_file('authored', 'shared_json', {'name' -> name, 'blocks' -> _scan_region()});
-  length(_scan_region())
-);
+// (fx_cap_authored は廃止した。初期状態は fx_cap_start が
+//  差分の基準と同じスキャンから書き出す — #248)
 
 // コンテナの中身を一括投入する (#240)。
 // generate.ts の `/item replace block` は 1 スロット 1 コマンド + sleep 80ms で、

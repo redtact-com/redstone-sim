@@ -31,10 +31,10 @@
 // ```
 // ============================================================
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { rcon, scarpet, withHarnessLock, sleep, MAX_COMMAND_LEN } from './rcon.js'
+import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture } from './compare.js'
 import { readScheduledTicks } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
@@ -511,6 +511,7 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   }
 
   // 2. 設置 → 中身 → 安定化
+  reloadDumpApp()
   rcon('tick', 'freeze')
   // **掃除 → 空回し → 設置** の順にする (#240)。
   // 続けてやると前回の実行が残した**予約 tick がキューに残ったまま**になり、
@@ -543,26 +544,7 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   scarpet('fx_settle()')
   await waitForDrain(8)
 
-  // 3. 元ファイルとのズレを記録する (落とさない。実機が正)
-  const source: Record<string, string> = {}
-  for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
-  scarpet(`fx_cap_authored('${def.name}')`)
-  const authored = (JSON.parse(readFileSync(join(sharedDir, 'authored.json'), 'utf-8')) as {
-    blocks: Record<string, string>
-  }).blocks
-  const settleDrift: Capture['settleDrift'] = []
-  for (const k of new Set([...Object.keys(source), ...Object.keys(authored)])) {
-    if (source[k] !== authored[k]) {
-      settleDrift.push({ pos: k, source: source[k] ?? 'air', settled: authored[k] ?? 'air' })
-    }
-  }
-  if (settleDrift.length > 0) {
-    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
-    for (const d of settleDrift.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
-    if (settleDrift.length > 8) log(`    … 他 ${settleDrift.length - 8} 件`)
-  }
-
-  // 3a. **ピストンが動き終わるまで待つ** (#244)。
+  // 3. **ピストンが動き終わるまで待つ** (#244)。
   //
   // 動作中 (moving_piston) に撮り始めると**再現できないキャプチャ**になる。
   // moving_piston は運んでいる中身が BlockEntity 内にあって blockstate に出ないため、
@@ -572,14 +554,18 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     const moving = Number(scarpet('fx_moving()').match(/=\s*(\d+)/)?.[1] ?? 0)
     if (moving === 0) break
     if (i >= SETTLE_MOVING_MAX) {
-      console.warn(`[capture] **警告**: ピストンが ${moving} 個動いたままです。`
-        + 'このキャプチャは sim 側で初期状態を復元できず、食い違いが道具由来になります')
-      break
+      // **警告して続けない** (#248)。moving_piston が初期状態に残ったキャプチャは
+      // sim 側で復元できず、しかも食い違いが**下流の別の座標**に出るので
+      // 「sim のバグ」に見えてしまう。撮れないなら撮れないと言って止まる方がよい
+      throw new Error(
+        `ピストンが ${SETTLE_MOVING_MAX} tick 経っても ${moving} 個動いたままです。`
+        + 'この状態で撮ると初期状態を sim 側で復元できず、食い違いが道具由来になります。'
+        + '止まらない機械なら region を狭めるか、動き続けない場面で撮ってください')
     }
     await waitForDrain(1)
   }
 
-  // 3b. **実機の予約 tick を読む** (#240)。
+  // 3a. **実機の予約 tick を読む** (#240)。
   // 「あと 5gt で ON」のような予約は blockstate に出ないので、これが無いと
   // 動いている機械の出発点を sim 側で再現できない
   rcon('save-all', 'flush')
@@ -600,9 +586,52 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     await sleep(300)
   }
 
-  // 5. 記録開始 → 入力を挟みながら tick を進める
+  // 5. 記録開始 → 入力を挟みながら tick を進める。
+  //
+  // **初期状態 (authored) も fx_cap_start が撮る** (#248)。
+  // 差分の基準と同じ 1 回のスキャンから書き出すので、
+  // 「初期状態 ≡ 記録開始時点」が構造的に保証される。
+  // 以前は 3 の手前で別に撮っていて、そのあと 3 のピストン待ちが tick を進めるぶん
+  // **初期状態だけが古い**キャプチャになっていた
   const watch = players.map(p => `'${p.name}'`).join(',')
-  scarpet(`fx_cap_start([${watch}])`)
+  // **前回の残骸を消してから撮る**。書き出しに失敗しても古いファイルが読めてしまうと、
+  // 「前回の初期状態 + 今回の frames」という一番たちの悪いキャプチャになる
+  rmSync(join(sharedDir, 'authored.json'), { force: true })
+  scarpet(`fx_cap_start([${watch}], '${def.name}')`)
+  if (!existsSync(join(sharedDir, 'authored.json'))) {
+    throw new Error('fx_cap_start が初期状態を書き出しませんでした (dump.sc の読み込みを確認)')
+  }
+  const authored = (JSON.parse(readFileSync(join(sharedDir, 'authored.json'), 'utf-8')) as {
+    blocks: Record<string, string>
+  }).blocks
+
+  // 元ファイルとのズレを記録する (落とさない。実機が正)
+  const source: Record<string, string> = {}
+  for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
+  const settleDrift: Capture['settleDrift'] = []
+  for (const k of new Set([...Object.keys(source), ...Object.keys(authored)])) {
+    if (source[k] !== authored[k]) {
+      settleDrift.push({ pos: k, source: source[k] ?? 'air', settled: authored[k] ?? 'air' })
+    }
+  }
+  if (settleDrift.length > 0) {
+    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
+    for (const d of settleDrift.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    if (settleDrift.length > 8) log(`    … 他 ${settleDrift.length - 8} 件`)
+  }
+
+  // **初期状態に moving_piston が残っていたら撮り直し** (#248)。
+  // 3 の待ちループを抜けた後なので普通は起きないが、ここが最後の砦。
+  // 残ったまま進むと compare 側で導体が air に化けて、
+  // **5 ブロック下流の座標**が食い違い「sim のバグ」に見える
+  const movingPos = Object.entries(authored)
+    .filter(([, v]) => v.startsWith('moving_piston')).map(([k]) => k)
+  if (movingPos.length > 0) {
+    throw new Error(
+      `初期状態に moving_piston が ${movingPos.length} 個残っています `
+      + `(${movingPos.slice(0, 5).join(' ')})。`
+      + 'sim 側で復元できないので、このキャプチャは使えません')
+  }
   const inputs = (def.inputs ?? []).slice().sort((a, b) => a.tick - b.tick)
   let cur = 0
   for (const input of inputs) {

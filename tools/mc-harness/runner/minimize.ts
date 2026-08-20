@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os'
 import { capture, loadCircuit, type CaptureDef } from './capture.js'
 import { compareCapture, captureToFixture, type Capture, type CompareReport } from './compare.js'
 import { minimizeSubset } from './delta-debug.js'
-import { rcon, withHarnessLock, refreshHarnessLock } from './rcon.js'
+import { withHarnessLock, refreshHarnessLock, reloadDumpApp } from './rcon.js'
 import {
   expandExpect, diffStateSeries, runFixtureOnSim, type Fixture,
 } from '../../../packages/sim/test/fixture-runner.js'
@@ -265,8 +265,7 @@ async function run(args: MinimizeArgs): Promise<number> {
   log(`定義 ${def.name} / 対象 ${args.pos} / モード ${mode} / 予算 ${args.maxTrials} 回`)
 
   // dump.sc を読み直す (fx_setup の掃除範囲指定が要る)
-  const loaded = rcon('script', 'load', 'dump')
-  if (!/reloaded|loaded/.test(loaded)) throw new Error(`dump.sc をロードできない: ${loaded}`)
+  reloadDumpApp()
 
   // 1. 全体を撮って「対象が本当に食い違う」ことを確かめる
   const started = Date.now()
