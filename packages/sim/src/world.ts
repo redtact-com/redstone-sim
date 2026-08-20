@@ -1542,7 +1542,10 @@ export class SimWorld {
    * 起動する連鎖」で到達可能になる — 差が出る回路は 02 §6 参照。
    */
   private isMovable(block: BlockState): boolean {
-    if (block.type === 'solid' || block.type === 'lamp') return true
+    // 黒曜石・岩盤などは押せない (#253)。[確定: 26.2 pushReaction(BLOCK)]
+    // sim は材質を潰しているので取り込み時に立てた immovable で割る
+    if (block.type === 'solid') return block.immovable !== true
+    if (block.type === 'lamp') return true
     // 非導体でもフルブロック / スラブは PushReaction 既定 = NORMAL で可動 (#184)
     if (block.type === 'glass' || block.type === 'slab') return true
     if (block.type === 'redstone_block' || block.type === 'target' || block.type === 'note_block') return true
