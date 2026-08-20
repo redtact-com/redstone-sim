@@ -23,7 +23,8 @@
 //   "players": [{ "name": "gt", "spawn": [3.5, 6, 1.5] }],
 //   "inputs": [
 //     { "tick": 2,  "pos": [5, 2, 8], "action": "container", "signal": 5 },
-//     { "tick": 10, "pos": [2, 1, 7], "action": "use" }
+//     { "tick": 10, "pos": [2, 1, 7], "action": "use" },
+//     { "tick": 20, "pos": [1, 9, 9], "action": "lectern", "page": 10 }
 //   ],
 //   "snapshots": [0, 60, 200]                  // 回路ファイルに書き出す tick
 // }
@@ -33,10 +34,11 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { rcon, scarpet, withHarnessLock, sleep } from './rcon.js'
+import { rcon, scarpet, withHarnessLock, sleep, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture } from './compare.js'
 import { readScheduledTicks } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
+import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
@@ -59,12 +61,15 @@ export interface CaptureDefInput {
    * 'container' … コンテナの中身を `signal` (0-15) 相当にする (#236 の入力)
    * 'tp'        … fake player を `to` へ飛ばす (シャフトへ入れる等)
    * 'kill'      … 近傍のエンティティを消す
+   * 'lectern'   … 書見台のページを `page` にする (#240 の階数指定)
    */
-  action: 'use' | 'setblock' | 'container' | 'tp' | 'kill'
+  action: 'use' | 'setblock' | 'container' | 'tp' | 'kill' | 'lectern'
   block?: string
   signal?: number
   player?: string
   to?: [number, number, number]
+  /** action='lectern': 開くページ (0 始まり) */
+  page?: number
 }
 
 export interface CaptureDef {
@@ -188,6 +193,134 @@ function parseKeyStrict(key: string): [number, number, number] {
   return [parts[0], parts[1], parts[2]]
 }
 
+// ── 書見台の本 (#240) ────────────────────────────────────────────────────────
+// ガラスエレベーターの**階数指定は書見台のページ番号**で、コンパレーターがそれを読む
+// [確定: 26.2 LecternBlock.getAnalogOutputSignal → LecternBlockEntity.getRedstoneSignal]。
+// ところが本は blockstate ではなく **block entity の中身**なので、scarpet の set() で
+// 置き直しても復元されない。has_book=true なのに中身が無い書見台は
+// **常に 14 を出す** (ページ数 0 → 進捗 1.0、本の実体は無しで +1 されない) ため、
+// 何ページ目にしても出力が変わらず機械がまったく動かない。
+// そこで設置のあとに `/data merge block` で入れ直す (set() では BE を作れない)。
+
+/** 書見台 1 台に入れ直す本 */
+export interface LecternBook {
+  pos: [number, number, number]
+  /** 開いているページ (0 始まり) */
+  page: number
+  /** 本のページ数 (1 以上) */
+  pages: number
+}
+
+/**
+ * 元ファイルから読んだ書見台。`lectern` は readRawPlacedBlocks が付ける
+ * 「本の中身」で、**まだ無い版でも落ちないよう任意プロパティ**として扱う。
+ */
+export interface LecternSource {
+  pos: [number, number, number]
+  name: string
+  props: Record<string, string>
+  lectern?: { page: number; pages: number }
+}
+
+/** ダミー本の 1 ページ分。中身は読まれないので何でもよい (空文字を避けただけ) */
+const DUMMY_PAGE = '"x"'
+
+/**
+ * 入れ直す本の SNBT。**本文は再現しない**。
+ *
+ * コンパレーターが見るのは**ページ数と現在ページだけ**で本文には触れない
+ * [確定: 26.2 LecternBlockEntity.getRedstoneSignal / getPageCount]。
+ * よって同じページ数のダミーで出力は元の本と完全に一致する。
+ * 本文まで運ぶと 1 ページで数百バイトになり、rcon の 1014 バイト制限
+ * (rcon.ts の MAX_COMMAND_LEN) にすぐ当たるので割に合わない。
+ *
+ * 種類は writable book (本と羽根ペン) に統一する。written book と writable book は
+ * どちらも「本を持っている」扱いで、ページ数の数え方も同じ
+ * [確定: 26.2 LecternBlockEntity.hasBook / getPageCount が両方の中身を見る] ため、
+ * 元がどちらでも出力は変わらない。
+ *
+ * **空白を入れない**こと。rcon() は引数を空白で連結するので、SNBT の中に空白があると
+ * コマンドの区切りとして解釈されて壊れる。
+ */
+function dummyBookSnbt(page: number, pages: number): string {
+  const body = new Array(pages).fill(DUMMY_PAGE).join(',')
+  return '{Book:{id:"minecraft:writable_book",count:1,'
+    + `components:{"minecraft:writable_book_content":{pages:[${body}]}}},Page:${page}}`
+}
+
+/**
+ * 書見台へ本を入れ直す rcon コマンド (引数配列)。
+ *
+ * ページは 0..pages-1 に丸める。実機も本を読み込む時点で範囲外のページを丸めるので、
+ * 丸めずに投げると「定義に書いた Page」と「実機の Page」がズレて出力が合わなくなる。
+ *
+ * **長さは投げる前に見積もる**。rcon-cli は 1014 バイト超をエラーも出さず無言でハングさせる
+ * (rcon.ts) ので、ここで先に落として「どの書見台が何ページで溢れたか」が分かる形にする。
+ */
+export function buildLecternBookArgs(book: LecternBook): string[] {
+  const key = book.pos.join(',')
+  if (!Number.isInteger(book.pages) || book.pages < 1) {
+    throw new Error(`書見台のページ数が不正: ${book.pages} (${key})。1 以上の整数で書くこと`)
+  }
+  const page = Math.min(Math.max(0, Math.floor(book.page)), book.pages - 1)
+  const args = [
+    'data', 'merge', 'block',
+    String(book.pos[0]), String(book.pos[1]), String(book.pos[2]),
+    dummyBookSnbt(page, book.pages),
+  ]
+  const bytes = Buffer.byteLength(args.join(' '), 'utf8')
+  if (bytes > MAX_COMMAND_LEN) {
+    throw new Error(
+      `書見台に本を入れるコマンドが長すぎる (${bytes} バイト > ${MAX_COMMAND_LEN}): `
+      + `${key} は ${book.pages} ページ。rcon-cli は上限超えを無言でハングさせるので投げない`,
+    )
+  }
+  return args
+}
+
+/**
+ * 書見台のページだけを変える rcon コマンド (入力アクション 'lectern')。
+ * 本は入れ直さない (設置時に入れたものがそのまま残っている)。
+ */
+export function buildLecternPageArgs(pos: [number, number, number], page: number): string[] {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new Error(`lectern の page が不正: ${page} (${pos.join(',')})。0 以上の整数で書くこと`)
+  }
+  return [
+    'data', 'modify', 'block',
+    String(pos[0]), String(pos[1]), String(pos[2]),
+    'Page', 'set', 'value', String(page),
+  ]
+}
+
+/**
+ * 置くブロックから「本を入れ直す書見台」を拾う純関数。
+ *
+ * `noBook` は **blockstate が has_book=true なのに本の中身が読めなかった**座標。
+ * 黙って進むと出力が 14 に張り付いたまま「なぜか動かないキャプチャ」になるので、
+ * 呼び出し側で必ず警告を出すこと。
+ */
+export function collectLecternBooks(blocks: readonly LecternSource[]): {
+  books: LecternBook[]
+  noBook: string[]
+} {
+  const books: LecternBook[] = []
+  const noBook: string[] = []
+  for (const b of blocks) {
+    if (b.name.replace(/^minecraft:/, '') !== 'lectern') continue
+    // 本の無い書見台 (has_book=false) は復元するものが無い。blockstate を正とする
+    if (b.props.has_book !== 'true') continue
+    const l = b.lectern
+    if (l === undefined || !Number.isInteger(l.pages) || l.pages < 1) {
+      noBook.push(b.pos.join(','))
+      continue
+    }
+    books.push({ pos: b.pos, page: l.page, pages: l.pages })
+  }
+  return { books, noBook }
+}
+
+
 /**
  * 回路ファイルを読み、原点寄せして「置くブロック」と region を決める。
  *
@@ -210,11 +343,16 @@ export async function loadCircuit(def: CaptureDef) {
   }
   const blocks = raw.map(b => {
     const { name, props } = { name: b.name, props: b.props }
+    // 書見台の本 (#240) は readRawPlacedBlocks が**任意プロパティ**で付ける
+    // (本を持たない書見台や、この項目を持たない版では単に付かない)。
+    // 付いていない前提で読むので、無くてもここから先は落ちない
+    const lectern = (b as RawPlacedBlock & { lectern?: { page: number; pages: number } }).lectern
     return {
       pos: [b.pos[0] - minX, b.pos[1] - minY, b.pos[2] - minZ] as [number, number, number],
       name: name.replace(/^minecraft:/, ''),
       props,
       items: b.items,
+      lectern,
     }
   })
   const pad = def.pad ?? 1
@@ -315,6 +453,16 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
     case 'kill':
       rcon('kill', `@e[type=!player,x=${x},y=${y},z=${z},distance=..3]`)
       break
+    case 'lectern': {
+      // 書見台のページを変える (#240)。本はそのまま、Page だけ動かす
+      rcon(...buildLecternPageArgs(input.pos, Math.floor(input.page ?? 0)))
+      // `/data modify` は block entity を書き換えるだけで**更新を配らない**。
+      // 実機のページめくりは書見台側が出力先へ更新を出す
+      // [確定: 26.2 LecternBlock がページ変更時に comparator 向けの更新を出す] ので、
+      // 同じことをしないと下流のコンパレーターが古い値を読み続ける (中身投入と同じ罠 #196)
+      scarpet(`update([${x},${y},${z}])`)
+      break
+    }
   }
 }
 
@@ -352,6 +500,13 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   }))
   log(`[capture] コンテナ ${items.length} 個 / スロット ${items.reduce((n, i) => n + i.slots.length, 0)}`)
 
+  // 書見台の本 (#240)。**本が無いと出力が 14 に張り付いて階数指定が効かない**
+  const { books: lecternBooks, noBook } = collectLecternBooks(blocks)
+  if (noBook.length > 0) {
+    log(`[capture] 書見台 ${noBook.length} 台の本を読めなかった (出力が 14 に張り付いて機械が動かない): `
+      + noBook.slice(0, 5).join(' '))
+  }
+
   // 2. 設置 → 中身 → 安定化
   rcon('tick', 'freeze')
   // **掃除 → 空回し → 設置** の順にする (#240)。
@@ -372,6 +527,15 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     const n = scarpet('fx_items()')
     log(`[capture] 中身を投入: ${n.trim()}`)
     scarpet('fx_settle()')   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
+  }
+  if (lecternBooks.length > 0) {
+    // set() は blockstate しか作らないので、本は設置の**後**に rcon で入れ直す
+    for (const b of lecternBooks) rcon(...buildLecternBookArgs(b))
+    log(`[capture] 書見台に本を入れ直した: ${lecternBooks.length} 台 `
+      + `(${lecternBooks.slice(0, 3).map(b => `${b.pos.join(',')} ${b.page + 1}/${b.pages}p`).join(' ')})`)
+    // コンテナの中身と同じ理由 (#196)。without_updates で置いた後に block entity だけ
+    // 変えてもコンパレーターは読みに行かないので、更新を配り直す
+    scarpet('fx_settle()')
   }
   scarpet('fx_settle()')
   await waitForDrain(8)
@@ -454,7 +618,14 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     region,
     authored,
     ...(items.length > 0 ? { items } : {}),
-    inputs,
+    // 書見台の本 (#239)。blockstate に出ないので、これを載せないと
+    // sim 側が出力 14 に張り付いて階数指定が効かない
+    ...(lecternBooks.length > 0
+      ? { lecterns: lecternBooks.map(b => ({ pos: b.pos, page: b.page, pages: b.pages })) }
+      : {}),
+    // sim 側の FixtureInput にはまだ 'lectern' が無い (#240 で別担当が足す)。
+    // キャプチャは**実機に当てた入力をそのまま残す**のが仕事なので、落とさずに書き出す
+    inputs: inputs as Capture['inputs'],
     ticks: raw.ticks,
     frames: raw.frames.map(f => ({
       tick: f.tick,

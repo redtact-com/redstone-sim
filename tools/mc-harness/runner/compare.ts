@@ -68,6 +68,11 @@ export interface Capture {
   /** 実機の settled 状態 (tick 0 の直前)。キーは "x,y,z" */
   authored: Record<string, string>
   items?: CaptureItems[]
+  /**
+   * 書見台の本 (#239)。**ページ数と現在ページは blockstate に出ない**ので、
+   * これが無いと sim 側の出力が 14 に張り付き、階数指定が効かない
+   */
+  lecterns?: { pos: Pos3D; page: number; pages: number }[]
   inputs?: FixtureInput[]
   ticks: number
   /** 差分のみ。消滅は "block": "air" */
@@ -100,7 +105,9 @@ function parsePosKey(key: string): Pos3D {
  * players は sim に対応物が無いので捨てる。
  */
 export function captureToFixture(cap: Capture, trustAuthored = false): Fixture {
-  // items は座標で引けるようにしておく (authored の走査中に引き当てる)
+  // items / 書見台の本は座標で引けるようにしておく (authored の走査中に引き当てる)
+  const lecternByPos = new Map<string, { page: number; pages: number }>()
+  for (const l of cap.lecterns ?? []) lecternByPos.set(posKey(l.pos), { page: l.page, pages: l.pages })
   const itemsByPos = new Map<string, CaptureSlot[]>()
   for (const it of cap.items ?? []) itemsByPos.set(posKey(it.pos), it.slots)
 
@@ -109,9 +116,13 @@ export function captureToFixture(cap: Capture, trustAuthored = false): Fixture {
     const pos = parsePosKey(key)
     // JSON のキー順に依存しないよう後で並べ替える (レポートの再現性のため)
     const slots = itemsByPos.get(posKey(pos))
-    blocks.push(slots === undefined
-      ? { pos, block: cap.authored[key] }
-      : { pos, block: cap.authored[key], items: slots.map(s => ({ ...s })) })
+    const book = lecternByPos.get(posKey(pos))
+    blocks.push({
+      pos,
+      block: cap.authored[key],
+      ...(slots === undefined ? {} : { items: slots.map(s => ({ ...s })) }),
+      ...(book === undefined ? {} : { lectern: { ...book } }),
+    })
   }
   blocks.sort((a, b) => a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2])
 

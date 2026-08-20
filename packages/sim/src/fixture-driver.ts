@@ -40,7 +40,7 @@ export interface FixtureInput {
    * 'tp'       … 実機で fake player を動かす。**sim にエンティティは無いので no-op**
    *              (13 §2 の境界)。プレイヤーが動いた結果のブロック変化だけを突き合わせる。
    */
-  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill' | 'item' | 'container' | 'tp'
+  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill' | 'item' | 'container' | 'tp' | 'lectern'
   /** action='setblock' で置く blockstate 文字列 ('air' 可) */
   block?: string
   /** action='item': 入れるアイテム ID (`minecraft:` 省略可)。空にすると空スロット */
@@ -51,6 +51,8 @@ export interface FixtureInput {
   slot?: number
   /** action='container': コンパレーター強度 (0-15) */
   signal?: number
+  /** action='lectern': 開くページ (0 始まり)。**階数指定はこれ** (#239) */
+  page?: number
   /** action='tp': 移動先 (sim では使わない) */
   to?: [number, number, number]
   /** action='use'/'tp': 対象のプレイヤー名 (sim では使わない) */
@@ -101,7 +103,16 @@ export interface Fixture {
    * - `items: 2` … 旧形式。cobblestone (64 スタック) を slot 0 から 2 個
    * - `items: [{slot, id, count}]` … スロット指定 (#194)。混載を表現できる
    */
-  blocks: { pos: Pos3D; block: string; items?: number | FixtureItem[] }[]
+  blocks: {
+    pos: Pos3D
+    block: string
+    items?: number | FixtureItem[]
+    /**
+     * 書見台の本 (#239)。**ページ数と現在ページは blockstate に出ない**ので、
+     * これが無いと出力が 14 に張り付いて階数指定にならない
+     */
+    lectern?: { page: number; pages: number }
+  }[]
   inputs: FixtureInput[]
   expect: FixtureExpectEntry[]
   generated?: { at: string; mc: string; carpet: string }
@@ -158,6 +169,11 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
       if (b.items !== undefined && sim.type === 'crafter') {
         (sim as { occupiedSlots?: number }).occupiedSlots = fixtureItemTotal(b.items) > 0 ? 1 : 0
       }
+      // 書見台の本 (blockstate に出ないので後から差し込む。items と同じ扱い)
+      if (b.lectern !== undefined && sim.type === 'lectern') {
+        sim.page = b.lectern.page
+        sim.pages = b.lectern.pages
+      }
       world.setBlockAt(b.pos, sim)
     }
   }
@@ -205,6 +221,8 @@ export function applyFixtureInputsAt(
       const count = input.count ?? 1
       world.setContainerSlot(input.pos[0], input.pos[1], input.pos[2], input.slot ?? 0,
         id === '' || count <= 0 ? null : { id, stack: stackSizeOf(id).stack, count })
+    } else if (input.action === 'lectern') {
+      world.setLecternPage(input.pos[0], input.pos[1], input.pos[2], input.page ?? 0)
     } else if (input.action === 'container') {
       world.setContainerSignal(input.pos[0], input.pos[1], input.pos[2], input.signal ?? 0)
     } else if (input.action === 'tp') {

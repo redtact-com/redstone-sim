@@ -318,3 +318,34 @@ describe('divergentPositions は全 tick・全座標を拾う (#240)', () => {
     expect(r.first!.positions.length).toBeLessThan(12)   // first は切り詰められる
   })
 })
+
+describe('書見台の本がキャプチャから sim へ渡る (#239)', () => {
+  // ページ数と現在ページは blockstate に出ない。載せ忘れると出力が 14 に張り付き、
+  // 階数指定が丸ごと効かなくなる (エレベーターが動かなかった原因そのもの)。
+  // 15 ページ本の Page=4 → 出力 5 [実機で確認: 信号 = ページ + 1]
+  const base = (lecterns?: Capture['lecterns']): Capture => ({
+    name: 'lectern', mcVersion: '1.21.1',
+    region: { from: [0, 0, 0], to: [2, 1, 0] },
+    authored: {
+      '0,0,0': 'stone', '1,0,0': 'stone', '2,0,0': 'stone',
+      '0,1,0': 'lectern[facing=east,has_book=true,powered=false]',
+      '1,1,0': 'comparator[facing=west,mode=compare,powered=true]',
+      '2,1,0': 'redstone_wire[east=none,north=none,power=5,south=none,west=side]',
+    },
+    ...(lecterns ? { lecterns } : {}),
+    inputs: [], ticks: 6,
+    frames: [],           // 実機は落ち着いていて何も変わらない
+    players: [],
+    generated: { at: '', mc: '1.21.1', carpet: '' },
+  })
+
+  it('本を載せると実機と一致する', () => {
+    const r = compareCapture(base([{ pos: [0, 1, 0], page: 4, pages: 15 }]))
+    expect(r.ok, JSON.stringify(r.first)).toBe(true)
+  })
+
+  it('**本を載せないと食い違う** (出力 14 に張り付く)', () => {
+    const r = compareCapture(base())
+    expect(r.ok, '本が無いのに一致してしまっている').toBe(false)
+  })
+})
