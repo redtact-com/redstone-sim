@@ -97,7 +97,7 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
       blocks.set(`${i},0,0`, b)
       want.set(`${i},0,0`, b.type)
     })
-    const back = await importFromNbtBytes(exportToNbtBytes(blocks as never, names.length, 1, 1))
+    const back = await importFromNbtBytes(exportToNbtBytes(blocks as never, names.length, 1))
     // **型まで見る**。存在だけ見ると、隣の case へ落ちて別のブロックになっていても気付けない
     const broken: string[] = []
     for (const [key, type] of want) {
