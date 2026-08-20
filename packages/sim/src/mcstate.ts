@@ -545,9 +545,20 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'piston':
     case 'sticky_piston':
+      // **向きも sim 側から書く** (#257)。ピストンは可動なので、
+      // 別の向きのピストンがあった座標へ移動してくると authored の向きが残ってしまう
+      // (エレベーターの搬器は上向きと下向きのピストンが背中合わせで昇降するため、
+      //  座標だけ見ると同じ型で向きだけ違う。sim の世界は正しいのに
+      //  **書き出しだけが古い向き**になり、実機と食い違って見えていた)
+      props.facing = sim.facing
       props.extended = String(sim.extended)
       break
     case 'piston_head':
+      // ヘッドも同じ理由で向き・粘着を sim 側から書く (#257)
+      props.facing = sim.facing
+      props.type = sim.sticky ? 'sticky' : 'normal'
+      props.short = 'false'
+      break
     case 'moving_piston':
       break // 出現/消滅が動的要素 (合成パスで処理)
     case 'redstone_block':
@@ -556,6 +567,8 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.power = String(sim.outputPower)
       break
     case 'observer':
+      // オブザーバーも可動なので向きを sim 側から書く (#257)
+      props.facing = sim.facing
       props.powered = String(sim.powered)
       break
     case 'powered_rail':
