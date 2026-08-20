@@ -240,6 +240,7 @@ export function mcToSim(state: string): BlockState | null {
         half: (props.half === 'upper' ? 'upper' : 'lower'),
         facing: (props.facing ?? 'north') as HDir,
         open: props.open === 'true', powered: props.powered === 'true',
+        hinge: props.hinge === 'right' ? 'right' : 'left',
       }
     case 'oak_trapdoor':
     case 'spruce_trapdoor':
@@ -397,7 +398,7 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'door_wood':
       case 'door_iron':
         return formatMcState(sim.type === 'door_iron' ? 'iron_door' : 'oak_door', {
-          facing: sim.facing, half: sim.half, hinge: 'left',
+          facing: sim.facing, half: sim.half, hinge: sim.hinge,
           open: String(sim.open), powered: String(sim.powered),
         })
       case 'trapdoor_wood':

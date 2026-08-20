@@ -169,11 +169,40 @@ function sideValue(w: { north: WallSide; east: WallSide; south: WallSide; west: 
  * ドアが隣にある塀の柱が sim だけ up=true に反転し、
  * **140 段まるごと**食い違っていた (エレベーターで実測)。
  */
-function connectsToWall(b: BlockState | null | undefined): boolean {
+/** 上から見て時計回り (北 → 東 → 南 → 西) */
+const CW: Record<HDir, HDir> = { north: 'east', east: 'south', south: 'west', west: 'north' }
+/** 上から見て反時計回り */
+const CCW: Record<HDir, HDir> = { north: 'west', west: 'south', south: 'east', east: 'north' }
+
+/**
+ * ドアの板がどの辺に張り付いているか (#262)。
+ *
+ * 閉じているときは `facing` の**反対側**の辺。開くと 90° 回り、
+ * **hinge=left は時計回り / hinge=right は反時計回り**。
+ *
+ * [実機実測 2026-08-21: 塀の南にドアを置き 4 向き × 開閉 × 蝶番 の 16 通りで
+ *  塀の south を読んだ。繋がったのは
+ *  facing=south/閉 (板=北) / facing=east/開/left (板=北) / facing=west/開/right (板=北) の 3 通りだけ]
+ */
+function doorPanelSide(b: { facing: HDir; open: boolean; hinge: 'left' | 'right' }): HDir {
+  const closed = OPPOSITE[b.facing as Dir6] as HDir
+  if (!b.open) return closed
+  return b.hinge === 'left' ? CW[closed] : CCW[closed]
+}
+
+/**
+ * 塀が `dir` 方向の隣へ繋がるか (#234 / #262)。
+ * `dir` は**塀から見た隣の方向**。
+ */
+function connectsToWall(b: BlockState | null | undefined, dir: HDir): boolean {
   if (!b) return false
   if (b.type === 'wall') return true
-  // ドアとフェンスゲートは全部繋がる (実機で確認)
-  if (b.type === 'door_wood' || b.type === 'door_iron' || b.type === 'fence_gate') return true
+  if (b.type === 'fence_gate') return true          // 向きによらず繋がる (実機で確認)
+  if (b.type === 'door_wood' || b.type === 'door_iron') {
+    // **板が塀の側を向いているときだけ繋がる**。開いたドアは板が横へ逃げるので
+    // 繋がらなくなり、塀の up が連鎖して**柱ごと反転する** (#244 の下方向伝播)
+    return doorPanelSide(b) === OPPOSITE[dir as Dir6]
+  }
   return isFullCube(b)
 }
 
@@ -2095,9 +2124,9 @@ export class SimWorld {
       if (above?.type === 'wall') return sideValue(above, dir) !== 'none'
       return false
     }
-    const sideOf = (dir: Dir6): WallSide => {
+    const sideOf = (dir: HDir): WallSide => {
       const nb = this.getBlockAt(neighbor(pos, dir))
-      const connects = connectsToWall(nb)
+      const connects = connectsToWall(nb, dir)
       return !connects ? 'none' : tallOn(dir) ? 'tall' : 'low'
     }
     const north = sideOf('north'), south = sideOf('south')

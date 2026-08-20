@@ -670,6 +670,12 @@ export interface DoorState {
   facing: HDir
   open: boolean
   powered: boolean
+  /**
+   * 蝶番の左右 (#262)。**塀が繋がるかに効く**。
+   * 扉の板は閉じているとき facing の反対側に張り付いていて、開くと 90° 回る
+   * (left = 時計回り / right = 反時計回り)。塀はその板が面している辺にしか繋がらない
+   */
+  hinge: 'left' | 'right'
 }
 
 /**

@@ -108,13 +108,29 @@ describe('塀が横に繋がる相手 (#244)', () => {
     return wallAt(w, [0, 1, 0]).south
   }
 
-  it('**ドアは開閉・向きによらず繋がる** (実機で 8 通り確認)', () => {
-    for (const open of [false, true]) {
-      for (const facing of ['north', 'south', 'east', 'west'] as const) {
-        const door: BlockState = {
-          type: 'door_iron', facing, half: 'lower', hinge: 'left', open, powered: false,
-        } as BlockState
-        expect(southSide(door), `facing=${facing} open=${open}`).not.toBe('none')
+  // **ドアは「板が塀の側を向いているとき」だけ繋がる** (#262)。
+  //
+  // 以前ここには「開閉・向きによらず繋がる」と書いてあったが、**実機で 16 通り測り直したら
+  // 繋がるのは 3 通りだけ**だった。塀の南にドアを置いて塀の south を読んだ結果:
+  //
+  //   facing=south 閉        → low  (板が北 = 塀の側)
+  //   facing=east  開 left   → low  (閉じたとき板は西、開くと時計回りで北)
+  //   facing=west  開 right  → low  (閉じたとき板は東、開くと反時計回りで北)
+  //   残り 13 通り            → none
+  //
+  // ガラスエレベーターは各階のドアが開くと塀の up が連鎖して**柱ごと反転する**ので、
+  // ここを取り違えると 140 段の塀が丸ごと食い違う (#244 の下方向伝播)。
+  const CONNECTS = new Set(['south|false|left', 'south|false|right', 'east|true|left', 'west|true|right'])
+  it('ドアは板が塀の側を向いているときだけ繋がる (実機で 16 通り確認 / #262)', () => {
+    for (const hinge of ['left', 'right'] as const) {
+      for (const open of [false, true]) {
+        for (const facing of ['north', 'south', 'east', 'west'] as const) {
+          const door: BlockState = {
+            type: 'door_iron', facing, half: 'lower', hinge, open, powered: false,
+          } as BlockState
+          const want = CONNECTS.has(`${facing}|${open}|${hinge}`)
+          expect(southSide(door) !== 'none', `facing=${facing} open=${open} hinge=${hinge}`).toBe(want)
+        }
       }
     }
   })

@@ -566,7 +566,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'door_wood':
     case 'door_iron':
       return [block.type === 'door_iron' ? 'minecraft:iron_door' : 'minecraft:oak_door', {
-        facing: block.facing, half: block.half, hinge: 'left',
+        facing: block.facing, half: block.half, hinge: (block as any).hinge ?? 'left',
         open: String(block.open), powered: String(block.powered),
       }]
     case 'trapdoor_wood':
@@ -773,6 +773,7 @@ function minecraftToBlockState(
       facing: (props.facing ?? 'north'),
       open: props.open === 'true',
       powered: props.powered === 'true',
+      hinge: props.hinge === 'right' ? 'right' : 'left',
     } as BlockState
   }
   if (name.endsWith('_trapdoor')) {
