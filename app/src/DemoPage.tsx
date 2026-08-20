@@ -66,6 +66,8 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
   const [reloadKey, setReloadKey] = useState(0)
 
   const cameraInputRef = useRef<CameraInput | null>(null)
+  /** setCamera で明示指定されたか (#238)。自動フィットを抑える */
+  const explicitCameraRef = useRef(false)
 
   // ready Promise はマウント同期で 1 度だけ作る (window.__demo.ready が参照)
   const readyResolveRef = useRef<(() => void) | null>(null)
@@ -113,6 +115,10 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
    * 省略した値は今の値を保つ
    */
   const setCamera = useCallback((opts: Partial<CameraInput>) => {
+    // **明示指定があったら以後の自動フィットは走らせない** (#238)。
+    // 自動フィットはビューアの ready (テクスチャ読み込み後) に走るので、
+    // 先に距離を指定しても後から上書きされて効かなかった
+    explicitCameraRef.current = true
     const cur = cameraInputRef.current
       ?? { distance: 20, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
     cameraInputRef.current = { ...cur, ...opts }
@@ -154,7 +160,7 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
 
   const onViewerReady = useCallback(() => {
     setReady(true)
-    fitCamera()
+    if (!explicitCameraRef.current) fitCamera()
     readyResolveRef.current?.()
   }, [fitCamera])
 

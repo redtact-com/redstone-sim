@@ -86,6 +86,13 @@ export function IsometricView({
   const animFrameRef = useRef<number>(0)
   /** 最後に寄りを合わせたときの回路サイズ ("x,y,z")。変わったら合わせ直す (#238) */
   const fittedSizeRef = useRef<string>('')
+  /**
+   * 外部 (デモの setCamera 等) がカメラを指定したか (#238)。
+   *
+   * **自動フィットはテクスチャ読み込みを待ってから走る**ので、外から距離を指定しても
+   * あとから上書きされて効かなかった。一度でも外部指定があったら自動フィットは譲る
+   */
+  const externalCameraRef = useRef(false)
 
   /** 引ける上限。**回路の大きさに追従させる** — 固定 200 だと大きい回路で引ききれない (#238) */
   const zoomLimit = (): number => {
@@ -376,10 +383,13 @@ export function IsometricView({
         // **回路の大きさに合わせて寄る** (#238)。
         // 旧: max(幅,高さ,奥行) * 1.5 は視野角も画面比も見ていないため、
         // 147 段の回路が画面の高さの 3 割しか使わない糸のような柱になっていた
-        cameraRef.current.distance = fitDistance(size as [number, number, number], {
-          aspect: canvas.clientWidth / Math.max(1, canvas.clientHeight),
-        })
         fittedSizeRef.current = `${size[0]},${size[1]},${size[2]}`
+        // 外から指定されていたらそちらを尊重する (上書きしない)
+        if (!externalCameraRef.current) {
+          cameraRef.current.distance = fitDistance(size as [number, number, number], {
+            aspect: canvas.clientWidth / Math.max(1, canvas.clientHeight),
+          })
+        }
 
         setStatus('ready')
         let readyFired = false
@@ -391,7 +401,10 @@ export function IsometricView({
           // 外部からのカメラ上書き (fitCamera 等) を消費する
           if (cameraInputRef?.current) {
             const ci = cameraInputRef.current
-            if (ci.distance !== undefined) cam.distance = ci.distance
+            if (ci.distance !== undefined) {
+              cam.distance = ci.distance
+              externalCameraRef.current = true    // 以後の自動フィットは譲る
+            }
             if (ci.panX !== undefined) cam.panX = ci.panX
             if (ci.panZ !== undefined) cam.panZ = ci.panZ
             if (ci.rotX !== undefined) cam.rotX = ci.rotX
@@ -468,10 +481,12 @@ export function IsometricView({
     const key = `${ns[0]},${ns[1]},${ns[2]}`
     if (key !== fittedSizeRef.current) {
       fittedSizeRef.current = key
-      const canvas = canvasRef.current
-      cameraRef.current.distance = fitDistance(ns as [number, number, number], {
-        aspect: canvas ? canvas.clientWidth / Math.max(1, canvas.clientHeight) : 1,
-      })
+      if (!externalCameraRef.current) {
+        const canvas = canvasRef.current
+        cameraRef.current.distance = fitDistance(ns as [number, number, number], {
+          aspect: canvas ? canvas.clientWidth / Math.max(1, canvas.clientHeight) : 1,
+        })
+      }
     }
     console.log('[IsometricView] setStructure: blocks in structure=', newStructure.getBlocks().length)
     renderer.setStructure(newStructure)
