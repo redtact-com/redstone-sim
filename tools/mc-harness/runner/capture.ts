@@ -93,6 +93,9 @@ export type { Capture } from './compare.js'
 
 const MC_VERSION = '1.21.1'
 
+/** 掃除のあと予約 tick を枯らすために空回しする tick 数 (#240) */
+const DRAIN_TICKS = 60
+
 /** "x,y,z" → [x,y,z] */
 const parseKey = (k: string): [number, number, number] =>
   k.split(',').map(Number) as [number, number, number]
@@ -233,6 +236,21 @@ export async function loadCircuit(def: CaptureDef) {
  * 採れなかった)。1 tick ごとに領域を全走査するぶん所要時間は回路の大きさで変わるため、
  * **完了はポーリングで確かめる**。
  */
+async function waitForDrain(n: number, timeoutMs = 5 * 60 * 1000): Promise<void> {
+  // `/tick step N` は即座に返るので、**進み終わるまで待つ**。
+  // sleep で待つと残りの tick が「ブロックを置いている最中」に進んでしまい、
+  // 同じ条件で撮っても結果がばらつく (実測で 29 座標のズレが残っていた原因)
+  const base = Number(scarpet('fx_tickcount()').match(/=\s*(\d+)/)?.[1] ?? 0)
+  rcon('tick', 'step', String(n))
+  const started = Date.now()
+  for (;;) {
+    const cur = Number(scarpet('fx_tickcount()').match(/=\s*(\d+)/)?.[1] ?? 0)
+    if (cur - base >= n) return
+    if (Date.now() - started > timeoutMs) throw new Error(`空回しが進まない (${cur - base}/${n})`)
+    await sleep(200)
+  }
+}
+
 async function waitForTick(target: number, timeoutMs = 15 * 60 * 1000): Promise<void> {
   const started = Date.now()
   let last = -1
@@ -336,6 +354,19 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
 
   // 2. 設置 → 中身 → 安定化
   rcon('tick', 'freeze')
+  // **掃除 → 空回し → 設置** の順にする (#240)。
+  // 続けてやると前回の実行が残した**予約 tick がキューに残ったまま**になり、
+  // 同じ回路を置き直しても発火して結果が変わる (予約は座標 + ブロック種で照合されるので
+  // 同じ種類を置き直すと当たる)。実測: 同条件で 2 回撮ると 6396 中 242 座標が食い違い、
+  // 予約の読み取りも 11 件 vs 91 件とばらついた。空回しを挟むと**完全に一致する**。
+  // 空にした座標の予約は発火時にブロック種の照合で捨てられるので、
+  // 一番長い遅延 (ソウルサンド 20gt 等) を越える分だけ回せば枯れる
+  scarpet('fx_clear()')
+  // **エンティティも消す**。ブロックを air にしても、前回の実行でドロッパーが吐いた
+  // アイテムなどはワールドに残り、次の実行でホッパーに吸われて中身が変わる
+  // (README「掃除と残骸」#161 と同じ理由)
+  rcon('kill', '@e[type=!player]')
+  await waitForDrain(DRAIN_TICKS)
   scarpet('fx_setup()')
   if (items.length > 0) {
     const n = scarpet('fx_items()')
@@ -343,8 +374,7 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     scarpet('fx_settle()')   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
   }
   scarpet('fx_settle()')
-  rcon('tick', 'step', '8')
-  await sleep(600)
+  await waitForDrain(8)
 
   // 3. 元ファイルとのズレを記録する (落とさない。実機が正)
   const source: Record<string, string> = {}

@@ -51,6 +51,31 @@ _scan_region() -> (
 );
 
 // ── fixture 設置 ─────────────────────────────────────────────────
+// **掃除だけ**を先に行う (#240)。
+// 掃除と設置を続けてやると、**前回の実行が残した予約 tick がキューに残ったまま**になり、
+// 同じ回路を置き直しても発火して結果が変わる (予約は座標 + ブロック種で照合されるので、
+// 同じ種類を置き直すと当たってしまう)。実測: 同条件で 2 回撮ると 6396 中 242 座標が食い違い、
+// 予約の読み取りも 11 件 vs 91 件とばらついた。
+// 掃除 → **数十 tick 空回し**して予約を枯らす → 設置、の順にすると一致する。
+fx_clear() -> (
+  fx = read_file('fixture', 'shared_json');
+  if(fx == null, exit('shared/fixture.json がない'));
+  global_region = fx:'region';
+  cl = if(has(fx, 'clear'), fx:'clear', global_region);
+  from = cl:'from'; to = cl:'to';
+  pad = 8; pady = 6;
+  without_updates(
+    c_for(x = from:0 - pad, x <= to:0 + pad, x += 1,
+      c_for(y = from:1 - pady, y <= to:1 + pady, y += 1,
+        c_for(z = from:2 - pad, z <= to:2 + pad, z += 1,
+          set([x, y, z], 'air')
+        )
+      )
+    )
+  );
+  'ok'
+);
+
 fx_setup() -> (
   fx = read_file('fixture', 'shared_json');
   if(fx == null, exit('shared/fixture.json がない'));
