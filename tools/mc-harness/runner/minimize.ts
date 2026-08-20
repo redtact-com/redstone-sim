@@ -200,6 +200,12 @@ export function buildMinimizedFixture(
   // **moving_piston は authored に書けない** (運んでいる中身が BE 内にあり復元できない)。
   // 残したまま書き出すと fixture が読み込み時に落ちて、縮めた成果が使えない
   const dropped = raw.blocks.filter(b => MOVING_PISTON.test(b.block)).length
+  if (dropped > 0) {
+    // **黙って落とすと道具由来の食い違いを生む** (#244)。
+    // 伸びかけのピストンを air にすると「伸びたはずのピストンが伸びない」記録になる
+    console.warn(`[minimize] **警告**: authored に moving_piston が ${dropped} 個ある。`
+      + '動作中に撮ったキャプチャなので、この最小化は実機の再現になっていない可能性が高い')
+  }
   const base: Fixture = dropped === 0
     ? raw
     : { ...raw, blocks: raw.blocks.filter(b => !MOVING_PISTON.test(b.block)) }
@@ -215,7 +221,7 @@ export function buildMinimizedFixture(
       `実機と sim の食い違いを自動最小化した記録 (対象 ${opts.pos})。`
       + `${opts.defPath ? `元定義 ${opts.defPath} / ` : ''}`
       + `${base.blocks.length} ブロックまで削っても食い違いが残ることを実機で確認済み。${where}`
-      + `${dropped > 0 ? ` (過渡状態の moving_piston ${dropped} 個は復元できないので除いた)` : ''}`,
+      + `${dropped > 0 ? ` (**過渡状態の moving_piston ${dropped} 個を除いたので、この記録は初期状態が実機と違う**)` : ''}`,
     mcVersion: base.mcVersion,
     ticks: base.ticks,
     ...(opts.skipUntil !== null ? { skipUntil: opts.skipUntil, skipReason } : {}),
