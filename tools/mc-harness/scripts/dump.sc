@@ -335,3 +335,21 @@ fx_set_signal(pos, s) -> (
   );
   [sz, first]
 );
+
+// 領域内で「動いている最中」のピストンを数える (#244)。
+//
+// **動作中に撮り始めると再現できないキャプチャになる**。moving_piston は
+// 運んでいる中身が BlockEntity 内にあって blockstate に出ないので、
+// sim 側で復元できない。撮り始める前にこれが 0 になるまで待つ。
+fx_moving() -> (
+  from = global_region:'from'; to = global_region:'to';
+  n = 0;
+  c_for(x = from:0, x <= to:0, x += 1,
+    c_for(y = from:1, y <= to:1, y += 1,
+      c_for(z = from:2, z <= to:2, z += 1,
+        if(str(block(x, y, z)) == 'moving_piston', n += 1)
+      )
+    )
+  );
+  n
+);

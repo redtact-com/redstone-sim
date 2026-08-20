@@ -153,6 +153,28 @@ function sideValue(w: { north: WallSide; east: WallSide; south: WallSide; west: 
   }
 }
 
+/**
+ * 塀が横に繋がる相手か (#244)。
+ *
+ * **実機で全数測った** (塀の隣にブロックを置いて side を読む):
+ *
+ * | 繋がる | 繋がらない |
+ * |---|---|
+ * | 石・ガラス・二重ハーフ・階段・フェンスゲート・音符ブロック・ランプ・ピストン・オブザーバー・塀・磁鉄鉱・ソウルサンド・樽 | 下ハーフ・**トラップドア (開閉とも)**・書見台 |
+ * | **ドア (向き 4 種 × 開閉 2 種すべて)** | |
+ *
+ * ドアは**向きにも開閉にもよらず必ず繋がる**。ここを落としていたため、
+ * ドアが隣にある塀の柱が sim だけ up=true に反転し、
+ * **140 段まるごと**食い違っていた (エレベーターで実測)。
+ */
+function connectsToWall(b: BlockState | null | undefined): boolean {
+  if (!b) return false
+  if (b.type === 'wall') return true
+  // ドアとフェンスゲートは全部繋がる (実機で確認)
+  if (b.type === 'door_wood' || b.type === 'door_iron' || b.type === 'fence_gate') return true
+  return isFullCube(b)
+}
+
 function isFullCube(b: BlockState | null | undefined): boolean {
   if (!b) return false
   switch (b.type) {
@@ -1905,7 +1927,7 @@ export class SimWorld {
     }
     const sideOf = (dir: Dir6): WallSide => {
       const nb = this.getBlockAt(neighbor(pos, dir))
-      const connects = nb?.type === 'wall' || isFullCube(nb)
+      const connects = connectsToWall(nb)
       return !connects ? 'none' : tallOn(dir) ? 'tall' : 'low'
     }
     const north = sideOf('north'), south = sideOf('south')

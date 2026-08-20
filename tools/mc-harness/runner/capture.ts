@@ -101,6 +101,9 @@ const MC_VERSION = '1.21.1'
 /** 掃除のあと予約 tick を枯らすために空回しする tick 数 (#240) */
 const DRAIN_TICKS = 60
 
+/** ピストンが動き終わるのを待つ上限 tick (#244)。これを超えたら警告して進む */
+const SETTLE_MOVING_MAX = 40
+
 /** "x,y,z" → [x,y,z] */
 const parseKey = (k: string): [number, number, number] =>
   k.split(',').map(Number) as [number, number, number]
@@ -557,6 +560,23 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
     for (const d of settleDrift.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
     if (settleDrift.length > 8) log(`    … 他 ${settleDrift.length - 8} 件`)
+  }
+
+  // 3a. **ピストンが動き終わるまで待つ** (#244)。
+  //
+  // 動作中 (moving_piston) に撮り始めると**再現できないキャプチャ**になる。
+  // moving_piston は運んでいる中身が BlockEntity 内にあって blockstate に出ないため、
+  // 記録しても sim 側で復元できず、「伸びたはずのピストンが伸びない」という
+  // **道具由来の食い違い**が出る (実際にこれで 1 周無駄にした)。
+  for (let i = 0; ; i++) {
+    const moving = Number(scarpet('fx_moving()').match(/=\s*(\d+)/)?.[1] ?? 0)
+    if (moving === 0) break
+    if (i >= SETTLE_MOVING_MAX) {
+      console.warn(`[capture] **警告**: ピストンが ${moving} 個動いたままです。`
+        + 'このキャプチャは sim 側で初期状態を復元できず、食い違いが道具由来になります')
+      break
+    }
+    await waitForDrain(1)
   }
 
   // 3b. **実機の予約 tick を読む** (#240)。
