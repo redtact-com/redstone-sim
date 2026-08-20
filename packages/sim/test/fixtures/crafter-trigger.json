@@ -1,6 +1,6 @@
 {
   "name": "crafter-trigger",
-  "description": "#163 クラフターの受電挙動と、**疑似接続を持たない**ことの対比。neighborChanged は hasNeighborSignal(pos) だけを見る [確定: 26.2 CrafterBlock.java:73-88] のに対し、ディスペンサーは pos.above() も見る [確定: DispenserBlock.java:131]。z=1 は直接受電するクラフター + コンパレーター (占有スロット数を読む [確定: CrafterBlockEntity.getRedstoneSignal:251-262]。container.0 に 3 個 = 占有 1 スロット = 出力 1)。z=4 と z=6 は同じ疑似接続の配置で、レッドストーンブロックを **1 マス上の隣** (真上ではない) に置く。ただし setblock の近隣更新は置いた位置の 6 方向にしか 届かないので、この時点では条件を満たしても**更新が来ておらず BUD 状態**になる。t8/t10 で隣に石を 置いて更新を送ると、**ディスペンサーだけが起動しクラフターは起動しない** = QC の有無が確定する。",
+  "description": "#163 クラフターの受電挙動と、**疑似接続を持たない**ことの対比。neighborChanged は**自身 6 面の受電**だけを見る [確定: 26.2 CrafterBlock.java:73-88] のに対し、ディスペンサーは**1 マス上**も見る [確定: DispenserBlock.java:131]。z=1 は直接受電するクラフター + コンパレーター (占有スロット数を読む [確定: CrafterBlockEntity.getRedstoneSignal:251-262]。container.0 に 3 個 = 占有 1 スロット = 出力 1)。z=4 と z=6 は同じ疑似接続の配置で、レッドストーンブロックを **1 マス上の隣** (真上ではない) に置く。ただし setblock の近隣更新は置いた位置の 6 方向にしか 届かないので、この時点では条件を満たしても**更新が来ておらず BUD 状態**になる。t8/t10 で隣に石を 置いて更新を送ると、**ディスペンサーだけが起動しクラフターは起動しない** = QC の有無が確定する。",
   "mcVersion": "1.21.1",
   "ticks": 20,
   "region": {

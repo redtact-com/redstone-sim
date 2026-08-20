@@ -6,7 +6,7 @@ import type { BlockState } from '../src/types.js'
  * ピストンで動いたブロックの**着地は近隣更新を伴う** (#213)。
  *
  * vanilla の `PistonMovingBlockEntity.finalTick` は
- * `Level.setBlock(pos, state, UPDATE_ALL)` で置くので隣接 6 マスへ NC が飛ぶ。
+ * **UPDATE_ALL flag の setBlock** で置くので隣接 6 マスへ NC が飛ぶ。
  *
  * これが無いと「**移動中 (moving_piston) だったせいで押せなかったピストンが、
  * 着地後も再評価されず伸びないまま**」になる。ピストンは NC を受けたときしか

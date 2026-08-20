@@ -1,4 +1,4 @@
-# 準接続 (QC) セルの境界: ピストンは pos.above() (+1 のマス) の受電だけを見る
+# 準接続 (QC) セルの境界: ピストンは 1 個上 (+1 のマス) の受電だけを見る
 # (02 §5.3 QC / §6 piston getNeighborSignal = 「1 個上のマスの hasSignal」[確定])。
 # 第一弾 components/piston/quasi-connectivity は「+1 セル受電で伸長」を pin する。
 # 本ケースは QC が届く高さの**境界**を対で断言する:
@@ -6,11 +6,11 @@
 #       → QC セル (0,2,0) はその真上 rblock から受電 → ピストン伸長 (○)。
 #   P2: redstone_block を +3 ((5,4,0)) に置く。→ 受電するのは +2 セル (5,3,0) だけで、
 #       QC セル (5,2,0) は受電しない → ピストン伸長しない (−)。
-#   ∴ QC の判定は「ちょうど 1 個上 (pos.above())」に限られる (+2 セルは見ない)。
-# 期待値は §5.3/§6 の getNeighborSignal ([確定] pos.above() のみ) から先に導出 → sim で照合 → 一致 (PASS)。
+#   ∴ QC の判定は「ちょうど 1 個上のマス」に限られる (+2 セルは見ない)。
+# 期待値は §5.3/§6 の getNeighborSignal ([確定] 1 個上のマスのみ) から先に導出 → sim で照合 → 一致 (PASS)。
 meta {
   name: QC セル境界 (+2 で伸長する・+3 では伸長しない)
-  ref: 02 §5.3 QC / §6 piston (getNeighborSignal = pos.above() の hasSignal [確定])
+  ref: 02 §5.3 QC / §6 piston (getNeighborSignal = 1 個上のマスの hasSignal [確定])
 }
 
 circuit {

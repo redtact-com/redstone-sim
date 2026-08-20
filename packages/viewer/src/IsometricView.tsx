@@ -12,8 +12,10 @@ import type { Pos3D } from '@redstone/sim'
 import {
   worldSnapshotToStructure,
   VIEWER_PRELOAD_BLOCKS,
+  extraPreloadNames,
 } from './world-to-structure.js'
 import { buildResources } from './renderer/buildResources.js'
+import { fitDistance, maxZoomOut } from './camera.js'
 import { useCamera } from './renderer/useCamera.js'
 import { canvasPixelToBlock, FOV_F } from './renderer/coordUtils.js'
 
@@ -82,6 +84,21 @@ export function IsometricView({
   const structureRef = useRef<Structure | null>(null)
   const prevSnapshotRef = useRef<WorldSnapshot | null>(null)
   const animFrameRef = useRef<number>(0)
+  /** 最後に寄りを合わせたときの回路サイズ ("x,y,z")。変わったら合わせ直す (#238) */
+  const fittedSizeRef = useRef<string>('')
+  /**
+   * 外部 (デモの setCamera 等) がカメラを指定したか (#238)。
+   *
+   * **自動フィットはテクスチャ読み込みを待ってから走る**ので、外から距離を指定しても
+   * あとから上書きされて効かなかった。一度でも外部指定があったら自動フィットは譲る
+   */
+  const externalCameraRef = useRef(false)
+
+  /** 引ける上限。**回路の大きさに追従させる** — 固定 200 だと大きい回路で引ききれない (#238) */
+  const zoomLimit = (): number => {
+    const s = structureRef.current?.getSize()
+    return s === undefined ? 200 : maxZoomOut(s as [number, number, number])
+  }
 
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadingMsg, setLoadingMsg] = useState('Loading textures...')
@@ -177,7 +194,7 @@ export function IsometricView({
 
         if (lastPinchDist.current !== null && lastPinchMid.current !== null) {
           const scale   = lastPinchDist.current / dist
-          const newDist = Math.max(3, Math.min(200, cam.distance * scale))
+          const newDist = Math.max(3, Math.min(zoomLimit(), cam.distance * scale))
 
           if (topDown && structureRef.current) {
             const canvas = canvasRef.current
@@ -269,7 +286,7 @@ export function IsometricView({
       const structure = structureRef.current
 
       if (!topDown || !structure) {
-        cam.distance = Math.max(3, Math.min(200, cam.distance + e.deltaY * 0.05))
+        cam.distance = Math.max(3, Math.min(zoomLimit(), cam.distance + e.deltaY * 0.05))
         return
       }
 
@@ -290,7 +307,7 @@ export function IsometricView({
       const wz0 = sz / 2 - ndcY * depth / FOV_F + cam.panZ
 
       const factor = 1 + e.deltaY * 0.001
-      cam.distance = Math.max(3, Math.min(200, oldDist * factor))
+      cam.distance = Math.max(3, Math.min(zoomLimit(), oldDist * factor))
 
       const newDepth = cam.distance + sy / 2 - placementY
       const wx1 = ndcX * aspect * newDepth / FOV_F + sx / 2 + cam.panX
@@ -304,7 +321,24 @@ export function IsometricView({
     return () => canvas.removeEventListener('wheel', handleWheel)
   }, [topDown, placementY, cameraRef])
 
-  // ─── WebGL 初期化（マウント時に一度だけ） ─────────────────────────────────
+  // ─── プリロードに無いブロック名の収集 (#234) ──────────────────────────────
+  // 装飾は取り込み元の名前をそのまま持つので固定表に列挙できない。ここで拾って
+  // buildResources に渡さないと**エラーも出さずに消えて見える**。名前が増えたときだけ
+  // extraKey を動かし、下の初期化を作り直す
+  const extraNamesRef = useRef<string[]>([])
+  const [extraKey, setExtraKey] = useState('')
+
+  useEffect(() => {
+    const found = extraPreloadNames(snapshot)
+    const merged = [...new Set([...extraNamesRef.current, ...found])].sort()
+    const key = merged.join(',')
+    if (key !== extraNamesRef.current.join(',')) {
+      extraNamesRef.current = merged
+      setExtraKey(key)
+    }
+  }, [snapshot])
+
+  // ─── WebGL 初期化（マウント時 + 未知ブロック名が増えたとき） ─────────────
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -325,7 +359,8 @@ export function IsometricView({
         setStatus('loading')
         setLoadingMsg('Loading textures...')
 
-        const resources = await buildResources(VIEWER_PRELOAD_BLOCKS)
+        const resources = await buildResources(
+          [...VIEWER_PRELOAD_BLOCKS, ...extraNamesRef.current])
         if (cancelled) return
 
         // 初回スナップショットで Structure を構築
@@ -345,7 +380,16 @@ export function IsometricView({
         }
 
         const size = structure.getSize()
-        cameraRef.current.distance = Math.max(size[0], size[1], size[2]) * 1.5
+        // **回路の大きさに合わせて寄る** (#238)。
+        // 旧: max(幅,高さ,奥行) * 1.5 は視野角も画面比も見ていないため、
+        // 147 段の回路が画面の高さの 3 割しか使わない糸のような柱になっていた
+        fittedSizeRef.current = `${size[0]},${size[1]},${size[2]}`
+        // 外から指定されていたらそちらを尊重する (上書きしない)
+        if (!externalCameraRef.current) {
+          cameraRef.current.distance = fitDistance(size as [number, number, number], {
+            aspect: canvas.clientWidth / Math.max(1, canvas.clientHeight),
+          })
+        }
 
         setStatus('ready')
         let readyFired = false
@@ -357,7 +401,10 @@ export function IsometricView({
           // 外部からのカメラ上書き (fitCamera 等) を消費する
           if (cameraInputRef?.current) {
             const ci = cameraInputRef.current
-            if (ci.distance !== undefined) cam.distance = ci.distance
+            if (ci.distance !== undefined) {
+              cam.distance = ci.distance
+              externalCameraRef.current = true    // 以後の自動フィットは譲る
+            }
             if (ci.panX !== undefined) cam.panX = ci.panX
             if (ci.panZ !== undefined) cam.panZ = ci.panZ
             if (ci.rotX !== undefined) cam.rotX = ci.rotX
@@ -417,7 +464,7 @@ export function IsometricView({
       prevSnapshotRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // 初回マウント時のみ
+  }, [extraKey]) // 初回マウント時 + 未知ブロック名が増えたとき (#234)
 
   // ─── snapshot 変化時に構造を再構築 ──────────────────────────────────────
 
@@ -428,6 +475,19 @@ export function IsometricView({
     if (prevSnapshotRef.current === snapshot) return
 
     const { structure: newStructure } = worldSnapshotToStructure(snapshot)
+    // **大きさが変わったら寄り直す** (#238)。取り込みで盤面が伸びても
+    // マウント時の距離のままだと、収まらない / 豆粒になる
+    const ns = newStructure.getSize()
+    const key = `${ns[0]},${ns[1]},${ns[2]}`
+    if (key !== fittedSizeRef.current) {
+      fittedSizeRef.current = key
+      if (!externalCameraRef.current) {
+        const canvas = canvasRef.current
+        cameraRef.current.distance = fitDistance(ns as [number, number, number], {
+          aspect: canvas ? canvas.clientWidth / Math.max(1, canvas.clientHeight) : 1,
+        })
+      }
+    }
     console.log('[IsometricView] setStructure: blocks in structure=', newStructure.getBlocks().length)
     renderer.setStructure(newStructure)
     structureRef.current = newStructure

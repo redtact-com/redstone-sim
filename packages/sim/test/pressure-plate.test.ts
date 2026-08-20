@@ -10,15 +10,15 @@ import type { BlockState } from '../src/types.js'
 //
 // [確定: 26.2 デコンパイル] BasePressurePlateBlock / PressurePlateBlock /
 //   WeightedPressurePlateBlock:
-//   - 木/石 (PressurePlateBlock): getSignalForState = POWERED ? 15 : 0 /
+//   - 木/石 (PressurePlateBlock): getSignalForState は POWERED なら 15・でなければ 0 /
 //     getPressedTime = 20gt (BasePressurePlateBlock 既定、非 override)。
 //   - 重量 light=金 (maxWeight 15) / heavy=鉄 (maxWeight 150)
 //     (WeightedPressurePlateBlock): POWER 0-15 / getPressedTime = 10gt /
-//     signal = count>0 ? ceil(min(count,maxWeight)/maxWeight*15) : 0。
+//     signal = count が 0 なら 0、それ以外は min(count,maxWeight)/maxWeight×15 の切り上げ。
 //     手動モデルはエンティティ計数を持たないため設定値 pressedPower を直接出力する。
-//   - 給電: 全方向 weak (ownSignal=getSignalForState) / 直下のみ strong
-//     (getDirectSignal = direction==UP ? signal : 0)。
-//   - NC 送信: updateNeighborsAt(pos) + updateNeighborsAt(pos.below())。
+//   - 給電: 全方向 weak (ownSignal は getSignalForState と同じ) / 直下のみ strong
+//     (getDirectSignal は方向が UP のときだけ signal、他は 0)。
+//   - NC 送信: 自身の位置と真下の位置の 2 か所から 6 方向へ配る。
 //
 // 手動モデル: activateBlock で踏まれ ON、getPressedTime の tile tick で自動 OFF
 // (ボタンの自動 OFF パターン)。

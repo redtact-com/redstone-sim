@@ -56,8 +56,8 @@ export function isRail(block: BlockState | null): block is AnyRailState {
 
 /**
  * 曲線を取れるレールか (vanilla の `BaseRailBlock.isStraight` の否定)。
- * 通常レールだけが false [確定: 26.2 RailBlock は super(false, ...)、
- * PoweredRailBlock / DetectorRailBlock は super(true, ...)]。
+ * 通常レールだけが false [確定: 26.2 RailBlock はこのフラグを立てず、
+ * PoweredRailBlock / DetectorRailBlock は立てる]。
  */
 export function isStraightRail(block: AnyRailState): boolean {
   return block.type !== 'rail'
@@ -249,7 +249,7 @@ class RailConnector {
     this.connections = [...railConnections(this.pos, shape)]
   }
 
-  /** 内部状態 + ワールドへの書き込み (vanilla の setBlock(pos, state, 3) 相当) */
+  /** 内部状態 + ワールドへの書き込み (vanilla の flag 3 の setBlock 相当) */
   private applyShape(shape: RailShape): void {
     this.setInternal(shape)
     this.ws.set(this.pos, shape)
@@ -267,7 +267,7 @@ class RailConnector {
    * [確定: 26.2 RailState.place]。自身の形状を確定させ、繋がった相手の形状も
    * connectTo で張り替える。first は設置時 (形状が同じでも隣へ伝える) を意味する。
    *
-   * hasSignal (= level.hasNeighborSignal(pos)) が効くのは**第三段の内側だけ**で、
+   * hasSignal (= その位置が 6 面のどこかで受電しているか) が効くのは**第三段の内側だけ**で、
    * しかも通常レールのときだけ。両軸に隣接がある (3 方向以上の) ジャンクションで
    * 曲がる先が反転する [実機 fixture rail-junction-place: 非通電 south_east /
    * 通電 north_east]。
@@ -297,8 +297,8 @@ class RailConnector {
     }
 
     // 第三段: ここに来るのは「両軸に隣接がある」か「隣接ゼロ」のときだけ。
-    // vanilla にはこのあと `else if (northOrSouth)` / `else if (westOrEast)` が
-    // あるが、その条件は第一段で必ず確定済みなので**到達しない死コード**。
+    // vanilla にはこのあと「南北軸だけ」「東西軸だけ」を見る分岐が続くが、
+    // その条件は第一段で必ず確定済みなので**到達しない死コード**。
     // 写すと「片軸だけでも hasSignal が効く」誤実装になるので落としてある。
     if (shape === null) {
       if (northOrSouth && westOrEast) shape = defaultShape
@@ -322,7 +322,8 @@ class RailConnector {
     const decided = this.promoteSlope(shape) ?? defaultShape
     const changed = decided !== this.shape
     // 内部状態は必ず更新するが、**ワールドへの書き込みと隣への伝播は条件つき**
-    // [確定: 26.2 RailState.place — `if (first || level.getBlockState(pos) != state)`]。
+    // [確定: 26.2 RailState.place — 書き込むのは「設置時 (first) であるか、
+    //  現在の blockstate と決定した state が異なる」ときだけ]。
     // first=false (実行中の再計算) で形状が変わらなければ setBlock ごと起きないので、
     // 近隣更新もオブザーバー通知も出ない (#142)
     this.setInternal(decided)
@@ -359,11 +360,11 @@ export function countPotentialConnections(grid: RailGrid, pos: Pos3D): number {
 /**
  * レールを設置したときの形状張り替えを計算する。
  * 隣接レールに合わせて自身の形状を決め、繋がった相手の形状も張り替える
- * [確定: 26.2 BaseRailBlock.updateDir → new RailState(...).place(...)]。
+ * [確定: 26.2 BaseRailBlock.updateDir → RailState.place]。
  * 副作用は持たず、書き換えるべき (pos, shape) の一覧を返すので、
  * 呼び出し側が SimWorld / EditorGrid それぞれの方法で適用する。
  *
- * 返す一覧は vanilla が `setBlock(pos, state, 3)` を呼ぶ座標と 1 対 1 に対応する
+ * 返す一覧は vanilla が **flag 3 の setBlock** を呼ぶ座標と 1 対 1 に対応する
  * (形状が結果的に変わらなかった座標も含む — vanilla も first=true / connectTo では
  * 値の異同に関係なく setBlock する)。**flag 3 に伴う近隣更新とオブザーバー通知の
  * 発行は適用側の責務** で、SimWorld ではこの一覧の順に 1 件ずつ書いて発行する (#132)。
@@ -384,8 +385,8 @@ export function planRailPlacement(
  * 「繋がる向きの powered な**同種の**レール」があれば、そのレールが受電しているか、
  * さらに先へ再帰する。深さ 8 で打ち切り。
  *
- * railType は連鎖の同一性を決める。vanilla の判定は `state.is(this)` で
- * **ブロックそのものの一致**なので、powered_rail の連鎖は activator_rail を
+ * railType は連鎖の同一性を決める。vanilla の判定は**ブロックそのものの一致**
+ * (自分と同じブロックか) なので、powered_rail の連鎖は activator_rail を
  * 通り抜けない (逆も同じ) [確定: 26.2 PoweredRailBlock.isSameRailWithPower]
  * [実機 fixture activator-rail-mixed-chain: 両方向とも境目で切れる] (#138)。
  */
@@ -437,7 +438,7 @@ function isSameRailWithPower(
   dir: 'north_south' | 'east_west', railType: PoweredRailType,
 ): boolean {
   const state = world.getBlockAt(pos)
-  // `state.is(this)` — 同じブロックでなければ連鎖しない (#138)。
+  // vanilla の同一ブロック判定に対応 — 同じブロックでなければ連鎖しない (#138)。
   // 通常レールもここで弾かれる (動力を持たないので連鎖に参加しない)
   if (!isPoweredRail(state) || state.type !== railType) return false
 
@@ -458,7 +459,7 @@ function isSameRailWithPower(
 /**
  * パワードレール / アクティベーターレールの powered をあるべき値として算出する
  * [確定: 26.2 PoweredRailBlock.updateState]:
- *   hasNeighborSignal(自身6面) || 前方向の連鎖 || 後方向の連鎖
+ *   自身 6 面の受電 (hasNeighborSignal) / 前方向の連鎖 / 後方向の連鎖 のいずれか
  * 連鎖は同種のレールしかたどらない (#138)。
  */
 export function shouldRailBePowered(

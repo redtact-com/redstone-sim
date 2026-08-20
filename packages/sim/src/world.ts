@@ -1,9 +1,11 @@
 import type {
+  WallSide,
   Pos3D, Dir6, HDir, BlockState, WorldSnapshot, ScheduledTick, TickResult,
   WireState, RepeaterState, ComparatorState, LeverState, ButtonState, TargetState,
   ObserverState, PressurePlateState, WeightedPressurePlateState, MovingPistonState,
   RailShape, BlockType, DetectorRailState, DoorLikeState,
 } from './types.js'
+import { noteInstrumentFor } from './blocks/noteInstrument.js'
 import {
   OPPOSITE, ALL_DIRS, MAX_PUSH_DEPTH, isStickyBlock, canStickToEachOther, isRailSlope,
   isStraightRailShape,
@@ -23,11 +25,13 @@ import {
 import { getRepeaterLockDirs } from './blocks/repeater.js'
 import {
   isContainerType, effectiveContainerSignal, HOPPER_COOLDOWN, DROPPER_TICK_DELAY,
-  takeOne, putOne, totalItems, containerSlotsOf,
+  WATER_TICK_DELAY,
+  takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal, emptySlots,
 } from './blocks/container.js'
+import { stackSizeOf } from './blocks/itemStacks.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
-  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState,
+  BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState, ItemStack,
 } from './types.js'
 
 /** 音符ブロック発音イベント (C5 #38)。BE フェーズの triggerEvent 相当で発火する */
@@ -78,7 +82,7 @@ function offset(pos: Pos3D, dir: Dir6, n: number): Pos3D {
 }
 
 // NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)。
-// origin は vanilla の `updateNeighborsAt(pos, block)` が運ぶ **更新元ブロック**。
+// origin は vanilla の `updateNeighborsAt` が第 2 引数で運ぶ **更新元ブロック**。
 // 通常レールの向き再計算がこれを門番に使う (更新元が信号源のときだけ走る。#142)
 type UpdateEntry =
   | { kind: 'single'; target: Pos3D; origin: BlockType }
@@ -88,9 +92,141 @@ type UpdateEntry =
 // SimWorld 実装
 // ============================================================
 
+/**
+ * コンパレーターが読む「アナログ出力」 (vanilla の hasAnalogOutputSignal / getAnalogOutputSignal)。
+ * 持たないブロックは null。**直後と導体 1 個越しの両方で同じ判定を使う**
+ * [確定: 26.2 ComparatorBlock.calculateOutputSignal]。
+ */
+function analogOutputOf(block: BlockState | null | undefined): number | null {
+  if (!block) return null
+  // コンテナ (hopper/dropper/dispenser/barrel 等) は充填率 → 信号
+  if (isContainerType(block.type)) return effectiveContainerSignal(block)
+  // クラフターは「埋まっているスロット数」0-9 (充填率ではない)
+  // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal]
+  if (block.type === 'crafter') return block.occupiedSlots
+  // 銅の電球が読ませるのは **lit** で powered ではない
+  // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
+  if (block.type === 'copper_bulb') return block.lit ? 15 : 0
+  // 水入り大釜 / コンポスターは LEVEL をそのまま返す (#234)
+  // [確定: 26.2 LayeredCauldronBlock / ComposterBlock の getAnalogOutputSignal]
+  if (block.type === 'cauldron' || block.type === 'composter') return block.level
+  // 書見台はページ番号を読む (#240)
+  // [確定: 26.2 LecternBlock.getAnalogOutputSignal / LecternBlockEntity.getRedstoneSignal]
+  if (block.type === 'lectern') return lecternSignal(block)
+  return null
+}
+
+/**
+ * 書見台のコンパレーター出力 (#240)。
+ *
+ * [確定: 26.2 LecternBlockEntity.getRedstoneSignal — ページ進捗は「ページ数が 2 以上なら
+ *  現在ページ ÷ (ページ数 - 1)、1 以下なら 1.0」。出力は進捗 × 14 の切り捨てに、
+ *  本の実体を持つなら +1]
+ * 呼び出し元 (getAnalogOutputSignal) が **blockstate の has_book で先に 0 を返す**ので、
+ * has_book=false は 0。`pages === 0` は「blockstate だけ has_book=true で中身が無い」状態で、
+ * ページ数 2 以上の分岐に入らず進捗 1.0・本の実体も無しと判定されるので **14** になる
+ * (実機で確認: 本無し 14 / 5 ページ本は Page 0→1, 1→4, 2→8, 3→11, 4→15)。
+ */
+function lecternSignal(b: { hasBook: boolean; page: number; pages: number }): number {
+  if (!b.hasBook) return 0
+  const progress = b.pages > 1 ? b.page / (b.pages - 1) : 1
+  return Math.floor(Math.min(1, Math.max(0, progress)) * 14) + (b.pages > 0 ? 1 : 0)
+}
+
+/** 泡柱の状態が同じか (水 ⇔ 泡柱 / drag 違いを区別する) */
+function sameColumnState(a: BlockState, b: BlockState): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === 'bubble_column' && b.type === 'bubble_column') return a.drag === b.drag
+  return true
+}
+
+/**
+ * 見た目がフルキューブか (塀の接続判定 / 側面の tall 判定に使う)。
+ * vanilla の `isFaceSturdy` 相当の近似 [確定: 26.2 WallBlock.connectsTo]。
+ */
+/** 塀の指定辺の値を取り出す */
+function sideValue(w: { north: WallSide; east: WallSide; south: WallSide; west: WallSide }, dir: Dir6): WallSide {
+  switch (dir) {
+    case 'north': return w.north
+    case 'south': return w.south
+    case 'east':  return w.east
+    case 'west':  return w.west
+    default:      return 'none'
+  }
+}
+
+/**
+ * 塀が横に繋がる相手か (#244)。
+ *
+ * **実機で全数測った** (塀の隣にブロックを置いて side を読む):
+ *
+ * | 繋がる | 繋がらない |
+ * |---|---|
+ * | 石・ガラス・二重ハーフ・階段・フェンスゲート・音符ブロック・ランプ・ピストン・オブザーバー・塀・磁鉄鉱・ソウルサンド・樽 | 下ハーフ・**トラップドア (開閉とも)**・書見台 |
+ * | **ドア (向き 4 種 × 開閉 2 種すべて)** | |
+ *
+ * ドアは**向きにも開閉にもよらず必ず繋がる**。ここを落としていたため、
+ * ドアが隣にある塀の柱が sim だけ up=true に反転し、
+ * **140 段まるごと**食い違っていた (エレベーターで実測)。
+ */
+/** 上から見て時計回り (北 → 東 → 南 → 西) */
+const CW: Record<HDir, HDir> = { north: 'east', east: 'south', south: 'west', west: 'north' }
+/** 上から見て反時計回り */
+const CCW: Record<HDir, HDir> = { north: 'west', west: 'south', south: 'east', east: 'north' }
+
+/**
+ * ドアの板がどの辺に張り付いているか (#262)。
+ *
+ * 閉じているときは `facing` の**反対側**の辺。開くと 90° 回り、
+ * **hinge=left は時計回り / hinge=right は反時計回り**。
+ *
+ * [実機実測 2026-08-21: 塀の南にドアを置き 4 向き × 開閉 × 蝶番 の 16 通りで
+ *  塀の south を読んだ。繋がったのは
+ *  facing=south/閉 (板=北) / facing=east/開/left (板=北) / facing=west/開/right (板=北) の 3 通りだけ]
+ */
+function doorPanelSide(b: { facing: HDir; open: boolean; hinge: 'left' | 'right' }): HDir {
+  const closed = OPPOSITE[b.facing as Dir6] as HDir
+  if (!b.open) return closed
+  return b.hinge === 'left' ? CW[closed] : CCW[closed]
+}
+
+/**
+ * 塀が `dir` 方向の隣へ繋がるか (#234 / #262)。
+ * `dir` は**塀から見た隣の方向**。
+ */
+function connectsToWall(b: BlockState | null | undefined, dir: HDir): boolean {
+  if (!b) return false
+  if (b.type === 'wall') return true
+  if (b.type === 'fence_gate') return true          // 向きによらず繋がる (実機で確認)
+  if (b.type === 'door_wood' || b.type === 'door_iron') {
+    // **板が塀の側を向いているときだけ繋がる**。開いたドアは板が横へ逃げるので
+    // 繋がらなくなり、塀の up が連鎖して**柱ごと反転する** (#244 の下方向伝播)
+    return doorPanelSide(b) === OPPOSITE[dir as Dir6]
+  }
+  return isFullCube(b)
+}
+
+function isFullCube(b: BlockState | null | undefined): boolean {
+  if (!b) return false
+  switch (b.type) {
+    case 'solid': case 'lodestone': case 'soul_sand': case 'note_block': case 'target':
+    case 'glass': case 'redstone_block': case 'lamp': case 'copper_bulb':
+    case 'dropper': case 'dispenser': case 'crafter': case 'slime_block': case 'observer':
+    case 'piston': case 'sticky_piston':
+      return true
+    default:
+      return false
+  }
+}
+
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
+  /**
+   * この tick 分として取り出した予約 (`posKey|blockType`)。
+   * vanilla の `LevelTicks.toRunThisTick` に相当し、`hasScheduledTick` が見る (#264)
+   */
+  private runningThisTick = new Set<string>()
   private currentTick = 0
   private seqCounter = 0
 
@@ -274,10 +410,59 @@ export class SimWorld {
     this.traceReserve('ST', abbrOf(block), pendingAction(block), delay, priority)
   }
 
-  /** 同 pos + ブロック種の予約が既にあるか (vanilla hasScheduledTick 相当) */
+  /**
+   * 同 pos + ブロック種の予約が既にあるか。
+   *
+   * **この tick に走る分も「ある」と数える** (#264)。
+   * [確定: 26.2 LevelTicks.willTickThisTick — 収集済み (toRunThisTick) も見る]。
+   * vanilla のトーチやダイオードは近隣更新を受けたとき
+   * `!willTickThisTick(...)` を条件に予約するので、**すでに今 tick 分として
+   * 取り出された予約は二重に積まれない**。
+   *
+   * ここを見落とすと、同じ tick に
+   *   「近隣更新 → 2gt 後を予約」→「取り出し済みの予約が発火して状態が変わる」
+   * の順で走ったときに**余計な予約が 1 本残り**、2 tick 後に空撃ちして
+   * 実機より早く遷移してしまう
+   * (ガラスエレベーターでトーチが実機より 2gt 早く点いていた原因)。
+   */
   hasScheduledTick(pos: Pos3D, blockType: BlockState['type']): boolean {
     const key = posKey(pos)
     return this.scheduledTicks.some(t => posKey(t.pos) === key && t.blockType === blockType)
+  }
+
+  /**
+   * **この tick に走る分も含めて**予約があるか
+   * [確定: 26.2 LevelTicks.willTickThisTick — 収集済み (toRunThisTick) も見る]。
+   *
+   * `hasScheduledTick` との違いは「取り出し済みの予約を数えるか」だけ。
+   * vanilla は素子ごとに使い分けていて、**トーチの近隣更新はこちら**を見る
+   * [確定: 26.2 RedstoneTorchBlock.neighborChanged —
+   *  `LIT != hasNeighborSignal && !willTickThisTick` のときだけ 2gt を予約する]。
+   *
+   * 見落とすと、同じ tick に
+   *   「近隣更新 → 2gt 後を予約」→「取り出し済みの予約が発火して状態が変わる」
+   * の順で走ったときに**余計な予約が 1 本残り**、2gt 後に空撃ちして実機より早く遷移する
+   * (ガラスエレベーターでトーチが実機より 2gt 早く点いていた原因 — #264)。
+   *
+   * **数えるのは「まだ走っていない」分だけ**。これは vanilla からの逸脱ではなく同型で、
+   * `LevelTicks.runCollectedTicks` は取り出した予約をその場で `toRunThisTickSet` から外す
+   * [確定: 26.2]。数え続けると自分の発火のあとに戻ってきた近隣更新まで抑止してしまい、
+   * トーチクロックが止まる (実機 fixture torch-clock)。
+   *
+   * vanilla の `willTickThisTick` は `hasScheduledTick` を含まないが、
+   * `scheduleTick` 側が `LevelChunkTicks` で (pos, type) の先勝ち dedup をするので、
+   * ここの「取り出し済み ∪ 未実行の予約」は合成として等価。
+   *
+   * **`hasScheduledTick` の側を広げてはいけない**。オブザーバー・泡柱・ピストンは
+   * vanilla でも取り出し済みを数えないので、まとめて変えると 58 本のテストが落ちる。
+   *
+   * **これを見るのはトーチ・リピーター・コンパレーターの 3 つだけ** (#264)。
+   * 26.2 でブロック側から `willTickThisTick` を呼ぶのは
+   * `RedstoneTorchBlock` / `DiodeBlock` / `ComparatorBlock` の 3 クラスに限られる。
+   */
+  willTickThisTick(pos: Pos3D, blockType: BlockState['type']): boolean {
+    if (this.runningThisTick.has(`${posKey(pos)}|${blockType}`)) return true
+    return this.hasScheduledTick(pos, blockType)
   }
 
   /** ブロックイベントを予約する (同一 (pos, blockType, param) は重複登録しない) */
@@ -320,8 +505,16 @@ export class SimWorld {
       .filter(t => t.dueTick <= this.currentTick)
       .sort((a, b) => a.priority - b.priority || a.seq - b.seq)
     this.scheduledTicks = this.scheduledTicks.filter(t => t.dueTick > this.currentTick)
+    // **取り出した分も「予約あり」として数える** (#264)。tick の最後まで保持する
+    this.runningThisTick.clear()
+    for (const t of toExecute) this.runningThisTick.add(`${posKey(t.pos)}|${t.blockType}`)
 
     for (const tick of toExecute) {
+      // **走らせたら「これから走る」集合から外す** (#264)。
+      // 走る前のものだけを willTickThisTick が数えるようにしないと、
+      // 自分の発火のあとに戻ってきた近隣更新まで抑止してしまい
+      // トーチクロックが止まる (実機 fixture torch-clock が落ちる)
+      this.runningThisTick.delete(`${posKey(tick.pos)}|${tick.blockType}`)
       const affectedKeys = this.executeScheduledTick(tick)
       for (const k of affectedKeys) changed.add(k)
     }
@@ -417,7 +610,8 @@ export class SimWorld {
           h = { ...h, slots: taken.slots }
           this.setBlockAt(pos, h)
           // #89/#91: 押し込み先ホッパーのクールダウンを再設定 (vanilla HopperBlockEntity.add)。
-          // vanilla は `if (bl && dest is hopper && !isOnCustomCooldown) setCooldown(8-k)`:
+          // vanilla の条件は「受信スロットが空だった (bl) かつ 押込先がホッパー かつ
+          //   カスタムクールダウン中でない」ときに限り クールダウンを 8-k に設定する:
           //   bl = 受信スロットが空だった / k=1: 押込先が同gt 既 tick / k=0: 未 tick。
           //   k=0 でも押込先は自 serverTick で -1 され結局 **実効 7gt**。よって空受信時は
           //   一律 currentTick+7 (残留クールダウン中でもリセット。旧実装は off-cooldown 時
@@ -484,7 +678,7 @@ export class SimWorld {
     }
     // **点灯したまま運ばれてきた**場合は即消灯する (#221)
     // [確定: 26.2 ObserverBlock.onPlace — POWERED かつ scheduledTick が無ければ
-    //  setBlock(POWERED=false, flag 18) + updateNeighborsInFront]。
+    //  flag 18 の setBlock で POWERED を false に落とし、updateNeighborsInFront を呼ぶ]。
     // 消灯 tick は移動前の座標に予約されていて移動で失われるため、これが無いと
     // **二度と消えない**。ユーザ提供の 2 幅ドアで、押されて戻ったオブザーバーが
     // 点きっぱなしになり 2 往復目が動かなくなっていた
@@ -502,12 +696,31 @@ export class SimWorld {
       for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
       this.neighborChanged(pos)
     }
-    // 着地は vanilla では setBlock(UPDATE_ALL) なので**隣接 6 マスへ NC が飛ぶ**
-    // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock(..., UPDATE_ALL)]。
+    // 着地したピストンは**自分自身を再判定する** (#231)
+    // [確定: 26.2 PistonBaseBlock.onPlace — 置き換え前が別ブロック種で、かつその位置に
+    //  BlockEntity がまだ無いときだけ checkIfExtend を呼ぶ]。
+    // 着地は moving_piston → piston の差し替えなので条件を満たす。
+    // 隣接 6 マスへの NC (下の submitMultiNC) は**自分には飛ばない**ので、
+    // これが無いと「運ばれて着地した直後に受電しているピストン」が伸びない
+    // (5×5 ドアの t=299 で実機だけが伸びていた原因)
+    if (into.type === 'piston' || into.type === 'sticky_piston') {
+      this.neighborChanged(pos)
+    }
+    // 着地は vanilla では **UPDATE_ALL flag の setBlock** なので**隣接 6 マスへ NC が飛ぶ**
+    // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock を UPDATE_ALL で呼ぶ]。
     // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も
     // 再評価されず伸びないまま」になる (#213 のドアで tick 135 の押し上げが
     // 起きなかった原因)。実機 fixture door-2wide-open-to-close が回帰を守る
     this.submitMultiNC(pos)
+    // **導体 1 個越しに読んでいるコンパレーターにも知らせる** (#259)。
+    // submitMultiNC は隣接 6 マスにしか届かないので、
+    // 「コンパレーター → 導体 → 着地したブロック」の並びだと通知が届かない。
+    // 同じ tick に複数のブロックが着地するとき、確定の順番によっては
+    // コンパレーターが「まだ moving_piston のままの中身」を読んでしまい、
+    // **二度と再評価されない**
+    // (ガラスエレベーターの搬器が階に着いたとき、コンパレーター → スライム →
+    //  コンポスター の並びで階数表示が動かなくなっていた)
+    this.emitComparatorUpdate(pos)
     this.propagateChange(pos)
     this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
@@ -533,8 +746,8 @@ export class SimWorld {
 
   /**
    * ドロッパー/ディスペンサーの起動判定 (通常受電 ∪ QC の 1 個上受電)。
-   * [確定: 26.2 DispenserBlock.neighborChanged — hasNeighborSignal(pos) ||
-   *  hasNeighborSignal(pos.above())]。QC は 02 §5.3 の 3 クラスの 1 つ。
+   * [確定: 26.2 DispenserBlock.neighborChanged — 自身 6 面の受電 または
+   *  1 個上のマスの受電 の OR]。QC は 02 §5.3 の 3 クラスの 1 つ。
    */
   private isDropperPowered(pos: Pos3D): boolean {
     if (isBlockPowered(this, pos)) return true
@@ -617,15 +830,28 @@ export class SimWorld {
    * tick=0 の起点を呼び出し側に委ねることで、発振回路も正しく駆動できる
    * （fixture-runner は initialize() 後に flush(64) を明示的に呼んで settle する）。
    */
-  initialize(): void {
+  initialize(opts: {
+    trustAuthored?: boolean
+    /**
+     * 実機のコンパレーターが保持していた出力強度 (#249)。key は posKey。
+     * 与えられた座標は Step 4b で**計算し直さずこの値をそのまま使う**
+     */
+    comparatorOutputs?: ReadonlyMap<string, number>
+  } = {}): void {
+    // trustAuthored: **動いている機械のスナップショットをそのまま出発点にする** (#240)。
+    // 既定 (false) は「静止した authored 状態」を前提に動的値を捨てて組み直す。
+    // クロックが回っている実機を撮ると、コンパレーターの powered などは
+    // 「予約 tick が実行された結果」なので、捨てると tick 0 から実機と食い違う
+    const trust = opts.trustAuthored === true
     this.scheduledTicks = []
+    this.runningThisTick.clear()
     this.blockEvents = []
     this.seqCounter = 0
     // 初期組み立て中は PP を抑止 (オブザーバーは authored 安定状態のまま発火しない)
     this.suppressPP = true
 
-    // Step 1: 動的状態をリセット
-    for (const [key, block] of this.blocks) {
+    // Step 1: 動的状態をリセット (trustAuthored なら丸ごと飛ばす)
+    for (const [key, block] of trust ? [] : this.blocks) {
       if (block.type === 'wire') {
         this.blocks.set(key, { ...block, power: 0 })
       } else if (block.type === 'lamp') {
@@ -676,7 +902,7 @@ export class SimWorld {
     // （BFS だと処理順依存になるため、全体パスを繰り返す。
     //   固体の充電状態は power.ts の純クエリで都度計算されるため
     //   反復対象はワイヤーのみでよい）
-    let changed = true
+    let changed = !trust
     let pass = 0
     while (changed && pass < 100) {
       changed = false
@@ -694,7 +920,7 @@ export class SimWorld {
     }
 
     // Step 3: ランプと固体（表示用 powered）の状態を更新
-    for (const [key, block] of this.blocks) {
+    for (const [key, block] of trust ? [] : this.blocks) {
       const pos = keyToPos(key)
       if (block.type === 'lamp') {
         const lit = isBlockPowered(this, pos)
@@ -723,7 +949,7 @@ export class SimWorld {
     // Step 3b: パワードレールの powered を収束するまで繰り返し計算。
     // 連鎖は「隣接レールが powered」を条件にするため 1 パスでは広がらない。
     // Step 1 で false に落としてあるので単調増加として収束する (ワイヤーと同趣旨)。
-    let railChanged = true
+    let railChanged = !trust
     let railPass = 0
     while (railChanged && railPass < 100) {
       railChanged = false
@@ -743,7 +969,9 @@ export class SimWorld {
     // turn_on を、入力のあるコンパレーターは出力を schedule する。
     // ここを抜くとクロック回路（torch + repeater のフィードバック）が
     // tick=0 で何もスケジュールされず発振開始しない。
-    for (const [key] of this.blocks) {
+    // trustAuthored のときはここも飛ばす。**実機から読んだ予約を後から積む**ので、
+    // sim が自前で予約を組み直すと二重になる
+    for (const [key] of trust ? [] : this.blocks) {
       const pos = keyToPos(key)
       const b = this.getBlockAt(pos)
       if (
@@ -758,6 +986,30 @@ export class SimWorld {
       }
     }
 
+    // Step 4b: **blockstate に出ない値だけは trustAuthored でも組み直す** (#240)。
+    //
+    // コンパレーターの出力強度は BlockEntity の OutputSignal で、blockstate には
+    // powered (0 か否か) しか出ない。実機のスナップショットを読んでも強度が分からず、
+    // 0 のままだと下流のダストが丸ごと 0 になる
+    // (実機の最小再現 elevator-observer-min: 実機 15 / sim 0 で発覚)。
+    //
+    // **実機から読めた値があればそれを使う** (#249)。計算し直しでよいのは
+    // 止まっている回路だけで、信号が周回しながら 1 ずつ減っていく機械では
+    // コンパレーターが「まだ書き換わっていない古い値」を持っている。
+    // 計算し直すと最初から新しい値になり、予約が発火しても何も変わらず**機械が止まる**
+    // (実機 fixture elev-dust-decay-min: 実機は 15→14→13、sim は 15 のまま不動)。
+    // 読めなかった座標は従来どおり今の入力から計算する
+    if (trust) {
+      for (const [key, block] of this.blocks) {
+        if (block.type !== 'comparator') continue
+        const captured = opts.comparatorOutputs?.get(key)
+        const out = captured !== undefined
+          ? captured
+          : block.powered ? this.computeComparatorOutput(keyToPos(key), block) : 0
+        if (block.outputPower !== out) this.blocks.set(key, { ...block, outputPower: out })
+      }
+    }
+
     // Step 5: スケジュール済みティックを処理して安定化（クロック回路では呼ばない）
     // initialize() 後は tick=0 の初期状態から手動で進める想定のため flush は行わない
 
@@ -766,17 +1018,41 @@ export class SimWorld {
   }
 
   /**
+   * 実機から読んだ予約 tick をそのまま積む (#240)。
+   *
+   * **ブロック状態だけでは動いている機械を再現できない**。リピーターの
+   * 「あと 5gt で ON」のような予約は blockstate に出ないため、実機のスナップショットを
+   * そのまま読ませても出発点が揃わない。実機側は保存データ (チャンク NBT の
+   * `block_ticks`) から残り遅延と優先度を読める
+   * [確定: 26.2 SavedTick — codec は i=type / t=delay / p=priority、
+   *  unpack が `currentTick + delay` を発火 tick にする]。
+   *
+   * `initialize()` の**後**に呼ぶこと (initialize は予約を空にする)。
+   */
+  seedScheduledTick(pos: Pos3D, delay: number, priority: number): boolean {
+    const block = this.getBlockAt(pos)
+    if (!block || block.type === 'air') return false
+    this.scheduledTicks.push({
+      pos: [...pos] as Pos3D,
+      blockType: block.type,
+      dueTick: this.currentTick + Math.max(0, Math.floor(delay)),
+      priority,
+      seq: this.seqCounter++,
+    })
+    return true
+  }
+
+  /**
    * `/setblock` 相当のブロック差し替え (#127)。**BUD の検証に使う**。
    *
-   * vanilla の SetBlockCommand は `block.place(level, pos, 2 | 256)` で置く。
+   * vanilla の SetBlockCommand は **flag 2 | 256** で置く。
    * flag に **UPDATE_NEIGHBORS (1) が立っていない**ので置いた瞬間は近隣更新を出さず、
-   * そのあと `updateNeighboursOnBlockSet` → `updateNeighborsAt(pos)` で
+   * そのあと `updateNeighboursOnBlockSet` → `updateNeighborsAt` で
    * **周囲 6 方向にだけ**更新を配る (自分自身には配らない)
    * [確定: 26.2 SetBlockCommand.setBlock / ServerLevel.updateNeighboursOnBlockSet]。
    *
-   * **置いた位置自身も再評価する**。`BaseRailBlock.onPlace` は
-   * `if (!oldState.is(state.getBlock()))` で「同じブロック種の上書きなら updateState を
-   * 呼ばない」ように読めるが、**実機 1.21.1 で試すと同種上書きでも powered は保持されず
+   * **置いた位置自身も再評価する**。`BaseRailBlock.onPlace` は「置き換え前と同じブロック種の
+   * 上書きなら updateState を呼ばない」ように読めるが、**実機 1.21.1 で試すと同種上書きでも powered は保持されず
    * 即座に再計算される** (リピーターの powered / ランプの lit も同様に落ちる)。
    * `/setblock ... strict` (onPlace を飛ばす flag 512) は 1.21.1 には無く、carpet の
    * scarpet `set()` でも同じだった。実機の観測に合わせてここでも自身を再評価する。
@@ -800,16 +1076,21 @@ export class SimWorld {
 
     this.neighborChanged(pos)   // 置いた位置自身の再評価 (上記の実測に合わせる)
     this.emitShapeUpdate(pos)   // flag に UPDATE_KNOWN_SHAPE(16) が無い → updateShape は飛ぶ
-    this.submitMultiNC(pos)     // updateNeighborsAt(pos) — 周囲 6 方向のみ
+    this.submitMultiNC(pos)     // updateNeighborsAt 相当 — 周囲 6 方向のみ
+    // **ワイヤーの電力も配り直す** (#259)。sim ではダストは neighborChanged に
+    // 反応せず propagateChange 経由でしか更新されないので、これが無いと
+    // `/setblock redstone_block` を置いてもダストが 0 のままになる
+    // (vanilla は RedStoneWireBlock.neighborChanged → updateSurroundingRedstone で更新する)
+    this.propagateChange(pos)
   }
 
   /**
    * レールを置いた (または押されて着地した) ときの形状決定を世界へ適用する。
-   * vanilla の `BaseRailBlock.updateDir` → `new RailState(...).place(...)` に対応する
+   * vanilla の `BaseRailBlock.updateDir` → `RailState.place` に対応する
    * [確定: 26.2 BaseRailBlock.java:111-118]。
    *
    * **形状を書いた各レールが更新源になる** (#132)。vanilla は RailState.place も
-   * connectTo も `level.setBlock(pos, state, 3)` で書く [確定: 26.2 RailState.java:205,333]。
+   * connectTo も **flag 3 の setBlock** で書く [確定: 26.2 RailState.java:205,333]。
    * flag 3 = UPDATE_NEIGHBORS(1) | UPDATE_CLIENTS(2) なので
    *   - flag 1  → そのレールが周囲 6 方向へ近隣更新を配る
    *   - 16 が無い → updateNeighbourShapes が走り隣接オブザーバーが発火する
@@ -826,7 +1107,7 @@ export class SimWorld {
   private applyRailPlacement(pos: Pos3D, defaultShape: RailShape, first = true): Pos3D[] {
     const written: Pos3D[] = []
     // hasSignal は通常レールの曲線の優先順位にだけ効く [確定: 26.2 BaseRailBlock.updateDir
-    // が level.hasNeighborSignal(pos) を place へ渡す]。
+    // が「その位置が受電しているか」を place へ渡す]。
     // first=false は実行中の再計算 (RailBlock.updateState) 経路で、形状が変わらなければ
     // ワールドへの書き込みごと起きない = 更新も出ない (#142)
     for (const c of planRailPlacement(this, pos, defaultShape, isBlockPowered(this, pos), first)) {
@@ -921,7 +1202,7 @@ export class SimWorld {
       this.traceCloseUpdate(abbrOf(next), next.open ? 'n' : 'f', 0, 'PI')
     } else if (block.type === 'detector_rail') {
       // マインカートの「乗り込み」を手動トリガする (#146)。既に powered なら no-op
-      // [確定: 26.2 DetectorRailBlock.entityInside の `if (!state.getValue(POWERED))` ガード]。
+      // [確定: 26.2 DetectorRailBlock.entityInside — POWERED が既に true なら何もしないガード付き]。
       // ON → 20gt (PRESSED_CHECK_PERIOD) 後の tile tick で checkPressed が
       // カート不在と再評価して自動 OFF する (感圧板と同型の折衷モデル)。
       // [実機 fixture detector-rail-cart-pulse: t3 検出 → t23 OFF]
@@ -962,7 +1243,87 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Wp', 'n', 0, 'PI')
       this.schedule(pos, 10, 0)  // [確定: 26.2 WeightedPressurePlateBlock.getPressedTime]
+    } else if (block.type === 'lectern') {
+      // ページをめくる (#240)。実機では最終ページの次はめくれないが、
+      // **UI から任意の階を選べるようにする**ため 0 に戻す折衷にする
+      // (樽の +1 と同型。信号の伝わり方 = CU だけ実機と揃える)
+      if (!block.hasBook || block.pages <= 1) return
+      const page = (block.page + 1) % block.pages
+      this.setBlockAt(pos, { ...block, page })
+      this.traceProcess('PI', 'Lc', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitComparatorUpdate(pos)
+      this.traceCloseUpdate('Lc', 'n', 0, 'PI')
+    } else if (block.type === 'container') {
+      // 樽/チェストの中身を手で 1 段階増やす (#236)。15 の次は 0 に戻る。
+      // vanilla に「1 回叩くと 1 段上がる」操作は無く、これは**プレイヤーが
+      // 中身を出し入れする行為の折衷**。信号の変わり方 (CU) だけは実物と揃える
+      this.setContainerSignal(x, y, z, (effectiveContainerSignal(block) + 1) % 16)
     }
+  }
+
+  /**
+   * コンテナの中身を差し替えて、コンパレーターに伝える (#236)。
+   *
+   * [確定: 26.2 BlockEntity.setChanged → Level.updateNeighbourForOutputSignal]
+   * 中身は BlockEntity の情報なので **blockstate は変わらない**。したがって
+   * PP (オブザーバー起動) も NC も出ず、**水平 4 方向のコンパレーターにだけ**
+   * 更新が飛ぶ (直接隣接、または導体 1 個越し)。真上のコンパレーターは反応しない。
+   *
+   * `slots` を持つコンテナ (物流モード) は、その信号になる最小個数へ組み替える。
+   */
+  /**
+   * コンテナの 1 スロットを差し替える (`/item replace block <pos> container.<n>` 相当。#236)。
+   *
+   * [確定: 26.2 ItemCommands.setBlockItem → Container.setItem →
+   *  BaseContainerBlockEntity.setItem — 末尾で setChanged を呼ぶ]
+   * プレイヤーが GUI でアイテムを動かしたときと**同じ経路**なので、実機 fixture の
+   * 入力にこれを使える。伝わるのは `setContainerSignal` と同じ CU だけ。
+   */
+  setContainerSlot(x: number, y: number, z: number, slot: number, item: ItemStack | null): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || !isContainerType(block.type)) return
+    const slots = (containerSlotsOf(block) ?? emptySlots(block.type)).slice()
+    if (slot < 0 || slot >= slots.length) return
+    slots[slot] = item
+    this.setBlockAt(pos, { ...block, slots } as BlockState)
+    this.traceProcess('PI', abbrOf(block), 'n', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate(abbrOf(block), 'n', 0, 'PI')
+  }
+
+  /** 書見台のページを直接指定する (#240)。実機の `/data modify block ... Page` に対応 */
+  setLecternPage(x: number, y: number, z: number, page: number): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || block.type !== 'lectern') return
+    const p = Math.max(0, Math.min(Math.max(0, block.pages - 1), Math.floor(page)))
+    if (p === block.page) return
+    this.setBlockAt(pos, { ...block, page: p })
+    this.traceProcess('PI', 'Lc', 'n', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate('Lc', 'n', 0, 'PI')
+  }
+
+  setContainerSignal(x: number, y: number, z: number, signal: number): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || block.type !== 'container') return
+    const s = Math.max(0, Math.min(15, Math.floor(signal)))
+    // 値が変わらなくても CU は飛ばす。vanilla の setChanged は**中身が動いたら
+    // 無条件**に updateNeighbourForOutputSignal を呼ぶ (同じ強度のまま 1 個入れ替えても
+    // 呼ばれる)。コンパレーター側が出力差分で予約するので観測結果は変わらない
+    const next: ContainerState = block.slots !== undefined
+      ? { ...block, slots: slotsForSignal('container', s) }
+      : { ...block, signal: s }
+    this.setBlockAt(pos, next)
+    this.traceProcess('PI', 'Cn', s > 0 ? 'n' : 'f', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate('Cn', s > 0 ? 'n' : 'f', 0, 'PI')
   }
 
   // ── 状態クエリ ───────────────────────────────────────────
@@ -1018,6 +1379,7 @@ export class SimWorld {
     const w = new SimWorld()
     w.blocks = new Map(this.blocks)
     w.scheduledTicks = this.scheduledTicks.map(t => ({ ...t, pos: [...t.pos] as Pos3D }))
+    w.runningThisTick = new Set(this.runningThisTick)
     w.blockEvents = this.blockEvents.map(e => ({ ...e, pos: [...e.pos] as Pos3D }))
     w.currentTick = this.currentTick
     w.seqCounter = this.seqCounter
@@ -1093,6 +1455,13 @@ export class SimWorld {
         // 点灯中で基無給電 (遷移なし)。刈った履歴と burnedOut 表示を整える。
         this.setBlockAt(pos, { ...block, recentToggles: toggles, burnedOut: false })
       }
+    } else if (block.type === 'bubble_column') {
+      // [確定: 26.2 BubbleColumnBlock.tick → updateColumn]
+      // 予約が来たら柱を評価し直す。書き換えは updateBubbleColumn が同期で行う
+      for (const k of this.updateBubbleColumn(pos)) changed.push(k)
+      for (const k of this.updateWaterFlow(pos)) changed.push(k)
+    } else if (block.type === 'water') {
+      for (const k of this.updateWaterFlow(pos)) changed.push(k)
     } else if (block.type === 'lamp') {
       // vanilla RedstoneLampBlock.tick: 消灯 tick は「LIT かつ無入力」なら消灯。
       // 点灯は neighborChanged で即時なので、ここでは消灯のみ扱う。
@@ -1174,6 +1543,28 @@ export class SimWorld {
       if (taken) {
         const destPos = neighbor(pos, block.facing)
         const dest = this.getBlockAt(destPos)
+        // **バケツはワールドを書き換える** (#252)。射出ではなく前方のブロックを
+        // 置く / 汲み上げるので、通常の射出経路より先に処理する
+        // [確定: 26.2 DispenseItemBehavior — バケツは専用の DispenseItemBehavior を持ち、
+        //  失敗したときだけ既定の射出に落ちる]
+        if (block.type === 'dispenser' && (taken.item.id === 'water_bucket' || taken.item.id === 'bucket')) {
+          const swapped = this.dispenseBucket(destPos, taken.item.id)
+          if (swapped !== null) {
+            // **スタック上限も持ち替える** (bucket=16 / water_bucket=1)。
+            // これを間違えるとコンパレーターの読みがずれる
+            const slots = putOne(taken.slots,
+              { ...taken.item, id: swapped, stack: stackSizeOf(swapped).stack })
+            // 入れ替え先が無い (満杯) ことは 1 個抜いた直後なので起きないが、
+            // 起きたら何もしなかったことにする (バケツを消さない)
+            if (slots !== null) {
+              this.setBlockAt(pos, { ...block, slots })
+              changed.push(posKey(pos), posKey(destPos))
+              this.emitComparatorUpdate(pos)
+            }
+            return changed
+          }
+          // 置けない / 汲めない → 既定の射出へ落ちる (vanilla と同じ)
+        }
         const destSlots = containerSlotsOf(dest)
         const put = destSlots !== undefined ? putOne(destSlots, taken.item) : null
         if (block.type === 'dropper' && dest && put) {
@@ -1258,7 +1649,10 @@ export class SimWorld {
    * 起動する連鎖」で到達可能になる — 差が出る回路は 02 §6 参照。
    */
   private isMovable(block: BlockState): boolean {
-    if (block.type === 'solid' || block.type === 'lamp') return true
+    // 黒曜石・岩盤などは押せない (#253)。[確定: 26.2 pushReaction(BLOCK)]
+    // sim は材質を潰しているので取り込み時に立てた immovable で割る
+    if (block.type === 'solid') return block.immovable !== true
+    if (block.type === 'lamp') return true
     // 非導体でもフルブロック / スラブは PushReaction 既定 = NORMAL で可動 (#184)
     if (block.type === 'glass' || block.type === 'slab') return true
     if (block.type === 'redstone_block' || block.type === 'target' || block.type === 'note_block') return true
@@ -1275,6 +1669,12 @@ export class SimWorld {
     // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
     // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
     if (isRail(block)) return true
+    // 装飾・大釜・コンポスターは PushReaction 既定 = NORMAL で可動 (#234)。
+    // **lodestone はここに入れない** — pushReaction(BLOCK) で押せない
+    // [確定: 26.2 Blocks.LODESTONE]
+    if (block.type === 'decor' || block.type === 'cauldron' || block.type === 'composter') return true
+    // ソウルサンドは PushReaction 既定 = NORMAL
+    if (block.type === 'soul_sand') return true
     return false
   }
 
@@ -1316,27 +1716,35 @@ export class SimWorld {
    * extending 時のみ。sticky は引かずに置き去りにする = 既存挙動)。
    */
   private resolvePushStructure(
-    pos: Pos3D, facing: Dir6, startAt?: Pos3D,
+    pos: Pos3D, facing: Dir6, startAt?: Pos3D, extending = true,
   ): { toPush: Pos3D[]; toDestroy: Pos3D[] } | null {
     const toPush: Pos3D[] = []
     const toDestroy: Pos3D[] = []
     const key = (p: Pos3D): string => posKey(p)
     const inPush = (p: Pos3D): number => toPush.findIndex(q => key(q) === key(p))
 
-    /** 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可 */
-    const pushable = (p: Pos3D, allowDestroy: boolean): boolean => {
+    /**
+     * 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可。
+     *
+     * `face` は**どの向きから動かそうとしているか**。PUSH_ONLY (釉薬テラコッタ) は
+     * 押し方向と一致するときだけ動く (#255)。
+     * [実機実測 2026-08-20: 正面から押す → 動く / 粘着で引く → 引けず置き去り /
+     *  スライムの横に置く → 引き連れられずその場に残る]
+     */
+    const pushable = (p: Pos3D, allowDestroy: boolean, face: Dir6): boolean => {
       const b = this.getBlockAt(p)
       if (!b) return true                                   // 空気
       if (b.type === 'piston' || b.type === 'sticky_piston') return !b.extended
       if (this.isPushDestroy(b)) return allowDestroy
+      if (b.type === 'solid' && b.pushOnly === true) return face === facing
       return this.isMovable(b)                              // それ以外は BLOCK 扱い
     }
 
     /** 26.2 PistonStructureResolver.addBlockLine */
-    const addBlockLine = (start: Pos3D): boolean => {
+    const addBlockLine = (start: Pos3D, face: Dir6): boolean => {
       const first = this.getBlockAt(start)
       if (!first) return true                               // 空気 → 何も足さない
-      if (!pushable(start, false)) return true
+      if (!pushable(start, false, face)) return true
       if (key(start) === key(pos)) return true
       if (inPush(start) > -1) return true
 
@@ -1350,7 +1758,8 @@ export class SimWorld {
         const next = this.getBlockAt(back)
         if (!next
             || !canStickToEachOther(prev, next)
-            || !pushable(back, false)
+            // 後ろに繋がる塊は「押し方向の逆」から足しに行くので PUSH_ONLY は入らない
+            || !pushable(back, false, OPPOSITE[facing])
             || key(back) === key(pos)) break
         cur = next
         if (++count + toPush.length > MAX_PUSH_DEPTH) return false
@@ -1376,7 +1785,7 @@ export class SimWorld {
         }
         const b = this.getBlockAt(p)
         if (!b) return true                                 // 空気に到達 → 押せる
-        if (!pushable(p, true) || key(p) === key(pos)) return false
+        if (!pushable(p, true, facing) || key(p) === key(pos)) return false
         if (this.isPushDestroy(b)) { toDestroy.push(p); return true }
         if (toPush.length >= MAX_PUSH_DEPTH) return false
         toPush.push(p)
@@ -1401,14 +1810,19 @@ export class SimWorld {
         if (dir === facing || dir === OPPOSITE[facing]) continue   // 押し軸は対象外
         const nPos = neighbor(from, dir)
         const nb = this.getBlockAt(nPos)
-        if (nb && canStickToEachOther(nb, fromState) && !addBlockLine(nPos)) return false
+        // **枝の向きを渡す**。glazed terracotta のような PUSH_ONLY は
+        // 押し方向と一致する向きからしか動かないので、横からは引き連れない (#255)
+        if (nb && canStickToEachOther(nb, fromState) && !addBlockLine(nPos, dir)) return false
       }
       return true
     }
 
     const start = startAt ?? neighbor(pos, facing)
     const startBlock = this.getBlockAt(start)
-    if (!pushable(start, false)) {
+    // 収縮では facing が「引く向き」なので、対象から見た向きはその逆になる。
+    // PUSH_ONLY はこれで**引けない**側に落ちる (#255)
+    const startFace = extending ? facing : OPPOSITE[facing]
+    if (!pushable(start, false, startFace)) {
       // 直前が壊れ物なら破壊して終端 (26.2 resolve の DESTROY 分岐)
       if (startBlock && this.isPushDestroy(startBlock)) {
         toDestroy.push(start)
@@ -1416,7 +1830,7 @@ export class SimWorld {
       }
       return startBlock ? null : { toPush, toDestroy }
     }
-    if (!addBlockLine(start)) return null
+    if (!addBlockLine(start, startFace)) return null
     for (let i = 0; i < toPush.length; i++) {
       const b = this.getBlockAt(toPush[i])
       if (b && isStickyBlock(b) && !addBranchingBlocks(toPush[i])) return null
@@ -1450,13 +1864,15 @@ export class SimWorld {
     // 相当を行うため、ここでの一律 no-op ガードは撤去した (mid-retract の base=moving は
     // ev.pos のブロック種チェック (block.type !== piston) で既に弾かれている)。
 
-    const setMoving = (pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState) => {
+    const setMoving = (
+      pos: Pos3D, kind: 'normal' | 'sticky', into: BlockState, extending: boolean,
+    ) => {
       // #80: 確定は ST 相の tile tick でなく BlockEntity 相 (finalizeDue) で行う。
       // ST (phase4) は BE (phase8) の前なので、旧実装では確定ブロックが同 tick 内で
       // 下流ピストンを起動していた (実機と 1tick ズレ)。vanilla は
       // PistonMovingBlockEntity.tick (phase10) で確定するため下流 BE は翌 tick 発火。
       this.setBlockAt(pos, {
-        type: 'moving_piston', facing: piston.facing, kind, into,
+        type: 'moving_piston', facing: piston.facing, kind, into, extending,
         finalizeDue: this.currentTick + 2, seq: this.seqCounter++,
       })
       changed.push(posKey(pos))
@@ -1487,7 +1903,7 @@ export class SimWorld {
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
       for (let i = pushList.length - 1; i >= 0; i--) {
-        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i])
+        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i], true)
       }
       // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
       // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
@@ -1501,7 +1917,7 @@ export class SimWorld {
       // head セル (= 最近接 src と同座標) を head 行きの moving に
       setMoving(headPos, sticky ? 'sticky' : 'normal', {
         type: 'piston_head', facing: piston.facing, sticky,
-      })
+      }, true)
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
       this.traceOpenUpdate(ev.pos)
@@ -1514,6 +1930,18 @@ export class SimWorld {
     } else {
       // retract
       if (!piston.extended) return []
+      // **実行時再判定**: 収縮イベントが走る時点でまだ受電していれば収縮を取り消す (#231)
+      // [確定: 26.2 PistonBaseBlock.triggerEvent — 伸長イベント (b0=1/2) の実行時にまだ
+      //  受電していれば、extended=true の状態を **flag 2** で書き直して false を返し、
+      //  イベント自体を取り消す。flag 2 なので NC は飛ばさない]。
+      // 収縮予約は「受電が切れた」瞬間の NC で積まれるが、同じ tick の ST 相で
+      // オブザーバー等が再点火すると BE 相の時点では受電が戻っている。
+      // これが無いと**伸びたままのはずのピストンが縮んでしまう**
+      // (5×5 ドアで t=20 に早縮みしていた原因)
+      if (this.shouldExtend(ev.pos, piston)) {
+        this.traceProcess('BE', 'Pi', 'r', 0, { failed: true })
+        return []
+      }
       // トレース: BE 実行 (収縮)
       this.traceProcess('BE', 'Pi', 'r', 0)
       // #82: 収縮 BE が伸長中 (head=moving) に到達したら、まず伸長を即確定させる
@@ -1539,13 +1967,37 @@ export class SimWorld {
         // これでスライム/蜂蜜にくっついた塊ごと引き戻せる
         const pullDir = OPPOSITE[piston.facing]
         const pullFrom = neighbor(headPos, piston.facing)
-        const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom)
+
+        // #231: pos+2 が**同じ向きで伸長中**の moving なら、その場で確定させて
+        // 引き戻しは行わない
+        // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) の isSticky 分岐 —
+        //  pos+2 の PistonMovingBlockEntity の向きが自分の facing と同じで、かつ
+        //  伸長中なら、その BlockEntity をその場で確定 (finalTick) させ、
+        //  「ピストン片あり」と扱って引き戻し (moveBlocks) を飛ばす]。
+        // **確定が BE 相で起きる**のが要点で、phase10 任せにすると
+        // 「そのセルを押したい下流ピストン」が翌 tick までずれる。
+        // ユーザ提供の 5×5 ドアで tick 18 の押し上げが 1 tick 遅れていた原因
+        const twoBlock = this.getBlockAt(pullFrom)
+        if (twoBlock?.type === 'moving_piston'
+          && twoBlock.facing === piston.facing && twoBlock.extending) {
+          const finalized = new Set<string>()
+          this.finalizeMovingPiston(pullFrom, twoBlock, finalized)
+          for (const k of finalized) changed.push(k)
+          // pistonPiece 相当: 引き戻しはしない
+          setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
+          this.traceOpenUpdate(ev.pos)
+          this.afterPistonMove(affected)
+          this.traceCloseUpdate('Pi', 'r', 0, 'BE')
+          return changed
+        }
+
+        const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom, false)
         const pullList = pulled ? pulled.toPush : []
         if (pullList.length > 0) {
           const payloads = pullList.map(q => this.getBlockAt(q)!)
           // 近い順に行き先 (piston 側) へ moving を置く
           for (let i = 0; i < pullList.length; i++) {
-            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i])
+            setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i], false)
           }
           const destKeys = new Set(pullList.map(q => posKey(neighbor(q, pullDir))))
           for (const src of pullList) {
@@ -1558,13 +2010,213 @@ export class SimWorld {
         }
       }
       // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
-      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false })
+      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
       this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(affected)
       this.traceCloseUpdate('Pi', 'r', 0, 'BE')
     }
 
     return changed
+  }
+
+  /**
+   * 泡柱の評価 (#234)。[確定: 26.2 BubbleColumnBlock.updateColumn —
+   * 起点が「占有できるマス」なら、真下と占有先から柱の状態を決めて起点に書き込み、
+   * そのあと 1 マスずつ上へ進みながら占有できる限り同じ状態を書き続ける。
+   * 書き込みが失敗した時点で打ち切る。書き込みフラグは 2 (近隣更新なし・形状更新あり)]
+   *
+   * **上へループで同期的に書き換える**ので、140 段でも 1 tick で全段が変わる
+   * (これが「無遅延の縦バス」の正体)。flag 2 なので**近隣更新は出さないが
+   * 形状更新は配られる** = 隣のオブザーバーは検知する。
+   */
+  private updateBubbleColumn(pos: Pos3D): string[] {
+    const changed: string[] = []
+    // 占有できるのは「泡柱」か「**水源**」。
+    // **落下水 (level 8) には柱が立たない** (#252)。これがガラスエレベーターの
+    // 階指定の正体で、ディスペンサーが水源を汲み上げると柱がそこで切れ、
+    // 上から落ちてきた水では柱が戻らない。水源が置き直されるまで切れたまま
+    const canOccupy = (b: BlockState | null): boolean =>
+      b?.type === 'bubble_column' || (b?.type === 'water' && b.level === 0)
+    if (!canOccupy(this.getBlockAt(pos))) return changed
+
+    // 柱の状態は**真下**で決まる: ソウルサンド → 上向き / 泡柱 → 同じ向き /
+    // それ以外 → 柱ではなくなる (水源に戻る)
+    const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
+    const next: BlockState = below?.type === 'soul_sand'
+      ? { type: 'bubble_column', drag: false }
+      : below?.type === 'bubble_column'
+        ? { type: 'bubble_column', drag: below.drag }
+        : { type: 'water', level: 0 }
+
+    // 起点から上へ、占有できる限り同じ状態を書き込む
+    const p: Pos3D = [pos[0], pos[1], pos[2]]
+    for (;;) {
+      const cur = this.getBlockAt(p)
+      if (!canOccupy(cur)) break
+      if (cur && !sameColumnState(cur, next)) {
+        this.setBlockAt(p, next)
+        changed.push(posKey(p))
+        // flag 2 = 近隣更新なし・形状更新あり → オブザーバーだけが気づく
+        this.emitShapeUpdate(p)
+      }
+      p[1] += 1
+    }
+    return changed
+  }
+
+  /** 泡柱を含む「水として振る舞うもの」か (落下水も含む) */
+  private isWaterish(b: BlockState | null): boolean {
+    return b?.type === 'water' || b?.type === 'bubble_column'
+  }
+
+  /** この位置の水が流動 tick を必要とするか (要らないなら予約しない) */
+  private waterNeedsFlowTick(pos: Pos3D): boolean {
+    const b = this.getBlockAt(pos)
+    if (!this.isWaterish(b)) return false
+    const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
+    if (below === null || below.type === 'air') return true
+    // 供給が絶たれた落下水は消える番
+    return b?.type === 'water' && b.level === 8
+      && !this.isWaterish(this.getBlockAt([pos[0], pos[1] + 1, pos[2]]))
+  }
+
+  /**
+   * 水の流動 (#252)。**縦だけ**。
+   *
+   * ガラスエレベーターの階指定はこの経路そのもの:
+   * ディスペンサーが水源を汲み上げる → 泡柱がそこで切れる →
+   * 5gt 後に上から水が落ちてくるが、**落下水では柱が戻らない** →
+   * 水源が置き直されるまで人が落ちる。
+   *
+   * 横方向の広がり (level 1-7) は実装していない (types.ts の WaterState 参照)。
+   * [確定: 26.2 WaterFluid — 水の流動 tick は 5gt / FlowingFluid.spreadTo は flag 3 で置く]
+   */
+  private updateWaterFlow(pos: Pos3D): string[] {
+    const changed: string[] = []
+    const block = this.getBlockAt(pos)
+    if (!this.isWaterish(block)) return changed
+
+    // 供給が絶たれた落下水は消える (水源は消えない)
+    if (block?.type === 'water' && block.level === 8
+      && !this.isWaterish(this.getBlockAt([pos[0], pos[1] + 1, pos[2]]))) {
+      this.setBlockAt(pos, { type: 'air' })
+      changed.push(posKey(pos))
+      this.emitShapeUpdate(pos)   // 下の「落下水は近隣更新を出さない」と同じ扱い
+      return changed
+    }
+
+    // 下が空いていれば落とす
+    const belowPos: Pos3D = [pos[0], pos[1] - 1, pos[2]]
+    const below = this.getBlockAt(belowPos)
+    if (below === null || below.type === 'air') {
+      this.setBlockAt(belowPos, { type: 'water', level: 8 })
+      changed.push(posKey(belowPos))
+      // **落下水が来ても泡柱は予約し直さない**。形状更新だけ出す (泡柱と同じ flag 2 扱い)。
+      // [実機 fixture bubble-column-refill-fast: 穴に落下水が来た t7 ではなく、
+      //  水源を置き直した t8 の 5gt 後 = t13 に柱が戻る]。
+      // 近隣更新まで出すと柱が t12 に戻ってしまい、実機と 1 tick ずれる
+      // (ガラスエレベーターはディスペンサーが落下水の 1 tick 後に水源を置くので、
+      //  ここがちょうど効く)。**消えるときも同じ扱いにしてある** (こちらは未測定)
+      this.emitShapeUpdate(belowPos)
+      // さらに下へ続く分は、この形状更新を受けた水自身が予約する
+      this.neighborChanged(belowPos)
+    }
+    return changed
+  }
+
+  /**
+   * ディスペンサーのバケツ (#252)。成功したら**入れ替わった後のアイテム ID**、
+   * 何もできなければ null を返す (呼び出し側は既定の射出へ落ちる)。
+   *
+   * - `water_bucket` … 前が空気なら**水源**を置く → `bucket` になる
+   * - `bucket` … 前が水源か泡柱なら汲み上げて空気にする → `water_bucket` になる
+   *
+   * ガラスエレベーターはこれで泡柱を切ったり戻したりして階を決めている
+   * (実機 elev-ride: tick 52 に汲み上げ → 柱が即座に切れる)。
+   * **落下水は汲めない** (水源ではないため)。
+   */
+  private dispenseBucket(destPos: Pos3D, itemId: string): string | null {
+    const dest = this.getBlockAt(destPos)
+    if (itemId === 'water_bucket') {
+      // **落下水の上からでも置ける**。水は置き換え可能なので、汲み上げた穴に
+      // 上から水が落ちてきた後でも水源を置き直せる
+      // (実機 elev-ride: tick 1 に落下水 → tick 2 にディスペンサーが水源を置く)
+      if (dest?.type === 'bubble_column') return 'bucket'   // 既に水源 → 空になるだけ
+      if (dest !== null && dest.type !== 'air' && dest.type !== 'water') return null
+      this.setBlockAt(destPos, { type: 'water', level: 0 })
+    } else {
+      const isSource = dest?.type === 'bubble_column' || (dest?.type === 'water' && dest.level === 0)
+      if (!isSource) return null
+      this.setBlockAt(destPos, { type: 'air' })
+    }
+    // vanilla は setBlock flag 3 相当。泡柱は近隣更新で 5gt の予約が入り、
+    // 面しているオブザーバーは形状更新で気づく
+    this.neighborChanged(destPos)
+    this.emitShapeUpdate(destPos)
+    this.submitMultiNC(destPos)
+    return itemId === 'water_bucket' ? 'bucket' : 'water_bucket'
+  }
+
+  /**
+   * 塀の形状を近傍から計算し直す (#234)。[確定: 26.2 WallBlock]
+   *
+   * - 各辺: 隣が塀 or フルブロックなら繋がる。**上にフルブロック/塀があれば tall**、無ければ low
+   * - `up` (中央の柱): **上の塀が up=true なら自分も true**
+   *   [確定: shouldRaisePost の先頭 `topNeighbourHasPost`] ← これが下方向の無遅延伝播の正体。
+   *   次に「角がある」なら true、南北 or 東西が両方 tall なら false、
+   *   それ以外は上のブロック次第
+   *
+   * 変わったら形状更新を出し (オブザーバーが検知)、**下の塀を再帰的に計算し直す**。
+   * 実機では上端の 1 か所を変えると柱の全段が同じ tick で反転する。
+   */
+  private refreshWall(pos: Pos3D, depth = 0): void {
+    if (depth > 512) return                       // 暴走よけ (実回路は 140 段)
+    const w = this.getBlockAt(pos)
+    if (w?.type !== 'wall') return
+
+    const above = this.getBlockAt([pos[0], pos[1] + 1, pos[2]])
+    /**
+     * その辺を tall にするか。[確定: 26.2 WallBlock.makeWallState —
+     * 上のブロックの当たり判定が**その辺の位置**を覆っていれば tall]。
+     * 上がフルブロックなら全辺 tall。上が塀なら**同じ辺が繋がっているときだけ** tall
+     * (塀の当たり判定は中央の柱 + 繋がっている辺だけなので、
+     *  上の塀が none の辺は下の辺を持ち上げない)。実機で確認:
+     * 上端の北を切ると、その 1 つ下だけ north=low に落ちる
+     */
+    const tallOn = (dir: Dir6): boolean => {
+      if (isFullCube(above)) return true
+      if (above?.type === 'wall') return sideValue(above, dir) !== 'none'
+      return false
+    }
+    const sideOf = (dir: HDir): WallSide => {
+      const nb = this.getBlockAt(neighbor(pos, dir))
+      const connects = connectsToWall(nb, dir)
+      return !connects ? 'none' : tallOn(dir) ? 'tall' : 'low'
+    }
+    const north = sideOf('north'), south = sideOf('south')
+    const east = sideOf('east'), west = sideOf('west')
+
+    // up の判定 [確定: shouldRaisePost]
+    let up: boolean
+    if (above?.type === 'wall' && above.up) {
+      up = true                                   // ← 上の塀と同期する
+    } else {
+      const nN = north === 'none', nS = south === 'none'
+      const nE = east === 'none', nW = west === 'none'
+      const hasCorner = (nN && nS && nE && nW) || nN !== nS || nE !== nW
+      if (hasCorner) up = true
+      else if ((north === 'tall' && south === 'tall') || (east === 'tall' && west === 'tall')) up = false
+      else up = isFullCube(above)
+    }
+
+    if (w.north === north && w.south === south && w.east === east && w.west === west && w.up === up) return
+    this.setBlockAt(pos, { ...w, north, south, east, west, up })
+    this.emitShapeUpdate(pos)                     // オブザーバーが検知する
+    // 下と横の塀へ連鎖 (updateShape の伝播に相当)。**同じ tick で全段が変わる**
+    this.refreshWall([pos[0], pos[1] - 1, pos[2]], depth + 1)
+    for (const d of ['north', 'south', 'east', 'west'] as const) {
+      this.refreshWall(neighbor(pos, d), depth + 1)
+    }
   }
 
   /**
@@ -1680,8 +2332,8 @@ export class SimWorld {
       }
       case 'detector_rail': {
         // checkPressed の更新一式 [確定: 26.2 DetectorRailBlock.java:88-113]:
-        //   setBlock(flag3) → 自身 6 方向 / updatePowerToConnected → 繋がる 2 マスへ
-        //   単発通知 / updateNeighborsAt(pos) (重複) / updateNeighborsAt(pos.below())
+        //   flag3 の setBlock → 自身 6 方向 / updatePowerToConnected → 繋がる 2 マスへ
+        //   単発通知 / 自身から 6 方向 (重複) / 真下から 6 方向
         //   / 末尾で updateNeighbourForOutputSignal (コンパレーター)
         this.submitMultiNC(pos)
         for (const c of railConnections(pos, block.shape)) this.submitSingleNC(c, block.type)
@@ -1695,8 +2347,8 @@ export class SimWorld {
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy': {
         // updateNeighbours: 自身の隣接 6 + 直下 (取り付け面) の隣接 6
-        // [確定: 26.2 BasePressurePlateBlock.updateNeighbours =
-        //  updateNeighborsAt(pos) + updateNeighborsAt(pos.below())]
+        // [確定: 26.2 BasePressurePlateBlock.updateNeighbours —
+        //  自身の位置と真下の位置の 2 か所から 6 方向へ配る]
         this.submitMultiNC(pos)
         this.submitMultiNC(neighbor(pos, 'down'))
         break
@@ -1759,6 +2411,19 @@ export class SimWorld {
    */
   private emitShapeUpdate(pos: Pos3D): void {
     if (this.suppressPP) return
+
+    // Y 軸で隣り合う音符ブロックは音色を引き直す (#231)。
+    // [確定: 26.2 NoteBlock.updateShape — `directionToNeighbour.getAxis() == Y` なら
+    //  setInstrument]。**上下どちらの隣が変わっても走る**ので両側を見る
+    //  (音色そのものは常に「下のブロック」から決まるが、引き直しの契機は上下両方)。
+    // **NC ではなく形状更新でしか走らない**。実機の settle (全ブロックへ update) を
+    // 通しても音色は古いままで、最初の形状更新ではじめて更新される
+    // — なので suppressPP (= settle 相当) の後に置く
+    this.refreshNoteInstrument([pos[0], pos[1] + 1, pos[2]])
+    this.refreshNoteInstrument([pos[0], pos[1] - 1, pos[2]])
+    // 隣の塀は形状を計算し直す (#234)。自分自身も (置き換わった直後のため)
+    for (const d of ALL_DIRS) this.refreshWall(neighbor(pos, d))
+    this.refreshWall(pos)
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)
@@ -1770,6 +2435,22 @@ export class SimWorld {
       if (this.hasScheduledTick(nPos, 'observer')) continue
       this.schedule(nPos, 2, 0)                      // startSignal: 2gt / priority 0
     }
+  }
+
+  /**
+   * 音符ブロックの音色を直下のブロックから引き直す (#231)。
+   *
+   * 変化したら blockstate が変わるので**オブザーバーに検知させる** (emitShapeUpdate)。
+   * 音色は下のブロックの「種別」だけで決まるため連鎖しない (下が音符ブロックなら
+   * その音色に関わらず bass)。
+   */
+  private refreshNoteInstrument(pos: Pos3D): void {
+    const nb = this.getBlockAt(pos)
+    if (nb?.type !== 'note_block') return
+    const next = noteInstrumentFor(this.getBlockAt([pos[0], pos[1] - 1, pos[2]]))
+    if (next === nb.instrument) return
+    this.setBlockAt(pos, { ...nb, instrument: next })
+    this.emitShapeUpdate(pos)
   }
 
   // ── NC 更新の DFS 実行 ───────────────────────────────────
@@ -1972,20 +2653,43 @@ export class SimWorld {
         if (block.powered !== powered) this.setBlockAt(pos, { ...block, powered })
         break
       }
+      case 'bubble_column': {
+        // [確定: 26.2 BubbleColumnBlock.updateShape —
+        //  下から来た更新 / 上が塞がった等で 5gt の tile tick を予約する]
+        // 5gt 後に柱を評価し直す。**即時に書き換えないのが要点**で、
+        // 実機でも柱を断ち切ってから 5gt 後に崩れる
+        if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
+        // 泡柱も水なので、下が空いたら落ちる (柱を汲み上げた直後の穴を埋めるのはこれ)
+        if (this.waterNeedsFlowTick(pos) && !this.hasScheduledTick(pos, 'bubble_column')) {
+          this.schedule(pos, WATER_TICK_DELAY, 0)
+        }
+        break
+      }
+      case 'water': {
+        // [確定: 26.2 WaterFluid — 水の流動 tick は 5gt]。
+        // **やるのは縦だけ** (#252)。下が空いたら落とし、供給が絶たれた落下水は消す
+        if (this.waterNeedsFlowTick(pos) && !this.hasScheduledTick(pos, 'water')) {
+          this.schedule(pos, WATER_TICK_DELAY, 0)
+        }
+        break
+      }
       case 'note_block': {
         // vanilla NoteBlock.neighborChanged を忠実に再現 (C5 #38 [確定: 26.2]):
-        //   signal = hasNeighborSignal(pos)
-        //   if (signal != POWERED) {
-        //     if (signal) playNote(...)      ← 立ち上がり (false→true) でのみ発音
-        //     setBlock(POWERED=signal, flag3) ← POWERED 更新 + PP/NC
-        //   }
-        // note block は信号を出力しないため下流への NC 伝播は不要 (lamp と同じく
-        // emitShapeUpdate = オブザーバー起動用の PP のみ発行する。G15)。
+        //   自身 6 面の受電 (signal) を取り、保持中の POWERED と食い違うときだけ
+        //   ・signal が真 (立ち上がり) なら playNote を呼ぶ
+        //   ・POWERED を signal に更新して flag3 で書く (POWERED 更新 + PP/NC)
+        // **flag 3 なので近隣更新 (NC) も飛ぶ** (#231)。以前は「音符ブロックは信号を
+        // 出力しないから NC 不要」としていたが、UPDATE_NEIGHBORS は出力の有無と関係なく
+        // 隣接 6 マスへ neighborChanged を配る。QC で音符ブロック越しに受電している
+        // ピストンは**この NC でしか電源断を知れない**
+        // (5×5 ドアで (2,8,6) の収縮が 1 tick 遅れていた原因)。
+        // ランプは flag 2 なので NC を出さない [確定: 26.2 RedstoneLampBlock] — 揃えないこと
         const signal = isBlockPowered(this, pos)
         if (signal !== block.powered) {
           if (signal) this.playNote(pos, block)   // 発音 BE を予約 (被覆条件つき)
           this.setBlockAt(pos, { ...block, powered: signal })
-          this.emitShapeUpdate(pos)               // POWERED 変化 → PP (flag3 相当)
+          this.emitShapeUpdate(pos)               // POWERED 変化 → PP
+          this.submitMultiNC(pos)                 // flag3 の UPDATE_NEIGHBORS 相当
         }
         break
       }
@@ -1996,7 +2700,9 @@ export class SimWorld {
         // ここではなく executeScheduledTick のトグル件数ゲートで行う (vanilla 準拠。
         // 自励クロックの焼き切れ→非復帰はこの 2gt 予約が 160gt を先取りすることで再現)。
         const basePowered = isTorchBasePowered(pos, this)
-        if (block.lit === basePowered) {
+        // **この tick に走る分も予約とみなす** (#264)。取り出し済みの予約を
+        // 数えないと、同じ tick 内で余計な 1 本が積まれて 2gt 後に空撃ちする
+        if (block.lit === basePowered && !this.willTickThisTick(pos, block.type)) {
           this.schedule(pos, 2, 0)
         }
         break
@@ -2020,7 +2726,7 @@ export class SimWorld {
         // (ロック解除時の入出力不整合はここで拾われる)
         if (nowLocked) break
         const inputPowered = this.isRepeaterInputPowered(pos, cur)
-        if (inputPowered !== cur.powered) {
+        if (inputPowered !== cur.powered && !this.willTickThisTick(pos, cur.type)) {
           this.schedule(pos, cur.delay * 2, this.diodeTickPriority(pos, cur, cur.powered))
         }
         break
@@ -2030,8 +2736,25 @@ export class SimWorld {
         // キャンセル・再予約はしない (02 §2 [確定]: 予約は pos+block で常に 1 件)
         const newOutput = this.computeComparatorOutput(pos, block)
         const newPowered = newOutput > 0
-        if (newOutput !== block.outputPower || newPowered !== block.powered) {
+        if (!this.willTickThisTick(pos, block.type)
+          && (newOutput !== block.outputPower || newPowered !== block.powered)) {
           this.schedule(pos, 2, this.diodeTickPriority(pos, block, false))
+        }
+        break
+      }
+      case 'piston_head': {
+        // **ヘッドが受けた NC は基部のピストンへ転送する** (#231)
+        // [確定: 26.2 PistonHeadBlock.neighborChanged — ヘッドが存続可能 (canSurvive) なら、
+        //  facing の反対側 1 マス = 基部の位置へ近隣更新を転送する]。
+        // QC で受電しているピストンは、電源側の変化が「1 個上のマスの隣」で起きるため
+        // 基部に直接 NC が届かない。ヘッド経由のこの転送が唯一の通知経路になる
+        // (5×5 ドアで、電源が切れているのにピストンが縮まないままだった原因)
+        const basePos = neighbor(pos, OPPOSITE[block.facing])
+        const base = this.getBlockAt(basePos)
+        // canSurvive 相当: 基部が同じ向きで伸びているピストンのときだけ転送する
+        if ((base?.type === 'piston' || base?.type === 'sticky_piston')
+          && base.extended && base.facing === block.facing) {
+          this.neighborChanged(basePos)
         }
         break
       }
@@ -2040,15 +2763,24 @@ export class SimWorld {
         // NC 受信時のみ再評価 (BUD の根拠)。状態不一致なら BE を予約
         const should = this.shouldExtend(pos, block)
         if (should && !block.extended) {
-          this.scheduleBlockEvent(pos, 'extend')
+          // **押せるかをこの時点で判定する** (#231)
+          // [確定: 26.2 PistonBaseBlock.checkIfExtend — 押し構造の解決 (PistonStructureResolver)
+          //  が成功したときに限って block event を発行する]。
+          // 予約してから実行時に判定すると、その間に押し先の moving_piston が確定して
+          // **本来押せないはずのタイミングで押せてしまう**
+          // (5×5 ドアの t=220 で、実機が伸ばさないピストンを sim が伸ばしていた原因)
+          if (this.resolvePushStructure(pos, block.facing) !== null) {
+            this.scheduleBlockEvent(pos, 'extend')
+          }
         } else if (!should && block.extended) {
+          // 収縮側は vanilla も resolve を通さない (常に予約する)
           this.scheduleBlockEvent(pos, 'retract')
         }
         break
       }
       case 'hopper': {
         // vanilla HopperBlock.neighborChanged → checkPoweredState:
-        // enabled = !hasNeighborSignal(pos)。受電で enabled=false = ロック。
+        // ENABLED は「自身 6 面が受電していない」ことと同値。受電で enabled=false = ロック。
         // [確定: 26.2 HopperBlock]。setBlock flag2 相当だが blockstate 変化なので
         // オブザーバー検知用に PP も発行する。
         const enabled = !isBlockPowered(this, pos)
@@ -2060,9 +2792,9 @@ export class SimWorld {
       }
       case 'crafter': {
         // vanilla CrafterBlock.neighborChanged [確定: 26.2 CrafterBlock.java:73-88]:
-        //   shouldTrigger = hasNeighborSignal(pos) ← **疑似接続を持たない**
-        //   立ち上がり → scheduleTick 4gt + TRIGGERED=true / 立ち下がり → false
-        // ディスペンサーが pos.above() も見る [確定: DispenserBlock.java:131] のと対照的
+        //   起動条件は自身 6 面の受電 (hasNeighborSignal) だけ ← **疑似接続を持たない**
+        //   立ち上がり → 4gt の tile tick 予約 + TRIGGERED=true / 立ち下がり → false
+        // ディスペンサーが真上 (1 マス上) も見る [確定: DispenserBlock.java:131] のと対照的
         // [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
         const signal = isBlockPowered(this, pos)
         if (signal && !block.triggered) {
@@ -2096,7 +2828,7 @@ export class SimWorld {
       case 'door_wood':
       case 'door_iron': {
         // vanilla DoorBlock.neighborChanged [確定: 26.2 DoorBlock.java:225-238]:
-        //   signal = hasNeighborSignal(自分) || hasNeighborSignal(相方の半分)
+        //   受電判定は「自分の位置の受電」と「相方の半分の位置の受電」の OR
         //   更新元が同じドアブロックなら無視する (2 つの半分が更新を往復しないガード)
         // [実機 fixture door-redstone: 下半分だけ / 上半分だけ どちらの給電でも両方開く]
         if (origin === block.type) break
@@ -2147,7 +2879,7 @@ export class SimWorld {
         if (signal !== block.powered) {
           const lit = block.powered ? block.lit : !block.lit   // 立ち上がりでのみ反転
           this.setBlockAt(pos, { ...block, lit, powered: signal })
-          // setBlock(flag 3): 周囲 6 方向へ近隣更新 + updateNeighbourShapes。
+          // flag 3 の setBlock: 周囲 6 方向へ近隣更新 + updateNeighbourShapes。
           // powered だけ変わった立ち下がりでもオブザーバーは発火する (実機で確認済み)
           this.emitShapeUpdate(pos)
           this.submitMultiNC(pos)
@@ -2173,9 +2905,9 @@ export class SimWorld {
       case 'powered_rail':
       case 'activator_rail': {
         // vanilla PoweredRailBlock.updateState [確定: 26.2]:
-        //   shouldPower = hasNeighborSignal(pos) || 前方向の連鎖 || 後方向の連鎖
-        //   変化したら setBlock(flag3) + updateNeighborsAt(pos.below())
-        //                              + 坂なら updateNeighborsAt(pos.above())
+        //   あるべき powered = 自身 6 面の受電 / 前方向の連鎖 / 後方向の連鎖 のいずれか
+        //   変化したら flag3 で書き、さらに **真下**から 6 方向へ近隣更新を配る
+        //   (坂のときは**真上**からも配る)
         // レール自身は信号を出さない (power.ts に case を持たない) ため、
         // 「真下のブロックへ更新を配る」ことがレッドストーン的な唯一の出力になる。
         const should = shouldRailBePowered(this, pos, block.shape, block.type)
@@ -2185,7 +2917,7 @@ export class SimWorld {
           // flag3 の UPDATE_NEIGHBORS = 自身の周囲 6 方向。隣のパワードレールが
           // NC を受けて再評価することで、連鎖 (最大 8) が伝わっていく
           this.submitMultiNC(pos)
-          // 明示の updateNeighborsAt(pos.below(), this) — 真下ブロックの「周囲」へ配る。
+          // 明示の「真下から 6 方向」の近隣更新 — 真下ブロックの「周囲」へ配る。
           // vanilla が運ぶのは **レール自身** なので origin を明示する (真下のブロック
           // ではない。既定に任せると信号源判定を取り違える。#142)
           this.submitMultiNC([pos[0], pos[1] - 1, pos[2]], null, block.type)
@@ -2202,10 +2934,10 @@ export class SimWorld {
 
   /**
    * 音符ブロックの発音を予約する (26.2 NoteBlock.playNote 相当。C5 #38)。
-   * vanilla の被覆条件は `INSTRUMENT.worksAboveNoteBlock() || 直上が空気`。
-   * sim は instrument を省略 (常に BASE_BLOCK = worksAboveNoteBlock()=false) するため
+   * vanilla の被覆条件は「instrument が worksAboveNoteBlock を満たす」か「直上が空気」。
+   * sim は instrument を省略 (常に BASE_BLOCK = worksAboveNoteBlock は偽) するため
    * 「直上が空気」のみで判定する (直上が塞がれていれば発音しない。10 §C5 注記)。
-   * 条件を満たすとき level.blockEvent(pos, 0, 0) 相当の 'play' BE をキューする。
+   * 条件を満たすとき BE (b0=0 / b1=0) 相当の 'play' をキューする。
    */
   private playNote(pos: Pos3D, _block: NoteBlockState): void {
     const above = this.getBlockAt([pos[0], pos[1] + 1, pos[2]])
@@ -2293,25 +3025,21 @@ export class SimWorld {
     const backPos = neighbor(pos, backDir)
     const back = this.getBlockAt(backPos)
 
-    // 1. 背面直後のコンテナ (hopper/dropper/barrel 等) は通常信号を上書きする
-    //    (hasAnalogOutputSignal。充填率→信号は effectiveContainerSignal)
-    if (isContainerType(back?.type)) return effectiveContainerSignal(back)
-    // クラフターは「埋まっているスロット数」0-9 を返す (充填率ではない)
-    // [確定: 26.2 CrafterBlockEntity.getRedstoneSignal — 空でない or 無効化されたスロット数]
-    if (back?.type === 'crafter') return back.occupiedSlots
-    // 銅の電球も hasAnalogOutputSignal を持つ。読むのは **lit** で powered ではない
-    // [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal / 実機 fixture copper-bulb-output]
-    if (back?.type === 'copper_bulb') return back.lit ? 15 : 0
+    // 1. 背面直後の「アナログ出力を持つブロック」は通常信号を上書きする
+    const direct = analogOutputOf(back)
+    if (direct !== null) return direct
 
     // 2. 通常信号
     let i = getSignal(this, pos, backDir)
     if (back?.type === 'wire') i = Math.max(i, back.power)
     else if (isConductor(back)) i = Math.max(i, getSolidPower(this, backPos))
 
-    // 3. 導体 1 個越しのコンテナ読み
+    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読む
+    // [確定: 26.2 ComparatorBlock.calculateOutputSignal — hasAnalogOutputSignal を
+    //  直後と導体 1 個越しの両方で見る]
     if (i < 15 && isConductor(back)) {
-      const far = this.getBlockAt(neighbor(backPos, backDir))
-      if (isContainerType(far?.type)) i = Math.max(i, effectiveContainerSignal(far))
+      const far = analogOutputOf(this.getBlockAt(neighbor(backPos, backDir)))
+      if (far !== null) i = Math.max(i, far)
     }
     return i
   }
@@ -2368,7 +3096,7 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'pressure_plate_stone': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
     case 'weighted_pressure_plate_light':
     case 'weighted_pressure_plate_heavy':
-      // POWER プロパティ (= powered ? pressedPower : 0) の変化が観測対象
+      // POWER プロパティ (powered のとき pressedPower、でなければ 0) の変化が観測対象
       return (a.type === 'weighted_pressure_plate_light' || a.type === 'weighted_pressure_plate_heavy') &&
         (a.powered ? a.pressedPower : 0) !== (b.powered ? b.pressedPower : 0)
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit

@@ -12,7 +12,7 @@
 // 充填率 → コンパレーター信号の変換 [確定: 02 §6 comparator —
 //   AbstractContainerMenu.getRedstoneSignalFromContainer]:
 //     f = (Σ 各スロットの count / maxStackSize) / スロット数
-//     signal = Mth.lerpDiscrete(f, 0, 15) = floor(f * 14) + (f > 0 ? 1 : 0)
+//     signal = lerpDiscrete(f, 0, 15) 相当 = f が 0 なら 0、それ以外は f × 14 の切り捨て + 1
 //
 // [実機測定でこの式を 7 ケース確認 (#194)。ホッパー (5 スロット):
 //   snowball 14 (16 スタック) = 3 / player_head 14 (64) = 1 / 混載 11+3 = 2 /
@@ -27,12 +27,19 @@
 import type { BlockState, BlockType, ContainerSlots, ItemStack, StackSize } from '../types.js'
 import { REPRESENTATIVE_ITEM } from './itemStacks.js'
 
-/** ホッパーの転送クールダウン (gt) [確定: 26.2 HopperBlockEntity — setCooldown(8)]。 */
+/** ホッパーの転送クールダウン (gt) [確定: 26.2 HopperBlockEntity — クールダウンを 8 に設定]。 */
 export const HOPPER_COOLDOWN = 8
 
 /**
+ * 水の流動 tick (gt) [確定: 26.2 WaterFluid — オーバーワールドの水は 5]。
+ * 下が空いてから水が落ちてくるまでの遅れがこれ
+ * (実機 elev-ride: tick 52 に汲み上げ → tick 57 に落下水)。
+ */
+export const WATER_TICK_DELAY = 5
+
+/**
  * ドロッパー/ディスペンサーの発火遅延 (gt)
- * [確定: 26.2 DispenserBlock.neighborChanged — level.scheduleTick(pos, this, 4)]。
+ * [確定: 26.2 DispenserBlock.neighborChanged — 4gt の tile tick を予約する]。
  * 立ち上がり受電で TRIGGERED を立て、この遅延の tile tick で dispenseFrom を実行。
  */
 export const DROPPER_TICK_DELAY = 4
@@ -72,7 +79,7 @@ export function emptySlots(type: BlockType): ContainerSlots {
 /**
  * スロット列 → コンパレーター信号 (0-15)。
  *   f = Σ(count / stack) / スロット数
- *   signal = floor(f * 14) + (f > 0 ? 1 : 0)
+ *   signal = f が 0 なら 0、それ以外は f × 14 の切り捨て + 1
  */
 export function fillSignal(slots: ContainerSlots, slotCount: number): number {
   if (slotCount <= 0) return 0
@@ -174,6 +181,27 @@ export function effectiveContainerSignal(block: BlockState | null | undefined): 
       : block.signal
   }
   return 0
+}
+
+/**
+ * 指定のコンパレーター信号 (0-15) になる**最小個数**のスロット列を作る (#236)。
+ *
+ * `fillSignal` の逆写像。`f = 総個数 / 容量`, `signal = floor(f*14)+1` を解いて
+ * `count = ceil((signal-1) * 容量 / 14)`。**15 は容量いっぱい**でしか出ない
+ * (`f >= 1` が要る)、**1 は 1 個でよい**、という両端が直感に反する。
+ *
+ * **容量が 14 個未満だと刻めない信号が出る** (スタック不可アイテムだけの
+ * ホッパーは 5 個しか入らず、信号 1・2 を作れない)。そのときは切り上げた分だけ
+ * 上の信号になる — 樽 (27 スロット) では起きない。
+ */
+export function slotsForSignal(
+  type: BlockType, signal: number, stack: StackSize = STACK_SIZE, id?: string,
+): ContainerSlots {
+  const slotCount = containerSlots(type)
+  const s = Math.max(0, Math.min(15, Math.floor(signal)))
+  if (s === 0 || slotCount === 0) return emptySlots(type)
+  const cap = slotCount * stack
+  return slotsFromCount(type, Math.max(1, Math.ceil(((s - 1) * cap) / 14)), stack, id)
 }
 
 /**

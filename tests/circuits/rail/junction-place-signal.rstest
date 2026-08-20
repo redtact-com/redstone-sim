@@ -5,7 +5,7 @@
 # 曲線の代入順が入れ替わる (どちらも後勝ち) [確定: 26.2 RailState.java:269-303]:
 #   hasSignal = true  → SE → SW → NE → NW の順 (優先順位 NW > NE > SW > SE)
 #   hasSignal = false → NW → NE → SW → SE の順 (優先順位 SE > SW > NE > NW)
-# hasSignal は BaseRailBlock.updateDir が渡す level.hasNeighborSignal(pos)
+# hasSignal は BaseRailBlock.updateDir が渡す「その位置が受電しているか」の判定結果
 # [確定: 26.2 BaseRailBlock.java:111-118]。
 #
 # 北・南・東に隣接がある同じ形のジャンクションを 2 つ用意し、片方だけ

@@ -2,7 +2,7 @@
 #
 # A=(2,1,3) を「北に north_south のレール Q、東に east_west のレール R」がある状態で
 # 置くと、両軸に隣接があるため defaultShape (置いた向き) が採用されて east_west になる
-# [確定: 26.2 RailState.place — northOrSouth && westOrEast なら defaultShape]。
+# [確定: 26.2 RailState.place — 南北軸と東西軸の両方に隣接があるときは defaultShape を採る]。
 # このとき Q は A の connections に入らないので connectTo されず north_south のまま残り、
 # **隣接しているのに直交していて繋がらない** 2 本ができる。
 # R を壊しても形状は再計算されない (BaseRailBlock.neighborChanged → PoweredRailBlock.

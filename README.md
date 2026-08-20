@@ -68,9 +68,15 @@ npm run typecheck    # packages の型チェック
 - 必要な secrets（未設定の間はスキップされる）: `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`
   （権限「アカウント / Cloudflare Pages / 編集」。発行手順は issue #4 参照）
 
-## クレジット
+## クレジット・著作権
+
+**非公式ツールです。** Mojang / Microsoft とは関係がありません。無料で提供します。
+運用方針は [docs/ip-policy.md](docs/ip-policy.md)、規約の一次資料の調査は
+[docs/research/03_legal-decompile.md](docs/research/03_legal-decompile.md) にあります。
 
 `app/public/resourcepack/` のテクスチャは **MK.2 Redstone**（by Kyouju and Nisai）を
 利用しています。詳細は `app/public/resourcepack/credit.md` を参照。リソースパックが
 無い場合はバニラテクスチャ（[misode/mcmeta](https://github.com/misode/mcmeta)）に
 自動フォールバックします。
+
+> 同梱は**作者の了解のもと**で行っています (作者はプロジェクト所有者の知人)。

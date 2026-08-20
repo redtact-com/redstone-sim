@@ -31,10 +31,32 @@ export interface FixtureInput {
    * 'summon'   … 実機でマインカートを召喚する (#146)。detector_rail の検出トリガ。
    *              sim にエンティティは無いので activateBlock (手動トリガ) へ写像する。
    * 'kill'     … 実機でカートを消す。sim では auto-off が予約済みなので no-op。
+   * 'item'     … `/item replace block <pos> container.<slot>` 相当 (#236)。コンテナの
+   *              中身を差し替える。プレイヤーが GUI で動かすのと同じ `setChanged` 経路
+   *              [確定: 26.2 ItemCommands.setBlockItem → BaseContainerBlockEntity.setItem]。
+   *              **中身は blockstate に出ない**ので、観測できるのは下流の変化だけ。
+   * 'container' … コンテナの中身をコンパレーター強度 `signal` (0-15) 相当にする (#236)。
+   *              実機側は scarpet で中身を作り `/item replace` で確定させる。
+   * 'tp'       … 実機で fake player を動かす。**sim にエンティティは無いので no-op**
+   *              (13 §2 の境界)。プレイヤーが動いた結果のブロック変化だけを突き合わせる。
    */
-  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill'
+  action: 'use' | 'step' | 'setblock' | 'summon' | 'kill' | 'item' | 'container' | 'tp' | 'lectern'
   /** action='setblock' で置く blockstate 文字列 ('air' 可) */
   block?: string
+  /** action='item': 入れるアイテム ID (`minecraft:` 省略可)。空にすると空スロット */
+  item?: string
+  /** action='item': 個数 (既定 1) */
+  count?: number
+  /** action='item': スロット番号 (既定 0) */
+  slot?: number
+  /** action='container': コンパレーター強度 (0-15) */
+  signal?: number
+  /** action='lectern': 開くページ (0 始まり)。**階数指定はこれ** (#239) */
+  page?: number
+  /** action='tp': 移動先 (sim では使わない) */
+  to?: [number, number, number]
+  /** action='use'/'tp': 対象のプレイヤー名 (sim では使わない) */
+  player?: string
 }
 
 export interface FixtureChange {
@@ -47,6 +69,17 @@ export interface FixtureExpectEntry {
   changes: FixtureChange[]
 }
 
+/** 実機から読んだ予約 tick (#240)。動いている機械を再現するのに要る */
+export interface FixtureScheduledTick {
+  pos: Pos3D
+  /** 残り遅延 (gt) */
+  delay: number
+  /** 優先度 (小さいほど先) */
+  priority: number
+  /** 参考: 実機側のブロック ID */
+  block?: string
+}
+
 export interface Fixture {
   name: string
   description?: string
@@ -56,13 +89,40 @@ export interface Fixture {
   ticks: number
   region: { from: Pos3D; to: Pos3D }
   /**
+   * **動いている機械のスナップショットをそのまま出発点にする** (#240)。
+   * 既定 (false) は動的値を捨てて組み直すので、クロックが回っている実機とは
+   * tick 0 から食い違う。
+   */
+  trustAuthored?: boolean
+  /** 実機の予約 tick。trustAuthored と併用する */
+  scheduled?: FixtureScheduledTick[]
+  /**
+   * 実機のコンパレーターが保持している出力強度。trustAuthored と併用する。
+   *
+   * **blockstate は powered (0 か否か) しか持たない**ので、無いと sim は
+   * 「今の入力から計算し直す」で埋めることになる。それは**止まっている回路でしか
+   * 正しくない** — 信号が周回しながら 1 ずつ減る機械では、コンパレーターは
+   * 「まだ書き換わっていない古い値」を持っていて予約の発火で新しい値へ落ちる。
+   * 計算し直すと最初から新しい値になり、発火しても何も変わらず**機械が止まる**
+   */
+  comparators?: { pos: Pos3D; output: number }[]
+  /**
    * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
    * items で初期の中身を与えられる (アイテムは blockstate に現れないため)。
    *
    * - `items: 2` … 旧形式。cobblestone (64 スタック) を slot 0 から 2 個
    * - `items: [{slot, id, count}]` … スロット指定 (#194)。混載を表現できる
    */
-  blocks: { pos: Pos3D; block: string; items?: number | FixtureItem[] }[]
+  blocks: {
+    pos: Pos3D
+    block: string
+    items?: number | FixtureItem[]
+    /**
+     * 書見台の本 (#239)。**ページ数と現在ページは blockstate に出ない**ので、
+     * これが無いと出力が 14 に張り付いて階数指定にならない
+     */
+    lectern?: { page: number; pages: number }
+  }[]
   inputs: FixtureInput[]
   expect: FixtureExpectEntry[]
   generated?: { at: string; mc: string; carpet: string }
@@ -119,11 +179,25 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
       if (b.items !== undefined && sim.type === 'crafter') {
         (sim as { occupiedSlots?: number }).occupiedSlots = fixtureItemTotal(b.items) > 0 ? 1 : 0
       }
+      // 書見台の本 (blockstate に出ないので後から差し込む。items と同じ扱い)
+      if (b.lectern !== undefined && sim.type === 'lectern') {
+        sim.page = b.lectern.page
+        sim.pages = b.lectern.pages
+      }
       world.setBlockAt(b.pos, sim)
     }
   }
-  world.initialize()
-  world.flush(64)
+  world.initialize({
+    trustAuthored: fx.trustAuthored === true,
+    comparatorOutputs: new Map((fx.comparators ?? []).map(c => [posKey(c.pos), c.output])),
+  })
+  // 実機から読んだ予約を積む (initialize が予約を空にした後でないといけない)
+  for (const st of fx.scheduled ?? []) {
+    world.seedScheduledTick(st.pos, st.delay, st.priority)
+  }
+  // **trustAuthored のときは flush しない**。flush は予約を全部消化してしまうので、
+  // 「あと 5gt で ON」を積んだ意味が消え、実機のスナップショットとも食い違う
+  if (fx.trustAuthored !== true) world.flush(64)
   return { world, authored }
 }
 
@@ -133,7 +207,9 @@ export function fixtureInputsAt(fx: Fixture, t: number): FixtureInput[] {
 }
 
 /** その tick の入力を world へ適用する ('use'/'step' は activateBlock、'setblock' は差し替え) */
-export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): FixtureInput[] {
+export function applyFixtureInputsAt(
+  world: SimWorld, fx: Fixture, t: number, authored?: Map<string, string>,
+): FixtureInput[] {
   const inputs = fixtureInputsAt(fx, t)
 
   // 実機は freeze 中に entityInside が走らないため、カート召喚の検出は
@@ -149,6 +225,21 @@ export function applyFixtureInputsAt(world: SimWorld, fx: Fixture, t: number): F
     if (input.action === 'setblock') {
       if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
       world.setBlockCommand(input.pos, mcToSim(input.block) ?? { type: 'air' })
+      // **authored を差し替える**。simToMc は「その座標の元の名前」から
+      // blockstate を組み直すので、種類が変わる setblock (書見台 → 樽 等) の後に
+      // 古い名前のままだと `型不一致で合成不能` で落ちる (実機キャプチャで踏んだ)
+      authored?.set(posKey(input.pos), input.block)
+    } else if (input.action === 'item') {
+      const id = (input.item ?? '').replace(/^minecraft:/, '').replace(/^air$/, '')
+      const count = input.count ?? 1
+      world.setContainerSlot(input.pos[0], input.pos[1], input.pos[2], input.slot ?? 0,
+        id === '' || count <= 0 ? null : { id, stack: stackSizeOf(id).stack, count })
+    } else if (input.action === 'lectern') {
+      world.setLecternPage(input.pos[0], input.pos[1], input.pos[2], input.page ?? 0)
+    } else if (input.action === 'container') {
+      world.setContainerSignal(input.pos[0], input.pos[1], input.pos[2], input.signal ?? 0)
+    } else if (input.action === 'tp') {
+      // 実機では fake player が動く。sim にエンティティは無いので何もしない
     } else if (input.action === 'kill' || input.action === 'summon') {
       // kill … 実機ではカートを消す操作。sim は折衷モデル (トリガ時に持続 gt を予約し、
       //         実行時に「もう乗っていない」とみなして OFF) なので何もしない
@@ -188,7 +279,7 @@ export function runFixtureOnSim(fx: Fixture): StateMap[] {
   const states: StateMap[] = []
   for (let t = 0; t <= fx.ticks; t++) {
     if (t > 0) world.tick()
-    applyFixtureInputsAt(world, fx, t)
+    applyFixtureInputsAt(world, fx, t, authored)
     states.push(snapshotFixtureRegion(world, fx, authored))
   }
   return states
@@ -222,7 +313,7 @@ export class FixtureRunner {
     // settle 完了後にフックを付けてから tick 0 の入力を適用する。
     // (settle 中の発音は「起点前」の雑音として捨てる)
     if (opts.onNotePlay) this.world.onNotePlay(opts.onNotePlay)
-    applyFixtureInputsAt(this.world, this.fixture, 0)
+    applyFixtureInputsAt(this.world, this.fixture, 0, this.authored)
   }
 
   get tick(): number { return this._tick }
@@ -234,7 +325,7 @@ export class FixtureRunner {
     if (this._tick >= this.fixture.ticks) return { tick: this._tick, inputs: [] }
     this._tick++
     this.world.tick()
-    const inputs = applyFixtureInputsAt(this.world, this.fixture, this._tick)
+    const inputs = applyFixtureInputsAt(this.world, this.fixture, this._tick, this.authored)
     return { tick: this._tick, inputs }
   }
 

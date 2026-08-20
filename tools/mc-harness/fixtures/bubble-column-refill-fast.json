@@ -1,0 +1,315 @@
+{
+  "name": "bubble-column-refill-fast",
+  "description": "落下水が来た直後に水源を置き直したときに柱がいつ戻るか (#252)。「落下水が来た tick から 5gt」なのか「水源を置いた tick から 5gt」なのかを実機で分ける。ガラスエレベーターはディスペンサーが水源を置き直すのがちょうど落下水の 1 tick 後で、ここで 1 tick ずれる",
+  "mcVersion": "1.21.1",
+  "ticks": 24,
+  "region": {
+    "from": [
+      -1,
+      -1,
+      -1
+    ],
+    "to": [
+      1,
+      7,
+      1
+    ]
+  },
+  "player": {
+    "spawn": [
+      3.5,
+      1.0,
+      3.5
+    ],
+    "facing": [
+      0,
+      0
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "soul_sand"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        -1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        3,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        4,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        5,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        0
+      ],
+      "block": "water[level=0]"
+    },
+    {
+      "pos": [
+        -1,
+        6,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        7,
+        0
+      ],
+      "block": "glass"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 8,
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "water[level=0]"
+    }
+  ],
+  "expect": []
+}

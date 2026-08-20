@@ -2,8 +2,8 @@
 #
 # 26.2 に ActivatorRailBlock は**存在しない**。activator_rail は powered_rail と
 # 同じ PoweredRailBlock を別インスタンスとして登録しているだけで
-# [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock::new]、
-# レッドストーン挙動の差は連鎖探索が `state.is(this)` で
+# [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock として登録されている]、
+# レッドストーン挙動の差は連鎖探索が**同一ブロック判定**で
 # **ブロックそのものの一致**を要求する点だけ
 # [確定: 26.2 PoweredRailBlock.isSameRailWithPower]。
 #

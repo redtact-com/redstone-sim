@@ -119,7 +119,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - キューは **ObjectLinkedOpenHashSet** = 挿入順 FIFO + 重複排除 (同一 (pos, block, type, data) は重複登録されない) [確定]。
 - runBlockEvents は**キューが空になるまで** removeFirst で回す。**処理中に追加されたイベントも同一 tick 内で処理される** (ピストン連鎖の根拠)。tile tick の collect-then-execute と対照的 [確定]。
 - 非 ticking チャンクのイベントは退避して次 tick へ再スケジュール [確定]。
-- 実行時検証: getBlockState(pos).isOf(event.block) が不一致なら no-op [確定]。
+- 実行時検証: イベント実行時にその座標のブロックがイベント登録時のブロックと一致するかを見て、不一致なら no-op [確定]。
 - **BED (block event delay)**: フェーズ開始時 (または前レイヤー処理後) のキュー内容を 1 層とする BFS 的レイヤー概念。現行実装は単一 FIFO だが観測順序は層状と等価 (1.12 以前は文字通り 2 リストスワップ) [確定]。
 - 使用ブロック: ピストン (伸縮)、音符ブロック、チェスト/シュルカーボックス (蓋)、鐘、エンドゲートウェイ、スポナー [確定: 26.2 — `level.blockEvent` を呼ぶクラス悉皆 grep: PistonBaseBlock / NoteBlock / ChestBlockEntity / ShulkerBoxBlockEntity / BellBlockEntity / TheEndGatewayBlockEntity / SpawnerBlockEntity。26.2 では EnderChestBlockEntity・DecoratedPotBlockEntity・PotentSulfurBlock も追加で使用 (元リストの拡張)。sim 実装分はピストンのみ (10 §)]。
 - 出典: 1.21.1/1.18 デコンパイル (ServerLevel.runBlockEvents)、SubTick BlockEventWorldMixin、https://techmcdocs.github.io/pages/GameTick/
@@ -191,7 +191,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 ### 4.3 動力源化と活性化の分離 (BUD の原理) [確定: 26.2 デコンパイル]
 - 「動力源化 (powered)」に隣接更新は不要、「活性化 (状態変化)」は隣接更新を受けて初めて再評価される。→ powered なのに activated でない BUD 状態が生じる。
-- **典拠 [確定: 26.2]**: (a) 出力/被動力の**読み**は保持 state を即読みし更新を要さない — DiodeBlock.ownSignal=`POWERED?getOutputSignal:0` / RedStoneWireBlock.ownSignal=`POWER` / RedstoneTorchBlock.ownSignal=`LIT?15:0` / ObserverBlock.ownSignal=`POWERED?15:0` で、各 getSignal はこれを即返す。(b) **状態遷移 (activation)** は `tick()` でのみ起き、その tile tick 予約は近傍更新契機のみ — DiodeBlock.checkTickOnNeighbor / RedstoneTorchBlock.neighborChanged (LIT==入力 の不整合時)→scheduleTick、ObserverBlock は updateShape(PP)→startSignal。(c) PistonBaseBlock.getNeighborSignal は quasi 位置 (`pos.above()`) の下面以外の hasSignal を **live** で読み、checkIfExtend は neighborChanged 契機で呼ばれる → 「1 個上が受電 (powered) しても NC が来るまで伸長 (activated) しない」= BUD の実体。sim 観測: tests/circuits/verify/qc-bud-activation (facing 直背面でなく quasi 位置の通電で伸長)。
+- **典拠 [確定: 26.2]**: (a) 出力/被動力の**読み**は保持 state を即読みし更新を要さない — DiodeBlock.ownSignal は POWERED のとき getOutputSignal・でなければ 0 / RedStoneWireBlock.ownSignal は POWER そのもの / RedstoneTorchBlock.ownSignal は LIT なら 15・でなければ 0 / ObserverBlock.ownSignal は POWERED なら 15・でなければ 0 で、各 getSignal はこれを即返す。(b) **状態遷移 (activation)** は tick でのみ起き、その tile tick 予約は近傍更新契機のみ — DiodeBlock.checkTickOnNeighbor / RedstoneTorchBlock.neighborChanged (**LIT と入力が一致している = トーチにとっての不整合**のとき)→tile tick 予約、ObserverBlock は updateShape(PP)→startSignal。(c) PistonBaseBlock.getNeighborSignal は quasi 位置 (**1 個上のマス**) の下面以外の hasSignal を **live** で読み、checkIfExtend は neighborChanged 契機で呼ばれる → 「1 個上が受電 (powered) しても NC が来るまで伸長 (activated) しない」= BUD の実体。sim 観測: tests/circuits/verify/qc-bud-activation (facing 直背面でなく quasi 位置の通電で伸長)。
 - **設計指針: powered フラグ更新と neighbor update 受信時の状態再評価を別レイヤに分ける。**
 
 ---
@@ -201,18 +201,18 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 ### 5.1 信号強度 [確定]
 - 0〜15 の 16 段階。動力部品は基本 15 を供給、ダストは 1 ブロックごとに 1 減衰 (最大 15 マス)。
 - 複数信号源の合流は **max 合成** [確定: HLPtool 実装 + techmcdocs]。
-- アナログ値を保持するのはダストとコンパレーターのみ。リピーターは 15 にリセット [確定: 26.2 — DiodeBlock.getOutputSignal は定数 15、RepeaterBlock は非 override (ownSignal=POWERED?getOutputSignal:0)。アナログ保持は RedStoneWireBlock.ownSignal=POWER と ComparatorBlock.getOutputSignal(ComparatorBlockEntity に保存した calculateOutputSignal) のみ。sim 観測: tests/circuits/verify/{repeater-resets-to-15,comparator-holds-analog} — 入力 10 でもリピーター出力 15/コンパレーター出力 10]。
+- アナログ値を保持するのはダストとコンパレーターのみ。リピーターは 15 にリセット [確定: 26.2 — DiodeBlock.getOutputSignal は定数 15、RepeaterBlock は非 override (ownSignal は POWERED のとき getOutputSignal・でなければ 0)。アナログ保持は RedStoneWireBlock.ownSignal (= POWER そのもの) と ComparatorBlock.getOutputSignal(ComparatorBlockEntity に保存した calculateOutputSignal) のみ。sim 観測: tests/circuits/verify/{repeater-resets-to-15,comparator-holds-analog} — 入力 10 でもリピーター出力 15/コンパレーター出力 10]。
 - 出典: https://ja.minecraft.wiki/w/レッドストーン回路、ArcFrout chap1
 
 ### 5.2 強/弱動力 (strong/hard・weak/soft powering) [確定]
 - リピーター/コンパレーター/トーチ (直上)/レバー等 (取り付け面) から直接給電された導体 = **強動力源化** → 起動素子にもダストにも伝える。
 - ダストから給電された導体 = **弱動力源化** → 起動素子には伝えるが**別のダストには伝えない**。
-- 動力源化した導体が他の導体をさらに動力源化することはない。信号強度は動力源化を経ても維持 [確定: 26.2 — SignalGetter.getSignal = isRedstoneConductor ? max(state.getSignal, getDirectSignalTo(pos)) : state.getSignal。getDirectSignalTo は隣接 6 方向の getDirectSignal を **減衰なし** で max 集約するため、強充電された導体は源の強度をそのまま再放出する。−1 減衰はダスト間 (RedStoneWireBlock.calculateTargetStrength = 隣接ワイヤ最大 −1) のみで発生。sim 観測: tests/circuits/verify/strength-through-conductor — コンパレーター出力 12 が石を経て 12 のまま、その先のダストで初めて 11]。
+- 動力源化した導体が他の導体をさらに動力源化することはない。信号強度は動力源化を経ても維持 [確定: 26.2 — SignalGetter.getSignal は、対象が導体なら「そのブロック自身の getSignal」と「getDirectSignalTo」の大きい方、非導体なら getSignal そのもの。getDirectSignalTo は隣接 6 方向の getDirectSignal を **減衰なし** で max 集約するため、強充電された導体は源の強度をそのまま再放出する。−1 減衰はダスト間 (RedStoneWireBlock.calculateTargetStrength = 隣接ワイヤ最大 −1) のみで発生。sim 観測: tests/circuits/verify/strength-through-conductor — コンパレーター出力 12 が石を経て 12 のまま、その先のダストで初めて 11]。
 - 出典: https://ja.minecraft.wiki/w/レッドストーン回路 + ArcFrout chap1 の 2 源一致。
 
 ### 5.3 準接続 (QC) [確定 — デコンパイル悉皆確認済み]
 - QC (1 ブロック上の位置の被動力チェック) を持つのは **PistonBaseBlock (通常/スティッキー共通)・DispenserBlock・DropperBlock の 3 クラスのみ**。26.2 jar の block パッケージ全 468 クラス grep で他に該当なし (Crafter は非対象)。
-- 出典: 26.2 server.jar デコンパイル (hasNeighborSignal(pos.above()))、https://minecraft.wiki/w/Quasi-connectivity、carpet quasiConnectivity ルール。
+- 出典: 26.2 server.jar デコンパイル (1 個上のマスに対する hasNeighborSignal)、https://minecraft.wiki/w/Quasi-connectivity、carpet quasiConnectivity ルール。
 - 注: ArcFrout の「間接続 4 種 (ダスト斜め含む)」はダスト斜め接続 (別機構) を含む独自上位概念。コード上の QC は上記 3 種。
 
 ### 5.4 ダストの給電対象と斜め接続 [確定: 26.2 RedStoneWireBlock デコンパイル]
@@ -232,7 +232,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   ダスト自身の強度計算 (`calculateTargetStrength`) 中のみ `shouldSignal=false` になり、その間ワイヤの
   `getDirectSignal`/`isSignalSource` が 0/false を返す → **ダスト給電された導体は機構には信号を伝えるが、
   他のダストの強度計算には寄与しない** (= 弱充電)。`getDirectSignal` は通常時 `getSignal` と同値。
-- **強度計算** (`calculateTargetStrength`): `max(getBestNeighborSignal(pos), 隣接ワイヤ最大値 − 1)`。
+- **強度計算** (`calculateTargetStrength`): 「非ワイヤ隣接の最大信号 (`getBestNeighborSignal`)」と「隣接ワイヤ最大値 − 1」の大きい方。
   斜め読み: 水平隣接が導体かつ自分の直上が非導体 → 斜め上のワイヤを読む / 水平隣接が非導体 → 斜め下のワイヤを読む。
   → ArcFrout の切断規則 (上の遮蔽が導体なら斜め上からの受信が切断) はこのコードと一致 [確定]。
 
@@ -257,7 +257,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 ### torch (レッドストーントーチ)
 - NOT ゲート。状態変化は 2 gt 遅延の tile tick (`TOGGLE_DELAY = 2`)、priority 0 [確定: RedstoneTorchBlock]。
-- 入力: 取り付けブロックのみを読む (床置き = 直下 `hasSignal(pos.below(), DOWN)`、壁付け = FACING の逆) [確定]。
+- 入力: 取り付けブロックのみを読む (床置き = 直下ブロックを DOWN 方向で hasSignal 判定、壁付け = FACING の逆) [確定]。
 - 給電: **取り付け面以外の全隣接 (床置きなら水平 4 + 上) に弱 15、直上ブロックのみ強充電**
   [確定: getSignal は取り付けブロックからの問い合わせのみ 0 (他 5 方向 15)、getDirectSignal は直上ブロックからの問い合わせのみ 15]。
 - NC 受信時: 「LIT == 入力あり」という**不整合状態のときだけ** 2 gt 後の tick を予約 (willTickThisTick ガード付き) [確定]。
@@ -275,10 +275,11 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   1. ロック中なら何もしない。
   2. `shouldTurnOn` (入力再評価) を取り、ON かつ入力なし → OFF 化 (flag 2)。
   3. **OFF なら入力の有無にかかわらず ON 化** (flag 2)。このとき入力が既に消えていれば
-     `scheduleTick(delay, VERY_HIGH=-2)` で OFF を追加予約 → **最小パルス幅 = 遅延を保証**。
+     遅延と同じ gt 数・priority VERY_HIGH (-2) の tile tick で OFF を追加予約 →
+     **最小パルス幅 = 遅延を保証**。
   4. ON かつ入力あり → 変化なし。
 - **NC 時の予約規則** [確定: DiodeBlock.checkTickOnNeighbor]: ロック中は無視。`POWERED != shouldTurnOn` かつ
-  `!willTickThisTick(pos, this)` のときのみ予約。priority は 出力先が別ダイオードの背面/側面 (`shouldPrioritize`:
+  その位置に当 tick 実行予定の tick が無い (willTickThisTick が偽) ときのみ予約。priority は 出力先が別ダイオードの背面/側面 (`shouldPrioritize`:
   出力先がダイオードかつその FACING が出力方向と不一致) → -3、ON→OFF → -2、その他 → -1。
   同 pos の既予約は LevelChunkTicks の重複無視 (2.1) に従う (キャンセルなし)。
 - 入力読み (`getInputSignal`): 背面 `getSignal` に加え、**背面がワイヤなら接続形状に関係なく POWER を直読** [確定]。
@@ -291,8 +292,14 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - 演算式 [確定: ComparatorBlock.calculateOutputSignal のデコンパイルで最終確定 (従来 3 源とも一致)]:
   - `back == 0 → 0` / `side > back → 0` / compare: `back` / subtract: `back − side` (side = `max(side_L, side_R)`)
 - 遅延 **2 gt 固定** (`getDelay` が定数 2) [確定: 未解明 #4 解消]。priority -1/0 (2.2 表) [確定]。
-- **NC 時の予約規則** [確定: ComparatorBlock.checkTickOnNeighbor]: `willTickThisTick` でなく、
-  「計算出力 != BlockEntity 保持値 or POWERED != shouldTurnOn」のとき `scheduleTick(2, shouldPrioritize ? -1 : 0)`。
+- **NC 時の予約規則** [確定: ComparatorBlock.checkTickOnNeighbor]: **`willTickThisTick` が偽のとき**、
+  「計算出力 != BlockEntity 保持値 or POWERED != shouldTurnOn」なら **2gt の tile tick** を
+  priority (shouldPrioritize なら -1、でなければ 0) で予約する。
+  **`willTickThisTick` を最外の条件として持つ** (リピーターと同じ形。checkTickOnNeighbor は
+  ComparatorBlock 側で override されていて、DiodeBlock.neighborChanged から呼ばれる)。
+  > **旧記述は誤りだった** (#264)。「`willTickThisTick` でなく」と [確定] 付きで書いてあったが、
+  > 26.2 の実物とも実機 1.21.1 とも食い違う。実機 fixture `comparator-nc-own-tick` /
+  > `repeater-nc-own-tick` が正で、ガードが無いと**遷移が 1gt 早まる**。
   tick で `refreshOutputState`: 出力値を ComparatorBlockEntity に保存し、POWERED を更新して前方更新。
 - 側面入力 [確定: SignalGetter.getControlInputSignal(diodesOnly=false)]: ワイヤ (POWER 直読)・レッドストーンブロック (15)・
   その他は **direct signal (強出力) がその方向を向くもの** = リピーター/コンパレーター/**オブザーバー**。
@@ -307,8 +314,8 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - 背面入力 (`getInputSignal` override) [確定]: 背面ブロックが `hasAnalogOutputSignal` なら**その値で上書き** (通常信号より優先)。
   そうでなく信号 <15 かつ背面が導体なら、さらに 1 マス先のコンテナ/額縁 (ItemFrame.getAnalogOutput) を読む (固体 1 個越し)。
 - **コンテナ充填率→強度の変換式** [確定: AbstractContainerMenu.getRedstoneSignalFromContainer、未解明 #5 解消]:
-  `f = (Σ 各スロットの count / maxStackSize) / スロット数` として `Mth.lerpDiscrete(f, 0, 15)` =
-  `floor(f * 14) + (f > 0 ? 1 : 0)` — 通説の「floor(1+14*fill)」と同値 (空 = 0、非空は最低 1)。
+  `f = (Σ 各スロットの count / maxStackSize) / スロット数` として `lerpDiscrete(f, 0, 15)` =
+  「f が 0 なら 0、それ以外は f × 14 の切り捨て + 1」— 通説の「floor(1+14*fill)」と同値 (空 = 0、非空は最低 1)。
 - 1 gt パルスに必ずしも反応しない (2.4) [確定]。
 
 ### lever / button
@@ -328,7 +335,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 - 定数の弱動力源 [確定: 1.21.1 Blocks.REDSTONE_BLOCK = `PoweredBlock`]: `getSignal`=**15** (全方向)・
   `isSignalSource`=true・`getDirectSignal` 非 override (=**0** → 固体を強充電しない = weak のみ)。状態も tile tick も持たない。
-- `.isRedstoneConductor(Blocks::never)` = **非導体** [確定]: 自身は被充電されず、ダストの上下斜め接続も**切らない**
+- `isRedstoneConductor` に常時 false を返す述語が渡されている = **非導体** [確定]: 自身は被充電されず、ダストの上下斜め接続も**切らない**
   (石・ランプ・target とは対照的)。
 - ダストは 4 面すべてで接続 [確定: RedStoneWireBlock.shouldConnectTo が `isSignalSource()` を受理]。
 
@@ -341,7 +348,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   `isRedstoneConductor`=true (被充電され得る・ダストの斜め接続を切る)。ダストは 4 面接続。
 - 発火 (`onProjectileHit`→`updateRedstoneOutput`) [確定]: 命中強度 = 中心からの距離で **1..15** (`getRedstoneStrength`)、
   持続 = 矢/トライデント (`AbstractArrow`) **20 gt** (`ACTIVATION_TICKS_ARROWS`) / その他 **8 gt** (`ACTIVATION_TICKS_OTHER`)。
-  `setOutputPower` が POWER を setBlock (flag 3) し `scheduleTick(pos, block, 持続)` を予約 (priority NORMAL=0)。
+  `setOutputPower` が POWER を **flag 3 の setBlock** で書き、**持続 gt 後の tile tick**を予約 (priority NORMAL=0)。
   `hasScheduledTick` が真の間は**再発火を無視** (持続の延長なし)。
 - `tick` [確定]: OUTPUT_POWER != 0 なら 0 に戻す (消灯)。
 - `onPlace` [確定]: OUTPUT_POWER>0 かつ pending tick 無しで設置されたら **0 に戻す** (flag 18)。
@@ -350,7 +357,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   発火に投射物エンティティが必須で実機 fixture が作れないため、消灯系列は手書き単体テストで検証する。
 - **導体としての伝導** [確定: #35 実機バグ報告 2 → 1.21.1 デコンパイルで確定。実機 fixture target-conduct]:
   target は信号源かつ **導体** (前項のとおり isRedstoneConductor=true) なので、solid と同じ規則で充電される。
-  ダストが指す/上に乗る target の充電の実体は `RedStoneWireBlock.getDirectSignal` = `shouldSignal ? getSignal : 0` —
+  ダストが指す/上に乗る target の充電の実体は `RedStoneWireBlock.getDirectSignal` は shouldSignal 中だけ getSignal と同値・それ以外は 0 —
   つまり**ダストは自分が給電する対象 (足元 + 接続方向) に direct signal も出す**。導体はこれを
   `SignalGetter.getSignal` の `isRedstoneConductor` 分岐 (`max(自身の getSignal, getDirectSignalTo)`) で拾うため、
   ダストが指す target は隣接機構 (lamp)・直上トーチの土台判定・ダイオードの背面読み (`DiodeBlock.getInputSignal` →
@@ -382,7 +389,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   スタックされる」(= ホッパー/ドロッパーの実挿入順) と仮定する。この下では per-slot の充填率式
   (§6 comparator) と厳密一致し、`f = count / (スロット数×64)` になる。容量 = ホッパー **320**
   (5×64) / ドロッパー **576** (9×64) / 汎用コンテナ **1728** (27×64)。信号は
-  `fillSignal(count, 容量) = floor(f*14) + (count>0?1:0)`。異種アイテムを別スロットに散らす配置は
+  `fillSignal(count, 容量)` = 「count が 0 なら 0、それ以外は f × 14 の切り捨て + 1」。異種アイテムを別スロットに散らす配置は
   表現しない (単一種前提)。
 - **コンテナの 2 モード (移行方法)**: 既存 `ContainerState` は `signal` 直接指定の「手動計測モード」
   (C6/#13。樽/チェストを充填率ダミーとして使う) を維持しつつ、`count` を持つと「物流モード」
@@ -394,14 +401,14 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
     1 回の転送で **1 個**。
   - `tryMoveItems`: **送り込み (facing 先コンテナへ eject) が先**、続いて **吸い出し (直上コンテナから
     suck)**。両方が同 gt に成立し得る (それぞれ 1 個)。いずれか成功でクールダウン 8gt 再設定。
-  - **ロック**: `HopperBlock.neighborChanged` で `enabled = !hasNeighborSignal(pos)`。受電中は
+  - **ロック**: `HopperBlock.neighborChanged` が ENABLED に「自身 6 面が受電していない」を入れる。受電中は
     `enabled=false` = 転送停止 (NC で再評価、blockstate プロパティ)。ロックは自分の能動転送のみを
     止め、下段ホッパーが上段を吸い出すのは止めない (vanilla 準拠)。
   - コンテナ内容が変わると **CU** (`updateNeighbourForOutputSignal`) で水平隣接 (北→東→南→西) の
     コンパレーターへ通知 (直接隣接 or 導体 1 個越し)。
 - **ドロッパー [確定: 26.2 DropperBlock / DispenserBlock]**:
-  - `neighborChanged` で `hasNeighborSignal(pos) || hasNeighborSignal(pos.above())` (QC。§5.3 の 3
-    クラス) の立ち上がりで `TRIGGERED` を立て **`scheduleTick(pos, this, 4)`** (4gt) を予約、
+  - `neighborChanged` で **自身 6 面の受電 または 1 個上のマスの受電** の OR (QC。§5.3 の 3
+    クラス) の立ち上がりで `TRIGGERED` を立て **4gt の tile tick**を予約、
     立ち下がりで `TRIGGERED` 解除。発火は **ST フェーズ** の tile tick (STC 系。ホッパーと違い毎 gt
     ではない)。
   - `dispenseFrom`: 前方がコンテナなら 1 個挿入 (`HopperBlockEntity.addItem`)。前方が満杯コンテナは
@@ -434,13 +441,13 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 | gt | フェーズ (§1.2) | vanilla の出来事 (デコンパイル) | ブロック状態 | sim の対応 |
 |---|---|---|---|---|
-| **t2 境界** | プレイヤー入力適用 (§1.4) | レバー ON → NC → wire=15。piston.`neighborChanged`→`checkIfExtend`→`getNeighborSignal`=true→`PistonStructureResolver.resolve()` OK → `level.blockEvent(pos, EXTEND=0, facing)` を**キュー** (runBlockEvents は当 tick で既に通過済み) | piston `extended=false` のまま。moving なし | `activateBlock`→NC→`scheduleBlockEvent('extend')` をキュー |
+| **t2 境界** | プレイヤー入力適用 (§1.4) | レバー ON → NC → wire=15。piston.`neighborChanged`→`checkIfExtend`→`getNeighborSignal`=true→`PistonStructureResolver.resolve` OK → **BE (type=EXTEND=0 / data=facing)** を**キュー** (runBlockEvents は当 tick で既に通過済み) | piston `extended=false` のまま。moving なし | `activateBlock`→NC→`scheduleBlockEvent('extend')` をキュー |
 | **t3 phase8** (runBlockEvents) | `triggerEvent(type=0)`: 電源再確認 → `moveBlocks` が MOVING_PISTON + `PistonMovingBlockEntity(progress=0)` を head セル [3,1,0]・押出先 [4,1,0] に生成、base を EXTENDED 化 | piston `extended=true`、[3,1,0]/[4,1,0] = `moving_piston` | BE フェーズ: `executeBlockEvent`→`moving_piston` 化 + `schedule(pos, 2gt)` |
 | **t3 phase10** (tickBlockEntities) | 生成直後の BE も**同 tick に tick する** (作成は phase8 = `tickingBlockEntities`=false なので `blockEntityTickers` に直接追加 → phase10 で走る)。progressO=0<1 → progress 0.5 | `moving_piston` のまま | (tile tick 抽象。個別 progress は保持しない) |
 | **t4 phase10** | progressO=0.5<1 → progress 1.0 (clamp) | `moving_piston` のまま | 変化なし (dueTick=5 未到達) |
 | **t5 phase10** | progressO=1.0≥1 → finalize: `removeBlockEntity` + `setBlock` 最終形 (head セル→`piston_head`、押出先→`石`) + `neighborChanged` | [3,1,0]=`piston_head`, [4,1,0]=`石` | **ST フェーズ**: `executeScheduledTick(dueTick=5)`→`moving_piston`→`into` (最終形) |
 
-- **典拠クラス** (out/1.21.1): `PistonBaseBlock.neighborChanged/checkIfExtend/getNeighborSignal/triggerEvent/moveBlocks`、`PistonMovingBlockEntity.tick/finalTick` (`progressO=progress; progressO>=1.0F なら finalize、さもなくば progress+=0.5F`)、`Level.tickBlockEntities/addBlockEntityTicker` (`tickingBlockEntities` フラグで pending 振り分け → 当 tick 生成 BE は同 tick 実行)。
+- **典拠クラス** (out/1.21.1): `PistonBaseBlock.neighborChanged/checkIfExtend/getNeighborSignal/triggerEvent/moveBlocks`、`PistonMovingBlockEntity.tick/finalTick` (前回値 progressO に現在の progress を退避し、progressO が 1.0 以上なら finalize、そうでなければ progress を 0.5 進める)、`Level.tickBlockEntities/addBlockEntityTicker` (`tickingBlockEntities` フラグで pending 振り分け → 当 tick 生成 BE は同 tick 実行)。
 - **mod 出典**:
   - carpet: `pushLimit` (既定 12)、`quasiConnectivity` (既定 true = 「上のマスが受電で反応」)、`movableTileEntities` (既定 false)、`pistonClippingFix` (progress 0/20/40/100% で当たり判定補正) — https://gist.github.com/skyrising/cea2495437afea0cc3af2bb11d6a1856 / https://github.com/gnembon/fabric-carpet
   - G4mespeed: `GSPistonMovingBlockEntityMixin` (client, 1.21.x) が `progress`/`progressO` を @Shadow し `gs_numberOfSteps = 2.0f` で補間 (`val = (progress*2 + tickDelta)/2`) → **伸長 = 2 ステップ = 2 gt** を裏付け。common mixin は `gs_ticked` フラグで「BE が最低 1 回 tick 済みか」を追跡 — https://github.com/G4me4u/g4mespeed/blob/1.21.x/src/main/java/com/g4mesoft/mixin/client/GSPistonMovingBlockEntityMixin.java
@@ -466,7 +473,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - **facing 意味論の確定 (I8)**: blockstate `facing` = **観測方向 (顔のある面が向く先)**、出力は `OPPOSITE[facing]` の背面
   1 マス。sim の `ObserverState.facing` は vanilla FACING と同一で **反転しない** (mcstate/viewer/nbtIO とも piston と
   同じ非反転規則。repeater/comparator/wall_torch の flip とは異なる)。ObserverBlock.updateShape の
-  `state.getValue(FACING) == direction` (direction = pos→変化した neighbor) と minecraft.wiki (「facing は観測方向」)
+  「FACING が direction (= pos→変化した neighbor の方向) と一致するときのみ」という条件と minecraft.wiki (「facing は観測方向」)
   の両方で確定。実機 fixture `observer[facing=west]` がレバー (西) を観測しコンパレーター (東=背面) に出力する構成で一致検証済み。
 - **実装 (packages/sim)**: PP は「シミュレーション中に観測可能な blockstate が変化した座標」から隣接 6 (PP_UPDATE_ORDER
   西東北南下上) へ発行 (`SimWorld.emitShapeUpdate`)。受信者はオブザーバーのみ (`observableChanged` が solid.powered /
@@ -492,7 +499,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 26.2 に `ActivatorRailBlock` は**存在しない**。`activator_rail` は `powered_rail` と同じ
 `PoweredRailBlock` を別インスタンスとして登録しているだけで、挙動差は連鎖判定が
-`state.is(this)` (ブロックそのものの一致) を要求する点のみ [確定]。**形状の接続は種別をまたぐ**
+**ブロックそのものの一致**を要求する点のみ [確定]。**形状の接続は種別をまたぐ**
 (`BlockTags.RAILS`) が、**動力の連鎖はまたがない** [実機 fixture activator-rail-mixed-chain]。
 
 **形状の自動接続 [確定: 26.2 RailState]**
@@ -534,7 +541,7 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 **動力の連鎖 [確定: 26.2 PoweredRailBlock.findPoweredRailSignal]**
 
 - `powered` = 自身 6 面の受電 (`hasNeighborSignal`) **または** 繋がった同種レールを前後方向に
-  最大 8 個たどった先での受電。`searchDepth >= 8` で打ち切り [実機 fixture powered-rail-chain]
+  最大 8 個たどった先での受電。探索深度が 8 に達したら打ち切り [実機 fixture powered-rail-chain]
 - 減衰は無い。届く範囲は一様に `powered=true` (「レール 9 本ごとに動力源」の根拠)
 - 探索は同高さと 1 段下を見るが、**坂の登り側では 1 段下を見ない** (`checkBelow=false`)
 - 進行軸に直交する向きのレールへは伝播しない
@@ -555,7 +562,7 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 
 **detector_rail の出力 [確定: 26.2 DetectorRailBlock]**
 
-- `isSignalSource` = true。`ownSignal` = `powered ? 15 : 0` (全方向へ weak)
+- `isSignalSource` = true。`ownSignal` は powered なら 15・でなければ 0 (全方向へ weak)
 - `getDirectSignal` は **UP のみ** 15 = **真下のブロックだけを強励起**する
   [実機 fixture detector-rail-cart-pulse: 側面の隣接固体越しにはランプが点かない]
 - `powered` のトリガはカート検出のみ (`entityInside` / 20gt ごとの `tick` / `onPlace`)。

@@ -142,6 +142,11 @@ tools/mc-harness/
   scripts/shared/          scarpet との受け渡し JSON (gitignore)
   runner/generate.ts       実機駆動 → expect 生成
   runner/run.ts            fixture vs sim の diff CLI
+  runner/capture.ts        回路ファイルを実機に置いて N tick 撮る (npm run capture)
+  runner/compare.ts        キャプチャ vs sim の突き合わせ (npm run gt-compare)
+  runner/minimize.ts       食い違いを小さな再現まで自動で縮める → fixture 書き出し
+  runner/delta-debug.ts    縮め方のループ (純関数。実機に触らない)
+  captures/*.def.json      キャプチャ定義 (回路ファイル + 入力 + ticks)
   data/                    サーバ実体 (gitignore, Mojang 由来ファイル)
 packages/sim/src/mcstate.ts           MC blockstate 文字列 ↔ sim BlockState 変換
 packages/sim/test/fixture-runner.ts   sim 実行 + diff 共通ロジック
@@ -155,6 +160,41 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 2. `npm run ground-truth -- <name>` — settle 照合に失敗したら実機の教える安定状態に `blocks` を直す
 3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成
 4. `npm test` が通ることを確認してコミット
+
+## 食い違いの自動最小化 (minimize)
+
+実回路のキャプチャは大きい (エレベーターで 6393 ブロック)。`gt-compare` が
+「どこかで食い違う」と言っても、そのままでは原因も追えず fixture にもできない。
+`minimize.ts` は **対象座標の食い違いを保ったまま回路を削り**、残ったものを
+`packages/sim/test/fixtures/<name>.json` に書き出す。
+
+```bash
+# 1. まず全体を撮って突き合わせ、食い違う座標を知る
+npm run capture -- tools/mc-harness/captures/<name>.def.json
+npm run gt-compare -- tools/mc-harness/captures/<name>.json
+
+# 2. その座標を残したまま縮める (fixture が書き出される)
+npx tsx tools/mc-harness/runner/minimize.ts tools/mc-harness/captures/<name>.def.json \
+  --pos 21,2,20 --out <fixture名>
+
+# 3. 縮んだ fixture を照合する
+npx tsx tools/mc-harness/runner/run.ts <fixture名>
+```
+
+- 署名は **「その座標がどこかの tick で差分に出ること」**。「どこかが不一致」に
+  すると、削った拍子に生えた別の食い違いを追いかけて本命を取り落とす
+- 候補は対象座標からの距離順に並べ、**遠い側から塊で落とす**。塊は半分ずつ縮み、
+  オラクル (= 実機キャプチャ) 呼び出しは候補数に対しておよそ 2n 回
+- **1 回のキャプチャは回路の大きさで数秒〜25 秒**。6393 ブロックをそのまま掛けない
+  (定義に `keep` を書いて手で絞る / `--max-trials` で予算を切る)
+- **対象座標と入力の当たり先は落とさない**。落とすと入力が空振りして「署名が消えた」
+  と誤判定する
+- 書き出す fixture には既定で `skipUntil` が付く。**縮めた結果は定義上まだ sim が
+  再現できない回路**なので、付けないと CI が赤くなる。issue 番号に書き換えて使い、
+  sim を直したら外す (そこから先は普通の回帰になる)
+- 定義の `keep` (座標キー "x,y,z" の配列) は手でも使える。指定するとそのブロックだけを
+  置き、region は keep の bbox + pad に縮む。**掃除だけは回路全体に掛かる**ので、
+  region の外に前回のブロックが残ることはない
 
 ## fixture 作成の注意
 
@@ -216,3 +256,28 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 - **authored は `without_updates` で置かれる**ので、`onPlace` で自己補正する素子
   (ランプ・ピストン等) 以外は「実機に自然には存在しない状態」を作れてしまう。
   実プレイで到達できる状態かどうかは自分で担保すること
+- **初期状態 (authored) と frames の基準時刻は必ず同じにする** (#248)。
+  `fx_cap_start` が差分の基準 `global_cap_prev` と**同じ 1 回のスキャン**から
+  `authored.json` を書き出すのはこのため。別々に撮ると、その間に進んだ tick の変化が
+  どの frame にも現れず、sim 側は永久に追いつけない。
+  しかも食い違いは**ずれた座標ではなく下流**に出るので「sim のバグ」に見える
+  (実際 5 ブロック先のコンパレーターで 1 周誤診した)
+- **初期状態に `moving_piston` が 1 つでもあれば、そのキャプチャは捨てる** (#248)。
+  運んでいる中身が BlockEntity にあって blockstate に出ないため sim 側で復元できない。
+  capture / compare のどちらもエラーで止まる (以前は黙って air に落としていた)
+- **ブロック状態に出ない値は「記録開始と同じ瞬間」に実機から読む**。今のところ 3 つ:
+  - 予約 tick — 保存データの `block_ticks` (`runner/scheduled-ticks.ts`、#240)
+  - コンパレーターの保持出力 — 保存データの `block_entities` の `OutputSignal` (#249)
+  - **コンテナの中身** — `fx_read_items()` (#252)。**元ファイルの中身を使ってはいけない**。
+    settle 中に機械が動いて入れ替わることがある
+    (ガラスエレベーターのディスペンサーは空バケツ ⇄ 水バケツで入れ替わり、
+    元ファイルの空バケツで始めると水源を置けずに機械が止まる)
+  保存データ由来のものは `/save-all flush` の後に読む。時刻を揃えないと #248 と同じ穴になる
+- **コンパレーターの出力を「今の入力から計算し直す」でよいのは止まっている回路だけ** (#249)。
+  信号が周回しながら 1 ずつ減る機械では、コンパレーターは
+  「まだ書き換わっていない古い値」を保持していて、予約 tick の発火でようやく落ちる。
+  計算し直すと最初から新しい値になり、発火しても何も変わらず**機械が止まる**
+  (エレベーターで実測: 実機は 15→14→13 と減衰、sim は 15 のまま不動)
+- **dump.sc を直したら `unload` → `load`**。読み込み済みのまま `script load` を撃つと
+  carpet は「もう入っている」と答えるだけで**ファイルを読み直さない**。
+  `reloadDumpApp()` (runner/rcon.ts) を使うこと

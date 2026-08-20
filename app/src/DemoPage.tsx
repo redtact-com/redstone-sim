@@ -20,15 +20,26 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IsometricView } from '@redstone/viewer'
+import { IsometricView, fitDistance } from '@redstone/viewer'
 import type { CameraInput } from '@redstone/viewer'
 import { FixtureRunner } from '@redstone/sim'
 import type { Fixture, WorldSnapshot, NotePlayEvent } from '@redstone/sim'
 import { resolveFixture, FIXTURE_NAMES } from './demo/fixtures'
 
-// GIF フレームの解像度を決めるデモ領域の固定サイズ (4:3)。
-const DEMO_W = 720
-const DEMO_H = 540
+// GIF / MP4 フレームの解像度を決めるデモ領域のサイズ (既定 4:3)。
+//
+// **`?w=` / `?h=` で変えられる** — 縦長の回路 (ガラスエレベーターのような
+// シャフト) を 4:3 で撮ると左右が余ってブロックが小さくなるため、
+// 撮影 CLI から縦長のコマを頼めるようにしてある。
+const demoSize = (): { w: number; h: number } => {
+  const q = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
+  const num = (k: string, d: number): number => {
+    const v = Number(q.get(k))
+    return Number.isFinite(v) && v >= 160 && v <= 2000 ? Math.round(v) : d
+  }
+  return { w: num('w', 720), h: num('h', 540) }
+}
+const { w: DEMO_W, h: DEMO_H } = demoSize()
 
 export interface DemoApi {
   ready: Promise<void>
@@ -37,6 +48,8 @@ export interface DemoApi {
   getTick: () => number
   getStateAt: (x: number, y: number, z: number) => string
   fitCamera: () => void
+  /** カメラを明示指定する (面を見せる GIF 用)。省略値は現状維持 */
+  setCamera: (opts: Partial<CameraInput>) => void
   getFixtureName: () => string
   getMaxTicks: () => number
   isDone: () => boolean
@@ -64,6 +77,8 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
   const [reloadKey, setReloadKey] = useState(0)
 
   const cameraInputRef = useRef<CameraInput | null>(null)
+  /** setCamera で明示指定されたか (#238)。自動フィットを抑える */
+  const explicitCameraRef = useRef(false)
 
   // ready Promise はマウント同期で 1 度だけ作る (window.__demo.ready が参照)
   const readyResolveRef = useRef<(() => void) | null>(null)
@@ -98,11 +113,26 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
     const sx = fx.region.to[0] - fx.region.from[0] + 1
     const sy = fx.region.to[1] - fx.region.from[1] + 1
     const sz = fx.region.to[2] - fx.region.from[2] + 1
-    // rotX=45,rotY=45 の等角ビューで回路全体が収まる距離。70°FOV では距離 d の
-    // 中心面で高さ約 1.4d が見える。水平は回転で対角 hypot(sx,sz)、縦は sy を見て
-    // 大きい方に合わせ、キャンバスの ~7 割を占めるよう係数を詰める。
-    const distance = Math.max(Math.hypot(sx, sz) * 0.72, sy * 1.7) + 2.5
+    // 回路全体が収まる距離 (#238)。**外接球**で決めるので回転しても収まったまま。
+    // 旧: max(hypot(sx,sz)*0.72, sy*1.7) は縦に細長い回路で引きすぎて
+    // 147 段が糸のように写っていた (実測: 画面の高さの 3 割)
+    const distance = fitDistance([sx, sy, sz], { aspect: DEMO_W / DEMO_H })
     cameraInputRef.current = { distance, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
+  }, [])
+
+  /**
+   * カメラを明示指定する (#231)。fitCamera の等角ビューだと面が斜めで、
+   * 「ドアのどこが欠けているか」のような**面を見せたい GIF**が撮れない。
+   * 省略した値は今の値を保つ
+   */
+  const setCamera = useCallback((opts: Partial<CameraInput>) => {
+    // **明示指定があったら以後の自動フィットは走らせない** (#238)。
+    // 自動フィットはビューアの ready (テクスチャ読み込み後) に走るので、
+    // 先に距離を指定しても後から上書きされて効かなかった
+    explicitCameraRef.current = true
+    const cur = cameraInputRef.current
+      ?? { distance: 20, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
+    cameraInputRef.current = { ...cur, ...opts }
   }, [])
 
   const step = useCallback((): { tick: number } => {
@@ -130,17 +160,18 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
       getTick: () => runnerRef.current?.tick ?? 0,
       getStateAt: (x, y, z) => runnerRef.current?.getStateAt(x, y, z) ?? 'air',
       fitCamera,
+      setCamera,
       getFixtureName: () => runnerRef.current?.fixture.name ?? '',
       getMaxTicks: () => runnerRef.current?.maxTicks ?? 0,
       isDone: () => runnerRef.current?.done ?? true,
     }
     window.__demo = api
     return () => { delete window.__demo }
-  }, [loadFixture, step, fitCamera])
+  }, [loadFixture, step, fitCamera, setCamera])
 
   const onViewerReady = useCallback(() => {
     setReady(true)
-    fitCamera()
+    if (!explicitCameraRef.current) fitCamera()
     readyResolveRef.current?.()
   }, [fitCamera])
 

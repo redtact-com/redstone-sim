@@ -153,7 +153,7 @@ describe('powered_rail の動力伝播 (findPoweredRailSignal)', () => {
 
 /**
  * パワードレールの唯一の「出力」= powered が変わったときに **真下のブロック**へ
- * 配られる近隣更新 [確定: 26.2 PoweredRailBlock.updateState の updateNeighborsAt(pos.below())]。
+ * 配られる近隣更新 [確定: 26.2 PoweredRailBlock.updateState が**真下の位置**から 6 方向へ配る]。
  *
  * ピストンは「動力判定は quasi 位置を含む live read だが、活性化は近隣更新でしか
  * 走らない」ので、更新が届いていなければ動かない (= BUD)。そこへレールが更新を
@@ -210,7 +210,7 @@ describe('powered_rail は真下のブロックへ更新を配る (BUD の更新
 
 /**
  * 形状を張り替えたレールは、置いた本人でなくても更新源になる (#132)
- * [確定: 26.2 RailState.place / connectTo はどちらも setBlock(pos, state, 3) — flag 1 で
+ * [確定: 26.2 RailState.place / connectTo はどちらも **flag 3 の setBlock** — flag 1 で
  *  周囲 6 方向へ近隣更新、flag 16 が無いので updateNeighbourShapes も走る]。
  * 実機 fixture rail-shape-update / rail-shape-chain-join が典拠。
  */
@@ -314,8 +314,8 @@ describe('powered_rail は信号を出さない', () => {
 
 /**
  * activator_rail は powered_rail と同じ PoweredRailBlock の別インスタンス (#138)
- * [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock::new]。
- * 挙動の差は連鎖探索の `state.is(this)` ガードだけで、**動力の連鎖は同種間でしか
+ * [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock として登録されている]。
+ * 挙動の差は連鎖探索の**同一ブロック判定**ガードだけで、**動力の連鎖は同種間でしか
  * 繋がらない** [確定: 26.2 PoweredRailBlock.isSameRailWithPower]
  * [実機 fixture activator-rail-mixed-chain / activator-rail-chain]。
  */

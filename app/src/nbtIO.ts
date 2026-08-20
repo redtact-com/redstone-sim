@@ -181,19 +181,28 @@ interface RawPlacedBlock {
   props: Record<string, string>
   /** コンテナの中身 (block entity の Items)。#194 */
   items?: RawItem[]
+  /** 書見台に載っている本 (block entity の Book / Page)。#240 */
+  lectern?: RawLectern
 }
 
 /** block entity の Items 1 件 (#194)。 */
 interface RawItem { slot: number; id: string; count: number }
 
+/** 書見台の本 (#240)。`page` は開いているページ (0 始まり)、`pages` は本のページ数 */
+interface RawLectern { page: number; pages: number }
+
 /** バニラ構造 NBT (.nbt) を RawPlacedBlock 列にする */
 function readVanillaStructureBlocks(root: NbtCompound): RawPlacedBlock[] {
-  return Structure.fromNbt(root).getBlocks().map((placed) => ({
-    pos: placed.pos as [number, number, number],
-    name: placed.state.getName().toString(),
-    props: placed.state.getProperties() as Record<string, string>,
-    items: readItems((placed as { nbt?: NbtCompound }).nbt),
-  }))
+  return Structure.fromNbt(root).getBlocks().map((placed) => {
+    const nbt = (placed as { nbt?: NbtCompound }).nbt
+    return {
+      pos: placed.pos as [number, number, number],
+      name: placed.state.getName().toString(),
+      props: placed.state.getProperties() as Record<string, string>,
+      items: readItems(nbt),
+      lectern: readLectern(nbt),
+    }
+  })
 }
 
 /**
@@ -216,6 +225,52 @@ function readItems(nbt: NbtCompound | undefined): RawItem[] | undefined {
     out.push({ slot: e.getNumber('Slot') ?? 0, id, count })
   }
   return out.length > 0 ? out : undefined
+}
+
+/**
+ * 書見台の block entity から**開いているページとページ数**を読む (#240)。
+ *
+ * ガラスエレベーターの階数指定はこれをコンパレーターに読ませているので、
+ * **本を落とすと出力が常に 14 に潰れて階を選べない**。
+ *
+ * [確定: 26.2 LecternBlockEntity — 本は `Book` (ItemStack)、開いているページは
+ *  `Page` (int)。読み込み時に Page はページ数の範囲へ丸められる]
+ * ページ数 0 (= 中身が読めない本) は undefined を返し、**本の中身なし扱い
+ * (出力 14)** の既定のままにする。
+ */
+function readLectern(nbt: NbtCompound | undefined): RawLectern | undefined {
+  if (!nbt) return undefined
+  const book = nbt.get('Book')
+  if (!(book instanceof NbtCompound)) return undefined
+  const pages = bookPageCount(book)
+  if (pages === 0) return undefined
+  const page = Math.min(Math.max(Math.floor(nbt.getNumber('Page')), 0), pages - 1)
+  return { page, pages }
+}
+
+/**
+ * 本のページ数 (#240)。
+ *
+ * [確定: 26.2 LecternBlockEntity.getPageCount — 署名済み (written_book_content) を
+ *  先に見て、無ければ未署名 (writable_book_content) を見る。どちらの component も
+ *  持たない本は 0 ページ]
+ * **両方見る**。実ファイル (ガラスエレベーター) は各階の 10 台が署名済み、
+ * 地上の階数指定用 1 台だけが未署名だった (実測)。ページ 1 件の中身は
+ * 文字列でも `raw` つきの compound でもよく、**要素数だけが効く**。
+ * 1.20.4 以前は component が無く `tag.pages` がページ列そのもの。
+ */
+function bookPageCount(book: NbtCompound): number {
+  const components = book.get('components')
+  if (components instanceof NbtCompound) {
+    for (const key of ['minecraft:written_book_content', 'minecraft:writable_book_content']) {
+      const content = components.get(key)
+      if (!(content instanceof NbtCompound)) continue
+      const pages = content.get('pages')
+      if (pages instanceof NbtList) return pages.length
+    }
+  }
+  const legacy = book.getCompound('tag').get('pages')   // 1.20.4 以前
+  return legacy instanceof NbtList ? legacy.length : 0
 }
 
 export interface ImportResult {
@@ -268,10 +323,11 @@ export async function importFromNbtBytes(
   const nbt = NbtFile.read(structureBytes)
   unknownStackItems.clear()   // #194: 取り込みごとに集計し直す
   const placedBlocks = readVanillaStructureBlocks(nbt.root)
-  // litematic のコンテナ中身は変換で落ちるので元ファイルから補う (#197)
+  // litematic の block entity (コンテナの中身 / 書見台の本) は変換で落ちるので
+  // 元ファイルから補う (#197 / #240)
   let orphanTileEntities = 0
   if (format === 'litematic') {
-    orphanTileEntities = attachLitematicItems(bytes, placedBlocks)
+    orphanTileEntities = attachLitematicBlockEntities(bytes, placedBlocks)
   }
 
   const resultBlocks = new Map<string, BlockState>()
@@ -301,7 +357,7 @@ export async function importFromNbtBytes(
 
     const { name, props } = placed
 
-    const block = minecraftToBlockState(name, props, placed.items)
+    const block = minecraftToBlockState(name, props, placed.items, placed.lectern)
     if (!block) {
       // air 亜種 (cave_air / void_air) は空セル扱いで無警告 (通常の air と同様)
       const isAir = name === 'minecraft:air' || name.endsWith('_air')
@@ -321,7 +377,7 @@ export async function importFromNbtBytes(
   if (orphanTileEntities > 0) {
     // 座標の対応が取れなかった = 変換側との正規化のズレを疑う (#197)
     warnings.push(
-      `litematic の中身 ${orphanTileEntities} 件をコンテナに対応付けられませんでした`,
+      `litematic の中身 ${orphanTileEntities} 件をブロックに対応付けられませんでした`,
     )
   }
   if (unknownStackItems.size > 0) {
@@ -347,6 +403,35 @@ export async function importFromNbtBytes(
     : [0, 0, 0]
 
   return { blocks: resultBlocks, warnings, size }
+}
+
+// ── 生ブロック読み取り (sim を経由しない経路) ───────────────────────────────
+
+export type { RawPlacedBlock, RawItem, RawLectern }
+
+/**
+ * 構造ファイル (.nbt / .litematic / .schem) → **sim へ落とす前の生ブロック列**。
+ *
+ * `importFromNbtBytes` は `minecraftToBlockState` を通すため、sim が型を持たない
+ * ブロックが黙って消える (エディタの盤面に置けないので正しい挙動)。実機ダンプの
+ * 正解ファイルを扱う経路では**消えては困る**ので、name / props / block entity の
+ * 中身 (コンテナの Items・書見台の本) をそのまま返す口を分けて用意する。
+ *
+ * 形式判別・litematic の block entity 補完 (#197 / #240) は `importFromNbtBytes` と同じ
+ * 関数を共有する。UI 向けではないので、読めない形式や壊れた NBT は警告ではなく
+ * **例外**にする (黙って 0 ブロックを返さない)。litematic で対応付かなかった
+ * TileEntities の件数はここでは捨てる (警告の受け手が居ないため)。
+ */
+export async function readRawPlacedBlocks(bytes: Uint8Array): Promise<RawPlacedBlock[]> {
+  const format = sniffFormat(bytes).format   // NBT として読めなければそのまま throw
+  const unsupported = UNSUPPORTED_FORMAT_MESSAGE[format]
+  if (unsupported) throw new Error(unsupported)
+
+  // バニラ構造 NBT は変換不要 (再エンコード + 再パースの往復を挟まない)
+  const structureBytes = format === 'structure' ? bytes : (await convertBuffer(bytes)).nbt
+  const placedBlocks = readVanillaStructureBlocks(NbtFile.read(structureBytes).root)
+  if (format === 'litematic') attachLitematicBlockEntities(bytes, placedBlocks)
+  return placedBlocks
 }
 
 // ── BlockState → Minecraft 変換 ─────────────────────────────────────────────
@@ -425,6 +510,52 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         note: String((block as any).note ?? 0),
         powered: String((block as any).powered ?? false),
       }]
+    // ── #234 以降に足した型 (#245) ──────────────────────────────────
+    // **書き出しに case が無いと default で air に潰れる**。
+    // 取り込んだ回路を保存すると塀・泡柱・書見台などが消えていた (実測: 9 種すべて消滅)
+    case 'wall':
+      return ['minecraft:stone_brick_wall', {
+        north: (block as any).north, east: (block as any).east,
+        south: (block as any).south, west: (block as any).west,
+        up: String((block as any).up ?? false),
+        waterlogged: String((block as any).waterlogged ?? false),
+      }]
+    case 'bubble_column':
+      return ['minecraft:bubble_column', { drag: String((block as any).drag ?? false) }]
+    case 'soul_sand':
+      return ['minecraft:soul_sand', {}]
+    case 'water':
+      // 水源 0 / 落下水 8 (#252)。以前は常に 0 で、汲み上げた跡が水源に化けていた
+      return ['minecraft:water', { level: String((block as any).level ?? 0) }]
+    case 'lodestone':
+      return ['minecraft:lodestone', {}]
+    case 'cauldron':
+      return ['minecraft:water_cauldron', { level: String((block as any).level ?? 1) }]
+    case 'composter':
+      return ['minecraft:composter', { level: String((block as any).level ?? 0) }]
+    case 'lectern':
+      // ページ数と現在ページは BE 側なので blockstate には出ない (#240)。
+      // 保存すると階数指定が失われる — 既知の穴として #245 に書いてある
+      return ['minecraft:lectern', {
+        facing: (block as any).facing ?? 'north',
+        has_book: String((block as any).hasBook ?? false),
+        powered: 'false',
+      }]
+    case 'decor': {
+      // 取り込み元の名前をそのまま持っている (判断 E)。'name[k=v,...]' を分解して戻す
+      const raw = String((block as any).name ?? '')
+      const i = raw.indexOf('[')
+      const id = (i === -1 ? raw : raw.slice(0, i)).replace(/^minecraft:/, '')
+      const props: Record<string, string> = {}
+      if (i !== -1) {
+        for (const kv of raw.slice(i + 1, -1).split(',')) {
+          const eq = kv.indexOf('=')
+          if (eq !== -1) props[kv.slice(0, eq)] = kv.slice(eq + 1)
+        }
+      }
+      return [`minecraft:${id}`, props]
+    }
+
     case 'slime_block':
       return ['minecraft:slime_block', {}]
     case 'honey_block':
@@ -435,7 +566,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'door_wood':
     case 'door_iron':
       return [block.type === 'door_iron' ? 'minecraft:iron_door' : 'minecraft:oak_door', {
-        facing: block.facing, half: block.half, hinge: 'left',
+        facing: block.facing, half: block.half, hinge: (block as any).hinge ?? 'left',
         open: String(block.open), powered: String(block.powered),
       }]
     case 'trapdoor_wood':
@@ -553,6 +684,7 @@ function minecraftToBlockState(
   name: string,
   props: Record<string, string>,
   items?: RawItem[],
+  lectern?: RawLectern,
 ): BlockState | null {
   if (name === 'minecraft:redstone_wire') {
     const val = (p: string | undefined) => p === 'up' ? 'up' as const : p === 'side'
@@ -641,6 +773,7 @@ function minecraftToBlockState(
       facing: (props.facing ?? 'north'),
       open: props.open === 'true',
       powered: props.powered === 'true',
+      hinge: props.hinge === 'right' ? 'right' : 'left',
     } as BlockState
   }
   if (name.endsWith('_trapdoor')) {
@@ -778,13 +911,21 @@ function minecraftToBlockState(
   }
 
   // 素材ブロック (固体 / ガラス / スラブ) の判定は sim 側と共有する (#214)
-  return classifyPlainBlock(name, props)
+  const plain = classifyPlainBlock(name, props)
+  // 書見台のページは blockstate ではなく block entity 側にあるので、
+  // classifyPlainBlock の既定 (本の中身なし) へ後から差し込む (#240)。
+  // コンテナの Items と同じ形。
+  if (plain?.type === 'lectern' && lectern) {
+    return { ...plain, page: lectern.page, pages: lectern.pages }
+  }
+  return plain
 }
 
-// ── litematic のコンテナ中身 (#197) ──────────────────────────────────────────
+// ── litematic の block entity (#197 / #240) ─────────────────────────────────
 //
 // `@taku128/java-schematic` の変換は block entity を落とすので、元の litematic の
 // `Regions.<name>.TileEntities` を直接読んで placed に貼り直す。
+// 対象はコンテナの中身 (#197) と**書見台の本** (#240)。
 //
 // 座標系: litematic のリージョンは `Position` と `Size` を持ち、**Size は軸ごとに
 // 負になりうる**。ブロック配列も TileEntities も**最小コーナー基準**なので、
@@ -795,7 +936,7 @@ function minecraftToBlockState(
 // **黙って取りこぼさず警告に出す**。
 
 /** litematic の TileEntities を placedBlocks に貼り、対応付かなかった件数を返す */
-function attachLitematicItems(bytes: Uint8Array, placed: RawPlacedBlock[]): number {
+function attachLitematicBlockEntities(bytes: Uint8Array, placed: RawPlacedBlock[]): number {
   let regions: NbtCompound
   try {
     regions = NbtFile.read(bytes).root.getCompound('Regions')
@@ -823,16 +964,18 @@ function attachLitematicItems(bytes: Uint8Array, placed: RawPlacedBlock[]): numb
       const te = list.get(k)
       if (!(te instanceof NbtCompound)) continue
       const items = readItems(te)
-      if (!items) continue
+      const lectern = readLectern(te)
+      if (!items && !lectern) continue
       const key = [
         (te.getNumber('x') ?? 0) + mx - gx,
         (te.getNumber('y') ?? 0) + my - gy,
         (te.getNumber('z') ?? 0) + mz - gz,
       ].join(',')
       const target = byPos.get(key)
-      // 対応先がコンテナでなければ座標系の解釈が違う → 貼らずに数える
-      if (!target || !isContainerName(target.name)) { orphan++; continue }
-      target.items = items
+      // 対応先のブロック種が合わなければ座標系の解釈が違う → 貼らずに数える
+      if (target && items && isContainerName(target.name)) target.items = items
+      else if (target && lectern && target.name === 'minecraft:lectern') target.lectern = lectern
+      else orphan++
     }
   })
   return orphan

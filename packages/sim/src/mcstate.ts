@@ -13,12 +13,13 @@
 //
 // facing 変換の要注意点 [確定: 1.21.1 DiodeBlock デコンパイル]:
 //   - MC の repeater/comparator の facing は「入力側」を指す
-//     (getInputSignal が pos.relative(FACING) を読む)。
+//     (getInputSignal が FACING 方向の隣を読む)。
 //     sim の facing は「出力方向」なので相互に OPPOSITE 変換する。
 //   - MC の redstone_wall_torch の facing は「壁から離れる方向」。
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
 // ============================================================
 
+import { toNoteInstrument } from './blocks/noteInstrument.js'
 import type {
   BlockState, HDir, Dir6, WireConnectionValue, RailShape, StraightRailShape,
 } from './types.js'
@@ -63,7 +64,14 @@ export function canonicalize(state: string): string {
   // 非導体 (glass / slab) も同様に代表名へ寄せる
   const plain = classifyPlainBlock(name, props)
   if (plain) {
-    if (plain.type === 'solid') return 'stone'
+    // **押せる導体と押せない導体は別の代表名へ寄せる** (#253)。
+    // 同じ stone に潰すと「黒曜石をピストンで押した」ような食い違いが見えなくなる
+    if (plain.type === 'solid') {
+      if (plain.immovable === true) return 'obsidian'
+      // 押せるが引けない (#255)。stone に潰すと「引けたかどうか」が比較で見えなくなる
+      if (plain.pushOnly === true) return formatMcState('gray_glazed_terracotta', { facing: 'north' })
+      return 'stone'
+    }
     if (plain.type === 'glass') return 'glass'
     if (plain.type === 'slab') return formatMcState('smooth_stone_slab', { type: plain.half })
   }
@@ -145,7 +153,7 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'oak_pressure_plate':
     case 'stone_pressure_plate':
-      // 木/石 感圧板。POWERED ? 15 : 0 [確定: 26.2 PressurePlateBlock]
+      // 木/石 感圧板。POWERED なら出力 15、でなければ 0 [確定: 26.2 PressurePlateBlock]
       return {
         type: name === 'stone_pressure_plate' ? 'pressure_plate_stone' : 'pressure_plate_wood',
         powered: props.powered === 'true',
@@ -165,10 +173,18 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'redstone_lamp':
       return { type: 'lamp', lit: props.lit === 'true' }
+
     case 'note_block':
-      // instrument は sim で保持しない (発音は BE フックで通知するのみ)。
-      // note (0-24) と powered のみ取り込む [確定: 26.2 NoteBlock]
-      return { type: 'note_block', powered: props.powered === 'true', note: Number(props.note ?? '0') }
+      // instrument も取り込む。**直下のブロックで決まり、変化はオブザーバーに
+      // 検知される**ので blockstate として持つ必要がある (#231)。
+      // 取り込み時は文字列をそのまま採る (実機の「まだ再計算されていない古い音色」を
+      // 再現するため。ここで計算し直すと authored 照合が合わなくなる)
+      return {
+        type: 'note_block',
+        powered: props.powered === 'true',
+        note: Number(props.note ?? '0'),
+        instrument: toNoteInstrument(props.instrument),
+      }
     case 'piston':
     case 'sticky_piston':
       // vanilla の facing = 伸長方向 = sim と同一 (反転不要)
@@ -224,6 +240,7 @@ export function mcToSim(state: string): BlockState | null {
         half: (props.half === 'upper' ? 'upper' : 'lower'),
         facing: (props.facing ?? 'north') as HDir,
         open: props.open === 'true', powered: props.powered === 'true',
+        hinge: props.hinge === 'right' ? 'right' : 'left',
       }
     case 'oak_trapdoor':
     case 'spruce_trapdoor':
@@ -348,6 +365,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         // payload (into) は blockstate に現れない (vanilla も BE 内)
         return formatMcState('moving_piston', { facing: sim.facing, type: sim.kind })
       case 'solid':
+        // 押した先には authored が無いので合成する。canonicalize と代表名を揃える
+        if (sim.immovable === true) return 'obsidian'    // #253 (そもそも動かない)
+        if (sim.pushOnly === true) {                     // #255 (押されて動く先はある)
+          return formatMcState('gray_glazed_terracotta', { facing: 'north' })
+        }
         return 'stone'
       // 非導体フルブロックも可動 (#184)。色・素材は保持しないので代表名で合成する
       case 'glass':
@@ -376,7 +398,7 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'door_wood':
       case 'door_iron':
         return formatMcState(sim.type === 'door_iron' ? 'iron_door' : 'oak_door', {
-          facing: sim.facing, half: sim.half, hinge: 'left',
+          facing: sim.facing, half: sim.half, hinge: sim.hinge,
           open: String(sim.open), powered: String(sim.powered),
         })
       case 'trapdoor_wood':
@@ -407,10 +429,29 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return formatMcState(sim.type, { facing: sim.facing, triggered: String(sim.triggered) })
       case 'lamp':
         return formatMcState('redstone_lamp', { lit: String(sim.lit) })
+      case 'lodestone':
+        return 'lodestone'
+      case 'wall':
+        return formatMcState('stone_brick_wall', {
+          east: sim.east, north: sim.north, south: sim.south, up: String(sim.up),
+          waterlogged: String(sim.waterlogged), west: sim.west,
+        })
+      case 'soul_sand':
+        return 'soul_sand'
+      case 'water':
+        return formatMcState('water', { level: String(sim.level) })
+      case 'bubble_column':
+        return formatMcState('bubble_column', { drag: String(sim.drag) })
+      case 'decor':
+        // 取り込み元の文字列をそのまま返す (判断 E: 名前を保持して描き分ける)
+        return sim.name
+      case 'cauldron':
+        return formatMcState('water_cauldron', { level: String(sim.level) })
+      case 'composter':
+        return formatMcState('composter', { level: String(sim.level) })
       case 'note_block':
-        // instrument は authored に無いため harp 既定で合成する (発音音色は sim 無関係)
         return formatMcState('note_block',
-          { instrument: 'harp', note: String(sim.note), powered: String(sim.powered) })
+          { instrument: sim.instrument, note: String(sim.note), powered: String(sim.powered) })
       case 'pressure_plate_wood':
         return formatMcState('oak_pressure_plate', { powered: String(sim.powered) })
       case 'pressure_plate_stone':
@@ -467,16 +508,58 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
     case 'lamp':
       props.lit = String(sim.lit)
       break
+    case 'cauldron':
+    case 'composter':
+      // level は固定 (汲む/入れる操作は sim のスコープ外。判断 D)
+      props.level = String(sim.level)
+      break
+    case 'lectern':
+      // ページは BE 側なので blockstate には出ない (has_book と facing だけ)
+      props.facing = sim.facing
+      props.has_book = String(sim.hasBook)
+      props.powered = 'false'
+      break
+    case 'bubble_column':
+      // drag は下のブロックで決まる (#234)
+      props.drag = String(sim.drag)
+      break
+    case 'wall':
+      // 形状は近傍で決まる (#234)。上の塀と同期する up が無遅延伝播の要
+      props.north = sim.north; props.east = sim.east
+      props.south = sim.south; props.west = sim.west
+      props.up = String(sim.up); props.waterlogged = String(sim.waterlogged)
+      break
+    case 'water':
+      // level は動く (水源 0 ⇄ 落下水 8)。#252
+      props.level = String(sim.level)
+      break
+    case 'lodestone':
+    case 'decor':
+    case 'soul_sand':
+      // 動的プロパティを持たない
+      break
     case 'note_block':
-      // 動的プロパティは powered のみ (note は tune で変わるが sim は tune しない)。
-      // authored の instrument/note は保持する
+      // note は tune で変わるが sim は tune しない (authored 保持)。
+      // instrument は直下のブロックで動的に変わるので sim 側の値で上書きする (#231)
       props.powered = String(sim.powered)
+      props.instrument = sim.instrument
       break
     case 'piston':
     case 'sticky_piston':
+      // **向きも sim 側から書く** (#257)。ピストンは可動なので、
+      // 別の向きのピストンがあった座標へ移動してくると authored の向きが残ってしまう
+      // (エレベーターの搬器は上向きと下向きのピストンが背中合わせで昇降するため、
+      //  座標だけ見ると同じ型で向きだけ違う。sim の世界は正しいのに
+      //  **書き出しだけが古い向き**になり、実機と食い違って見えていた)
+      props.facing = sim.facing
       props.extended = String(sim.extended)
       break
     case 'piston_head':
+      // ヘッドも同じ理由で向き・粘着を sim 側から書く (#257)
+      props.facing = sim.facing
+      props.type = sim.sticky ? 'sticky' : 'normal'
+      props.short = 'false'
+      break
     case 'moving_piston':
       break // 出現/消滅が動的要素 (合成パスで処理)
     case 'redstone_block':
@@ -485,6 +568,8 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.power = String(sim.outputPower)
       break
     case 'observer':
+      // オブザーバーも可動なので向きを sim 側から書く (#257)
+      props.facing = sim.facing
       props.powered = String(sim.powered)
       break
     case 'powered_rail':

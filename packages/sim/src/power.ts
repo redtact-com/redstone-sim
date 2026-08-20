@@ -43,9 +43,11 @@ export function isConductor(block: BlockState | null): boolean {
   // 出さない (getSignal / getDirectSignal とも非 override) [確定: 26.2
   // PoweredRailBlock]。動力を「受ける」だけの素子で、出力に相当するのは
   // powered 変化時に真下のブロックへ配る近隣更新のみ (world.ts の neighborChanged)。
+  // lodestone は石と同じフルブロックなので導体。押せないだけ (#234)
   return !!block && (
     block.type === 'solid' || block.type === 'target' ||
-    block.type === 'note_block' || block.type === 'slime_block'
+    block.type === 'note_block' || block.type === 'slime_block' ||
+    block.type === 'lodestone' || block.type === 'soul_sand'
   )
 }
 
@@ -125,7 +127,7 @@ function getEmittedSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): number {
     case 'target':
       return src.outputPower
     case 'detector_rail':
-      // 全方向へ weak 15 [確定: 26.2 DetectorRailBlock.ownSignal = powered ? 15 : 0]。
+      // 全方向へ weak 15 [確定: 26.2 DetectorRailBlock.ownSignal — POWERED なら 15、でなければ 0]。
       // 強充電は真下のみ (getEmittedDirectSignal 側)
       return src.powered ? 15 : 0
     case 'torch':
@@ -175,8 +177,8 @@ function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): nu
     case 'button_wood':
       return src.powered && toDir === getAttachFace(src.facing) ? 15 : 0
     case 'detector_rail':
-      // **真下のブロックだけ**を強充電する [確定: 26.2 DetectorRailBlock.getDirectSignal
-      // = (direction == UP) ? 15 : 0。vanilla の UP = 受信側→レール の向きなので
+      // **真下のブロックだけ**を強充電する [確定: 26.2 DetectorRailBlock.getDirectSignal —
+      // 方向が UP のときだけ 15、他は 0。vanilla の UP = 受信側→レール の向きなので
       // sim の レール→受信側 'down' に対応]
       // [実機 fixture detector-rail-cart-pulse: 真下の支持ブロック越しにランプが点き、
       //  側面の隣接固体越しには点かない]
@@ -184,7 +186,7 @@ function getEmittedDirectSignal(world: SimWorld, srcPos: Pos3D, toDir: Dir6): nu
     case 'pressure_plate_wood':
     case 'pressure_plate_stone':
       // 取り付け面 = 直下ブロックのみを強充電 [確定: 26.2
-      // BasePressurePlateBlock.getDirectSignal = (direction==UP) ? signal : 0。
+      // BasePressurePlateBlock.getDirectSignal — 方向が UP のときだけ signal、他は 0。
       // vanilla の UP = 受信側→板 の向き = sim の板→受信側 'down' に対応]
       return src.powered && toDir === 'down' ? 15 : 0
     case 'weighted_pressure_plate_light':

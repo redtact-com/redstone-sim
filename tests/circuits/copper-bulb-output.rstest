@@ -1,11 +1,11 @@
 # 銅の電球の 2 つの出力性質 (#155)。
 #
 # (a) **コンパレーターは lit を読む** (powered ではない)。
-#     lit ? 15 : 0 [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal]。
+#     lit なら 15・でなければ 0 [確定: 26.2 CopperBulbBlock.getAnalogOutputSignal]。
 #     レバーを切って powered が落ちても lit は保持されるので、コンパレーターの
 #     出力は 15 のまま残る — これが「読んでいるのは記憶ビットの方」の証拠。
 #
-# (b) **銅の電球は非導体** (.isRedstoneConductor(Blocks::never)
+# (b) **銅の電球は非導体** (isRedstoneConductor に常時 false を返す述語が渡されている
 #     [確定: 26.2 Blocks.java:5272]) かつ非信号源なので、レバーの給電が
 #     電球を素通りしない。南隣 (2,1,4) のダストは lit でも powered でも常に 0。
 #     フルブロックなのに強充電を通さないので、**給電の仕切り**として使える。

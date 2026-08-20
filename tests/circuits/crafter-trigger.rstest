@@ -1,7 +1,7 @@
 # クラフターは疑似接続を持たない (#163)。
 #
-# `neighborChanged` は `hasNeighborSignal(pos)` **だけ**を見る
-# [確定: 26.2 CrafterBlock.java:73-88]。ディスペンサーが `pos.above()` も見る
+# `neighborChanged` は**自身 6 面の受電**だけを見る
+# [確定: 26.2 CrafterBlock.java:73-88]。ディスペンサーが**1 マス上**も見る
 # [確定: DispenserBlock.java:131] のと対照的で、同じ「4gt ラッチ素子」でありながら
 # 疑似接続の有無が違う。
 #

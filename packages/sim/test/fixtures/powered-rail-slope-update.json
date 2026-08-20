@@ -1,6 +1,6 @@
 {
   "name": "powered-rail-slope-update",
-  "description": "#129 斜め上への伝播が BUD なしで届くかは「手前のレールが坂かどうか」で決まる。PoweredRailBlock.updateState は変化時に真下へ近隣更新を配るが、**坂のときだけ真上にも配る** [確定: 26.2 `if (state.getValue(SHAPE).isSlope()) level.updateNeighborsAt(pos.above(), this)`]。真上 (2,2,3) の周囲 6 方向には斜め上のレール (3,2,3) が入るので、坂なら更新が届いて即座に点く。平坦なままだと届かず更新を送るまで点かない (powered-rail-step)。この差を実機で確定させる。",
+  "description": "#129 斜め上への伝播が BUD なしで届くかは「手前のレールが坂かどうか」で決まる。PoweredRailBlock.updateState は変化時に真下へ近隣更新を配るが、**坂のときだけ真上にも配る** [確定: 26.2 — SHAPE が坂のときだけ、**真上の位置**から 6 方向へレール自身を更新元とする近隣更新を配る]。真上 (2,2,3) の周囲 6 方向には斜め上のレール (3,2,3) が入るので、坂なら更新が届いて即座に点く。平坦なままだと届かず更新を送るまで点かない (powered-rail-step)。この差を実機で確定させる。",
   "mcVersion": "1.21.1",
   "ticks": 8,
   "region": {

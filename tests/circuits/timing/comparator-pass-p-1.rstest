@@ -42,7 +42,6 @@ trace strict {
   6gt[ST]: Ob{f.2}
   6gt[ST]: Co(c.2) p-1
   8gt[ST]: Re{n.2}
-  8gt[ST]: Co(c.2) p-1
   8gt[ST]: Co{c.2}
   8gt[ST]: Re(f.2) p-2
   10gt[ST]: Re{f.2}

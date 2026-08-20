@@ -201,7 +201,7 @@ describe('盤面サイズの保存 (#226)', () => {
     }))
     const r = loadCircuit(s)
     expect(r?.blocks.size).toBe(1)
-    expect(r?.board).toEqual({ x: 64, y: 16, z: 1 })
+    expect(r?.board).toEqual({ x: 256, y: 16, z: 1 })
   })
 
   it('盤面サイズを渡さずに保存すると既定が入る', () => {

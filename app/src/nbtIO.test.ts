@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { isConductor } from '@redstone/sim'
 import {
-  NbtFile, NbtCompound, NbtList, NbtInt, NbtString,
+  NbtFile, NbtCompound, NbtList, NbtInt, NbtString, NbtLongArray,
 } from 'deepslate/nbt'
 import type { BlockState } from '@redstone/sim'
-import { mcToSim, slotsFromCount } from '@redstone/sim'
+import { mcToSim, slotsFromCount, SimWorld } from '@redstone/sim'
 import { blockStateToMinecraftStr } from '@redstone/viewer'
 import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
 
@@ -265,9 +266,17 @@ describe('固体ブロックの取り込み (#170)', () => {
     'minecraft:iron_ore', 'minecraft:deepslate_redstone_ore',
     'minecraft:oxidized_copper', 'minecraft:waxed_exposed_cut_copper',
     'minecraft:hay_block', 'minecraft:packed_ice', 'minecraft:blue_ice',
-    'minecraft:soul_sand', 'minecraft:mud', 'minecraft:magma_block', 'minecraft:shroomlight',
+    'minecraft:mud', 'minecraft:magma_block', 'minecraft:shroomlight',
   ])('その他の導体フルブロックも solid: %s', async (name) => {
     expect(await importVanilla(name)).toMatchObject(solid)
+  })
+
+  it('soul_sand は導体だが独立した型 (#234)', async () => {
+    // 泡柱の源になるので solid に潰さない。導体であることは変わらない
+    // (実機ハーネスで測定済み)
+    const b = await importVanilla('minecraft:soul_sand')
+    expect(b).toMatchObject({ type: 'soul_sand' })
+    expect(isConductor(b as BlockState)).toBe(true)
   })
 
   it('従来から solid だったものは維持される', async () => {
@@ -336,8 +345,13 @@ describe('固体ブロックの取り込み (#170)', () => {
     expect(await importVanilla('minecraft:redstone_block')).toMatchObject({ type: 'redstone_block' })
   })
 
-  it('装飾ブロックは従来どおり省略される', async () => {
-    expect(await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })).toBeUndefined()
+  it('装飾ブロックは decor として取り込む (#234)', async () => {
+    // 以前は省略していた。レッドストーン的には無関係だが、
+    // **見た目が欠けると回路の理解を損ねる**ので 1 型に集約して取り込む。
+    // 元のブロック名は保持する (判断 E)
+    const sign = await importVanilla('minecraft:oak_wall_sign', { facing: 'north' })
+    expect(sign).toMatchObject({ type: 'decor' })
+    expect((sign as { name: string }).name).toContain('oak_wall_sign')
   })
 })
 
@@ -472,5 +486,195 @@ describe('素材ブロックの分類: nbtIO と mcstate が一致する (#214)'
 
   it('本当に未対応のブロックは従来どおり例外にする (typo 検知を残す)', () => {
     expect(() => mcToSim('definitely_not_a_block')).toThrow(/扱えないブロック/)
+  })
+})
+
+// ============================================================
+// 書見台の本の取り込み (#240)
+//
+// ガラスエレベーターの**階数指定は書見台**で、コンパレーターがページ番号を読む
+// (実機の本文がそのまま操作説明: 「15-階数(1F~14F) =1ページ」)。ページと
+// ページ数は blockstate ではなく block entity 側にあるため、**取り込みで本を
+// 落とすと出力が常に 14 に潰れて階を選べない**。
+//
+// 本の形式は 2 つある。署名済みの written_book_content と未署名の
+// writable_book_content で、実ファイルは各階の 10 台が前者、地上の 1 台が後者だった。
+// [確定: 26.2 LecternBlockEntity — Book / Page、ページ数は上記 2 component の
+//  ページ列の長さ (どちらも無ければ 0)]
+// ============================================================
+
+/** ページ n 枚のページ列。1 件は raw つき compound でも素の文字列でもよい */
+function pageList(n: number, form: 'raw' | 'string' = 'raw'): NbtList {
+  const texts = Array.from({ length: n }, (_, i) => `p${i}`)
+  return form === 'raw'
+    ? new NbtList<NbtCompound>(texts.map(t => new NbtCompound().set('raw', new NbtString(t))))
+    : new NbtList<NbtString>(texts.map(t => new NbtString(t)))
+}
+
+/** ページ n 枚の本アイテム (1.20.5 以降の component 形式) */
+function bookItem(component: string, n: number, form: 'raw' | 'string' = 'raw'): NbtCompound {
+  const id = component.includes('writable') ? 'minecraft:writable_book' : 'minecraft:written_book'
+  return new NbtCompound()
+    .set('id', new NbtString(id))
+    .set('count', new NbtInt(1))
+    .set('components', new NbtCompound().set(component, new NbtCompound().set('pages', pageList(n, form))))
+}
+
+/** ページ n 枚の本アイテム (1.20.4 以前の tag 形式) */
+function legacyBookItem(n: number): NbtCompound {
+  return new NbtCompound()
+    .set('id', new NbtString('minecraft:written_book'))
+    .set('Count', new NbtInt(1))
+    .set('tag', new NbtCompound().set('pages', pageList(n, 'string')))
+}
+
+/** 書見台の block entity (Book を省くと**本の中身なし**) */
+function lecternNbt(book: NbtCompound | undefined, page: number): NbtCompound {
+  const c = new NbtCompound().set('id', new NbtString('minecraft:lectern'))
+  if (book) c.set('Book', book).set('Page', new NbtInt(page))
+  return c
+}
+
+/** block entity NBT つきの単一ブロックを構造 NBT (.nbt) に組んで取り込む */
+async function importWithBlockEntity(
+  name: string, props: Record<string, string>, be: NbtCompound | undefined,
+): Promise<BlockState | undefined> {
+  const air = new NbtCompound().set('Name', new NbtString('minecraft:air'))
+  const target = new NbtCompound().set('Name', new NbtString(name))
+  const p = new NbtCompound()
+  for (const [k, v] of Object.entries(props)) p.set(k, new NbtString(v))
+  target.set('Properties', p)
+  const blockEntry = new NbtCompound()
+    .set('state', new NbtInt(1))
+    .set('pos', new NbtList<NbtInt>([new NbtInt(0), new NbtInt(0), new NbtInt(0)]))
+  if (be) blockEntry.set('nbt', be)
+  const root = new NbtCompound()
+    .set('size', new NbtList<NbtInt>([new NbtInt(1), new NbtInt(1), new NbtInt(1)]))
+    .set('palette', new NbtList<NbtCompound>([air, target]))
+    .set('blocks', new NbtList<NbtCompound>([blockEntry]))
+    .set('entities', new NbtList<NbtCompound>([]))
+  const bytes = new NbtFile('', root, 'gzip', false, undefined).write()
+  return (await importFromNbtBytes(bytes, { maxLayers: 8 })).blocks.get('0,0,0')
+}
+
+const LECTERN_PROPS = { facing: 'west', has_book: 'true', powered: 'false' }
+
+/** 書見台を .nbt 経由で取り込む (本つき) */
+const importLectern = (book: NbtCompound | undefined, page = 0) =>
+  importWithBlockEntity('minecraft:lectern', LECTERN_PROPS, lecternNbt(book, page))
+
+describe('書見台の本の取り込み: 構造 NBT (#240)', () => {
+  it('署名済みの本 (written_book_content) のページ数と現在ページを読む', async () => {
+    expect(await importLectern(bookItem('minecraft:written_book_content', 15), 3))
+      .toMatchObject({ type: 'lectern', hasBook: true, page: 3, pages: 15 })
+  })
+
+  it('**未署名の本 (writable_book_content)** も読む — 実ファイルでは地上の 1 台だけがこちら', async () => {
+    expect(await importLectern(bookItem('minecraft:writable_book_content', 15), 4))
+      .toMatchObject({ type: 'lectern', hasBook: true, page: 4, pages: 15 })
+  })
+
+  it('ページ 1 件が素の文字列でも要素数で数える', async () => {
+    expect(await importLectern(bookItem('minecraft:writable_book_content', 5, 'string'), 2))
+      .toMatchObject({ page: 2, pages: 5 })
+  })
+
+  it('1.20.4 以前の tag.pages 形式も読む', async () => {
+    expect(await importLectern(legacyBookItem(15), 3)).toMatchObject({ page: 3, pages: 15 })
+  })
+
+  it('本が無ければ pages=0 のまま (= 出力 14 の既存の挙動)', async () => {
+    // block entity ごと無い場合と、block entity はあるが Book が無い場合
+    expect(await importWithBlockEntity('minecraft:lectern', LECTERN_PROPS, undefined))
+      .toMatchObject({ type: 'lectern', hasBook: true, page: 0, pages: 0 })
+    expect(await importLectern(undefined)).toMatchObject({ page: 0, pages: 0 })
+  })
+
+  it('ページ数が読めない本も pages=0 (中身なし扱いにフォールバック)', async () => {
+    // component も tag も持たない本 (別 mod / 壊れたファイル)
+    const odd = new NbtCompound().set('id', new NbtString('minecraft:written_book'))
+    expect(await importLectern(odd, 3)).toMatchObject({ page: 0, pages: 0 })
+  })
+
+  it('Page がページ数を超えていたら最終ページへ丸める', async () => {
+    // [確定: 26.2 LecternBlockEntity — 読み込み時に Page をページ数の範囲へ収める]
+    expect(await importLectern(bookItem('minecraft:writable_book_content', 5), 99))
+      .toMatchObject({ page: 4, pages: 5 })
+    expect(await importLectern(bookItem('minecraft:writable_book_content', 5), -3))
+      .toMatchObject({ page: 0, pages: 5 })
+  })
+
+  it('取り込んだ本で階数指定が効く (コンパレーター出力 = ページ + 1)', async () => {
+    // 15 ページ本なら進捗 = page/14 なので **出力はページ + 1**。
+    // 本を落とすと pages=0 → 常に 14 で、どの階も選べなくなる
+    const read = (b: BlockState): number => {
+      const w = new SimWorld()
+      w.setBlockAt([0, -1, 0], { type: 'solid', powered: false })
+      w.setBlockAt([1, -1, 0], { type: 'solid', powered: false })
+      w.setBlockAt([0, 0, 0], b)
+      // sim の facing は出力方向なので、西隣の書見台を読むには east 向き
+      w.setBlockAt([1, 0, 0], {
+        type: 'comparator', facing: 'east', mode: 'compare', powered: false, outputPower: 0,
+      } as BlockState)
+      w.initialize()
+      w.settle(8)
+      const c = w.getBlockAt([1, 0, 0])
+      return c?.type === 'comparator' ? c.outputPower : -1
+    }
+    for (const page of [0, 4, 14]) {
+      const b = await importLectern(bookItem('minecraft:writable_book_content', 15), page)
+      expect(read(b as BlockState), `Page=${page}`).toBe(page + 1)
+    }
+  })
+})
+
+// ── litematic 経由 (実ファイルはこの経路) ──────────────────────────────────────
+//
+// litematic は変換で block entity が落ちるため `Regions.<name>.TileEntities` を
+// 元ファイルから直接読んで貼り直している (#197 と同じ経路)。
+
+/** ブロック 1 個 + TileEntity 1 件の litematic。パレットは air + 1 種 = 2 bit 固定 */
+function litematicOne(name: string, tile: NbtCompound | undefined): Uint8Array {
+  const xyz = (x: number, y: number, z: number) =>
+    new NbtCompound().set('x', new NbtInt(x)).set('y', new NbtInt(y)).set('z', new NbtInt(z))
+  const region = new NbtCompound()
+    .set('Position', xyz(0, 0, 0))
+    .set('Size', xyz(1, 1, 1))
+    .set('BlockStatePalette', new NbtList<NbtCompound>(
+      ['minecraft:air', name].map(n => new NbtCompound().set('Name', new NbtString(n)))))
+    .set('BlockStates', new NbtLongArray([1n]))   // 添字 1 (= name) が 1 個だけ
+    .set('TileEntities', new NbtList<NbtCompound>(tile ? [tile.set('x', new NbtInt(0))
+      .set('y', new NbtInt(0)).set('z', new NbtInt(0))] : []))
+  return new NbtFile('', new NbtCompound()
+    .set('Version', new NbtInt(6))
+    .set('MinecraftDataVersion', new NbtInt(3700))
+    .set('Metadata', new NbtCompound())
+    .set('Regions', new NbtCompound().set('Unnamed', region)), 'gzip', false, undefined).write()
+}
+
+describe('書見台の本の取り込み: litematic (#240)', () => {
+  it('TileEntities から本を貼る (変換で落ちる分を元ファイルから補う)', async () => {
+    const bytes = litematicOne(
+      'minecraft:lectern',
+      lecternNbt(bookItem('minecraft:writable_book_content', 15), 4),
+    )
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    expect(r.blocks.get('0,0,0')).toMatchObject({ type: 'lectern', page: 4, pages: 15 })
+    expect(r.warnings).toEqual([])
+  })
+
+  it('TileEntity が無ければ pages=0 のまま (= 出力 14)', async () => {
+    const r = await importFromNbtBytes(litematicOne('minecraft:lectern', undefined),
+      { gridW: 16, gridH: 16, maxLayers: 16 })
+    expect(r.blocks.get('0,0,0')).toMatchObject({ type: 'lectern', page: 0, pages: 0 })
+    expect(r.warnings).toEqual([])
+  })
+
+  it('貼り先が書見台でなければ**黙って捨てず警告する**', async () => {
+    // 座標系の解釈がずれて石を指してしまった状況 (#197 のコンテナと同じ扱い)
+    const bytes = litematicOne(
+      'minecraft:stone', lecternNbt(bookItem('minecraft:writable_book_content', 15), 4))
+    const r = await importFromNbtBytes(bytes, { gridW: 16, gridH: 16, maxLayers: 16 })
+    expect(r.warnings.some(w => w.includes('対応付けられませんでした'))).toBe(true)
   })
 })

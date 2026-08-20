@@ -65,6 +65,28 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
+    // ── #234 ──────────────────────────────────────────────────────────
+    case 'lodestone':
+      return 'minecraft:lodestone'
+    case 'wall':
+      return `minecraft:stone_brick_wall[east=${block.east},north=${block.north},`
+        + `south=${block.south},up=${block.up},waterlogged=${block.waterlogged},west=${block.west}]`
+    case 'soul_sand':
+      return 'minecraft:soul_sand'
+    case 'water':
+      return 'minecraft:water[level=0]'
+    case 'bubble_column':
+      return `minecraft:bubble_column[drag=${block.drag}]`
+    case 'decor':
+      // 取り込み元の名前で描く (判断 E)。名前空間が無ければ補う
+      return block.name.startsWith('minecraft:') ? block.name : `minecraft:${block.name}`
+    case 'cauldron':
+      return `minecraft:water_cauldron[level=${block.level}]`
+    case 'composter':
+      return `minecraft:composter[level=${block.level}]`
+    case 'lectern':
+      // ページは BE 側なので blockstate には出ない (#240)
+      return `minecraft:lectern[facing=${block.facing},has_book=${block.hasBook},powered=false]`
     case 'note_block':
       // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
       return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`
@@ -234,7 +256,36 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:oak_fence_gate',
   'minecraft:oak_door',
   'minecraft:iron_door',
+  // #234 ガラスエレベーター。**ここに無い名前は deepslate が描けず消えて見える**
+  'minecraft:lodestone',
+  'minecraft:stone_brick_wall',
+  'minecraft:soul_sand',
+  'minecraft:water',
+  'minecraft:bubble_column',
+  'minecraft:water_cauldron',
+  'minecraft:composter',
+  'minecraft:lectern',
 ]
+
+/**
+ * スナップショットに出てくる「プリロード表に無いブロック名」(#234)。
+ *
+ * 装飾 (`decor`) は**取り込み元の名前をそのまま保持する**ため名前の集合が閉じておらず、
+ * 固定表に列挙できない。ここで拾って `buildResources` に足さないと、
+ * その装飾は**エラーにならず静かに消える** (実際、壁が透明なまま GIF に写って気づいた)。
+ */
+export function extraPreloadNames(
+  snapshot: { blocks: ReadonlyMap<string, BlockState> },
+): string[] {
+  const known = new Set(VIEWER_PRELOAD_BLOCKS)
+  const found = new Set<string>()
+  for (const block of snapshot.blocks.values()) {
+    if (block.type !== 'decor') continue     // 他の型は固定表で足りる
+    const name = blockStateToMinecraftStr(block).split('[')[0]
+    if (!known.has(name)) found.add(name)
+  }
+  return [...found].sort()
+}
 
 // ── WorldSnapshot → Structure ────────────────────────────────────────
 

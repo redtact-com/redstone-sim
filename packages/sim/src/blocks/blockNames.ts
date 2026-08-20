@@ -11,7 +11,8 @@
 // 「2 つの変換器がドリフトする」構図そのものだった。
 // ============================================================
 
-import type { BlockState } from '../types.js'
+import { noteInstrumentOfBlockName } from './noteInstrument.js'
+import type { BlockState, HDir } from '../types.js'
 
 // ── 非導体ブロック (#184) ────────────────────────────────────────────────────
 //
@@ -114,6 +115,33 @@ const NOT_SOLID_EXACT = new Set([
   'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
 ])
 
+/**
+ * 導体フルブロックのうち**ピストンで押せない**もの (#253)。
+ * [確定: 26.2 — いずれも pushReaction(BLOCK)]
+ *
+ * sim は材質を潰しているのでここだけ名前で割る。**lodestone は別型**なので入れない。
+ * [実機実測: ピストンの正面が黒曜石 → 伸びない / スライムの横が黒曜石 → 伸びる]
+ */
+const IMMOVABLE_SOLID = new Set([
+  'obsidian', 'crying_obsidian', 'bedrock', 'reinforced_deepslate',
+  'respawn_anchor', 'spawner', 'trial_spawner', 'vault', 'budding_amethyst',
+  'command_block', 'chain_command_block', 'repeating_command_block',
+  'structure_block', 'jigsaw', 'barrier', 'end_portal_frame',
+])
+
+/** ピストンで押せない導体フルブロックか (#253) */
+export function isImmovableSolidName(name: string): boolean {
+  return IMMOVABLE_SOLID.has(stripNs(name))
+}
+
+/**
+ * **押せるが引けない**導体フルブロックか (#255)。
+ * [確定: 26.2 — 釉薬テラコッタ 16 色は pushReaction(PUSH_ONLY)]
+ */
+export function isPushOnlySolidName(name: string): boolean {
+  return stripNs(name).endsWith('_glazed_terracotta')
+}
+
 export function isSolidBlockName(name: string): boolean {
   const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
   if (NOT_SOLID_EXACT.has(id)) return false
@@ -130,11 +158,114 @@ export function isSolidBlockName(name: string): boolean {
  * 判定順は **非導体が先**。`_slab` は `_planks` 等の接尾辞判定に引っかかるため、
  * 先に見ないと誤って solid になる。
  */
+/**
+ * レッドストーン的に何もしない装飾ブロック (#234)。
+ * **非導体・非信号源・ワイヤーを切らない**性質が同じものをここへ集約する。
+ * 見た目だけは区別したいので取り込み元の文字列を保持する (判断 E)。
+ *
+ * `lectern` は本来コンパレーターで読める (階数指定に使われている) が、
+ * 読み取りは未実装のため当面ここに入れる。
+ */
+const DECOR_SUFFIXES = ['_stairs', '_hanging_sign', '_sign', '_banner', '_carpet']
+const DECOR_EXACT = new Set([
+  'end_rod', 'lectern', 'lightning_rod', 'flower_pot', 'chain', 'ladder',
+])
+
+const stripNs = (name: string): string =>
+  name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
+
+export function isDecorBlockName(name: string): boolean {
+  const id = stripNs(name)
+  return DECOR_EXACT.has(id) || DECOR_SUFFIXES.some(sfx => id.endsWith(sfx))
+}
+
+/** blockstate の数値プロパティを範囲内に収めて取り込む */
+function clampLevel(v: string | undefined, min: number, max: number): number {
+  const n = Number(v ?? min)
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.floor(n))) : min
+}
+
 export function classifyPlainBlock(
   name: string, props: Record<string, string> = {},
 ): BlockState | null {
+  // #234 ガラスエレベーターで要るもの。**取り込みの入口はここ 1 か所**にする
+  // (nbtIO と mcstate に別々の変換器があり、#189 / #214 で 2 回ドリフト事故を起こしている)
+  const id = stripNs(name)
+  if (id === 'lodestone') {
+    // 石 (導体) だがピストンで押せない [確定: 26.2 pushReaction(BLOCK)]
+    return { type: 'lodestone', powered: false }
+  }
+  if (id === 'water_cauldron') {
+    // コンパレーターは LEVEL をそのまま読む [確定: 26.2 LayeredCauldronBlock]
+    return { type: 'cauldron', level: clampLevel(props.level, 0, 3) }
+  }
+  if (id === 'composter') {
+    // 同上 [確定: 26.2 ComposterBlock]
+    return { type: 'composter', level: clampLevel(props.level, 0, 8) }
+  }
+  if (id.endsWith('_wall') && !id.endsWith('_wall_sign') && !id.endsWith('_wall_hanging_sign')
+    && !id.endsWith('_wall_torch') && !id.endsWith('_wall_fan') && !id.endsWith('_wall_head')
+    && !id.endsWith('_wall_banner') && !id.endsWith('_wall_skull')) {
+    // 塀 (#234)。材質は潰す (レッドストーン的な差は無い)
+    const side = (v: string | undefined): 'none' | 'low' | 'tall' =>
+      v === 'low' || v === 'tall' ? v : 'none'
+    return {
+      type: 'wall',
+      north: side(props.north), east: side(props.east),
+      south: side(props.south), west: side(props.west),
+      up: props.up !== 'false',
+      waterlogged: props.waterlogged === 'true',
+    }
+  }
+  if (id === 'soul_sand') {
+    // 導体だが泡柱の源なので solid に潰さない (#234)
+    return { type: 'soul_sand', powered: false }
+  }
+  if (id === 'water') {
+    // 持つのは水源 (0) と落下水 (8) だけ。**横に広がる流水 (1-7) は実装しない** (#252)。
+    // 1-7 が来たら落下水と同じ「泡柱が立たない水」として扱う (どちらも水源ではない)
+    const level = Number(props.level ?? 0)
+    return { type: 'water', level: level === 0 ? 0 : 8 }
+  }
+  if (id === 'bubble_column') {
+    // 縦の無遅延バス [確定: 26.2 BubbleColumnBlock]
+    return { type: 'bubble_column', drag: props.drag === 'true' }
+  }
+  if (id === 'lectern') {
+    // コンパレーターがページを読む (#240)。ページ数・現在ページは BE 側なので
+    // 取り込み元が持っていれば nbtIO が後から差し込む (既定は本の中身なし = 出力 14)
+    return {
+      type: 'lectern',
+      facing: (props.facing ?? 'north') as HDir,
+      hasBook: props.has_book === 'true',
+      page: 0,
+      pages: 0,
+    }
+  }
+  if (isDecorBlockName(id)) return { type: 'decor', name: formatDecorName(id, props) }
+
+  // sim は材質を潰すが、**上の音符ブロックの音色は材質で決まる** ので
+  // ここで拾って state に載せる (#231)。羊毛=guitar / 木=bass など
+  const instrument = noteInstrumentOfBlockName(name)
+  const withInstrument = <T extends BlockState>(b: T): T =>
+    instrument === 'harp' ? b : { ...b, instrument }
+
   const nonConductive = toNonConductiveBlockState(name, props)
-  if (nonConductive) return nonConductive
-  if (isSolidBlockName(name)) return { type: 'solid', powered: false }
+  if (nonConductive) return withInstrument(nonConductive)
+  if (isSolidBlockName(name)) {
+    if (isImmovableSolidName(name)) {
+      return withInstrument({ type: 'solid', powered: false, immovable: true })
+    }
+    if (isPushOnlySolidName(name)) {
+      return withInstrument({ type: 'solid', powered: false, pushOnly: true })
+    }
+    return withInstrument({ type: 'solid', powered: false })
+  }
   return null
+}
+
+/** 装飾の描画用に blockstate 文字列を組み立て直す (プロパティはキー昇順) */
+function formatDecorName(id: string, props: Record<string, string>): string {
+  const keys = Object.keys(props).sort()
+  return keys.length === 0 ? id : `${id}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
 }

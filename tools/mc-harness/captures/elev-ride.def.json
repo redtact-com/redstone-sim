@@ -1,0 +1,8 @@
+{
+  "name": "elev-ride",
+  "source": "/mnt/c/Users/TN256/Downloads/TAKU128_DoubleSidedGlassElevatorMultipleFloors.litematic",
+  "ticks": 160,
+  "pad": 1,
+  "players": [{ "name": "Rider", "spawn": [3.5, 6.0, 1.5] }],
+  "inputs": []
+}

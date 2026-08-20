@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { TRIGGERABLE_TYPES } from '@redstone/sim'
 import { PLACEABLE_TYPES, CircuitEditor, DEFAULT_BOARD, BOARD_MAX } from '@redstone/editor'
-import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS } from '@redstone/viewer'
+import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS, extraPreloadNames } from '@redstone/viewer'
+import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
+import { classifyPlainBlock, mcToSim } from '@redstone/sim'
+import type { BlockState } from '@redstone/sim'
 import { BLOCK_PALETTE, TRIGGER_META } from './palette'
 
 /**
@@ -45,6 +48,64 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
       if (!VIEWER_PRELOAD_BLOCKS.includes(name)) missing.push(`${type} → ${name}`)
     }
     expect(missing, 'VIEWER_PRELOAD_BLOCKS への追加漏れ').toEqual([])
+  })
+
+  it('取り込み専用のブロックもプリロード対象になっている (#234)', () => {
+    // パレットに無い = 配置できないが**取り込みでは現れる**ブロック。表に無い名前は
+    // deepslate が描画をスキップし、エラーも出さずに**消えて見える**
+    // (エレベーターの塀 280 個が透明なまま GIF に写って気づいた)
+    const imported = ['lodestone', 'stone_brick_wall', 'soul_sand', 'water',
+      'bubble_column', 'water_cauldron', 'composter', 'lectern']
+    const missing: string[] = []
+    for (const id of imported) {
+      const block = classifyPlainBlock(id)
+      expect(block, `${id} が取り込めない`).not.toBeNull()
+      const name = blockStateToMinecraftStr(block as BlockState).split('[')[0]
+      if (!VIEWER_PRELOAD_BLOCKS.includes(name)) missing.push(`${id} → ${name}`)
+    }
+    expect(missing, 'VIEWER_PRELOAD_BLOCKS への追加漏れ').toEqual([])
+  })
+
+  it('装飾はスナップショットから拾ってプリロードに足される (#234)', () => {
+    // 装飾は取り込み元の名前を保持する = 名前の集合が閉じないので固定表に列挙できない
+    const decor = classifyPlainBlock('oak_stairs', { facing: 'north' })
+    expect(decor?.type, 'oak_stairs が装飾として取り込めない').toBe('decor')
+    const blocks = new Map<string, BlockState>([['0,0,0', decor as BlockState]])
+    expect(extraPreloadNames({ blocks })).toEqual(['minecraft:oak_stairs'])
+
+    // 固定表にある名前は二重に足さない
+    const stone = new Map<string, BlockState>([['0,0,0', { type: 'solid', powered: false }]])
+    expect(extraPreloadNames({ blocks: stone })).toEqual([])
+  })
+
+  it('**取り込めるブロックは書き出しても消えない** (#245)', async () => {
+    // 書き出しに case が無いと `default` で air に潰れる。
+    // 取り込んだ回路を保存すると塀・泡柱・書見台などが**黙って消えていた** (実測: 9 種すべて)
+    const names = [
+      'stone', 'glass', 'redstone_wire', 'repeater', 'comparator', 'redstone_torch',
+      'lever', 'redstone_lamp', 'note_block', 'observer', 'piston', 'sticky_piston',
+      'hopper', 'dropper', 'barrel', 'target', 'redstone_block', 'slime_block',
+      // #234 以降に足した型
+      'stone_brick_wall', 'bubble_column', 'soul_sand', 'water', 'lodestone',
+      'water_cauldron', 'composter', 'lectern', 'oak_stairs',
+    ]
+    const blocks = new Map<string, BlockState>()
+    const want = new Map<string, string>()   // 座標 → 期待する型
+    names.forEach((n, i) => {
+      const b = mcToSim(n)
+      if (b === null) return
+      blocks.set(`${i},0,0`, b)
+      want.set(`${i},0,0`, b.type)
+    })
+    const back = await importFromNbtBytes(exportToNbtBytes(blocks as never, names.length, 1))
+    // **型まで見る**。存在だけ見ると、隣の case へ落ちて別のブロックになっていても気付けない
+    const broken: string[] = []
+    for (const [key, type] of want) {
+      const got = back.blocks.get(key)
+      if (got === undefined) broken.push(`${type}: 消えた`)
+      else if (got.type !== type) broken.push(`${type}: ${got.type} になった`)
+    }
+    expect(broken, '書き出し → 読み直しで壊れたブロック').toEqual([])
   })
 
   it('パレットのラベルとテクスチャが空でない', () => {

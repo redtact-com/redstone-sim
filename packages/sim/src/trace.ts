@@ -93,6 +93,7 @@ export function abbrOf(b: BlockState): string {
     case 'redstone_block': return 'Rb'
     case 'target':         return 'Tg'
     case 'container':      return 'Cn'
+    case 'lectern':        return 'Lc'
     case 'hopper':         return 'Ho'
     case 'dropper':        return 'Dr'
     case 'dispenser':      return 'Di'
@@ -112,6 +113,14 @@ export function abbrOf(b: BlockState): string {
     case 'door_wood':
     case 'door_iron':      return 'Do'
     case 'moving_piston':  return abbrOf(b.into)
+    case 'lodestone':      return 'Lo'
+    case 'decor':          return 'De'
+    case 'cauldron':       return 'Ca'
+    case 'composter':      return 'Co'
+    case 'wall':           return 'Wl'
+    case 'soul_sand':      return 'Ss'
+    case 'water':          return 'Wa'
+    case 'bubble_column':  return 'Bc'
     case 'air':            return 'Ai'
   }
 }

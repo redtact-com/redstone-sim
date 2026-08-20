@@ -3,7 +3,7 @@
 # 前方に転送ホッパー H_lock を置き、C が非空になったら H_lock をロックする自己制限フィラー。
 # 仕様 [確定: 02 §6 hopper / comparator / dropper]:
 #   - コンパレーターは前方 (facing の反対) へ出力し、その前方ブロックを NC で更新する。
-#     前方が H_lock ならその hasNeighborSignal が真 → enabled=false (ロック)。
+#     前方が H_lock ならその位置が受電している → enabled=false (ロック)。
 #   - C の充填 (fillSignal>0) → コンパレーター 2gt → powered=true → H_lock ロック。
 # 配置: D(east,items=5)→C(barrel,items=0); comparator(facing=west) 背面=C・前方=H_lock;
 #        H_lock(east,items=5)→sink barrel(items=0)。
@@ -16,7 +16,7 @@
 #   以後 H_lock は転送停止 (充填フィードバックが成立)。
 meta {
   name: 物流 コンパレーター充填読みで転送ホッパーをロック (フィードバック制御)
-  ref: 02 §6 comparator (前方 NC / 充填読み / getDelay=2) / hopper (enabled=!hasNeighborSignal) / dropper (scheduleTick 4gt)
+  ref: 02 §6 comparator (前方 NC / 充填読み / getDelay=2) / hopper (ENABLED は非受電と同値) / dropper (4gt の tile tick)
 }
 
 circuit {

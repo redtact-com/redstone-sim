@@ -1,6 +1,6 @@
 # レールを 1 本置くと、**形状が張り替わった隣のレール**も更新源になる (#132)。
 #
-# vanilla は RailState.place も connectTo も `level.setBlock(pos, state, 3)` で書く
+# vanilla は RailState.place も connectTo も **flag 3 の setBlock** で書く
 # [確定: 26.2 RailState.java:205,333]。flag 3 = UPDATE_NEIGHBORS(1) | UPDATE_CLIENTS(2) で
 #   - flag 1  → そのレールが周囲 6 方向へ近隣更新を配る
 #   - 16 が無い → updateNeighbourShapes が走り、面したオブザーバーが起動する

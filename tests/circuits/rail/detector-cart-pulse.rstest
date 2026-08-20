@@ -1,7 +1,7 @@
 # ディテクターレールはカート検出で信号を出す (#146)。
 #
 # レール 4 種で唯一の信号源 [確定: 26.2 DetectorRailBlock.java:44-54]:
-#   - ownSignal      = powered ? 15 : 0  (全方向へ weak)
+#   - ownSignal       … powered なら 15・でなければ 0 (全方向へ weak)
 #   - getDirectSignal = **UP のみ** 15   (= 真下のブロックだけを強励起)
 #
 # 1 本で 3 つを見ている:

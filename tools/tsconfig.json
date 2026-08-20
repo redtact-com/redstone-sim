@@ -1,0 +1,20 @@
+{
+  "//": "tools/ 以下 (実機ハーネスの runner など) を型検査するための設定。npm run typecheck が参照する",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "isolatedModules": true
+  },
+  "include": ["mc-harness/runner/**/*.ts", "demo/**/*.mjs"]
+}
