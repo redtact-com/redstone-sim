@@ -1,6 +1,6 @@
 # パワードレールの powered 変化は blockstate 変化として観測される (#127)。
 #
-# vanilla は setBlock(pos, state, 3) で更新する。flag 3 に UPDATE_KNOWN_SHAPE (16) が
+# vanilla は **flag 3 の setBlock** で更新する。flag 3 に UPDATE_KNOWN_SHAPE (16) が
 # 立っていないため updateShape が飛び、面したオブザーバーが起動する
 # [確定: 26.2 PoweredRailBlock.updateState]。
 # レール自身は信号を出さない (非導体・非信号源) ので、この経路と「真下のブロックへ

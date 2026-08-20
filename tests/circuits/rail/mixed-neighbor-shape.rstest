@@ -1,7 +1,7 @@
 # 形状の自動接続はレール種別をまたぐ (#140)。
 #
 # BaseRailBlock.isRail は BlockTags.RAILS 判定なので種別を問わない
-# [確定: 26.2 BaseRailBlock.java:33-39]。一方、動力の連鎖は state.is(this) で
+# [確定: 26.2 BaseRailBlock.java:33-39]。一方、動力の連鎖は同一ブロック判定で
 # 同種限定 (#138 / activator-mixed-chain.rstest)。**形状はまたぐ / 動力はまたがない**
 # という非対称を、こちらは形状側から確定させる。
 #

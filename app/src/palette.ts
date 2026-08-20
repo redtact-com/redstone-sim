@@ -35,6 +35,7 @@ export const TRIGGER_META: Record<string, { abbr: string; log: string; momentary
   door_wood:                       { abbr: 'Do', log: 'ドア(木) を開閉',       momentary: false },
   detector_rail:                   { abbr: 'Dt', log: 'ディテクターレールにトロッコ', momentary: true },
   container:                       { abbr: 'Cn', log: 'コンテナの中身を 1 段増やす', momentary: false },
+  lectern:                         { abbr: 'Lc', log: '書見台のページをめくる',       momentary: false },
 }
 export const TRIGGER_TYPES = new Set(Object.keys(TRIGGER_META))
 
@@ -42,6 +43,7 @@ export const TRIGGER_TYPES = new Set(Object.keys(TRIGGER_META))
 export function isTriggerOn(b: { type: string; powered?: boolean; outputPower?: number }): boolean {
   if (b.type === 'target') return (b.outputPower ?? 0) > 0
   if (b.type === 'container') return containerTriggerValue(b) > 0
+  if (b.type === 'lectern') return (b as { hasBook?: boolean }).hasBook === true
   return b.powered ?? false
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "activator-rail-mixed-chain",
-  "description": "#138 powered_rail と activator_rail の連鎖は混ざらないのか。26.2 に ActivatorRailBlock は存在せず、activator_rail は powered_rail と同じ PoweredRailBlock を別インスタンスとして登録しているだけ [確定: 26.2 Blocks.java:2892]。唯一の差は連鎖探索が state.is(this) で「同じブロックであること」を要求する点 [確定: 26.2 PoweredRailBlock.isSameRailWithPower] なので、異種の境目で連鎖が切れるはず。両方向を 1 本で見る: 上段 (z=3) は レバー → powered_rail 2 本 → activator_rail 2 本、下段 (z=5) は レバー → activator_rail 2 本 → powered_rail 2 本。どちらもレバー側の 2 本だけが on になり、境目から先は off になるはず。",
+  "description": "#138 powered_rail と activator_rail の連鎖は混ざらないのか。26.2 に ActivatorRailBlock は存在せず、activator_rail は powered_rail と同じ PoweredRailBlock を別インスタンスとして登録しているだけ [確定: 26.2 Blocks.java:2892]。唯一の差は連鎖探索が**同一ブロック判定**で「同じブロックであること」を要求する点 [確定: 26.2 PoweredRailBlock.isSameRailWithPower] なので、異種の境目で連鎖が切れるはず。両方向を 1 本で見る: 上段 (z=3) は レバー → powered_rail 2 本 → activator_rail 2 本、下段 (z=5) は レバー → activator_rail 2 本 → powered_rail 2 本。どちらもレバー側の 2 本だけが on になり、境目から先は off になるはず。",
   "mcVersion": "1.21.1",
   "ticks": 8,
   "region": {

@@ -1,6 +1,6 @@
 {
   "name": "hopper-lock",
-  "description": "ホッパーのロック回路 (#65)。レバー (西隣) の受電でホッパー enabled が false になり (ロック)、解除で true に戻る。アイテム不要 (enabled は blockstate なので直接観測できる)。[確定: 26.2 HopperBlock.neighborChanged — enabled = !hasNeighborSignal]",
+  "description": "ホッパーのロック回路 (#65)。レバー (西隣) の受電でホッパー enabled が false になり (ロック)、解除で true に戻る。アイテム不要 (enabled は blockstate なので直接観測できる)。[確定: 26.2 HopperBlock.neighborChanged — ENABLED は「受電していない」ことと同値]",
   "mcVersion": "1.21.1",
   "ticks": 16,
   "region": {

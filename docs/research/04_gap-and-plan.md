@@ -79,7 +79,7 @@
 | I4 | テスト基盤修正 | 失敗 5 件を gt 基準に書き直し、initialize() の事後条件 (安定化 or tick=0 停止) を仕様化して 1 件解消。ボタン持続を確定値に修正 | テストグリーン + 事後条件が docs に明記 | T1, G12 |
 | I5 | コンパレーター完全化 + リピーターロック | 側面入力の受理範囲修正、背面充電ブロック読み、コンテナ充填率読み (I1 で式確定後)、ロック実装 | 計測回路・ラッチ fixture 通過 | G8, G9 |
 | I6 | 更新 3 種 (NC/PP/CU) の分離と方向順実装 | 更新イベント型を neighborUpdate/shapeUpdate/comparatorUpdate に分割、I1 で確定した方向順 (通常 + 素子別例外 + ダスト多段) を DFS プッシュ型で実装 | microTiming ログと更新順が一致する locational fixture 1 件以上 | G7, G10 |
-| I7 | ブロックイベントキュー + ピストン (QC 込み) | BE キュー (挿入順 FIFO + 重複排除、同 tick 枯渇まで処理、実行時型検証) を tick ループに追加し、piston/sticky piston を BEC として実装。QC (piston/dropper/dispenser の pos.above() チェック) と BUD 状態 (powered/activated 分離) | 基本伸縮・押し 12 制限・QC BUD fixture 通過 | G11 (piston/QC) |
+| I7 | ブロックイベントキュー + ピストン (QC 込み) | BE キュー (挿入順 FIFO + 重複排除、同 tick 枯渇まで処理、実行時型検証) を tick ループに追加し、piston/sticky piston を BEC として実装。QC (piston/dropper/dispenser の 1 個上のマスのチェック) と BUD 状態 (powered/activated 分離) | 基本伸縮・押し 12 制限・QC BUD fixture 通過 | G11 (piston/QC) |
 | I8 | オブザーバー実装 | PP/SU 受信で起動、パルス tile tick (priority 0)、オン時に自身のオフを先行登録する順序 | 飲み込み fixture + オブザーバーチェーン fixture 通過 | G11 (observer) |
 | I9 | 実機 ground truth ハーネス構築 | §2.2 のパイプライン (docker 化した Fabric+carpet、scarpet ダンプスクリプト、diff ランナー、fixture フォーマット定義) を tools/ に実装し CI 接続 | 手元コマンド 1 発で fixture 生成→diff が回る。初期 fixture 10 本 | 検証基盤 |
 | I10 | MCHPRS テスト移植 + トレースログ形式 | MCHPRS 12 テストの TS 移植 (MIT 帰属表示)、RSC 記法風トレース出力 (`Tgt[Ph]: Block(action...)`) の実装で日本語回路勢と照合可能に | 移植テスト通過 + トレース出力のスナップショットテスト | 検証補強 |

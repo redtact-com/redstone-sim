@@ -8,14 +8,9 @@ import type { BlockState, Pos3D } from '../src/types'
  *
  * 検証の主眼は「**触っても何も起きない**方」。中身は BlockEntity の情報なので
  * blockstate は変わらず、飛ぶのは水平 4 方向のコンパレーター更新 (CU) だけ
- * [確定: 26.2 BlockEntity.setChanged → Level.updateNeighbourForOutputSignal]:
- *
- * ```java
- * for (Direction direction : Direction.Plane.HORIZONTAL) {   // 水平だけ
- *    if (state.is(Blocks.COMPARATOR)) { this.neighborChanged(...); }
- *    else if (state.isRedstoneConductor(...)) { ... 1 個越しのコンパレーターだけ }
- * }
- * ```
+ * [確定: 26.2 BlockEntity.setChanged → Level.updateNeighbourForOutputSignal —
+ * 走査するのは水平 4 方向だけ。隣がコンパレーターならそこへ近隣更新を送り、
+ * 隣が導体ならさらにその 1 個先を見て、そこがコンパレーターのときだけ更新を送る]:
  *
  * ∴ 真上のコンパレーターも、隣のオブザーバーも動かない。
  */

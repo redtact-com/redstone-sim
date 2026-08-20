@@ -10,7 +10,7 @@
 # 仕様クロスチェック (02 §2.4 [確定: ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER]):
 #   §2.4 例外: 「コンパレーターが別ダイオードに向く場合は priority -1 になりパルスが通る」。
 #   ComparatorBlock.checkTickOnNeighbor の shouldPrioritize (front がダイオードかつその facing が
-#     出力方向と不一致) → scheduleTick(2, -1)。priority -1 < 0 なので、同 gt にある
+#     出力方向と不一致) → 2gt の tile tick を priority -1 で予約。priority -1 < 0 なので、同 gt にある
 #     オブザーバーの自己 OFF (priority 0) より先にコンパレーター tick が走り、入力=15 を読んで ON。
 #   導出: t2 lever → t4 OB ON → CMP は NC を priority -1 で予約 (delay2) → t6 CMP が先に実行
 #     (OB OFF はまだ) → CMP ON。t6 に OB OFF → 次段 NC で CMP は OFF を priority -1 再予約 →

@@ -74,8 +74,8 @@ describe('大釜 / コンポスターはコンパレーターが LEVEL を読む
 })
 
 describe('装飾は 1 型に集約しつつ名前を保持する', () => {
-  it('end_rod / 階段 / 壁掛け看板 / 書見台が装飾になる', () => {
-    for (const n of ['end_rod', 'dark_oak_stairs', 'dark_oak_wall_hanging_sign', 'lectern']) {
+  it('end_rod / 階段 / 壁掛け看板が装飾になる', () => {
+    for (const n of ['end_rod', 'dark_oak_stairs', 'dark_oak_wall_hanging_sign']) {
       expect(mcToSim(n)?.type, n).toBe('decor')
     }
   })
@@ -88,5 +88,65 @@ describe('装飾は 1 型に集約しつつ名前を保持する', () => {
 
   it('レッドストーンには関与しない (非導体)', () => {
     expect(isConductor(mcToSim('end_rod'))).toBe(false)
+  })
+})
+
+describe('書見台のコンパレーター出力 (#240)', () => {
+  // [確定: 26.2 LecternBlockEntity.getRedstoneSignal]
+  //   ページ進捗 = ページ数が 2 以上なら page ÷ (ページ数 - 1)、1 以下なら 1
+  //   signal = 進捗 × 14 の切り捨て + (本の実体があれば 1)
+  // 実機で確認 (5 ページ本): Page 0→1 / 1→4 / 2→8 / 3→11 / 4→15、本無しは 14
+  const lectern = (hasBook: boolean, page: number, pages: number): BlockState =>
+    ({ type: 'lectern', facing: 'east', hasBook, page, pages })
+
+  const readAt = (b: BlockState): number => {
+    const w = new SimWorld()
+    w.setBlockAt([0, -1, 0], { type: 'solid', powered: false })
+    w.setBlockAt([1, -1, 0], { type: 'solid', powered: false })
+    w.setBlockAt([0, 0, 0], b)
+    // sim の facing は**出力方向**なので、背面 (西) の書見台を読むには east 向き
+    w.setBlockAt([1, 0, 0], { type: 'comparator', facing: 'east', mode: 'compare', powered: false, outputPower: 0 } as BlockState)
+    w.initialize()
+    w.settle(8)
+    const c = w.getBlockAt([1, 0, 0])
+    return c?.type === 'comparator' ? c.outputPower : -1
+  }
+
+  it('5 ページの本は実機と同じ 1 / 4 / 8 / 11 / 15 を出す', () => {
+    expect([0, 1, 2, 3, 4].map(p => readAt(lectern(true, p, 5)))).toEqual([1, 4, 8, 11, 15])
+  })
+
+  it('本の中身が無い has_book=true は 14 (実機で確認)', () => {
+    expect(readAt(lectern(true, 0, 0))).toBe(14)
+  })
+
+  it('ページ数 1 以下の本は 15', () => {
+    expect(readAt(lectern(true, 0, 1))).toBe(15)
+  })
+
+  it('has_book=false は 0', () => {
+    expect(readAt(lectern(false, 3, 5))).toBe(0)
+  })
+
+  it('ページをめくると出力が変わり、最終ページの次は 0 に戻る', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, -1, 0], { type: 'solid', powered: false })
+    w.setBlockAt([0, 0, 0], lectern(true, 3, 5))
+    w.initialize()
+    w.activateBlock(0, 0, 0)
+    expect((w.getBlockAt([0, 0, 0]) as { page: number }).page).toBe(4)
+    w.activateBlock(0, 0, 0)
+    expect((w.getBlockAt([0, 0, 0]) as { page: number }).page).toBe(0)
+  })
+
+  it('ページを直接指定できる (階数指定の用途)', () => {
+    const w = new SimWorld()
+    w.setBlockAt([0, -1, 0], { type: 'solid', powered: false })
+    w.setBlockAt([0, 0, 0], lectern(true, 0, 10))
+    w.initialize()
+    w.setLecternPage(0, 0, 0, 7)
+    expect((w.getBlockAt([0, 0, 0]) as { page: number }).page).toBe(7)
+    w.setLecternPage(0, 0, 0, 99)   // ページ数を超えたら最終ページで止まる
+    expect((w.getBlockAt([0, 0, 0]) as { page: number }).page).toBe(9)
   })
 })

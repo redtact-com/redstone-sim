@@ -7,12 +7,12 @@ import type { BlockState, WireConnections, WireState, Dir6 } from '../src/types.
 // ダスト形状 × 隣接給電マトリクス (issue #44)
 //
 // [確定: 26.2 デコンパイル net/minecraft/world/level/block/RedStoneWireBlock]:
-//   getSignal(state, level, pos, direction):
-//     - direction == DOWN                       → 0   (真上のブロックには給電しない)
-//     - power == 0                              → 0
-//     - direction == UP                         → power (足元ブロックへ給電)
-//     - それ以外 (水平) は getConnectionState の
-//       PROPERTY_BY_DIRECTION[direction.opposite].isConnected() のときのみ power
+//   getSignal の判定順 (direction = 被給電ブロックから見たダストの方向):
+//     - direction が DOWN                        → 0   (真上のブロックには給電しない)
+//     - 自身の出力 (POWER) が 0                  → 0
+//     - direction が UP                          → POWER (足元ブロックへ給電)
+//     - それ以外 (水平) は、再計算した接続状態
+//       (getConnectionState) の direction 反対側が接続のときのみ POWER
 //   getDirectSignal は shouldSignal 中は getSignal と同値 (足元/接続方向を強充電)。
 //
 // 重要: vanilla は単一接続のダストを直線に自動拡張する

@@ -1,6 +1,6 @@
 {
   "name": "rail-piston-push-powered",
-  "description": "#134 押されて着地したレールの powered が再評価されるか。レール (3,1,3) は真下がレッドストーンブロック (3,0,3) なので powered=true。ピストンで東へ 1 マス送ると移動先 (4,1,3) の真下は石なので受電が無くなる。BaseRailBlock.onPlace は movedByPiston でも走り、!oldState.is(block) (直前は moving_piston) なので updateState → updateDir → isStraight なら自分自身に neighborChanged [確定: 26.2 BaseRailBlock.java:64-77] → PoweredRailBlock.updateState で powered が再計算されるはず。電源はピストンの quasi セル (2,2,3) に触れない位置 (レールの真下) に置いてあるので、ピストン自身は authored の時点では通電していない。",
+  "description": "#134 押されて着地したレールの powered が再評価されるか。レール (3,1,3) は真下がレッドストーンブロック (3,0,3) なので powered=true。ピストンで東へ 1 マス送ると移動先 (4,1,3) の真下は石なので受電が無くなる。BaseRailBlock.onPlace は movedByPiston でも走り、置き換え前が別ブロック種 (直前は moving_piston) なので updateState → updateDir → isStraight なら自分自身に neighborChanged [確定: 26.2 BaseRailBlock.java:64-77] → PoweredRailBlock.updateState で powered が再計算されるはず。電源はピストンの quasi セル (2,2,3) に触れない位置 (レールの真下) に置いてあるので、ピストン自身は authored の時点では通電していない。",
   "mcVersion": "1.21.1",
   "ticks": 12,
   "region": { "from": [0, 0, 2], "to": [6, 3, 4] },

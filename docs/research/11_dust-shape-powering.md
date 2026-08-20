@@ -14,30 +14,24 @@ I8 (#16) の observer-piston fixture 生成中に、単一接続 (直線形状) 
 
 ### 1.1 給電方向 (`getSignal` / `getDirectSignal`)
 
-```java
-protected int getSignal(state, level, pos, direction) {
-   if (this.shouldSignal && direction != Direction.DOWN) {
-      int power = this.ownSignal(state, level, pos);      // = POWER
-      if (power == 0) return 0;
-      return direction != Direction.UP
-            && !this.getConnectionState(level, state, pos)
-                 .getValue(PROPERTY_BY_DIRECTION.get(direction.getOpposite())).isConnected()
-         ? 0 : power;
-   }
-   return 0;
-}
-protected int getDirectSignal(state, level, pos, direction) {
-   return !this.shouldSignal ? 0 : state.getSignal(level, pos, direction);   // 通常時は getSignal と同値
-}
-```
+`getSignal` の判定順 (自然言語。`direction` は被給電ブロックから見たダストの方向):
+
+1. `shouldSignal` が false、または `direction` が DOWN なら **0**。
+2. 自身の出力 (`ownSignal` = blockstate の POWER) を取り、0 なら **0**。
+3. `direction` が UP ならそのまま **POWER** を返す。
+4. それ以外 (水平) は、その場で再計算した接続状態 (`getConnectionState`) の
+   `direction` の反対側が接続なら **POWER**、非接続なら **0**。
+
+`getDirectSignal` は `shouldSignal` が false なら 0、
+それ以外は `getSignal` にそのまま委譲する (＝通常時は `getSignal` と同値)。
 
 `direction` は「被給電ブロックから見たダストの方向」= ダストは `direction.getOpposite()` 側の
 ブロックへ給電する。整理すると:
 
 | 被給電ブロックの位置 | `getSignal` の `direction` | 判定 | 結果 |
 |---|---|---|---|
-| ダストの**真下** (足元) | UP | `direction==UP` → 短絡で power | **給電 (power)** |
-| ダストの**真上** | DOWN | 外側 `if` が false | **給電しない (0)** |
+| ダストの**真下** (足元) | UP | 手順 3 で短絡して power | **給電 (power)** |
+| ダストの**真上** | DOWN | 手順 1 の DOWN 除外に掛かる | **給電しない (0)** |
 | ダストの**水平隣接** H | OPPOSITE[H] | `getConnectionState` の H 方向が接続なら power | **接続時のみ給電** |
 
 - **強充電/弱充電**: `getDirectSignal` は `shouldSignal` 中は `getSignal` と同値。よって足元・接続方向の
@@ -48,18 +42,15 @@ protected int getDirectSignal(state, level, pos, direction) {
 ### 1.2 形状の自動拡張 (`getConnectionState` → `getMissingConnections`) — #44 の核心
 
 `getSignal` は**保持中の blockstate ではなく `getConnectionState` を毎 query 再計算**して接続を見る。
-`getConnectionState` は物理接続 (`getMissingConnections`) に次の拡張を掛ける:
+`getConnectionState` は物理接続 (`getMissingConnections`) に次の拡張を掛ける (自然言語):
 
-```java
-boolean wasDot = isDot(state);
-state = getMissingConnections(...);               // 物理接続を再導出
-if (wasDot && isDot(state)) return state;         // 元も今も dot → 拡張しない
-boolean nsEmpty = !north && !south, ewEmpty = !east && !west;
-if (!west  && nsEmpty) state = SIDE(WEST);        // 接続 1 本 → 反対軸を SIDE = 直線化
-if (!east  && nsEmpty) state = SIDE(EAST);
-if (!north && ewEmpty) state = SIDE(NORTH);
-if (!south && ewEmpty) state = SIDE(SOUTH);
-```
+1. 呼び出し時点の state が dot かどうかを覚えておく。
+2. `getMissingConnections` で**物理接続を再導出**する。
+3. 元も再導出後も dot なら、そこで打ち切って拡張しない。
+4. 南北がどちらも非接続 (`nsEmpty`) なら、非接続の west / east を SIDE に立てる。
+5. 東西がどちらも非接続 (`ewEmpty`) なら、非接続の north / south を SIDE に立てる。
+
+4・5 が「接続 1 本なら反対軸も SIDE = 直線化」の実体で、判定順は west → east → north → south。
 
 - 物理接続 **0 本** → cross (4 方向 SIDE)。孤立ダストは cross であって dot ではない
   (dot は `useWithoutItem` の手動トグルでのみ生じ、周囲に接続対象が無い場合だけ保持される)。

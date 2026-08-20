@@ -1,7 +1,8 @@
 # **平坦のまま段差にしたレール**での探索の非対称性 (#129)。
 #
 # 仕様 [確定: 26.2 PoweredRailBlock.findPoweredRailSignal]:
-#   isSameRailWithPower(x,y,z) ? true : checkBelow && isSameRailWithPower(x,y-1,z)
+#   まず同じ高さを同種の powered レールとして探し、見つからなければ
+#   checkBelow が真のときだけ 1 段下も探す。
 # 平坦なレールが見るのは **同じ高さと 1 段下だけで、1 段上は見ない**。
 # ∴ 上のレールは下のレールを根として見つけられるが、下のレールは上を見つけられない
 #   = **途切れた斜め上には伝わり、途切れた斜め下には伝わらない**。

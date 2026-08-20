@@ -2,7 +2,7 @@
 #
 # PoweredRailBlock.updateState は powered が変わったとき真下へ近隣更新を配るが、
 # **坂のときだけ真上にも配る**
-# [確定: 26.2 `if (state.getValue(SHAPE).isSlope()) level.updateNeighborsAt(pos.above(), this)`]。
+# [確定: 26.2 — SHAPE が坂のときだけ、**真上の位置**から 6 方向へレール自身を更新元とする近隣更新を配る]。
 # 真上 (2,2,3) の周囲 6 方向には斜め上のレール (3,2,3) が入るので、坂ならレバーと
 # **同じ tick** で斜め上とその先まで一気に点く。
 #

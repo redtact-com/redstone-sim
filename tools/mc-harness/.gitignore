@@ -3,3 +3,9 @@ data/
 
 # scarpet との受け渡し用 shared JSON (実行時生成物)
 scripts/shared/
+# キャプチャの多重実行を防ぐロック (プロセスが落ちると残る)
+.lock
+
+# キャプチャの出力 (実行時生成物・大きい)。定義 (*.def.json) は追跡する
+captures/*.json
+!captures/*.def.json

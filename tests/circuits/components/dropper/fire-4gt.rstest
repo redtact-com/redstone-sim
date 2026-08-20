@@ -1,6 +1,6 @@
 # ドロッパーの発火 (4gt) と挿入 → コンパレーターの充填読み
 # (02 §6 dropper/container [確定: 26.2 DropperBlock])。
-# 仕様: neighborChanged で受電 (QC 含む) の立ち上がりに TRIGGERED を立て scheduleTick(4) を予約。
+# 仕様: neighborChanged で受電 (QC 含む) の立ち上がりに TRIGGERED を立て 4gt の tile tick を予約。
 #       発火は ST フェーズ (4gt 後)。前方コンテナへ 1 個挿入。
 # fixture dropper-insert: レバー ON → t2 triggered=true → 4gt 後 (t6) に発火して隣ホッパーへ 1 個挿入 →
 #       ホッパー充填 (count=1) を背面コンパレーターが CU 経由で読み、t8 で powered=true (信号 1)。

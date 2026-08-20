@@ -12,7 +12,7 @@
 // 充填率 → コンパレーター信号の変換 [確定: 02 §6 comparator —
 //   AbstractContainerMenu.getRedstoneSignalFromContainer]:
 //     f = (Σ 各スロットの count / maxStackSize) / スロット数
-//     signal = Mth.lerpDiscrete(f, 0, 15) = floor(f * 14) + (f > 0 ? 1 : 0)
+//     signal = lerpDiscrete(f, 0, 15) 相当 = f が 0 なら 0、それ以外は f × 14 の切り捨て + 1
 //
 // [実機測定でこの式を 7 ケース確認 (#194)。ホッパー (5 スロット):
 //   snowball 14 (16 スタック) = 3 / player_head 14 (64) = 1 / 混載 11+3 = 2 /
@@ -27,12 +27,12 @@
 import type { BlockState, BlockType, ContainerSlots, ItemStack, StackSize } from '../types.js'
 import { REPRESENTATIVE_ITEM } from './itemStacks.js'
 
-/** ホッパーの転送クールダウン (gt) [確定: 26.2 HopperBlockEntity — setCooldown(8)]。 */
+/** ホッパーの転送クールダウン (gt) [確定: 26.2 HopperBlockEntity — クールダウンを 8 に設定]。 */
 export const HOPPER_COOLDOWN = 8
 
 /**
  * ドロッパー/ディスペンサーの発火遅延 (gt)
- * [確定: 26.2 DispenserBlock.neighborChanged — level.scheduleTick(pos, this, 4)]。
+ * [確定: 26.2 DispenserBlock.neighborChanged — 4gt の tile tick を予約する]。
  * 立ち上がり受電で TRIGGERED を立て、この遅延の tile tick で dispenseFrom を実行。
  */
 export const DROPPER_TICK_DELAY = 4
@@ -72,7 +72,7 @@ export function emptySlots(type: BlockType): ContainerSlots {
 /**
  * スロット列 → コンパレーター信号 (0-15)。
  *   f = Σ(count / stack) / スロット数
- *   signal = floor(f * 14) + (f > 0 ? 1 : 0)
+ *   signal = f が 0 なら 0、それ以外は f × 14 の切り捨て + 1
  */
 export function fillSignal(slots: ContainerSlots, slotCount: number): number {
   if (slotCount <= 0) return 0

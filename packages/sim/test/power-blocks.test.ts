@@ -233,7 +233,7 @@ describe('redstone block: コンパレーター側面入力 = 15', () => {
 // ─────────────────────────────────────────────────────────────
 // target: 導体としての伝導 (#35 実機バグ報告 2)
 // [確定: 1.21.1 Blocks.TARGET は isRedstoneConductor 非 override (導体) /
-//  RedStoneWireBlock.getDirectSignal = shouldSignal ? getSignal : 0 →
+//  RedStoneWireBlock.getDirectSignal は shouldSignal 中だけ getSignal と同値・それ以外は 0 →
 //  ダストが指す target は機構・ダイオード読みには充電として見えるが、
 //  他のダストの強度計算には見えない (shouldSignal=false)]
 // ─────────────────────────────────────────────────────────────

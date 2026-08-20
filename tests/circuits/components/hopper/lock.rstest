@@ -1,5 +1,5 @@
 # ホッパーの受電ロック (02 §6 hopper [確定: 26.2 HopperBlockEntity])。
-# 仕様: HopperBlock.neighborChanged で enabled = !hasNeighborSignal(pos)。受電中は enabled=false
+# 仕様: HopperBlock.neighborChanged が ENABLED に「自身 6 面が受電していない」を入れる。受電中は enabled=false
 #       (能動転送停止)。NC で再評価される blockstate プロパティ。
 # t2 レバー ON → enabled=false (ロック)。t10 レバー OFF → enabled=true (解除)。
 meta {

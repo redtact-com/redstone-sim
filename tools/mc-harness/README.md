@@ -142,6 +142,11 @@ tools/mc-harness/
   scripts/shared/          scarpet との受け渡し JSON (gitignore)
   runner/generate.ts       実機駆動 → expect 生成
   runner/run.ts            fixture vs sim の diff CLI
+  runner/capture.ts        回路ファイルを実機に置いて N tick 撮る (npm run capture)
+  runner/compare.ts        キャプチャ vs sim の突き合わせ (npm run gt-compare)
+  runner/minimize.ts       食い違いを小さな再現まで自動で縮める → fixture 書き出し
+  runner/delta-debug.ts    縮め方のループ (純関数。実機に触らない)
+  captures/*.def.json      キャプチャ定義 (回路ファイル + 入力 + ticks)
   data/                    サーバ実体 (gitignore, Mojang 由来ファイル)
 packages/sim/src/mcstate.ts           MC blockstate 文字列 ↔ sim BlockState 変換
 packages/sim/test/fixture-runner.ts   sim 実行 + diff 共通ロジック
@@ -155,6 +160,41 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 2. `npm run ground-truth -- <name>` — settle 照合に失敗したら実機の教える安定状態に `blocks` を直す
 3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成
 4. `npm test` が通ることを確認してコミット
+
+## 食い違いの自動最小化 (minimize)
+
+実回路のキャプチャは大きい (エレベーターで 6393 ブロック)。`gt-compare` が
+「どこかで食い違う」と言っても、そのままでは原因も追えず fixture にもできない。
+`minimize.ts` は **対象座標の食い違いを保ったまま回路を削り**、残ったものを
+`packages/sim/test/fixtures/<name>.json` に書き出す。
+
+```bash
+# 1. まず全体を撮って突き合わせ、食い違う座標を知る
+npm run capture -- tools/mc-harness/captures/<name>.def.json
+npm run gt-compare -- tools/mc-harness/captures/<name>.json
+
+# 2. その座標を残したまま縮める (fixture が書き出される)
+npx tsx tools/mc-harness/runner/minimize.ts tools/mc-harness/captures/<name>.def.json \
+  --pos 21,2,20 --out <fixture名>
+
+# 3. 縮んだ fixture を照合する
+npx tsx tools/mc-harness/runner/run.ts <fixture名>
+```
+
+- 署名は **「その座標がどこかの tick で差分に出ること」**。「どこかが不一致」に
+  すると、削った拍子に生えた別の食い違いを追いかけて本命を取り落とす
+- 候補は対象座標からの距離順に並べ、**遠い側から塊で落とす**。塊は半分ずつ縮み、
+  オラクル (= 実機キャプチャ) 呼び出しは候補数に対しておよそ 2n 回
+- **1 回のキャプチャは回路の大きさで数秒〜25 秒**。6393 ブロックをそのまま掛けない
+  (定義に `keep` を書いて手で絞る / `--max-trials` で予算を切る)
+- **対象座標と入力の当たり先は落とさない**。落とすと入力が空振りして「署名が消えた」
+  と誤判定する
+- 書き出す fixture には既定で `skipUntil` が付く。**縮めた結果は定義上まだ sim が
+  再現できない回路**なので、付けないと CI が赤くなる。issue 番号に書き換えて使い、
+  sim を直したら外す (そこから先は普通の回帰になる)
+- 定義の `keep` (座標キー "x,y,z" の配列) は手でも使える。指定するとそのブロックだけを
+  置き、region は keep の bbox + pad に縮む。**掃除だけは回路全体に掛かる**ので、
+  region の外に前回のブロックが残ることはない
 
 ## fixture 作成の注意
 

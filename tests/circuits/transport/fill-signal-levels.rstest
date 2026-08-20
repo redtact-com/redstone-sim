@@ -1,7 +1,7 @@
 # コンテナ充填率 → コンパレーター信号の量子化 (#79 領域1 複合物流)。
 # 仕様の正 [確定: 02 §6 comparator — AbstractContainerMenu.getRedstoneSignalFromContainer]:
-#   f = (Σ count/maxStackSize) / スロット数、signal = Mth.lerpDiscrete(f,0,15)
-#     = floor(f*14) + (f>0 ? 1 : 0)。単一種前提 (13 §4.2 容量抽象) では
+#   f = (Σ count/maxStackSize) / スロット数、signal = lerpDiscrete(f,0,15) 相当
+#     = 「f が 0 なら 0、それ以外は f × 14 の切り捨て + 1」。単一種前提 (13 §4.2 容量抽象) では
 #   f = count / (スロット数×64)。ホッパー容量 = 5×64 = 320。
 # ∴ fillSignal(N,320) = floor(N*14/320) + 1 を先に導出:
 #   N=1  → floor(14/320)=0   → 1      (非空は最低 1)

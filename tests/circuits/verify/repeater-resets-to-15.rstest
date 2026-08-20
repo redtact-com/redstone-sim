@@ -1,6 +1,6 @@
 # リピーターは入力強度に関係なく出力を 15 にリセットする (02 §5.1 [要検証]→確定)。
 # 典拠 (26.2 デコンパイル): DiodeBlock.getOutputSignal は定数 15 を返し、RepeaterBlock は
-# これを override しない。ownSignal = POWERED ? getOutputSignal(=15) : 0。
+# これを override しない。点灯中は出力 15、消灯中は 0 を返すだけ。
 # → 背面入力が減衰して 10 でも、前面出力は 15 に「増幅/リセット」される。
 #
 # 導出 (spec 先行): レバー ON → ダスト 6 マスで 15,14,13,12,11,10 と減衰

@@ -9,7 +9,7 @@
 #     NC/PP として届くが、O の facing (北) と一致しない方向のため updateShape を無視する。
 #
 # 仕様クロスチェック (02 §4.1/§4.2/§6 observer [確定: ObserverBlock デコンパイル]):
-#   ObserverBlock.updateShape は state.getValue(FACING) == (pos→変化 neighbor 方向) のときのみ
+#   ObserverBlock.updateShape は FACING が (pos→変化 neighbor 方向) と一致するときのみ
 #   startSignal → 2gt tile tick を予約。背面 (南) からの shape 更新は方向不一致で無反応。
 #   NC (neighborChanged) はそもそも ObserverBlock 非 override = 完全無反応。
 #   導出: t2 back lever ON → 背面 dust 通電 → O は無反応 (schedule 0 件)。

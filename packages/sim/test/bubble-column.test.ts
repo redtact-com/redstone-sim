@@ -7,10 +7,10 @@ import type { BlockState, Pos3D } from '../src/types.js'
  * 泡柱 = **縦の無遅延バス** (#234)。
  *
  * [確定: 26.2 BubbleColumnBlock]
- * - `updateColumn` は起点から**上へ while ループで同期的に setBlock(flag 2)**。
+ * - `updateColumn` は起点から**上へループで同期的に flag 2 の setBlock を繰り返す**。
  *   140 段でも 1 tick で全段が変わる (これが「無遅延」の正体)
  * - flag 2 は近隣更新を出さないが**形状更新は配る**ので、隣のオブザーバーは検知する
- * - 乱されたときは `updateShape` が `scheduleTick(pos, this, 5)` を積む
+ * - 乱されたときは `updateShape` が **5gt の tile tick** を積む
  *
  * 実機で採った挙動 (rcon で直接測定):
  * - ソウルサンドの上に水を置くと柱ができる (ソウルサンドの 20gt 予約経由)

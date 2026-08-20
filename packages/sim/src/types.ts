@@ -127,7 +127,7 @@ export interface LampState {
  *
  * 発音は BE (block event) 経由 [確定: 26.2 NoteBlock.neighborChanged / triggerEvent]:
  *   - neighborChanged で hasNeighborSignal を再評価し、POWERED と食い違えば
- *     立ち上がり (false→true) のときのみ playNote → level.blockEvent(pos, 0, 0) を
+ *     立ち上がり (false→true) のときのみ playNote 経由で BE (b0=0 / b1=0) を
  *     キューし、POWERED を signal に更新 (setBlock flag3)。
  *   - BE フェーズの triggerEvent で実発音 (sim は音を鳴らさず発音イベントを
  *     trace / onNotePlay コールバックへ流す。I7 の BE キューに相乗り)。
@@ -154,9 +154,11 @@ export interface NoteBlockState {
  * 持たないため activateBlock で手動 ON にし、持続 gt の tile tick で自動 OFF
  * する折衷モデルで扱う (レバーの手動トグルではなく、ボタンの自動 OFF に近い)。
  * [確定: 26.2 PressurePlateBlock / BasePressurePlateBlock]:
- *   - getSignalForState = POWERED ? 15 : 0 (全方向 weak / getDirectSignal は UP のみ)。
+ *   - getSignalForState は POWERED なら 15、そうでなければ 0 (全方向 weak /
+ *     getDirectSignal は UP のみ)。
  *   - getPressedTime = 20gt (BasePressurePlateBlock 既定。PressurePlateBlock は非 override)。
- *   - updateNeighbours = updateNeighborsAt(pos) + updateNeighborsAt(pos.below())。
+ *   - updateNeighbours は**自身の位置と真下の位置の 2 か所**から 6 方向の近隣更新を配る
+ *     (NC = 自身隣接 6 + 直下の隣接 6)。
  * material は判定差 (wood=全 entity / stone=mob) と描画にのみ効き、手動モデルの
  * 論理では両者とも 15 出力・20gt 持続で同一 (判定差は再現対象外)。
  */
@@ -170,7 +172,7 @@ export interface PressurePlateState {
  * 出す。本 sim はエンティティ計数を持たないため、editor 設定値 pressedPower を
  * そのまま出力する (計数式は通さない)。持続 gt は 10gt。
  * [確定: 26.2 WeightedPressurePlateBlock]:
- *   - getSignalStrength = count>0 ? ceil(min(count,maxWeight)/maxWeight * 15) : 0
+ *   - 個数が 0 なら 0。1 個以上なら「個数を上限で頭打ちにして 15 段階へ切り上げ」
  *     (light maxWeight=15 / heavy maxWeight=150。手動モデルでは非適用)。
  *   - getPressedTime = 10gt (override)。POWER プロパティ 0-15。
  *   - 給電形状は wooden/stone と同じ (全方向 weak / 直下 strong / self+below の NC)。
@@ -179,7 +181,7 @@ export interface WeightedPressurePlateState {
   type: 'weighted_pressure_plate_light' | 'weighted_pressure_plate_heavy'
   /** 踏まれたとき出力する信号強度 (editor 設定値, 1-15)。計数式は通さず直接出力 */
   pressedPower: number
-  /** 現在踏まれているか。出力信号 = powered ? pressedPower : 0 */
+  /** 現在踏まれているか。出力信号は powered のとき pressedPower、でなければ 0 */
   powered: boolean
 }
 
@@ -196,7 +198,7 @@ export interface WeightedPressurePlateState {
  * 充填率 → 強度の変換式 [確定: 02 §6 comparator —
  *   AbstractContainerMenu.getRedstoneSignalFromContainer]:
  *     f = (Σ 各スロットの count / maxStackSize) / スロット数
- *     signal = Mth.lerpDiscrete(f, 0, 15) = floor(f * 14) + (f > 0 ? 1 : 0)
+ *     signal = lerpDiscrete(f, 0, 15) 相当 = f が 0 なら 0、それ以外は f × 14 の切り捨て + 1
  *   (空 = 0、非空は最低 1)。
  *
  * nbtIO は barrel/chest 系を signal=0 (手動モード) で import し、viewer は
@@ -247,7 +249,7 @@ export type ContainerSlots = readonly (ItemStack | null)[]
  *   - tryMoveItems: **送り込み (facing 先コンテナへ eject) を先に**、続いて
  *     **吸い出し (直上コンテナから suck)** を行う。両方が同 gt に起き得る
  *     (それぞれ 1 個)。いずれか成功でクールダウンを 8 に再設定。
- *   - ENABLED: HopperBlock.neighborChanged で `enabled = !hasNeighborSignal`。
+ *   - ENABLED: HopperBlock.neighborChanged が「自身 6 面が受電していない」ことを ENABLED に入れる。
  *     受電中 (enabled=false) は転送しない = ロック (setBlock flag2)。
  *   - コンテナ内容変化は CU (updateNeighbourForOutputSignal) で隣接コンパレーターへ。
  * facing = vanilla FACING = 送り込み方向 (既定 down。piston/observer と同じ非反転)。
@@ -274,9 +276,9 @@ export interface HopperState {
  * (前方が満杯コンテナのときは vanilla 同様 no-op でアイテムは残る)。
  *
  * [確定: 26.2 DropperBlock / DispenserBlock]:
- *   - neighborChanged: `hasNeighborSignal(pos) || hasNeighborSignal(pos.above())`
+ *   - neighborChanged: **自身 6 面の受電 または 1 個上のマスの受電** の OR
  *     (QC。02 §5.3 の 3 クラス) の立ち上がりで TRIGGERED を立て
- *     scheduleTick(pos, this, 4) を予約 (setBlock flag2)。立ち下がりで TRIGGERED 解除。
+ *     4gt の tile tick を予約 (setBlock flag2)。立ち下がりで TRIGGERED 解除。
  *   - tick (ST フェーズ): dispenseFrom — ランダムスロットの 1 個を前方コンテナへ
  *     HopperBlockEntity.addItem で挿入 (sim は種別なしなので count を 1 移す)。
  * facing = vanilla FACING = 出力方向 (6 方向。既定 north。非反転)。
@@ -304,7 +306,7 @@ export interface DropperState {
  * レッドストーンブロック。常時 weak 15 を全 6 方向に出す定数動力源。
  * [確定: 1.21.1 PoweredBlock — getSignal=15 / isSignalSource=true /
  *   getDirectSignal 非 override (=0, 固体を強充電しない) /
- *   Blocks.REDSTONE_BLOCK は isRedstoneConductor(never) = 非導体]。
+ *   Blocks.REDSTONE_BLOCK は isRedstoneConductor に常時 false を与える = 非導体]。
  * 状態を持たない (常時通電)。
  */
 export interface RedstoneBlockState {
@@ -514,9 +516,10 @@ export function isRailSlope(shape: RailShape): boolean {
 /**
  * 動力を持つレールの種別 (#138)。26.2 に ActivatorRailBlock は**存在せず**、
  * activator_rail は powered_rail と同じ PoweredRailBlock を別インスタンスとして
- * 登録しているだけ [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock::new]。
+ * 登録しているだけ [確定: 26.2 Blocks.java:690 / :2893 — どちらも PoweredRailBlock として登録されている]。
  * レッドストーン挙動の差は**連鎖が同種のレール間でしか繋がらない**ことだけで
- * [確定: 26.2 PoweredRailBlock.isSameRailWithPower の `!state.is(this)` ガード]、
+ * [確定: 26.2 PoweredRailBlock.isSameRailWithPower の**同一ブロック判定ガード** —
+ * 別種のレールは連鎖対象から外れる]、
  * activator = トロッコを起動する側面はエンティティなのでスコープ外 (13 §2)。
  */
 export type PoweredRailType = 'powered_rail' | 'activator_rail'
@@ -577,14 +580,14 @@ export interface DetectorRailState {
 
 /**
  * 銅の電球 (#155)。**1 ブロックで T フリップフロップ**になる素子。
- *   - 近隣更新のたびに hasNeighborSignal を見て、`signal != powered` なら
+ *   - 近隣更新のたびに hasNeighborSignal を見て、それが保持中の powered と食い違うなら
  *     **立ち上がり (powered=false → signal=true) のときだけ lit を反転**し、
  *     powered を signal に追随させる [確定: 26.2 CopperBulbBlock.checkAndFlip]
  *   - **tile tick を持たない** = 遅延 0gt。近隣更新の処理中に同期確定する
  *     [実機 fixture copper-bulb-toggle: レバーと同じ tick で確定]
- *   - コンパレーターは **lit** を読む (powered ではない)。lit ? 15 : 0
+ *   - コンパレーターは **lit** を読む (powered ではない)。lit なら 15、でなければ 0
  *     [確定: 26.2 getAnalogOutputSignal / 実機 fixture copper-bulb-output]
- *   - **非導体** (.isRedstoneConductor(Blocks::never) [確定: 26.2 Blocks.java:5272])。
+ *   - **非導体** (isRedstoneConductor に常時 false を返す述語が渡されている [確定: 26.2 Blocks.java:5272])。
  *     フルブロックだが強充電を通さないので、給電の仕切りとして使える
  *   - 自身は信号を出さない (getSignal 非 override)
  *
@@ -634,8 +637,8 @@ export interface DoorLikeState {
  *     [確定: 26.2 DoorBlock.java:228-229]。ピストン・ディスペンサー以外で唯一の
  *     疑似接続の変種で、下半分だけに給電しても両方が開く
  *     [実機 fixture door-redstone]
- *   - **更新元が同じドアブロックなら無視する** [確定: :230 の
- *     `!this.defaultBlockState().is(block)`]。2 つの半分が更新を往復しないためのガード
+ *   - **更新元が同じドアブロックなら無視する** [確定: :230 — 更新元ブロックが
+ *     自分自身のブロック種と一致するかを見るガード]。2 つの半分が更新を往復しないため
  *   - 2 つの半分は updateShape で常に同期する [確定: :104-106 — 相手の状態を
  *     そのままコピーして HALF だけ自分のものにする] ので、sim では状態変化時に
  *     相方へミラーする
@@ -654,9 +657,9 @@ export interface DoorState {
 /**
  * クラフター (#163)。**受電部分だけを実装し、レシピは非対応**。
  *
- *   - `triggered` は `hasNeighborSignal(pos)` の立ち上がりで立ち、4gt の tile tick を
- *     予約する [確定: 26.2 CrafterBlock.java:73-88]
- *   - **疑似接続を持たない**。ディスペンサーが `pos.above()` も見る [確定:
+ *   - `triggered` は**自身 6 面の受電** (hasNeighborSignal) の立ち上がりで立ち、
+ *     4gt の tile tick を予約する [確定: 26.2 CrafterBlock.java:73-88]
+ *   - **疑似接続を持たない**。ディスペンサーが**1 個上のマス**も見る [確定:
  *     DispenserBlock.java:131] のに対し、クラフターは自分の位置しか見ない
  *     [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
  *   - コンパレーターは **「空でない or 無効化されたスロット数」0-9** を読む
@@ -698,6 +701,7 @@ export type BlockState =
   | DecorState
   | CauldronState
   | ComposterState
+  | LecternState
   | StoneWallState
   | SoulSandState
   | WaterState
@@ -727,7 +731,7 @@ export type BlockState =
 
 /**
  * ロードストーン (#234)。**石 (導体) だがピストンで押せない**
- * [確定: 26.2 Blocks.LODESTONE — pushReaction(PushReaction.BLOCK)]。
+ * [確定: 26.2 Blocks.LODESTONE — pushReaction が BLOCK]。
  * スライムにもくっつかない (不動なので塊収集から自然に外れる)。
  * ガラスエレベーターはこの 3 点だけを使っている。
  */
@@ -772,18 +776,35 @@ export interface ComposterState {
   level: number
 }
 
+/**
+ * 書見台 (#240)。**コンパレーターがページ番号を読む**ので階数指定に使われる。
+ *
+ * [確定: 26.2 LecternBlock.getAnalogOutputSignal → LecternBlockEntity.getRedstoneSignal —
+ *  ページ進捗 = 本のページ数が 2 以上なら「現在ページ ÷ (ページ数 - 1)」、1 以下なら 1.0。
+ *  出力 = 進捗 × 14 の切り捨て + (本の実体を持つなら 1)]
+ * 実機で確認 (5 ページ本): Page=0→1 / 1→4 / 2→8 / 3→11 / 4→15。
+ * **本を持たない has_book=true は 14** (pageCount=0 なので pageProgress=1.0、hasBook()=false)。
+ * ページ数 1 以下の本は 15。has_book=false は 0。
+ */
+export interface LecternState {
+  type: 'lectern'
+  facing: HDir
+  /** blockstate の has_book。false なら出力 0 */
+  hasBook: boolean
+  /** 開いているページ (0 始まり) */
+  page: number
+  /** 本のページ数。**0 = 本の中身が無い** (blockstate だけ has_book=true) */
+  pages: number
+}
+
 /** 塀の 1 辺の高さ [確定: 26.2 WallSide] */
 export type WallSide = 'none' | 'low' | 'tall'
 
 /**
  * 塀 (#234)。**形状変化で下方向へ無遅延に信号を送る**のに使われる。
  *
- * 仕掛けは [確定: 26.2 WallBlock.shouldRaisePost] の先頭:
- * ```java
- * boolean topNeighbourHasPost = topNeighbour.getBlock() instanceof WallBlock
- *   && topNeighbour.getValue(UP);
- * if (topNeighbourHasPost) return true;
- * ```
+ * 仕掛けは [確定: 26.2 WallBlock.shouldRaisePost — 判定の冒頭で真上のブロックを見て、
+ *  それが塀でありかつ up が true なら、他の条件を一切見ずに true を返す]。
  * **上の塀が up=true なら自分も up=true** になる。updateShape は隣へ連鎖するので、
  * 上端の 1 か所を変えると柱の全段が同じ tick で反転する
  * (実機で確認: 7 段の柱が t=0 で全段 false → true、下端のオブザーバーが 2gt 後に発火)。
@@ -824,11 +845,11 @@ export interface WaterState {
  *
  * **縦の無遅延バス**として使われる。仕組みは
  * [確定: 26.2 BubbleColumnBlock.updateColumn] —
- * 起点セルから**上へ while ループで同期的に setBlock(flag 2)** するので、
+ * 起点セルから**上へループで同期的に flag 2 の setBlock を繰り返す**ので、
  * 柱の全段が同じ tick で書き換わる (140 段でも 1 tick)。flag 2 は近隣更新を出さないが
  * 形状更新は配られるため、**隣のオブザーバーが検知できる**。
  *
- * 乱されたときは [確定: updateShape] `scheduleTick(pos, this, 5)` で 5gt 後に評価する。
+ * 乱されたときは [確定: updateShape] **5gt の tile tick を予約**して 5gt 後に評価する。
  */
 export interface BubbleColumnState {
   type: 'bubble_column'
@@ -938,6 +959,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   target: true,          // 投射物命中の折衷
   detector_rail: true,   // トロッコ検出の折衷 (#146)
   container: true,       // 樽/チェストの中身を手で出し入れする折衷 (#236)
+  lectern: true,         // ページをめくる (#240)
 
   // 受電・観測でしか動かない素子
   wire: false,
@@ -976,6 +998,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   decor: false,
   cauldron: false,
   composter: false,
+
   wall: false,
   soul_sand: false,
   water: false,

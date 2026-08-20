@@ -1,6 +1,6 @@
 {
   "name": "copper-bulb-toggle",
-  "description": "#155 銅の電球は 1 ブロックで T フリップフロップになる。neighborChanged で hasNeighborSignal != POWERED のとき、**立ち上がりなら LIT を反転**し POWERED を信号に追随させる [確定: 26.2 CopperBulbBlock.java:40-60]。tile tick を持たないので遅延 0gt。レバーを 4 回操作して (ON→OFF→ON→OFF)、lit が立ち上がりでだけ反転すること・powered は両エッジで追随すること・どちらもレバーと同じ tick で確定することを確定させる。真上のオブザーバーは blockstate が変わるたびに発火するはずなので、**立ち下がり (powered だけ変わる) でも発火する**かどうかも同時に見る。",
+  "description": "#155 銅の電球は 1 ブロックで T フリップフロップになる。neighborChanged で**受電状態が保持中の POWERED と食い違う**とき、**立ち上がりなら LIT を反転**し POWERED を信号に追随させる [確定: 26.2 CopperBulbBlock.java:40-60]。tile tick を持たないので遅延 0gt。レバーを 4 回操作して (ON→OFF→ON→OFF)、lit が立ち上がりでだけ反転すること・powered は両エッジで追随すること・どちらもレバーと同じ tick で確定することを確定させる。真上のオブザーバーは blockstate が変わるたびに発火するはずなので、**立ち下がり (powered だけ変わる) でも発火する**かどうかも同時に見る。",
   "mcVersion": "1.21.1",
   "ticks": 16,
   "region": {

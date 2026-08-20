@@ -1,7 +1,7 @@
 # 押されて着地したレールは、その場で形状と powered を決め直す (#134)。
 #
 # BaseRailBlock.onPlace は movedByPiston でも走り、直前が moving_piston なので
-# `!oldState.is(block)` を満たして updateState に入る [確定: 26.2 BaseRailBlock.java:64-77]。
+# **置き換え前が別ブロック種**という条件を満たして updateState に入る [確定: 26.2 BaseRailBlock.java:64-77]。
 # そこで
 #   (1) updateDir(first=true) → RailState.place で形状を決め直す
 #   (2) isStraight (= powered/detector/activator) なので自分自身に neighborChanged が

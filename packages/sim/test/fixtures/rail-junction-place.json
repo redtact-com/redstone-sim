@@ -1,6 +1,6 @@
 {
   "name": "rail-junction-place",
-  "description": "#140 3 方向ジャンクションの曲がる先は給電の有無で反転するのか。RailState.place は「両軸に隣接がある」ときだけ第三段に落ち、isStraight=false なら hasSignal で優先順位が入れ替わる。hasSignal=true は SE→SW→NE→NW の順に代入 (後勝ちで NW>NE>SW>SE)、false は NW→NE→SW→SE の順 (SE>SW>NE>NW) [確定: 26.2 RailState.java:269-303]。hasSignal は BaseRailBlock.updateDir が渡す level.hasNeighborSignal(pos) [確定: 26.2 BaseRailBlock.java:111-118]。北・南・東に隣接があるジャンクションを 2 つ用意し、片方だけ真下をレッドストーンブロックにして給電する。非通電側は southAndEast と northAndEast の両方が真になるので後勝ちで SOUTH_EAST、通電側は NORTH_EAST になるはず。",
+  "description": "#140 3 方向ジャンクションの曲がる先は給電の有無で反転するのか。RailState.place は「両軸に隣接がある」ときだけ第三段に落ち、isStraight=false なら hasSignal で優先順位が入れ替わる。hasSignal=true は SE→SW→NE→NW の順に代入 (後勝ちで NW>NE>SW>SE)、false は NW→NE→SW→SE の順 (SE>SW>NE>NW) [確定: 26.2 RailState.java:269-303]。hasSignal は BaseRailBlock.updateDir が渡す「その位置が受電しているか」の判定結果 [確定: 26.2 BaseRailBlock.java:111-118]。北・南・東に隣接があるジャンクションを 2 つ用意し、片方だけ真下をレッドストーンブロックにして給電する。非通電側は southAndEast と northAndEast の両方が真になるので後勝ちで SOUTH_EAST、通電側は NORTH_EAST になるはず。",
   "mcVersion": "1.21.1",
   "ticks": 8,
   "region": {

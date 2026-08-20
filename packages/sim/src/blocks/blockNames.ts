@@ -12,7 +12,7 @@
 // ============================================================
 
 import { noteInstrumentOfBlockName } from './noteInstrument.js'
-import type { BlockState } from '../types.js'
+import type { BlockState, HDir } from '../types.js'
 
 // ── 非導体ブロック (#184) ────────────────────────────────────────────────────
 //
@@ -201,6 +201,17 @@ export function classifyPlainBlock(
   if (id === 'bubble_column') {
     // 縦の無遅延バス [確定: 26.2 BubbleColumnBlock]
     return { type: 'bubble_column', drag: props.drag === 'true' }
+  }
+  if (id === 'lectern') {
+    // コンパレーターがページを読む (#240)。ページ数・現在ページは BE 側なので
+    // 取り込み元が持っていれば nbtIO が後から差し込む (既定は本の中身なし = 出力 14)
+    return {
+      type: 'lectern',
+      facing: (props.facing ?? 'north') as HDir,
+      hasBook: props.has_book === 'true',
+      page: 0,
+      pages: 0,
+    }
   }
   if (isDecorBlockName(id)) return { type: 'decor', name: formatDecorName(id, props) }
 

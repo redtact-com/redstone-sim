@@ -5,16 +5,11 @@ import type { BlockState } from '../src/types.js'
 /**
  * **収縮する粘着ピストンは pos+2 の伸長中 moving を強制確定する** (#231)。
  *
- * [確定: 26.2 `PistonBaseBlock.triggerEvent` (b0=1/2) の isSticky 分岐]
- * ```java
- * BlockPos twoPos = pos.offset(direction.getStepX() * 2, ...);
- * if (movingState.is(Blocks.MOVING_PISTON)
- *    && level.getBlockEntity(twoPos) instanceof PistonMovingBlockEntity entity
- *    && entity.getDirection() == direction && entity.isExtending()) {
- *    entity.finalTick();   // ← BE 相で確定させる
- *    pistonPiece = true;   // ← 引き戻しはしない
- * }
- * ```
+ * [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) の isSticky 分岐 —
+ * facing 方向へ 2 マス進んだ位置 (pos+2) を見て、そこが moving_piston であり、
+ * その BlockEntity の向きが自分の facing と同じで、かつ**伸長中**であれば、
+ * その BlockEntity を **BE 相でその場で確定 (finalTick)** させたうえで
+ * 「ピストン片あり」と扱い、引き戻しは行わない]
  *
  * 確定が **BE 相**で起きるのが要点。sim は以前 head (pos+1) だけ強制確定し、
  * pos+2 の payload を phase10 (BlockEntity 相) 任せにしていた。BE の後に確定するので
@@ -103,7 +98,8 @@ describe('収縮する粘着ピストンは pos+2 の伸長中 moving を確定�
  * **収縮イベントの実行時再判定** (#231)。
  *
  * [確定: 26.2 PistonBaseBlock.triggerEvent —
- *  `if (extend && (b0 == 1 || b0 == 2)) { level.setBlock(pos, extendedState, 2); return false; }`]
+ *  伸長イベント (b0=1/2) の実行時にまだ受電していれば、extended=true の状態を
+ *  flag 2 で書き直して false を返し、イベント自体を取り消す]
  *
  * 収縮の予約は「受電が切れた」瞬間の NC で積まれるが、同じ tick の ST 相で
  * オブザーバー等が再点火すると BE 相の時点では受電が戻っている。そのとき
@@ -162,7 +158,7 @@ describe('収縮イベントは実行時に受電していたら取り消す (#2
  * **ピストンヘッドが受けた NC は基部へ転送する** (#231)。
  *
  * [確定: 26.2 PistonHeadBlock.neighborChanged —
- *  `if (state.canSurvive(...)) level.neighborChanged(pos.relative(FACING.getOpposite()), ...)`]
+ *  ヘッドが存続可能 (canSurvive) なら facing の反対側 1 マス = 基部へ近隣更新を転送する]
  *
  * QC で受電しているピストンは、電源側の変化が「1 個上のマスの隣」で起きるため
  * 基部に直接 NC が届かない。ヘッド経由のこの転送が唯一の通知経路になる。
@@ -195,7 +191,7 @@ describe('ピストンヘッドは NC を基部へ転送する (#231)', () => {
 /**
  * **音符ブロックの POWERED 変化は近隣更新 (NC) を出す** (#231)。
  *
- * [確定: 26.2 NoteBlock.neighborChanged — `level.setBlock(pos, ..., 3)` の
+ * [確定: 26.2 NoteBlock.neighborChanged — **flag 3 の setBlock** の
  *  flag 3 = UPDATE_NEIGHBORS|UPDATE_CLIENTS]。
  * 「信号を出力しないから NC 不要」ではない。UPDATE_NEIGHBORS は出力の有無と関係なく
  * 隣接 6 マスへ配られ、**真下のピストン**はこれで電源断を知る。
@@ -227,7 +223,8 @@ describe('音符ブロックの POWERED 変化は NC を出す (#231)', () => {
  * **伸長の予約は「押せるか」を予約時に判定する** (#231)。
  *
  * [確定: 26.2 PistonBaseBlock.checkIfExtend —
- *  `if (extend && !EXTENDED) { if (new PistonStructureResolver(...).resolve()) level.blockEvent(...); }`]
+ *  伸長要求かつ EXTENDED でないとき、押し構造の解決 (PistonStructureResolver) が
+ *  成功した場合に限って block event を発行する]
  *
  * 予約してから実行時にだけ判定すると、**その間に押し先の moving_piston が確定して
  * 本来押せないはずのタイミングで押せてしまう**。5×5 ドアの t=220 で、実機が伸ばさない
@@ -269,7 +266,7 @@ describe('伸長は予約時に押せるかを判定する (#231)', () => {
  * **着地したピストンは自分自身を再判定する** (#231)。
  *
  * [確定: 26.2 PistonBaseBlock.onPlace —
- *  `if (!oldState.is(state.getBlock()) && level.getBlockEntity(pos) == null) checkIfExtend(...)`]
+ *  置き換え前が別ブロック種で、かつその位置に BlockEntity がまだ無いときだけ checkIfExtend を呼ぶ]
  *
  * 着地は moving_piston → piston の差し替えなので条件を満たす。
  * 着地が出す NC は**隣接 6 マス向けで自分には飛ばない**ため、これが無いと

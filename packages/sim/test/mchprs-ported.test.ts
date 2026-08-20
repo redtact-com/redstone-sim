@@ -19,7 +19,7 @@
 //      すべて「1 MCHPRS tick = 2 gt」で vanilla と一致する。)
 //   * use_block(pos) = activateBlock(pos) (即時反映)。
 //   * check_block_powered(pos) = 対象素子の powered/lit を読む。
-//     trapdoor 検出器 (sim 未対応) は「空マス + hasNeighborSignal(=isBlockPowered)」で
+//     trapdoor 検出器 (sim 未対応) は「空マス + 受電あり (= isBlockPowered)」で
 //     代替する (trapdoor.powered は vanilla hasNeighborSignal と同値)。
 //   * make_wire = 全方向 side の cross ダスト (MCHPRS make_cross(0) と同じ)。
 //   * make_lever/make_repeater/make_comparator = place_on_block 相当 (下に stone)。

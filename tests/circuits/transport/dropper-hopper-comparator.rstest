@@ -1,7 +1,7 @@
 # ドロッパー発火 → ホッパー挿入 → コンパレーター読み → ランプ フィードバック (#79 領域1 複合物流)。
 # 仕様 [確定: 02 §6 dropper / comparator]:
 #   - DropperBlock.neighborChanged: 受電(通常∪QC)の立ち上がりで TRIGGERED を立て
-#     scheduleTick(pos,this,4) を予約 (4gt)。発火は ST フェーズ (dispenseFrom)。
+#     4gt の tile tick を予約。発火は ST フェーズ (dispenseFrom)。
 #   - dispenseFrom: 前方コンテナへ 1 個挿入 (HopperBlockEntity.addItem)。
 #   - コンテナ内容変化 → CU → コンパレーター 2gt (getDelay=2)。
 #   - RedstoneLampBlock: 点灯は NC 受信で即時 (遅延なし)。

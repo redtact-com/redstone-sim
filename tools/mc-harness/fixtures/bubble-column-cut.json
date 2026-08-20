@@ -1,6 +1,6 @@
 {
   "name": "bubble-column-cut",
-  "description": "#234 泡柱を途中で断ち切ったときの実機挙動。ソウルサンドの上に 8 段の泡柱を立て、t=10 に (1,4,1) を石で塞ぐ。**切った位置より上が同じ tick でまとめて水に戻り**、隣のオブザーバーが検知する。 [確定: 26.2 BubbleColumnBlock.updateColumn は上へ while ループで同期的に setBlock(flag 2) / updateShape が 5gt を予約]。 **柱は石で囲ってある** — sim は水流を実装しないので (判断 B)、崩れた水が周囲へ広がると比較できなくなるため。",
+  "description": "#234 泡柱を途中で断ち切ったときの実機挙動。ソウルサンドの上に 8 段の泡柱を立て、t=10 に (1,4,1) を石で塞ぐ。**切った位置より上が同じ tick でまとめて水に戻り**、隣のオブザーバーが検知する。 [確定: 26.2 BubbleColumnBlock.updateColumn は上へループで同期的に flag 2 の setBlock を繰り返す / updateShape が 5gt の tile tick を予約]。 **柱は石で囲ってある** — sim は水流を実装しないので (判断 B)、崩れた水が周囲へ広がると比較できなくなるため。",
   "mcVersion": "1.21.1",
   "ticks": 30,
   "region": {

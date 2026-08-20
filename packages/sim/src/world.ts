@@ -80,7 +80,7 @@ function offset(pos: Pos3D, dir: Dir6, n: number): Pos3D {
 }
 
 // NC 更新 DFS 機械のエントリ (single = 1 マス通知 / multi = 6 方向一括、1 方向ずつ中断可)。
-// origin は vanilla の `updateNeighborsAt(pos, block)` が運ぶ **更新元ブロック**。
+// origin は vanilla の `updateNeighborsAt` が第 2 引数で運ぶ **更新元ブロック**。
 // 通常レールの向き再計算がこれを門番に使う (更新元が信号源のときだけ走る。#142)
 type UpdateEntry =
   | { kind: 'single'; target: Pos3D; origin: BlockType }
@@ -108,7 +108,27 @@ function analogOutputOf(block: BlockState | null | undefined): number | null {
   // 水入り大釜 / コンポスターは LEVEL をそのまま返す (#234)
   // [確定: 26.2 LayeredCauldronBlock / ComposterBlock の getAnalogOutputSignal]
   if (block.type === 'cauldron' || block.type === 'composter') return block.level
+  // 書見台はページ番号を読む (#240)
+  // [確定: 26.2 LecternBlock.getAnalogOutputSignal / LecternBlockEntity.getRedstoneSignal]
+  if (block.type === 'lectern') return lecternSignal(block)
   return null
+}
+
+/**
+ * 書見台のコンパレーター出力 (#240)。
+ *
+ * [確定: 26.2 LecternBlockEntity.getRedstoneSignal — ページ進捗は「ページ数が 2 以上なら
+ *  現在ページ ÷ (ページ数 - 1)、1 以下なら 1.0」。出力は進捗 × 14 の切り捨てに、
+ *  本の実体を持つなら +1]
+ * 呼び出し元 (getAnalogOutputSignal) が **blockstate の has_book で先に 0 を返す**ので、
+ * has_book=false は 0。`pages === 0` は「blockstate だけ has_book=true で中身が無い」状態で、
+ * ページ数 2 以上の分岐に入らず進捗 1.0・本の実体も無しと判定されるので **14** になる
+ * (実機で確認: 本無し 14 / 5 ページ本は Page 0→1, 1→4, 2→8, 3→11, 4→15)。
+ */
+function lecternSignal(b: { hasBook: boolean; page: number; pages: number }): number {
+  if (!b.hasBook) return 0
+  const progress = b.pages > 1 ? b.page / (b.pages - 1) : 1
+  return Math.floor(Math.min(1, Math.max(0, progress)) * 14) + (b.pages > 0 ? 1 : 0)
 }
 
 /** 泡柱の状態が同じか (水 ⇔ 泡柱 / drag 違いを区別する) */
@@ -475,7 +495,8 @@ export class SimWorld {
           h = { ...h, slots: taken.slots }
           this.setBlockAt(pos, h)
           // #89/#91: 押し込み先ホッパーのクールダウンを再設定 (vanilla HopperBlockEntity.add)。
-          // vanilla は `if (bl && dest is hopper && !isOnCustomCooldown) setCooldown(8-k)`:
+          // vanilla の条件は「受信スロットが空だった (bl) かつ 押込先がホッパー かつ
+          //   カスタムクールダウン中でない」ときに限り クールダウンを 8-k に設定する:
           //   bl = 受信スロットが空だった / k=1: 押込先が同gt 既 tick / k=0: 未 tick。
           //   k=0 でも押込先は自 serverTick で -1 され結局 **実効 7gt**。よって空受信時は
           //   一律 currentTick+7 (残留クールダウン中でもリセット。旧実装は off-cooldown 時
@@ -542,7 +563,7 @@ export class SimWorld {
     }
     // **点灯したまま運ばれてきた**場合は即消灯する (#221)
     // [確定: 26.2 ObserverBlock.onPlace — POWERED かつ scheduledTick が無ければ
-    //  setBlock(POWERED=false, flag 18) + updateNeighborsInFront]。
+    //  flag 18 の setBlock で POWERED を false に落とし、updateNeighborsInFront を呼ぶ]。
     // 消灯 tick は移動前の座標に予約されていて移動で失われるため、これが無いと
     // **二度と消えない**。ユーザ提供の 2 幅ドアで、押されて戻ったオブザーバーが
     // 点きっぱなしになり 2 往復目が動かなくなっていた
@@ -561,8 +582,8 @@ export class SimWorld {
       this.neighborChanged(pos)
     }
     // 着地したピストンは**自分自身を再判定する** (#231)
-    // [確定: 26.2 PistonBaseBlock.onPlace —
-    //  `if (!oldState.is(state.getBlock()) && level.getBlockEntity(pos) == null) checkIfExtend(...)`]。
+    // [確定: 26.2 PistonBaseBlock.onPlace — 置き換え前が別ブロック種で、かつその位置に
+    //  BlockEntity がまだ無いときだけ checkIfExtend を呼ぶ]。
     // 着地は moving_piston → piston の差し替えなので条件を満たす。
     // 隣接 6 マスへの NC (下の submitMultiNC) は**自分には飛ばない**ので、
     // これが無いと「運ばれて着地した直後に受電しているピストン」が伸びない
@@ -570,8 +591,8 @@ export class SimWorld {
     if (into.type === 'piston' || into.type === 'sticky_piston') {
       this.neighborChanged(pos)
     }
-    // 着地は vanilla では setBlock(UPDATE_ALL) なので**隣接 6 マスへ NC が飛ぶ**
-    // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock(..., UPDATE_ALL)]。
+    // 着地は vanilla では **UPDATE_ALL flag の setBlock** なので**隣接 6 マスへ NC が飛ぶ**
+    // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock を UPDATE_ALL で呼ぶ]。
     // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も
     // 再評価されず伸びないまま」になる (#213 のドアで tick 135 の押し上げが
     // 起きなかった原因)。実機 fixture door-2wide-open-to-close が回帰を守る
@@ -601,8 +622,8 @@ export class SimWorld {
 
   /**
    * ドロッパー/ディスペンサーの起動判定 (通常受電 ∪ QC の 1 個上受電)。
-   * [確定: 26.2 DispenserBlock.neighborChanged — hasNeighborSignal(pos) ||
-   *  hasNeighborSignal(pos.above())]。QC は 02 §5.3 の 3 クラスの 1 つ。
+   * [確定: 26.2 DispenserBlock.neighborChanged — 自身 6 面の受電 または
+   *  1 個上のマスの受電 の OR]。QC は 02 §5.3 の 3 クラスの 1 つ。
    */
   private isDropperPowered(pos: Pos3D): boolean {
     if (isBlockPowered(this, pos)) return true
@@ -685,15 +706,20 @@ export class SimWorld {
    * tick=0 の起点を呼び出し側に委ねることで、発振回路も正しく駆動できる
    * （fixture-runner は initialize() 後に flush(64) を明示的に呼んで settle する）。
    */
-  initialize(): void {
+  initialize(opts: { trustAuthored?: boolean } = {}): void {
+    // trustAuthored: **動いている機械のスナップショットをそのまま出発点にする** (#240)。
+    // 既定 (false) は「静止した authored 状態」を前提に動的値を捨てて組み直す。
+    // クロックが回っている実機を撮ると、コンパレーターの powered などは
+    // 「予約 tick が実行された結果」なので、捨てると tick 0 から実機と食い違う
+    const trust = opts.trustAuthored === true
     this.scheduledTicks = []
     this.blockEvents = []
     this.seqCounter = 0
     // 初期組み立て中は PP を抑止 (オブザーバーは authored 安定状態のまま発火しない)
     this.suppressPP = true
 
-    // Step 1: 動的状態をリセット
-    for (const [key, block] of this.blocks) {
+    // Step 1: 動的状態をリセット (trustAuthored なら丸ごと飛ばす)
+    for (const [key, block] of trust ? [] : this.blocks) {
       if (block.type === 'wire') {
         this.blocks.set(key, { ...block, power: 0 })
       } else if (block.type === 'lamp') {
@@ -744,7 +770,7 @@ export class SimWorld {
     // （BFS だと処理順依存になるため、全体パスを繰り返す。
     //   固体の充電状態は power.ts の純クエリで都度計算されるため
     //   反復対象はワイヤーのみでよい）
-    let changed = true
+    let changed = !trust
     let pass = 0
     while (changed && pass < 100) {
       changed = false
@@ -762,7 +788,7 @@ export class SimWorld {
     }
 
     // Step 3: ランプと固体（表示用 powered）の状態を更新
-    for (const [key, block] of this.blocks) {
+    for (const [key, block] of trust ? [] : this.blocks) {
       const pos = keyToPos(key)
       if (block.type === 'lamp') {
         const lit = isBlockPowered(this, pos)
@@ -791,7 +817,7 @@ export class SimWorld {
     // Step 3b: パワードレールの powered を収束するまで繰り返し計算。
     // 連鎖は「隣接レールが powered」を条件にするため 1 パスでは広がらない。
     // Step 1 で false に落としてあるので単調増加として収束する (ワイヤーと同趣旨)。
-    let railChanged = true
+    let railChanged = !trust
     let railPass = 0
     while (railChanged && railPass < 100) {
       railChanged = false
@@ -811,7 +837,9 @@ export class SimWorld {
     // turn_on を、入力のあるコンパレーターは出力を schedule する。
     // ここを抜くとクロック回路（torch + repeater のフィードバック）が
     // tick=0 で何もスケジュールされず発振開始しない。
-    for (const [key] of this.blocks) {
+    // trustAuthored のときはここも飛ばす。**実機から読んだ予約を後から積む**ので、
+    // sim が自前で予約を組み直すと二重になる
+    for (const [key] of trust ? [] : this.blocks) {
       const pos = keyToPos(key)
       const b = this.getBlockAt(pos)
       if (
@@ -826,6 +854,21 @@ export class SimWorld {
       }
     }
 
+    // Step 4b: **blockstate に出ない値だけは trustAuthored でも組み直す** (#240)。
+    //
+    // コンパレーターの出力強度は BlockEntity の OutputSignal で、blockstate には
+    // powered (0 か否か) しか出ない。実機のスナップショットを読んでも強度が分からず、
+    // 0 のままだと下流のダストが丸ごと 0 になる
+    // (実機の最小再現 elevator-observer-min: 実機 15 / sim 0 で発覚)。
+    // powered=true なら**今の入力から計算し直す**のが実機の BE 値に一致する
+    if (trust) {
+      for (const [key, block] of this.blocks) {
+        if (block.type !== 'comparator') continue
+        const out = block.powered ? this.computeComparatorOutput(keyToPos(key), block) : 0
+        if (block.outputPower !== out) this.blocks.set(key, { ...block, outputPower: out })
+      }
+    }
+
     // Step 5: スケジュール済みティックを処理して安定化（クロック回路では呼ばない）
     // initialize() 後は tick=0 の初期状態から手動で進める想定のため flush は行わない
 
@@ -834,17 +877,41 @@ export class SimWorld {
   }
 
   /**
+   * 実機から読んだ予約 tick をそのまま積む (#240)。
+   *
+   * **ブロック状態だけでは動いている機械を再現できない**。リピーターの
+   * 「あと 5gt で ON」のような予約は blockstate に出ないため、実機のスナップショットを
+   * そのまま読ませても出発点が揃わない。実機側は保存データ (チャンク NBT の
+   * `block_ticks`) から残り遅延と優先度を読める
+   * [確定: 26.2 SavedTick — codec は i=type / t=delay / p=priority、
+   *  unpack が `currentTick + delay` を発火 tick にする]。
+   *
+   * `initialize()` の**後**に呼ぶこと (initialize は予約を空にする)。
+   */
+  seedScheduledTick(pos: Pos3D, delay: number, priority: number): boolean {
+    const block = this.getBlockAt(pos)
+    if (!block || block.type === 'air') return false
+    this.scheduledTicks.push({
+      pos: [...pos] as Pos3D,
+      blockType: block.type,
+      dueTick: this.currentTick + Math.max(0, Math.floor(delay)),
+      priority,
+      seq: this.seqCounter++,
+    })
+    return true
+  }
+
+  /**
    * `/setblock` 相当のブロック差し替え (#127)。**BUD の検証に使う**。
    *
-   * vanilla の SetBlockCommand は `block.place(level, pos, 2 | 256)` で置く。
+   * vanilla の SetBlockCommand は **flag 2 | 256** で置く。
    * flag に **UPDATE_NEIGHBORS (1) が立っていない**ので置いた瞬間は近隣更新を出さず、
-   * そのあと `updateNeighboursOnBlockSet` → `updateNeighborsAt(pos)` で
+   * そのあと `updateNeighboursOnBlockSet` → `updateNeighborsAt` で
    * **周囲 6 方向にだけ**更新を配る (自分自身には配らない)
    * [確定: 26.2 SetBlockCommand.setBlock / ServerLevel.updateNeighboursOnBlockSet]。
    *
-   * **置いた位置自身も再評価する**。`BaseRailBlock.onPlace` は
-   * `if (!oldState.is(state.getBlock()))` で「同じブロック種の上書きなら updateState を
-   * 呼ばない」ように読めるが、**実機 1.21.1 で試すと同種上書きでも powered は保持されず
+   * **置いた位置自身も再評価する**。`BaseRailBlock.onPlace` は「置き換え前と同じブロック種の
+   * 上書きなら updateState を呼ばない」ように読めるが、**実機 1.21.1 で試すと同種上書きでも powered は保持されず
    * 即座に再計算される** (リピーターの powered / ランプの lit も同様に落ちる)。
    * `/setblock ... strict` (onPlace を飛ばす flag 512) は 1.21.1 には無く、carpet の
    * scarpet `set()` でも同じだった。実機の観測に合わせてここでも自身を再評価する。
@@ -868,16 +935,16 @@ export class SimWorld {
 
     this.neighborChanged(pos)   // 置いた位置自身の再評価 (上記の実測に合わせる)
     this.emitShapeUpdate(pos)   // flag に UPDATE_KNOWN_SHAPE(16) が無い → updateShape は飛ぶ
-    this.submitMultiNC(pos)     // updateNeighborsAt(pos) — 周囲 6 方向のみ
+    this.submitMultiNC(pos)     // updateNeighborsAt 相当 — 周囲 6 方向のみ
   }
 
   /**
    * レールを置いた (または押されて着地した) ときの形状決定を世界へ適用する。
-   * vanilla の `BaseRailBlock.updateDir` → `new RailState(...).place(...)` に対応する
+   * vanilla の `BaseRailBlock.updateDir` → `RailState.place` に対応する
    * [確定: 26.2 BaseRailBlock.java:111-118]。
    *
    * **形状を書いた各レールが更新源になる** (#132)。vanilla は RailState.place も
-   * connectTo も `level.setBlock(pos, state, 3)` で書く [確定: 26.2 RailState.java:205,333]。
+   * connectTo も **flag 3 の setBlock** で書く [確定: 26.2 RailState.java:205,333]。
    * flag 3 = UPDATE_NEIGHBORS(1) | UPDATE_CLIENTS(2) なので
    *   - flag 1  → そのレールが周囲 6 方向へ近隣更新を配る
    *   - 16 が無い → updateNeighbourShapes が走り隣接オブザーバーが発火する
@@ -894,7 +961,7 @@ export class SimWorld {
   private applyRailPlacement(pos: Pos3D, defaultShape: RailShape, first = true): Pos3D[] {
     const written: Pos3D[] = []
     // hasSignal は通常レールの曲線の優先順位にだけ効く [確定: 26.2 BaseRailBlock.updateDir
-    // が level.hasNeighborSignal(pos) を place へ渡す]。
+    // が「その位置が受電しているか」を place へ渡す]。
     // first=false は実行中の再計算 (RailBlock.updateState) 経路で、形状が変わらなければ
     // ワールドへの書き込みごと起きない = 更新も出ない (#142)
     for (const c of planRailPlacement(this, pos, defaultShape, isBlockPowered(this, pos), first)) {
@@ -989,7 +1056,7 @@ export class SimWorld {
       this.traceCloseUpdate(abbrOf(next), next.open ? 'n' : 'f', 0, 'PI')
     } else if (block.type === 'detector_rail') {
       // マインカートの「乗り込み」を手動トリガする (#146)。既に powered なら no-op
-      // [確定: 26.2 DetectorRailBlock.entityInside の `if (!state.getValue(POWERED))` ガード]。
+      // [確定: 26.2 DetectorRailBlock.entityInside — POWERED が既に true なら何もしないガード付き]。
       // ON → 20gt (PRESSED_CHECK_PERIOD) 後の tile tick で checkPressed が
       // カート不在と再評価して自動 OFF する (感圧板と同型の折衷モデル)。
       // [実機 fixture detector-rail-cart-pulse: t3 検出 → t23 OFF]
@@ -1030,6 +1097,17 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Wp', 'n', 0, 'PI')
       this.schedule(pos, 10, 0)  // [確定: 26.2 WeightedPressurePlateBlock.getPressedTime]
+    } else if (block.type === 'lectern') {
+      // ページをめくる (#240)。実機では最終ページの次はめくれないが、
+      // **UI から任意の階を選べるようにする**ため 0 に戻す折衷にする
+      // (樽の +1 と同型。信号の伝わり方 = CU だけ実機と揃える)
+      if (!block.hasBook || block.pages <= 1) return
+      const page = (block.page + 1) % block.pages
+      this.setBlockAt(pos, { ...block, page })
+      this.traceProcess('PI', 'Lc', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitComparatorUpdate(pos)
+      this.traceCloseUpdate('Lc', 'n', 0, 'PI')
     } else if (block.type === 'container') {
       // 樽/チェストの中身を手で 1 段階増やす (#236)。15 の次は 0 に戻る。
       // vanilla に「1 回叩くと 1 段上がる」操作は無く、これは**プレイヤーが
@@ -1052,7 +1130,7 @@ export class SimWorld {
    * コンテナの 1 スロットを差し替える (`/item replace block <pos> container.<n>` 相当。#236)。
    *
    * [確定: 26.2 ItemCommands.setBlockItem → Container.setItem →
-   *  BaseContainerBlockEntity.setItem の末尾 `this.setChanged()`]
+   *  BaseContainerBlockEntity.setItem — 末尾で setChanged を呼ぶ]
    * プレイヤーが GUI でアイテムを動かしたときと**同じ経路**なので、実機 fixture の
    * 入力にこれを使える。伝わるのは `setContainerSignal` と同じ CU だけ。
    */
@@ -1068,6 +1146,20 @@ export class SimWorld {
     this.traceOpenUpdate(pos)
     this.emitComparatorUpdate(pos)
     this.traceCloseUpdate(abbrOf(block), 'n', 0, 'PI')
+  }
+
+  /** 書見台のページを直接指定する (#240)。実機の `/data modify block ... Page` に対応 */
+  setLecternPage(x: number, y: number, z: number, page: number): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || block.type !== 'lectern') return
+    const p = Math.max(0, Math.min(Math.max(0, block.pages - 1), Math.floor(page)))
+    if (p === block.page) return
+    this.setBlockAt(pos, { ...block, page: p })
+    this.traceProcess('PI', 'Lc', 'n', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate('Lc', 'n', 0, 'PI')
   }
 
   setContainerSignal(x: number, y: number, z: number, signal: number): void {
@@ -1650,9 +1742,9 @@ export class SimWorld {
       // retract
       if (!piston.extended) return []
       // **実行時再判定**: 収縮イベントが走る時点でまだ受電していれば収縮を取り消す (#231)
-      // [確定: 26.2 PistonBaseBlock.triggerEvent —
-      //  `if (extend && (b0 == 1 || b0 == 2)) { level.setBlock(pos, extendedState, 2); return false; }`
-      //  flag 2 なので NC は飛ばさない]。
+      // [確定: 26.2 PistonBaseBlock.triggerEvent — 伸長イベント (b0=1/2) の実行時にまだ
+      //  受電していれば、extended=true の状態を **flag 2** で書き直して false を返し、
+      //  イベント自体を取り消す。flag 2 なので NC は飛ばさない]。
       // 収縮予約は「受電が切れた」瞬間の NC で積まれるが、同じ tick の ST 相で
       // オブザーバー等が再点火すると BE 相の時点では受電が戻っている。
       // これが無いと**伸びたままのはずのピストンが縮んでしまう**
@@ -1690,9 +1782,9 @@ export class SimWorld {
         // #231: pos+2 が**同じ向きで伸長中**の moving なら、その場で確定させて
         // 引き戻しは行わない
         // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) の isSticky 分岐 —
-        //  twoPos の PistonMovingBlockEntity が getDirection()==direction かつ
-        //  isExtending() なら entity.finalTick() を呼び pistonPiece=true にして
-        //  引き戻し (moveBlocks(..., false)) を飛ばす]。
+        //  pos+2 の PistonMovingBlockEntity の向きが自分の facing と同じで、かつ
+        //  伸長中なら、その BlockEntity をその場で確定 (finalTick) させ、
+        //  「ピストン片あり」と扱って引き戻し (moveBlocks) を飛ばす]。
         // **確定が BE 相で起きる**のが要点で、phase10 任せにすると
         // 「そのセルを押したい下流ピストン」が翌 tick までずれる。
         // ユーザ提供の 5×5 ドアで tick 18 の押し上げが 1 tick 遅れていた原因
@@ -1739,19 +1831,12 @@ export class SimWorld {
   }
 
   /**
-   * 泡柱の評価 (#234)。[確定: 26.2 BubbleColumnBlock.updateColumn]
+   * 泡柱の評価 (#234)。[確定: 26.2 BubbleColumnBlock.updateColumn —
+   * 起点が「占有できるマス」なら、真下と占有先から柱の状態を決めて起点に書き込み、
+   * そのあと 1 マスずつ上へ進みながら占有できる限り同じ状態を書き続ける。
+   * 書き込みが失敗した時点で打ち切る。書き込みフラグは 2 (近隣更新なし・形状更新あり)]
    *
-   * ```java
-   * if (canOccupy(bubbleColumn, occupyState)) {
-   *    BlockState columnState = getColumnState(bubbleColumn, belowState, occupyState);
-   *    level.setBlock(occupyAt, columnState, 2);
-   *    while (canOccupy(bubbleColumn, level.getBlockState(pos.move(UP)))) {
-   *       if (!level.setBlock(pos, columnState, 2)) return;
-   *    }
-   * }
-   * ```
-   *
-   * **上へ while ループで同期的に書き換える**ので、140 段でも 1 tick で全段が変わる
+   * **上へループで同期的に書き換える**ので、140 段でも 1 tick で全段が変わる
    * (これが「無遅延の縦バス」の正体)。flag 2 なので**近隣更新は出さないが
    * 形状更新は配られる** = 隣のオブザーバーは検知する。
    */
@@ -1962,8 +2047,8 @@ export class SimWorld {
       }
       case 'detector_rail': {
         // checkPressed の更新一式 [確定: 26.2 DetectorRailBlock.java:88-113]:
-        //   setBlock(flag3) → 自身 6 方向 / updatePowerToConnected → 繋がる 2 マスへ
-        //   単発通知 / updateNeighborsAt(pos) (重複) / updateNeighborsAt(pos.below())
+        //   flag3 の setBlock → 自身 6 方向 / updatePowerToConnected → 繋がる 2 マスへ
+        //   単発通知 / 自身から 6 方向 (重複) / 真下から 6 方向
         //   / 末尾で updateNeighbourForOutputSignal (コンパレーター)
         this.submitMultiNC(pos)
         for (const c of railConnections(pos, block.shape)) this.submitSingleNC(c, block.type)
@@ -1977,8 +2062,8 @@ export class SimWorld {
       case 'weighted_pressure_plate_light':
       case 'weighted_pressure_plate_heavy': {
         // updateNeighbours: 自身の隣接 6 + 直下 (取り付け面) の隣接 6
-        // [確定: 26.2 BasePressurePlateBlock.updateNeighbours =
-        //  updateNeighborsAt(pos) + updateNeighborsAt(pos.below())]
+        // [確定: 26.2 BasePressurePlateBlock.updateNeighbours —
+        //  自身の位置と真下の位置の 2 か所から 6 方向へ配る]
         this.submitMultiNC(pos)
         this.submitMultiNC(neighbor(pos, 'down'))
         break
@@ -2285,7 +2370,7 @@ export class SimWorld {
       }
       case 'bubble_column': {
         // [確定: 26.2 BubbleColumnBlock.updateShape —
-        //  下から来た更新 / 上が塞がった等で `scheduleTick(pos, this, 5)`]
+        //  下から来た更新 / 上が塞がった等で 5gt の tile tick を予約する]
         // 5gt 後に柱を評価し直す。**即時に書き換えないのが要点**で、
         // 実機でも柱を断ち切ってから 5gt 後に崩れる
         if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
@@ -2293,11 +2378,9 @@ export class SimWorld {
       }
       case 'note_block': {
         // vanilla NoteBlock.neighborChanged を忠実に再現 (C5 #38 [確定: 26.2]):
-        //   signal = hasNeighborSignal(pos)
-        //   if (signal != POWERED) {
-        //     if (signal) playNote(...)      ← 立ち上がり (false→true) でのみ発音
-        //     setBlock(POWERED=signal, flag3) ← POWERED 更新 + PP/NC
-        //   }
+        //   自身 6 面の受電 (signal) を取り、保持中の POWERED と食い違うときだけ
+        //   ・signal が真 (立ち上がり) なら playNote を呼ぶ
+        //   ・POWERED を signal に更新して flag3 で書く (POWERED 更新 + PP/NC)
         // **flag 3 なので近隣更新 (NC) も飛ぶ** (#231)。以前は「音符ブロックは信号を
         // 出力しないから NC 不要」としていたが、UPDATE_NEIGHBORS は出力の有無と関係なく
         // 隣接 6 マスへ neighborChanged を配る。QC で音符ブロック越しに受電している
@@ -2361,8 +2444,8 @@ export class SimWorld {
       }
       case 'piston_head': {
         // **ヘッドが受けた NC は基部のピストンへ転送する** (#231)
-        // [確定: 26.2 PistonHeadBlock.neighborChanged —
-        //  `if (state.canSurvive(...)) level.neighborChanged(pos.relative(FACING.getOpposite()), ...)`]。
+        // [確定: 26.2 PistonHeadBlock.neighborChanged — ヘッドが存続可能 (canSurvive) なら、
+        //  facing の反対側 1 マス = 基部の位置へ近隣更新を転送する]。
         // QC で受電しているピストンは、電源側の変化が「1 個上のマスの隣」で起きるため
         // 基部に直接 NC が届かない。ヘッド経由のこの転送が唯一の通知経路になる
         // (5×5 ドアで、電源が切れているのにピストンが縮まないままだった原因)
@@ -2381,8 +2464,8 @@ export class SimWorld {
         const should = this.shouldExtend(pos, block)
         if (should && !block.extended) {
           // **押せるかをこの時点で判定する** (#231)
-          // [確定: 26.2 PistonBaseBlock.checkIfExtend —
-          //  `if (new PistonStructureResolver(...).resolve()) level.blockEvent(...)`]。
+          // [確定: 26.2 PistonBaseBlock.checkIfExtend — 押し構造の解決 (PistonStructureResolver)
+          //  が成功したときに限って block event を発行する]。
           // 予約してから実行時に判定すると、その間に押し先の moving_piston が確定して
           // **本来押せないはずのタイミングで押せてしまう**
           // (5×5 ドアの t=220 で、実機が伸ばさないピストンを sim が伸ばしていた原因)
@@ -2397,7 +2480,7 @@ export class SimWorld {
       }
       case 'hopper': {
         // vanilla HopperBlock.neighborChanged → checkPoweredState:
-        // enabled = !hasNeighborSignal(pos)。受電で enabled=false = ロック。
+        // ENABLED は「自身 6 面が受電していない」ことと同値。受電で enabled=false = ロック。
         // [確定: 26.2 HopperBlock]。setBlock flag2 相当だが blockstate 変化なので
         // オブザーバー検知用に PP も発行する。
         const enabled = !isBlockPowered(this, pos)
@@ -2409,9 +2492,9 @@ export class SimWorld {
       }
       case 'crafter': {
         // vanilla CrafterBlock.neighborChanged [確定: 26.2 CrafterBlock.java:73-88]:
-        //   shouldTrigger = hasNeighborSignal(pos) ← **疑似接続を持たない**
-        //   立ち上がり → scheduleTick 4gt + TRIGGERED=true / 立ち下がり → false
-        // ディスペンサーが pos.above() も見る [確定: DispenserBlock.java:131] のと対照的
+        //   起動条件は自身 6 面の受電 (hasNeighborSignal) だけ ← **疑似接続を持たない**
+        //   立ち上がり → 4gt の tile tick 予約 + TRIGGERED=true / 立ち下がり → false
+        // ディスペンサーが真上 (1 マス上) も見る [確定: DispenserBlock.java:131] のと対照的
         // [実機 fixture crafter-trigger: 同じ配置でディスペンサーだけが起動する]
         const signal = isBlockPowered(this, pos)
         if (signal && !block.triggered) {
@@ -2445,7 +2528,7 @@ export class SimWorld {
       case 'door_wood':
       case 'door_iron': {
         // vanilla DoorBlock.neighborChanged [確定: 26.2 DoorBlock.java:225-238]:
-        //   signal = hasNeighborSignal(自分) || hasNeighborSignal(相方の半分)
+        //   受電判定は「自分の位置の受電」と「相方の半分の位置の受電」の OR
         //   更新元が同じドアブロックなら無視する (2 つの半分が更新を往復しないガード)
         // [実機 fixture door-redstone: 下半分だけ / 上半分だけ どちらの給電でも両方開く]
         if (origin === block.type) break
@@ -2496,7 +2579,7 @@ export class SimWorld {
         if (signal !== block.powered) {
           const lit = block.powered ? block.lit : !block.lit   // 立ち上がりでのみ反転
           this.setBlockAt(pos, { ...block, lit, powered: signal })
-          // setBlock(flag 3): 周囲 6 方向へ近隣更新 + updateNeighbourShapes。
+          // flag 3 の setBlock: 周囲 6 方向へ近隣更新 + updateNeighbourShapes。
           // powered だけ変わった立ち下がりでもオブザーバーは発火する (実機で確認済み)
           this.emitShapeUpdate(pos)
           this.submitMultiNC(pos)
@@ -2522,9 +2605,9 @@ export class SimWorld {
       case 'powered_rail':
       case 'activator_rail': {
         // vanilla PoweredRailBlock.updateState [確定: 26.2]:
-        //   shouldPower = hasNeighborSignal(pos) || 前方向の連鎖 || 後方向の連鎖
-        //   変化したら setBlock(flag3) + updateNeighborsAt(pos.below())
-        //                              + 坂なら updateNeighborsAt(pos.above())
+        //   あるべき powered = 自身 6 面の受電 / 前方向の連鎖 / 後方向の連鎖 のいずれか
+        //   変化したら flag3 で書き、さらに **真下**から 6 方向へ近隣更新を配る
+        //   (坂のときは**真上**からも配る)
         // レール自身は信号を出さない (power.ts に case を持たない) ため、
         // 「真下のブロックへ更新を配る」ことがレッドストーン的な唯一の出力になる。
         const should = shouldRailBePowered(this, pos, block.shape, block.type)
@@ -2534,7 +2617,7 @@ export class SimWorld {
           // flag3 の UPDATE_NEIGHBORS = 自身の周囲 6 方向。隣のパワードレールが
           // NC を受けて再評価することで、連鎖 (最大 8) が伝わっていく
           this.submitMultiNC(pos)
-          // 明示の updateNeighborsAt(pos.below(), this) — 真下ブロックの「周囲」へ配る。
+          // 明示の「真下から 6 方向」の近隣更新 — 真下ブロックの「周囲」へ配る。
           // vanilla が運ぶのは **レール自身** なので origin を明示する (真下のブロック
           // ではない。既定に任せると信号源判定を取り違える。#142)
           this.submitMultiNC([pos[0], pos[1] - 1, pos[2]], null, block.type)
@@ -2551,10 +2634,10 @@ export class SimWorld {
 
   /**
    * 音符ブロックの発音を予約する (26.2 NoteBlock.playNote 相当。C5 #38)。
-   * vanilla の被覆条件は `INSTRUMENT.worksAboveNoteBlock() || 直上が空気`。
-   * sim は instrument を省略 (常に BASE_BLOCK = worksAboveNoteBlock()=false) するため
+   * vanilla の被覆条件は「instrument が worksAboveNoteBlock を満たす」か「直上が空気」。
+   * sim は instrument を省略 (常に BASE_BLOCK = worksAboveNoteBlock は偽) するため
    * 「直上が空気」のみで判定する (直上が塞がれていれば発音しない。10 §C5 注記)。
-   * 条件を満たすとき level.blockEvent(pos, 0, 0) 相当の 'play' BE をキューする。
+   * 条件を満たすとき BE (b0=0 / b1=0) 相当の 'play' をキューする。
    */
   private playNote(pos: Pos3D, _block: NoteBlockState): void {
     const above = this.getBlockAt([pos[0], pos[1] + 1, pos[2]])
@@ -2713,7 +2796,7 @@ function observableChanged(a: BlockState, b: BlockState): boolean {
     case 'pressure_plate_stone': return 'powered' in a && (a as { powered: boolean }).powered !== b.powered
     case 'weighted_pressure_plate_light':
     case 'weighted_pressure_plate_heavy':
-      // POWER プロパティ (= powered ? pressedPower : 0) の変化が観測対象
+      // POWER プロパティ (powered のとき pressedPower、でなければ 0) の変化が観測対象
       return (a.type === 'weighted_pressure_plate_light' || a.type === 'weighted_pressure_plate_heavy') &&
         (a.powered ? a.pressedPower : 0) !== (b.powered ? b.pressedPower : 0)
     case 'lamp':        return a.type === 'lamp' && a.lit !== b.lit
