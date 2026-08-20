@@ -222,6 +222,7 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
         facing: facing === 'east' || facing === 'west' || facing === 'south' ? facing : 'north',
         open: false,
         powered: false,
+        hinge: 'left',
       }
     case 'trapdoor_wood':
     case 'trapdoor_iron':
