@@ -84,6 +84,9 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:water_cauldron[level=${block.level}]`
     case 'composter':
       return `minecraft:composter[level=${block.level}]`
+    case 'lectern':
+      // ページは BE 側なので blockstate には出ない (#240)
+      return `minecraft:lectern[facing=${block.facing},has_book=${block.hasBook},powered=false]`
     case 'note_block':
       // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
       return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`
@@ -261,6 +264,7 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:bubble_column',
   'minecraft:water_cauldron',
   'minecraft:composter',
+  'minecraft:lectern',
 ]
 
 /**

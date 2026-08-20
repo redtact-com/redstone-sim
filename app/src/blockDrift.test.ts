@@ -54,7 +54,7 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
     // deepslate が描画をスキップし、エラーも出さずに**消えて見える**
     // (エレベーターの塀 280 個が透明なまま GIF に写って気づいた)
     const imported = ['lodestone', 'stone_brick_wall', 'soul_sand', 'water',
-      'bubble_column', 'water_cauldron', 'composter']
+      'bubble_column', 'water_cauldron', 'composter', 'lectern']
     const missing: string[] = []
     for (const id of imported) {
       const block = classifyPlainBlock(id)

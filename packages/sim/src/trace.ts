@@ -93,6 +93,7 @@ export function abbrOf(b: BlockState): string {
     case 'redstone_block': return 'Rb'
     case 'target':         return 'Tg'
     case 'container':      return 'Cn'
+    case 'lectern':        return 'Lc'
     case 'hopper':         return 'Ho'
     case 'dropper':        return 'Dr'
     case 'dispenser':      return 'Di'

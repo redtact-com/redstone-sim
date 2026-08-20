@@ -500,6 +500,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       // level は固定 (汲む/入れる操作は sim のスコープ外。判断 D)
       props.level = String(sim.level)
       break
+    case 'lectern':
+      // ページは BE 側なので blockstate には出ない (has_book と facing だけ)
+      props.facing = sim.facing
+      props.has_book = String(sim.hasBook)
+      props.powered = 'false'
+      break
     case 'bubble_column':
       // drag は下のブロックで決まる (#234)
       props.drag = String(sim.drag)

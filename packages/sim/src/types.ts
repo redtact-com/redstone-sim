@@ -698,6 +698,7 @@ export type BlockState =
   | DecorState
   | CauldronState
   | ComposterState
+  | LecternState
   | StoneWallState
   | SoulSandState
   | WaterState
@@ -770,6 +771,29 @@ export interface ComposterState {
   type: 'composter'
   /** 堆肥の量 0-8 */
   level: number
+}
+
+/**
+ * 書見台 (#240)。**コンパレーターがページ番号を読む**ので階数指定に使われる。
+ *
+ * [確定: 26.2 LecternBlock.getAnalogOutputSignal → LecternBlockEntity.getRedstoneSignal]
+ * ```java
+ * float pageProgress = this.pageCount > 1 ? this.getPage() / (this.pageCount - 1.0F) : 1.0F;
+ * return Mth.floor(pageProgress * 14.0F) + (this.hasBook() ? 1 : 0);
+ * ```
+ * 実機で確認 (5 ページ本): Page=0→1 / 1→4 / 2→8 / 3→11 / 4→15。
+ * **本を持たない has_book=true は 14** (pageCount=0 なので pageProgress=1.0、hasBook()=false)。
+ * ページ数 1 以下の本は 15。has_book=false は 0。
+ */
+export interface LecternState {
+  type: 'lectern'
+  facing: HDir
+  /** blockstate の has_book。false なら出力 0 */
+  hasBook: boolean
+  /** 開いているページ (0 始まり) */
+  page: number
+  /** 本のページ数。**0 = 本の中身が無い** (blockstate だけ has_book=true) */
+  pages: number
 }
 
 /** 塀の 1 辺の高さ [確定: 26.2 WallSide] */
@@ -938,6 +962,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   target: true,          // 投射物命中の折衷
   detector_rail: true,   // トロッコ検出の折衷 (#146)
   container: true,       // 樽/チェストの中身を手で出し入れする折衷 (#236)
+  lectern: true,         // ページをめくる (#240)
 
   // 受電・観測でしか動かない素子
   wire: false,
@@ -976,6 +1001,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   decor: false,
   cauldron: false,
   composter: false,
+
   wall: false,
   soul_sand: false,
   water: false,

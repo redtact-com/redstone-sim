@@ -108,7 +108,29 @@ function analogOutputOf(block: BlockState | null | undefined): number | null {
   // 水入り大釜 / コンポスターは LEVEL をそのまま返す (#234)
   // [確定: 26.2 LayeredCauldronBlock / ComposterBlock の getAnalogOutputSignal]
   if (block.type === 'cauldron' || block.type === 'composter') return block.level
+  // 書見台はページ番号を読む (#240)
+  // [確定: 26.2 LecternBlock.getAnalogOutputSignal / LecternBlockEntity.getRedstoneSignal]
+  if (block.type === 'lectern') return lecternSignal(block)
   return null
+}
+
+/**
+ * 書見台のコンパレーター出力 (#240)。
+ *
+ * [確定: 26.2 LecternBlockEntity.getRedstoneSignal]
+ * ```java
+ * float pageProgress = this.pageCount > 1 ? this.getPage() / (this.pageCount - 1.0F) : 1.0F;
+ * return Mth.floor(pageProgress * 14.0F) + (this.hasBook() ? 1 : 0);
+ * ```
+ * 呼び出し元 (getAnalogOutputSignal) が **blockstate の has_book で先に 0 を返す**ので、
+ * has_book=false は 0。`pages === 0` は「blockstate だけ has_book=true で中身が無い」状態で、
+ * pageCount>1 が偽 → pageProgress=1.0、hasBook() も偽なので **14** になる
+ * (実機で確認: 本無し 14 / 5 ページ本は Page 0→1, 1→4, 2→8, 3→11, 4→15)。
+ */
+function lecternSignal(b: { hasBook: boolean; page: number; pages: number }): number {
+  if (!b.hasBook) return 0
+  const progress = b.pages > 1 ? b.page / (b.pages - 1) : 1
+  return Math.floor(Math.min(1, Math.max(0, progress)) * 14) + (b.pages > 0 ? 1 : 0)
 }
 
 /** 泡柱の状態が同じか (水 ⇔ 泡柱 / drag 違いを区別する) */
@@ -1062,6 +1084,17 @@ export class SimWorld {
       this.propagateChange(pos)
       this.traceCloseUpdate('Wp', 'n', 0, 'PI')
       this.schedule(pos, 10, 0)  // [確定: 26.2 WeightedPressurePlateBlock.getPressedTime]
+    } else if (block.type === 'lectern') {
+      // ページをめくる (#240)。実機では最終ページの次はめくれないが、
+      // **UI から任意の階を選べるようにする**ため 0 に戻す折衷にする
+      // (樽の +1 と同型。信号の伝わり方 = CU だけ実機と揃える)
+      if (!block.hasBook || block.pages <= 1) return
+      const page = (block.page + 1) % block.pages
+      this.setBlockAt(pos, { ...block, page })
+      this.traceProcess('PI', 'Lc', 'n', 0)
+      this.traceOpenUpdate(pos)
+      this.emitComparatorUpdate(pos)
+      this.traceCloseUpdate('Lc', 'n', 0, 'PI')
     } else if (block.type === 'container') {
       // 樽/チェストの中身を手で 1 段階増やす (#236)。15 の次は 0 に戻る。
       // vanilla に「1 回叩くと 1 段上がる」操作は無く、これは**プレイヤーが
@@ -1100,6 +1133,20 @@ export class SimWorld {
     this.traceOpenUpdate(pos)
     this.emitComparatorUpdate(pos)
     this.traceCloseUpdate(abbrOf(block), 'n', 0, 'PI')
+  }
+
+  /** 書見台のページを直接指定する (#240)。実機の `/data modify block ... Page` に対応 */
+  setLecternPage(x: number, y: number, z: number, page: number): void {
+    const pos: Pos3D = [x, y, z]
+    const block = this.getBlockAt(pos)
+    if (!block || block.type !== 'lectern') return
+    const p = Math.max(0, Math.min(Math.max(0, block.pages - 1), Math.floor(page)))
+    if (p === block.page) return
+    this.setBlockAt(pos, { ...block, page: p })
+    this.traceProcess('PI', 'Lc', 'n', 0)
+    this.traceOpenUpdate(pos)
+    this.emitComparatorUpdate(pos)
+    this.traceCloseUpdate('Lc', 'n', 0, 'PI')
   }
 
   setContainerSignal(x: number, y: number, z: number, signal: number): void {
