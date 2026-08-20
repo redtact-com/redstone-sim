@@ -1,7 +1,7 @@
 import type { Pos3D, BlockState, WireState } from '../types.js'
 import type { SimWorld } from '../world.js'
 import { H_DIRS, H_DIR_VEC, ALL_DIRS } from '../types.js'
-import { getSignal, getStrongPower, relative } from '../power.js'
+import { getSignal, getStrongPower, relative, isConductor } from '../power.js'
 
 /**
  * ワイヤーの上下斜め接続をカットする（不透過扱いの）ブロックか。
@@ -83,11 +83,6 @@ export function computeWirePower(pos: Pos3D, world: SimWorld): number {
     const src = world.getBlockAt(nPos)
     if (!src) continue
     if (src.type === 'wire') continue  // ワイヤー間は下の減衰伝播で扱う
-    if (src.type === 'solid') {
-      // 強充電された固体のみダストに給電（弱充電はダストに見えない）
-      maxPower = Math.max(maxPower, getStrongPower(world, nPos))
-      continue
-    }
     if (src.type === 'target') {
       // target は導体かつ信号源 [確定: 1.21.1 Blocks.TARGET は
       // isRedstoneConductor 非 override + TargetBlock.isSignalSource=true]。
@@ -95,6 +90,20 @@ export function computeWirePower(pos: Pos3D, world: SimWorld): number {
       // ダスト由来の弱充電は他のダストに見えない (shouldSignal=false 相当)
       // 点は solid と同じ [確定: RedStoneWireBlock.calculateTargetStrength]
       maxPower = Math.max(maxPower, getStrongPower(world, nPos), getSignal(world, pos, dir))
+      continue
+    }
+    if (isConductor(src)) {
+      // **強充電された導体はダストに給電する**。弱充電はダストに見えない
+      // [確定: docs/research/02 §5.2]。
+      //
+      // ここは以前 `solid` だけを見ていたが、**導体は材質ごとに型が分かれている**ので
+      // スライム / 音符ブロック / ロードストーン / ソウルサンドが素通りしていた (#259)。
+      // [実機実測 2026-08-21: リピーター → X → ダスト の X を差し替えて計測 —
+      //  stone / slime_block / lodestone / soul_sand / note_block はいずれもダスト 15。
+      //  honey_block だけ 0 (非導体)]
+      // ガラスエレベーターは**オブザーバーの出力をスライム越しにダストへ渡す**ので、
+      // ここが抜けていると搬器脇の制御線が丸ごと 0 のままになる
+      maxPower = Math.max(maxPower, getStrongPower(world, nPos))
       continue
     }
     maxPower = Math.max(maxPower, getSignal(world, pos, dir))

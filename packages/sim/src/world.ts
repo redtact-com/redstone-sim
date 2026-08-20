@@ -976,6 +976,11 @@ export class SimWorld {
     this.neighborChanged(pos)   // 置いた位置自身の再評価 (上記の実測に合わせる)
     this.emitShapeUpdate(pos)   // flag に UPDATE_KNOWN_SHAPE(16) が無い → updateShape は飛ぶ
     this.submitMultiNC(pos)     // updateNeighborsAt 相当 — 周囲 6 方向のみ
+    // **ワイヤーの電力も配り直す** (#259)。sim ではダストは neighborChanged に
+    // 反応せず propagateChange 経由でしか更新されないので、これが無いと
+    // `/setblock redstone_block` を置いてもダストが 0 のままになる
+    // (vanilla は RedStoneWireBlock.neighborChanged → updateSurroundingRedstone で更新する)
+    this.propagateChange(pos)
   }
 
   /**
