@@ -80,3 +80,60 @@ describe('塀の形状', () => {
     expect(w.getBlock(1, 5, 1)).toMatchObject({ north: 'tall' })
   })
 })
+
+describe('塀が横に繋がる相手 (#244)', () => {
+  // **実機で全数測った表**。ドアを落としていたため、ドアが隣にある塀の柱が
+  // sim だけ up=true に反転し、140 段まるごと食い違っていた
+  const wallAt = (w: SimWorld, pos: Pos3D): { south: string; up: boolean } => {
+    const b = w.getBlockAt(pos)
+    if (b?.type !== 'wall') throw new Error('塀ではない')
+    return { south: b.south, up: b.up }
+  }
+
+  /** 塀 (0,1,0) の南 (0,1,1) に置いたブロックで side がどうなるか */
+  const southSide = (neighbor: BlockState | null): string => {
+    const w = new SimWorld()
+    for (const x of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
+      w.setBlockAt([x, 0, z], { type: 'solid', powered: false })
+    }
+    w.setBlockAt([0, 1, 0], {
+      type: 'wall', north: 'none', east: 'none', south: 'none', west: 'none',
+      up: true, waterlogged: false,
+    } as BlockState)
+    if (neighbor) w.setBlockAt([0, 1, 1], neighbor)
+    w.initialize()
+    // 形状は近隣更新で決まるので、隣に何か置いた形で組み直す
+    w.setBlockCommand([0, 1, 1], neighbor ?? { type: 'air' })
+    w.settle(8)
+    return wallAt(w, [0, 1, 0]).south
+  }
+
+  it('**ドアは開閉・向きによらず繋がる** (実機で 8 通り確認)', () => {
+    for (const open of [false, true]) {
+      for (const facing of ['north', 'south', 'east', 'west'] as const) {
+        const door: BlockState = {
+          type: 'door_iron', facing, half: 'lower', hinge: 'left', open, powered: false,
+        } as BlockState
+        expect(southSide(door), `facing=${facing} open=${open}`).not.toBe('none')
+      }
+    }
+  })
+
+  it('フェンスゲートも繋がる', () => {
+    expect(southSide({ type: 'fence_gate', facing: 'east', open: false, powered: false } as BlockState))
+      .not.toBe('none')
+  })
+
+  it('ガラス・音符ブロック・ピストンは繋がる (フルブロック)', () => {
+    expect(southSide({ type: 'glass' } as BlockState)).not.toBe('none')
+    expect(southSide({ type: 'note_block', note: 0, powered: false, instrument: 'harp' } as BlockState)).not.toBe('none')
+    expect(southSide({ type: 'piston', facing: 'north', extended: false } as BlockState)).not.toBe('none')
+  })
+
+  it('**トラップドアと下ハーフは繋がらない** (実機で確認)', () => {
+    expect(southSide({ type: 'trapdoor_wood', facing: 'north', half: 'bottom', open: false, powered: false } as BlockState))
+      .toBe('none')
+    expect(southSide({ type: 'slab', half: 'bottom' } as BlockState)).toBe('none')
+    expect(southSide(null)).toBe('none')
+  })
+})
