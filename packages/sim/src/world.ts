@@ -728,7 +728,14 @@ export class SimWorld {
    * tick=0 の起点を呼び出し側に委ねることで、発振回路も正しく駆動できる
    * （fixture-runner は initialize() 後に flush(64) を明示的に呼んで settle する）。
    */
-  initialize(opts: { trustAuthored?: boolean } = {}): void {
+  initialize(opts: {
+    trustAuthored?: boolean
+    /**
+     * 実機のコンパレーターが保持していた出力強度 (#249)。key は posKey。
+     * 与えられた座標は Step 4b で**計算し直さずこの値をそのまま使う**
+     */
+    comparatorOutputs?: ReadonlyMap<string, number>
+  } = {}): void {
     // trustAuthored: **動いている機械のスナップショットをそのまま出発点にする** (#240)。
     // 既定 (false) は「静止した authored 状態」を前提に動的値を捨てて組み直す。
     // クロックが回っている実機を撮ると、コンパレーターの powered などは
@@ -882,11 +889,20 @@ export class SimWorld {
     // powered (0 か否か) しか出ない。実機のスナップショットを読んでも強度が分からず、
     // 0 のままだと下流のダストが丸ごと 0 になる
     // (実機の最小再現 elevator-observer-min: 実機 15 / sim 0 で発覚)。
-    // powered=true なら**今の入力から計算し直す**のが実機の BE 値に一致する
+    //
+    // **実機から読めた値があればそれを使う** (#249)。計算し直しでよいのは
+    // 止まっている回路だけで、信号が周回しながら 1 ずつ減っていく機械では
+    // コンパレーターが「まだ書き換わっていない古い値」を持っている。
+    // 計算し直すと最初から新しい値になり、予約が発火しても何も変わらず**機械が止まる**
+    // (実機 fixture elev-dust-decay-min: 実機は 15→14→13、sim は 15 のまま不動)。
+    // 読めなかった座標は従来どおり今の入力から計算する
     if (trust) {
       for (const [key, block] of this.blocks) {
         if (block.type !== 'comparator') continue
-        const out = block.powered ? this.computeComparatorOutput(keyToPos(key), block) : 0
+        const captured = opts.comparatorOutputs?.get(key)
+        const out = captured !== undefined
+          ? captured
+          : block.powered ? this.computeComparatorOutput(keyToPos(key), block) : 0
         if (block.outputPower !== out) this.blocks.set(key, { ...block, outputPower: out })
       }
     }

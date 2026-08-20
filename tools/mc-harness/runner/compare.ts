@@ -80,6 +80,12 @@ export interface Capture {
   players?: CapturePlayer[]
   /** 実機の予約 tick (#240)。blockstate に出ない「あと N gt で発火」を持ち込む */
   scheduled?: { pos: Pos3D; delay: number; priority: number; block?: string }[]
+  /**
+   * コンパレーターが保持している出力強度 (#249)。
+   * blockstate は powered (0 か否か) しか持たないので、これが無いと
+   * sim 側は「今の入力から計算し直す」しかなく、**周回しながら減衰する機械が止まる**
+   */
+  comparators?: { pos: Pos3D; output: number }[]
   /** 元ファイルと実機の安定状態のズレ (実機が正。参考情報) */
   settleDrift?: { pos: string; source: string; settled: string }[]
   generated?: { at: string; mc: string; carpet: string }
@@ -137,7 +143,13 @@ export function captureToFixture(cap: Capture, trustAuthored = false): Fixture {
     expect: cap.frames ?? [],
     // **動いている機械**は authored をそのまま出発点にし、実機の予約 tick を積む。
     // そうしないと tick 0 から食い違って以降の差分が雪崩れる (#240)
-    ...(trustAuthored ? { trustAuthored: true, scheduled: cap.scheduled ?? [] } : {}),
+    ...(trustAuthored
+      ? {
+        trustAuthored: true,
+        scheduled: cap.scheduled ?? [],
+        comparators: cap.comparators ?? [],
+      }
+      : {}),
     ...(cap.generated ? { generated: cap.generated } : {}),
   }
 }

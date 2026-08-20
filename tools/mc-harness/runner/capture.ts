@@ -36,7 +36,7 @@ import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture } from './compare.js'
-import { readScheduledTicks } from './scheduled-ticks.js'
+import { readScheduledTicks, readComparatorOutputs } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
 
@@ -565,20 +565,6 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     await waitForDrain(1)
   }
 
-  // 3a. **実機の予約 tick を読む** (#240)。
-  // 「あと 5gt で ON」のような予約は blockstate に出ないので、これが無いと
-  // 動いている機械の出発点を sim 側で再現できない
-  rcon('save-all', 'flush')
-  await sleep(1500)
-  const scheduled = readScheduledTicks(
-    join(repoRoot, 'tools', 'mc-harness', 'data', 'world'), region.from, region.to)
-  if (scheduled.length > 0) {
-    log(`[capture] 実機の予約 tick: ${scheduled.length} 件`)
-    for (const st of scheduled.slice(0, 5)) {
-      log(`    ${st.pos.join(',')} ${st.block.replace('minecraft:', '')} 残り ${st.delay}gt 優先度 ${st.priority}`)
-    }
-  }
-
   // 4. プレイヤーを置く
   const players = def.players ?? []
   for (const p of players) {
@@ -604,6 +590,30 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   const authored = (JSON.parse(readFileSync(join(sharedDir, 'authored.json'), 'utf-8')) as {
     blocks: Record<string, string>
   }).blocks
+
+  // **ブロック状態に出ない値を保存データから読む** (#240 / #249)。
+  //
+  // 記録開始と**同じ瞬間**に読むのが肝。以前は 3 の手前で読んでいたが、
+  // 初期状態と時刻が揃っている保証が無かった (#248 と同じ穴)。
+  // freeze 中なので save-all を挟んでも tick は進まない
+  rcon('save-all', 'flush')
+  await sleep(1500)
+  const worldDir = join(repoRoot, 'tools', 'mc-harness', 'data', 'world')
+  // 「あと 5gt で ON」のような予約 (#240)
+  const scheduled = readScheduledTicks(worldDir, region.from, region.to)
+  if (scheduled.length > 0) {
+    log(`[capture] 実機の予約 tick: ${scheduled.length} 件`)
+    for (const st of scheduled.slice(0, 5)) {
+      log(`    ${st.pos.join(',')} ${st.block.replace('minecraft:', '')} 残り ${st.delay}gt 優先度 ${st.priority}`)
+    }
+  }
+  // コンパレーターが保持している出力強度 (#249)。0 のものは sim 側の既定と同じなので落とす
+  const comparators = readComparatorOutputs(worldDir, region.from, region.to)
+    .filter(c => c.output !== 0)
+  if (comparators.length > 0) {
+    log(`[capture] コンパレーターの保持出力: ${comparators.length} 個`
+      + ` (${comparators.slice(0, 5).map(c => `${c.pos.join(',')}=${c.output}`).join(' ')})`)
+  }
 
   // 元ファイルとのズレを記録する (落とさない。実機が正)
   const source: Record<string, string> = {}
@@ -686,6 +696,7 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
       onGround: p.on_ground,
     })),
     ...(scheduled.length > 0 ? { scheduled } : {}),
+    ...(comparators.length > 0 ? { comparators } : {}),
     ...(settleDrift.length > 0 ? { settleDrift } : {}),
     generated: { at: new Date().toISOString(), mc: MC_VERSION, carpet: readCarpetVersion() },
   }

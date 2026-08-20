@@ -97,6 +97,16 @@ export interface Fixture {
   /** 実機の予約 tick。trustAuthored と併用する */
   scheduled?: FixtureScheduledTick[]
   /**
+   * 実機のコンパレーターが保持している出力強度。trustAuthored と併用する。
+   *
+   * **blockstate は powered (0 か否か) しか持たない**ので、無いと sim は
+   * 「今の入力から計算し直す」で埋めることになる。それは**止まっている回路でしか
+   * 正しくない** — 信号が周回しながら 1 ずつ減る機械では、コンパレーターは
+   * 「まだ書き換わっていない古い値」を持っていて予約の発火で新しい値へ落ちる。
+   * 計算し直すと最初から新しい値になり、発火しても何も変わらず**機械が止まる**
+   */
+  comparators?: { pos: Pos3D; output: number }[]
+  /**
    * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
    * items で初期の中身を与えられる (アイテムは blockstate に現れないため)。
    *
@@ -177,7 +187,10 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
       world.setBlockAt(b.pos, sim)
     }
   }
-  world.initialize({ trustAuthored: fx.trustAuthored === true })
+  world.initialize({
+    trustAuthored: fx.trustAuthored === true,
+    comparatorOutputs: new Map((fx.comparators ?? []).map(c => [posKey(c.pos), c.output])),
+  })
   // 実機から読んだ予約を積む (initialize が予約を空にした後でないといけない)
   for (const st of fx.scheduled ?? []) {
     world.seedScheduledTick(st.pos, st.delay, st.priority)
