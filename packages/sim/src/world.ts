@@ -621,6 +621,15 @@ export class SimWorld {
     // 再評価されず伸びないまま」になる (#213 のドアで tick 135 の押し上げが
     // 起きなかった原因)。実機 fixture door-2wide-open-to-close が回帰を守る
     this.submitMultiNC(pos)
+    // **導体 1 個越しに読んでいるコンパレーターにも知らせる** (#259)。
+    // submitMultiNC は隣接 6 マスにしか届かないので、
+    // 「コンパレーター → 導体 → 着地したブロック」の並びだと通知が届かない。
+    // 同じ tick に複数のブロックが着地するとき、確定の順番によっては
+    // コンパレーターが「まだ moving_piston のままの中身」を読んでしまい、
+    // **二度と再評価されない**
+    // (ガラスエレベーターの搬器が階に着いたとき、コンパレーター → スライム →
+    //  コンポスター の並びで階数表示が動かなくなっていた)
+    this.emitComparatorUpdate(pos)
     this.propagateChange(pos)
     this.traceCloseUpdate(abbrOf(into), 'c', 2, 'TE')
   }
