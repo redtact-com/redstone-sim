@@ -222,6 +222,11 @@ function isFullCube(b: BlockState | null | undefined): boolean {
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
+  /**
+   * この tick 分として取り出した予約 (`posKey|blockType`)。
+   * vanilla の `LevelTicks.toRunThisTick` に相当し、`hasScheduledTick` が見る (#264)
+   */
+  private runningThisTick = new Set<string>()
   private currentTick = 0
   private seqCounter = 0
 
@@ -405,10 +410,49 @@ export class SimWorld {
     this.traceReserve('ST', abbrOf(block), pendingAction(block), delay, priority)
   }
 
-  /** 同 pos + ブロック種の予約が既にあるか (vanilla hasScheduledTick 相当) */
+  /**
+   * 同 pos + ブロック種の予約が既にあるか。
+   *
+   * **この tick に走る分も「ある」と数える** (#264)。
+   * [確定: 26.2 LevelTicks.willTickThisTick — 収集済み (toRunThisTick) も見る]。
+   * vanilla のトーチやダイオードは近隣更新を受けたとき
+   * `!willTickThisTick(...)` を条件に予約するので、**すでに今 tick 分として
+   * 取り出された予約は二重に積まれない**。
+   *
+   * ここを見落とすと、同じ tick に
+   *   「近隣更新 → 2gt 後を予約」→「取り出し済みの予約が発火して状態が変わる」
+   * の順で走ったときに**余計な予約が 1 本残り**、2 tick 後に空撃ちして
+   * 実機より早く遷移してしまう
+   * (ガラスエレベーターでトーチが実機より 2gt 早く点いていた原因)。
+   */
   hasScheduledTick(pos: Pos3D, blockType: BlockState['type']): boolean {
     const key = posKey(pos)
     return this.scheduledTicks.some(t => posKey(t.pos) === key && t.blockType === blockType)
+  }
+
+  /**
+   * **この tick に走る分も含めて**予約があるか
+   * [確定: 26.2 LevelTicks.willTickThisTick — 収集済み (toRunThisTick) も見る]。
+   *
+   * `hasScheduledTick` との違いは「取り出し済みの予約を数えるか」だけ。
+   * vanilla は素子ごとに使い分けていて、**トーチの近隣更新はこちら**を見る
+   * [確定: 26.2 RedstoneTorchBlock.neighborChanged —
+   *  `LIT != hasNeighborSignal && !willTickThisTick` のときだけ 2gt を予約する]。
+   *
+   * 見落とすと、同じ tick に
+   *   「近隣更新 → 2gt 後を予約」→「取り出し済みの予約が発火して状態が変わる」
+   * の順で走ったときに**余計な予約が 1 本残り**、2gt 後に空撃ちして実機より早く遷移する
+   * (ガラスエレベーターでトーチが実機より 2gt 早く点いていた原因 — #264)。
+   *
+   * **数えるのは「まだ走っていない」分だけ**。自分の発火のあとに戻ってきた近隣更新まで
+   * 抑止するとトーチクロックが止まる (実機 fixture torch-clock)。
+   *
+   * **`hasScheduledTick` の側を広げてはいけない**。オブザーバー・泡柱・ピストンは
+   * vanilla でも取り出し済みを数えないので、まとめて変えると 58 本のテストが落ちる。
+   */
+  willTickThisTick(pos: Pos3D, blockType: BlockState['type']): boolean {
+    if (this.runningThisTick.has(`${posKey(pos)}|${blockType}`)) return true
+    return this.hasScheduledTick(pos, blockType)
   }
 
   /** ブロックイベントを予約する (同一 (pos, blockType, param) は重複登録しない) */
@@ -451,8 +495,16 @@ export class SimWorld {
       .filter(t => t.dueTick <= this.currentTick)
       .sort((a, b) => a.priority - b.priority || a.seq - b.seq)
     this.scheduledTicks = this.scheduledTicks.filter(t => t.dueTick > this.currentTick)
+    // **取り出した分も「予約あり」として数える** (#264)。tick の最後まで保持する
+    this.runningThisTick.clear()
+    for (const t of toExecute) this.runningThisTick.add(`${posKey(t.pos)}|${t.blockType}`)
 
     for (const tick of toExecute) {
+      // **走らせたら「これから走る」集合から外す** (#264)。
+      // 走る前のものだけを willTickThisTick が数えるようにしないと、
+      // 自分の発火のあとに戻ってきた近隣更新まで抑止してしまい
+      // トーチクロックが止まる (実機 fixture torch-clock が落ちる)
+      this.runningThisTick.delete(`${posKey(tick.pos)}|${tick.blockType}`)
       const affectedKeys = this.executeScheduledTick(tick)
       for (const k of affectedKeys) changed.add(k)
     }
@@ -782,6 +834,7 @@ export class SimWorld {
     // 「予約 tick が実行された結果」なので、捨てると tick 0 から実機と食い違う
     const trust = opts.trustAuthored === true
     this.scheduledTicks = []
+    this.runningThisTick.clear()
     this.blockEvents = []
     this.seqCounter = 0
     // 初期組み立て中は PP を抑止 (オブザーバーは authored 安定状態のまま発火しない)
@@ -1316,6 +1369,7 @@ export class SimWorld {
     const w = new SimWorld()
     w.blocks = new Map(this.blocks)
     w.scheduledTicks = this.scheduledTicks.map(t => ({ ...t, pos: [...t.pos] as Pos3D }))
+    w.runningThisTick = new Set(this.runningThisTick)
     w.blockEvents = this.blockEvents.map(e => ({ ...e, pos: [...e.pos] as Pos3D }))
     w.currentTick = this.currentTick
     w.seqCounter = this.seqCounter
@@ -2636,7 +2690,9 @@ export class SimWorld {
         // ここではなく executeScheduledTick のトグル件数ゲートで行う (vanilla 準拠。
         // 自励クロックの焼き切れ→非復帰はこの 2gt 予約が 160gt を先取りすることで再現)。
         const basePowered = isTorchBasePowered(pos, this)
-        if (block.lit === basePowered) {
+        // **この tick に走る分も予約とみなす** (#264)。取り出し済みの予約を
+        // 数えないと、同じ tick 内で余計な 1 本が積まれて 2gt 後に空撃ちする
+        if (block.lit === basePowered && !this.willTickThisTick(pos, block.type)) {
           this.schedule(pos, 2, 0)
         }
         break
