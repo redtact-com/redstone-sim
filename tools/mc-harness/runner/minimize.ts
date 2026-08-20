@@ -119,6 +119,19 @@ export function parseArgs(argv: readonly string[]): MinimizeArgs {
   return { defPath: positional[0], pos, out, trustAuthored, maxTrials, skipUntil, force }
 }
 
+/** authored に置けない過渡状態 */
+const MOVING_PISTON = /^(minecraft:)?moving_piston(\[|$)/
+
+/** 距離での粗い絞り込みで試す半径 (チェビシェフ距離)。小さい方から試す */
+const RADIUS_STEPS = [4, 8, 16, 32, 64]
+
+/** 座標キー同士のチェビシェフ距離 (各軸の差の最大値) */
+function chebyshev(a: string, b: string): number {
+  const pa = a.split(',').map(Number)
+  const pb = b.split(',').map(Number)
+  return Math.max(Math.abs(pa[0] - pb[0]), Math.abs(pa[1] - pb[1]), Math.abs(pa[2] - pb[2]))
+}
+
 // ── 署名 ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -183,7 +196,13 @@ export interface BuildFixtureOptions {
 export function buildMinimizedFixture(
   cap: Capture, opts: BuildFixtureOptions,
 ): Fixture {
-  const base = captureToFixture(cap, opts.trustAuthored)
+  const raw = captureToFixture(cap, opts.trustAuthored)
+  // **moving_piston は authored に書けない** (運んでいる中身が BE 内にあり復元できない)。
+  // 残したまま書き出すと fixture が読み込み時に落ちて、縮めた成果が使えない
+  const dropped = raw.blocks.filter(b => MOVING_PISTON.test(b.block)).length
+  const base: Fixture = dropped === 0
+    ? raw
+    : { ...raw, blocks: raw.blocks.filter(b => !MOVING_PISTON.test(b.block)) }
   const detail = divergenceDetail(cap, opts.pos, opts.trustAuthored)
   const where = detail
     ? `tick ${detail.tick} で 実機=${detail.mc} / sim=${detail.sim}`
@@ -195,7 +214,8 @@ export function buildMinimizedFixture(
     description:
       `実機と sim の食い違いを自動最小化した記録 (対象 ${opts.pos})。`
       + `${opts.defPath ? `元定義 ${opts.defPath} / ` : ''}`
-      + `${base.blocks.length} ブロックまで削っても食い違いが残ることを実機で確認済み。${where}`,
+      + `${base.blocks.length} ブロックまで削っても食い違いが残ることを実機で確認済み。${where}`
+      + `${dropped > 0 ? ` (過渡状態の moving_piston ${dropped} 個は復元できないので除いた)` : ''}`,
     mcVersion: base.mcVersion,
     ticks: base.ticks,
     ...(opts.skipUntil !== null ? { skipUntil: opts.skipUntil, skipReason } : {}),
@@ -270,7 +290,7 @@ async function run(args: MinimizeArgs): Promise<number> {
   const forced = [...new Set([args.pos, ...(def.inputs ?? []).map(i => i.pos.join(','))])]
   const candidates = sortByDistance(
     circuit.blocks.map(b => b.pos.join(',')).filter(k => !forced.includes(k)), args.pos)
-  log(`2. 候補 ${candidates.length} ブロック (強制保持 ${forced.length}: ${forced.join(' ')})。遠い側から塊で落とす`)
+  log(`2. 候補 ${candidates.length} ブロック (強制保持 ${forced.length}: ${forced.join(' ')})`)
 
   // 3. delta debugging。oracle = 一部だけ置いて撮り直し、署名が残るか
   const tmpDir = mkdtempSync(join(tmpdir(), 'mc-minimize-'))
@@ -304,8 +324,28 @@ async function run(args: MinimizeArgs): Promise<number> {
       }
     }
 
+    // 2b. **まず距離で粗く絞る** (#240)。
+    //
+    // 遠い側から 1 塊ずつ削る delta debugging は、6393 ブロックのような大物だと
+    // 収束が遅い (実測: 100 試行 15 分で 2500 → 2392 までしか縮まなかった)。
+    // 先に「対象からチェビシェフ距離 R 以内」だけを残して署名が保たれる R を
+    // **倍々で探す**と、log 回のキャプチャで候補が桁で減る。
+    // 保たれる R が見つからなければ全体のまま delta debugging に進む (損はしない)
+    let narrowed = candidates
+    for (const r of RADIUS_STEPS) {
+      const within = candidates.filter(k => chebyshev(k, args.pos) <= r)
+      if (within.length === 0 || within.length === candidates.length) continue
+      const t0 = Date.now()
+      const held = await runTrial([...forced, ...within])
+      log(`   半径 ${r}: ${forced.length + within.length} ブロック → `
+        + `${held ? '署名あり → ここから縮める' : '署名が消えた → もっと広く'}`
+        + ` [${fmtMs(Date.now() - t0)}]`)
+      if (held) { narrowed = within; break }
+    }
+    log(`   遠い側から塊で落とす (候補 ${narrowed.length})`)
+
     const result = await minimizeSubset<string>({
-      candidates,
+      candidates: narrowed,
       maxTrials: args.maxTrials,
       oracle: subset => runTrial([...forced, ...subset]),
       onTrial: t => log(
