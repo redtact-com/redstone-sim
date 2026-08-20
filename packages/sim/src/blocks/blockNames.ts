@@ -115,6 +115,25 @@ const NOT_SOLID_EXACT = new Set([
   'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
 ])
 
+/**
+ * 導体フルブロックのうち**ピストンで押せない**もの (#253)。
+ * [確定: 26.2 — いずれも pushReaction(BLOCK)]
+ *
+ * sim は材質を潰しているのでここだけ名前で割る。**lodestone は別型**なので入れない。
+ * [実機実測: ピストンの正面が黒曜石 → 伸びない / スライムの横が黒曜石 → 伸びる]
+ */
+const IMMOVABLE_SOLID = new Set([
+  'obsidian', 'crying_obsidian', 'bedrock', 'reinforced_deepslate',
+  'respawn_anchor', 'spawner', 'trial_spawner', 'vault', 'budding_amethyst',
+  'command_block', 'chain_command_block', 'repeating_command_block',
+  'structure_block', 'jigsaw', 'barrier', 'end_portal_frame',
+])
+
+/** ピストンで押せない導体フルブロックか (#253) */
+export function isImmovableSolidName(name: string): boolean {
+  return IMMOVABLE_SOLID.has(stripNs(name))
+}
+
 export function isSolidBlockName(name: string): boolean {
   const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
   if (NOT_SOLID_EXACT.has(id)) return false
@@ -225,7 +244,11 @@ export function classifyPlainBlock(
 
   const nonConductive = toNonConductiveBlockState(name, props)
   if (nonConductive) return withInstrument(nonConductive)
-  if (isSolidBlockName(name)) return withInstrument({ type: 'solid', powered: false })
+  if (isSolidBlockName(name)) {
+    return withInstrument(isImmovableSolidName(name)
+      ? { type: 'solid', powered: false, immovable: true }
+      : { type: 'solid', powered: false })
+  }
   return null
 }
 

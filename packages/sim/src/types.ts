@@ -352,6 +352,15 @@ export interface HoneyBlockState {
 export interface SolidState {
   type: 'solid'
   /**
+   * ピストンで押せないか (#253)。[確定: 26.2 — 黒曜石・岩盤などは pushReaction(BLOCK)]
+   *
+   * sim は導体フルブロックを材質ごと 1 種に潰しているが、**押せるかどうかだけは
+   * 材質で割れる**ので、ここで持つ。
+   * [実機実測 2026-08-20: ピストンの正面が黒曜石 → 伸びない /
+   *  スライムの**横**が黒曜石 → 伸びる (押せない相手は引き連れずに素通りする)]
+   */
+  immovable?: boolean
+  /**
    * 上の音符ブロックへ与える音色 (#231)。sim は材質を潰しているのでここで持つ。
    * 取り込み時に実ブロック名から載せる (羊毛=guitar / 木=bass など)。
    * 無ければ正規形 stone の basedrum
