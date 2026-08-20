@@ -1,6 +1,6 @@
 {
   "name": "rail-shape-chain-join",
-  "description": "#132 形状が張り替わったレールが連鎖に合流するか。A=(2,1,3) を「北に north_south のレール Q、東に east_west のレール R」がある状態で置くと、両軸に隣接があるため defaultShape が採用されて east_west になる [確定: 26.2 RailState.place — northOrSouth && westOrEast なら defaultShape]。このとき Q は A の connections に入らないので connectTo されず north_south のまま残り、A と Q は**隣接しているのに直交していて繋がらない**。R を壊しても形状の再計算は走らない (BaseRailBlock.neighborChanged → PoweredRailBlock.updateState は powered しか見ない) ので A は east_west のまま。t8 でレバーを入れると Q だけが on になり、直交する A には伝わらない。t10 で A の南隣にレールを置くと connectTo で A が north_south に張り替わり、Q の連鎖に合流して on になる。実プレイで作れる手順だけで構成してある (authored の Q は孤立した 1 本なので north_south が自然な状態)。",
+  "description": "#132 形状が張り替わったレールが連鎖に合流するか。A=(2,1,3) を「北に north_south のレール Q、東に east_west のレール R」がある状態で置くと、両軸に隣接があるため defaultShape が採用されて east_west になる [確定: 26.2 RailState.place — 南北軸と東西軸の両方に隣接があるときは defaultShape を採る]。このとき Q は A の connections に入らないので connectTo されず north_south のまま残り、A と Q は**隣接しているのに直交していて繋がらない**。R を壊しても形状の再計算は走らない (BaseRailBlock.neighborChanged → PoweredRailBlock.updateState は powered しか見ない) ので A は east_west のまま。t8 でレバーを入れると Q だけが on になり、直交する A には伝わらない。t10 で A の南隣にレールを置くと connectTo で A が north_south に張り替わり、Q の連鎖に合流して on になる。実プレイで作れる手順だけで構成してある (authored の Q は孤立した 1 本なので north_south が自然な状態)。",
   "mcVersion": "1.21.1",
   "ticks": 16,
   "region": {

@@ -23,7 +23,7 @@ const OUT = join(here, '../packages/sim/src/blocks/noteInstrument.generated.ts')
 
 const src = readFileSync(SOURCE, 'utf-8')
 
-// `public static final Block LIGHT_BLUE_WOOL = register(...)` の宣言単位で切り、
+// 「1 つの静的フィールド宣言 = 1 ブロック」(例: LIGHT_BLUE_WOOL の register 行) の単位で切り、
 // その範囲に instrument(...) があれば拾う。定数名の小文字化 = ブロック名という前提
 // (色違い等の ColorCollection は個別名を持たないので拾えない — 下で補う)
 const decls = [...src.matchAll(/public static final \w+(?:<[^>]*>)? ([A-Z0-9_]+) =/g)]

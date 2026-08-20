@@ -5,7 +5,7 @@
 # fixture qc-bud: レバー→ダスト→(石の上に載る)ダストが piston(2,1,1) の QC 位置を電源化 → 伸長。
 meta {
   name: ピストン 準接続 (1 個上受電で伸長)
-  ref: 02 §5.3 QC / §6 piston (getNeighborSignal に pos.above() 含む) / fixture qc-bud
+  ref: 02 §5.3 QC / §6 piston (getNeighborSignal が 1 個上のマスを含む) / fixture qc-bud
 }
 
 fixture qc-bud

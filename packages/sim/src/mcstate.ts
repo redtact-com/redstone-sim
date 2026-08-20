@@ -13,7 +13,7 @@
 //
 // facing 変換の要注意点 [確定: 1.21.1 DiodeBlock デコンパイル]:
 //   - MC の repeater/comparator の facing は「入力側」を指す
-//     (getInputSignal が pos.relative(FACING) を読む)。
+//     (getInputSignal が FACING 方向の隣を読む)。
 //     sim の facing は「出力方向」なので相互に OPPOSITE 変換する。
 //   - MC の redstone_wall_torch の facing は「壁から離れる方向」。
 //     sim の wall_torch facing は「壁の方向」なので OPPOSITE 変換する。
@@ -146,7 +146,7 @@ export function mcToSim(state: string): BlockState | null {
     }
     case 'oak_pressure_plate':
     case 'stone_pressure_plate':
-      // 木/石 感圧板。POWERED ? 15 : 0 [確定: 26.2 PressurePlateBlock]
+      // 木/石 感圧板。POWERED なら出力 15、でなければ 0 [確定: 26.2 PressurePlateBlock]
       return {
         type: name === 'stone_pressure_plate' ? 'pressure_plate_stone' : 'pressure_plate_wood',
         powered: props.powered === 'true',

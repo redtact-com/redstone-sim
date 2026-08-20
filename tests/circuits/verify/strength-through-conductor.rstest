@@ -1,6 +1,6 @@
 # 信号強度は動力源化 (導体の強充電) を経ても維持される (02 §5.2 [要検証]→確定)。
 # 典拠 (26.2 デコンパイル): SignalGetter.getSignal =
-#   isRedstoneConductor(pos) ? max(state.getSignal, getDirectSignalTo(pos)) : state.getSignal。
+#   導体なら「自身の信号」と「その座標へ向けた強充電」の大きい方、導体でなければ自身の信号だけ。
 #   getDirectSignalTo は隣接 6 方向の getDirectSignal の max を「減衰なし」で取る。
 #   → 強充電された導体は源の強度をそのまま再放出する。−1 の減衰はダスト間
 #   (RedStoneWireBlock.calculateTargetStrength = 隣接ワイヤ −1) だけで発生する。

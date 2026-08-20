@@ -33,34 +33,30 @@
 
 02 §4.2 が既に記載のとおり、上限は **深度ではなく総数**で、値は **1,000,000**。
 
-- 統合サーバ (シングルプレイ): `MinecraftServer.getMaxChainedNeighborUpdates()` が `return 1000000;` を直返し
+- 統合サーバ (シングルプレイ): `MinecraftServer.getMaxChainedNeighborUpdates()` が定数 1000000 を直返し
   (`net/minecraft/server/MinecraftServer.java:2047`)。
-- 専用サーバ: `DedicatedServerProperties.maxChainedNeighborUpdates = this.get("max-chained-neighbor-updates", 1000000)`
+- 専用サーバ: `DedicatedServerProperties.maxChainedNeighborUpdates` が server.properties の
+  `max-chained-neighbor-updates` を既定値 1000000 で読む
   (同上 `:100`)。**既定 1,000,000、server.properties で変更可**。
-- この値が `Level` コンストラクタ経由で `new CollectingNeighborUpdater(this, maxChainedNeighborUpdates)`
-  に渡る (`Level.java:152`、`ServerLevel.java:238`)。
+- この値が `Level` コンストラクタ経由で `CollectingNeighborUpdater` の生成時に上限として渡る (`Level.java:152`、`ServerLevel.java:238`)。
 
 ### 1.2 打ち切りの挙動 [確定: 26.2 `CollectingNeighborUpdater.addAndRun`]
 
-```java
-private void addAndRun(BlockPos pos, NeighborUpdates update) {
-   boolean runningAlready = this.count > 0;
-   boolean tooManyUpdates = this.maxChainedNeighborUpdates >= 0 && this.count >= this.maxChainedNeighborUpdates;
-   this.count++;
-   if (!tooManyUpdates) {
-      if (runningAlready) this.addedThisLayer.add(update);
-      else                this.stack.push(update);
-   } else if (this.count - 1 == this.maxChainedNeighborUpdates) {
-      LOGGER.error("Too many chained neighbor updates. Skipping the rest. First skipped position: {}", pos.toShortString());
-   }
-   if (!runningAlready) this.runUpdates();
-}
-```
+`addAndRun(pos, update)` の手順 (自然言語):
+
+1. カウンタ `count` が 1 以上なら「既に走行中 (runningAlready)」と判定する。
+2. 上限が 0 以上に設定されていて、かつ `count` が上限以上なら「打ち切り (tooManyUpdates)」と判定する。
+3. `count` を 1 進める。
+4. 打ち切りでなければ、走行中なら当該レイヤの追加リストへ、走行中でなければスタックへ update を積む。
+5. 打ち切りで、かつ**進めた後の `count` - 1 がちょうど上限に一致する**ときだけ、
+   「連鎖近隣更新が多すぎるので残りを skip する」旨と**最初に捨てた座標** (`First skipped position`) を
+   `LOGGER.error` で 1 回出す。
+6. 走行中でなかった場合に限り、そのまま `runUpdates` を回す (＝最外の呼び出しだけがループを駆動する)。
 
 確定できる仕様:
 - **skip されエラーログのみ、rollback なし** (02 §4.2 の記述どおり)。上限到達後の更新は**キューに積まれず捨てられる**が、
   既にキュー内にある更新は最後まで処理される (`runUpdates` は例外を投げない)。
-- **ログは 1 回だけ**: `count - 1 == max` の瞬間 (＝最初に捨てた 1 件) のみ `LOGGER.error(...)` を出す。
+- **ログは 1 回だけ**: カウンタが上限をちょうど 1 だけ超えた瞬間 (＝最初に捨てた 1 件) のみ `LOGGER.error` を出す。
   以降の捨てられた更新は無言。ログには最初に捨てた座標 (`First skipped position`) が入る。
 - `count` はカスケード全体で共有される走行カウンタで、最外の `runUpdates` の `finally` で 0 にリセットされる
   (＝ **1 回の外部トリガあたり 1,000,000 件の予算**)。tick をまたいでは持ち越さない。
@@ -91,7 +87,7 @@ NC/PP/CU の 3 種すべてが同一カウンタを共有する。
 
 A とは別に、**PP (updateShape) のカスケード深度**を切る第 2 の上限が存在する。
 
-- `Level.setBlock(pos, state, flags)` は 3 引数版で `updateLimit = 512` を既定にして 4 引数版へ委譲
+- `Level.setBlock` の 3 引数版は `updateLimit` に既定値 512 を与えて 4 引数版へ委譲
   (`Level.java:217-218`)。
 - shape 更新のたびに `updateLimit - 1` して伝播し (`Level.java:257-261`、`LevelAccessor.neighborShapeChanged:71`、
   `InstantNeighborUpdater:26`)、`updateLimit <= 0` で shape 伝播が止まる。

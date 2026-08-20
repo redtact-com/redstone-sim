@@ -4,7 +4,7 @@
 # 隣接 NC で初めて活性化させることで、BUD の本質を state 系列に開く。
 #
 # 仕様クロスチェック (02 §4.3 BUD / §5.3 QC / §6 piston / §6 torch / §6 repeater [確定]):
-#   §4.3 [確定: 26.2]: PistonBaseBlock.getNeighborSignal は pos.above() (quasi 位置) の
+#   §4.3 [確定: 26.2]: PistonBaseBlock.getNeighborSignal は 1 個上のマス (quasi 位置) の
 #     被電を live で読むが (= 動力源化)、checkIfExtend (状態遷移) は neighborChanged / BE
 #     実行時にしか走らない → 「powered なのに activated でない」BUD 状態が生じる。
 #   よって spec からの導出: (A) quasi を給電しても piston に NC が来なければ伸長しない、
@@ -27,7 +27,7 @@
 #                 ST 相由来の NC のため start delay 0 → 同 tick BE → 2gt 後に head 確定。
 meta {
   name: BUD 分離 — QC 受電を先行確立し後続 NC で活性化 (#75)
-  ref: 02 §4.3 BUD / §5.3 QC / §6 piston (getNeighborSignal=pos.above() live) / §6 torch(2gt) / §6 repeater / #75
+  ref: 02 §4.3 BUD / §5.3 QC / §6 piston (getNeighborSignal は 1 個上のマスを live 読み) / §6 torch(2gt) / §6 repeater / #75
 }
 
 circuit {

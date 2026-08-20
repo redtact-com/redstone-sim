@@ -1,6 +1,6 @@
 {
   "name": "rail-curve-no-slope",
-  "description": "#140 曲線に決まった後は坂昇格が適用されないのか。RailState.place の ASCENDING 昇格は shape がちょうど NORTH_SOUTH / EAST_WEST のときだけ実行される [確定: 26.2 RailState.java:306-324] ため、第二段で曲線が確定した後は「隣の 1 段上にレールがある」条件を満たしても坂にならないはず。中心 (2,1,3) の南隣は同じ高さのレール、東隣は**1 段上** (3,2,3) のレール。getRail は同じ高さ → 1 段上 → 1 段下 の順に探すので東も隣接として数えられ、s && e && !n && !w で SOUTH_EAST が確定する。対照として下段 (z=7) には東の 1 段上だけを置き、こちらは EAST_WEST 経由で ascending_east になるはず。",
+  "description": "#140 曲線に決まった後は坂昇格が適用されないのか。RailState.place の ASCENDING 昇格は shape がちょうど NORTH_SOUTH / EAST_WEST のときだけ実行される [確定: 26.2 RailState.java:306-324] ため、第二段で曲線が確定した後は「隣の 1 段上にレールがある」条件を満たしても坂にならないはず。中心 (2,1,3) の南隣は同じ高さのレール、東隣は**1 段上** (3,2,3) のレール。getRail は同じ高さ → 1 段上 → 1 段下 の順に探すので東も隣接として数えられ、「南と東だけに隣接がある」条件で SOUTH_EAST が確定する。対照として下段 (z=7) には東の 1 段上だけを置き、こちらは EAST_WEST 経由で ascending_east になるはず。",
   "mcVersion": "1.21.1",
   "ticks": 8,
   "region": {

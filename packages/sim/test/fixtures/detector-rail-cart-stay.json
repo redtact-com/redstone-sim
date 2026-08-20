@@ -1,6 +1,6 @@
 {
   "name": "detector-rail-cart-stay",
-  "description": "#146 カートを乗せっぱなしにした場合。実機は 20gt ごとの checkPressed でカートを数え直し、居続ける限り powered を維持する [確定: 26.2 DetectorRailBlock.java:100-107 — shouldBePressed なら scheduleTick(pos, this, 20) を再予約]。**sim の折衷モデルはエンティティを持たないので 20gt 後に必ず OFF になる** = 既知の乖離。実装できないことを明示するための記録用 fixture として skipUntil 付きでコミットする。detector-rail-cart-pulse (召喚してすぐ削除) は一致するので、乖離は「乗り続ける」ケースに限定される。",
+  "description": "#146 カートを乗せっぱなしにした場合。実機は 20gt ごとの checkPressed でカートを数え直し、居続ける限り powered を維持する [確定: 26.2 DetectorRailBlock.java:100-107 — shouldBePressed なら 20gt の tile tick を再予約]。**sim の折衷モデルはエンティティを持たないので 20gt 後に必ず OFF になる** = 既知の乖離。実装できないことを明示するための記録用 fixture として skipUntil 付きでコミットする。detector-rail-cart-pulse (召喚してすぐ削除) は一致するので、乖離は「乗り続ける」ケースに限定される。",
   "mcVersion": "1.21.1",
   "ticks": 30,
   "skipUntil": "146",

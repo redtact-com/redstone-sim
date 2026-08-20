@@ -48,7 +48,7 @@
 
 > **実装済み (I11 / #35)**: BlockType `redstone_block` を追加。全 6 方向に weak 15、固体は強充電しない。
 > デコンパイル裏取り (1.21.1 `PoweredBlock`) 済み: `getSignal`=15 / `getDirectSignal` 非 override (=0) /
-> `isRedstoneConductor(never)` = 非導体 (ダストの上下斜め接続を切らない)。ダスト 4 面接続・viewer
+> `isRedstoneConductor` に常時 false を返す述語が渡されている = 非導体 (ダストの上下斜め接続を切らない)。ダスト 4 面接続・viewer
 > (`minecraft:redstone_block`)・nbtIO・editor パレット対応。実機 fixture `redstone-block-static` で
 > 静的通電を検証。詳細は 02 §6 redstone block。
 
@@ -106,11 +106,11 @@
 > **実装済み (I13 / #37、手動入力モデル)**: BlockType `pressure_plate_wood` / `pressure_plate_stone`
 > (`{ powered: boolean }`) を追加。エンティティ非実装のため activateBlock で手動 ON にし、
 > **20 gt** の tile tick で自動 OFF する折衷モデル (レバーのトグルではなく、ボタンの自動 OFF に近い)。
-> デコンパイル裏取り [確定: 26.2]: `PressurePlateBlock.getSignalForState = POWERED ? 15 : 0` /
-> `BasePressurePlateBlock.getPressedTime = 20`(PressurePlateBlock は override せず既定を使う) /
-> `getDirectSignal = (direction==UP) ? signal : 0`(直下=取り付け面のみ strong) /
-> `ownSignal = getSignalForState`(全方向 weak) / `updateNeighbours = updateNeighborsAt(pos) +
-> updateNeighborsAt(pos.below())`(NC = 自身隣接 6 + 直下の隣接 6)。給電はレバー/ボタンと同じ
+> デコンパイル裏取り [確定: 26.2]: `PressurePlateBlock.getSignalForState` は POWERED なら 15・でなければ 0 /
+> `BasePressurePlateBlock.getPressedTime` は 20 (PressurePlateBlock は override せず既定を使う) /
+> `getDirectSignal` は方向が UP のときだけ signal・他は 0 (直下=取り付け面のみ strong) /
+> `ownSignal` は `getSignalForState` と同じ (全方向 weak) / `updateNeighbours` は
+> **自身の位置と真下の位置の 2 か所**から 6 方向へ配る (NC = 自身隣接 6 + 直下の隣接 6)。給電はレバー/ボタンと同じ
 > 「全方向 weak 15 / 取り付け面 strong 15」パターン (power.ts の getEmittedSignal / getEmittedDirectSignal)。
 > **判定差 (木=全 entity / 石=mob) は手動モデルでは意味を持たない**ため、両者とも 15 出力・20gt 持続で
 > 論理上は同一とし、material の別は viewer 描画 (`minecraft:oak_pressure_plate` / `stone_pressure_plate`) と
@@ -139,8 +139,8 @@
 > 持続 gt は **10 gt**、出力形状は木/石板と同じ (全方向 weak / 直下 strong / self+below の NC)。
 > デコンパイル裏取り [確定: 26.2 WeightedPressurePlateBlock]:
 > `getPressedTime = 10`(override) / POWER プロパティ 0-15 /
-> `getSignalStrength = count>0 ? ceil(min(count,maxWeight)/maxWeight * 15) : 0`
-> (light `maxWeight=15`=金 / heavy `maxWeight=150`=鉄。Blocks.java の `WeightedPressurePlateBlock(15|150,…)`)。
+> 個数 0 なら 0。1 個以上なら個数を上限 (軽 15 / 重 150) で頭打ちにし、15 段階へ**切り上げ**る
+> (light `maxWeight=15`=金 / heavy `maxWeight=150`=鉄。Blocks.java での上限指定 (軽 15 / 重 150))。
 >
 > **実装注記 — 「設定値をそのまま出力」を採用**: 上記の計数式はエンティティ数 `count` を入力に取るが、
 > 本 sim はエンティティを持たないため `count` を再現できない。したがって手動モデルでは**計数式を通さず**、
@@ -166,23 +166,17 @@
 
 > **実装済み (#38 / C5)**: BlockType `note_block { powered, note(0-24) }` を追加。26.2 `NoteBlock`
 > デコンパイルに忠実に、**立ち上がり (POWERED false→true) でのみ発音**する 3 フェーズを実装:
-> ```
-> // ① NC (world.ts neighborChanged 'note_block' 相当)
-> signal = hasNeighborSignal(pos)          // = isBlockPowered
-> if (signal != POWERED) {
->   if (signal) playNote(pos)               // 立ち上がりのみ
->   setBlock(POWERED = signal, flag3)       // emitShapeUpdate (PP) + POWERED 更新
-> }
-> // ② playNote (被覆条件つき BE 予約)
-> if (INSTRUMENT.worksAboveNoteBlock() || 直上が空気)   // sim は直上=空気 のみで近似
->   scheduleBlockEvent(pos, 'play')         // = level.blockEvent(pos, 0, 0)
-> // ③ BE フェーズ (world.ts executeBlockEvent 'play')
-> triggerEvent → onNotePlay({pos, note}) + trace BE[Nb{n}]  // 音は鳴らさず通知のみ
-> ```
+> - **① NC** (world.ts の neighborChanged 'note_block' 相当): 自身 6 面の受電 (= `isBlockPowered`) を取り、
+>   保持中の POWERED と食い違うときだけ、(i) 受電が真 = 立ち上がりなら playNote を呼び、
+>   (ii) POWERED を受電値に更新して flag3 で書く (= `emitShapeUpdate` (PP) + POWERED 更新)。
+> - **② playNote** (被覆条件つき BE 予約): 「instrument が worksAboveNoteBlock を満たす」か「直上が空気」なら
+>   `scheduleBlockEvent(pos, 'play')` (= vanilla の BE b0=0 / b1=0) を積む。sim は直上=空気 のみで近似。
+> - **③ BE フェーズ** (world.ts の executeBlockEvent 'play'): triggerEvent 相当で
+>   `onNotePlay({pos, note})` を呼び、trace に BE[Nb{n}] を出す (音は鳴らさず通知のみ)。
 > **発音 BE は I7 (#15) の BE キュー (`scheduleBlockEvent`/`executeBlockEvent`) に相乗り接続済み**
 > (issue 完了条件)。sim は音声を鳴らさず、`SimWorld.onNotePlay` コールバックと trace (`Nb` 略号) で
 > 発音イベントを可視化する。**instrument (音色) は保持しない** — 常に BASE_BLOCK 相当 (`worksAboveNoteBlock()`
-> = false) とみなし、被覆条件は「直上が空気」のみで近似する (mob head の `worksAboveNoteBlock`=true 経路は
+> は偽) とみなし、被覆条件は「直上が空気」のみで近似する (mob head の `worksAboveNoteBlock` が真の経路は
 > 省略)。note block は既定フルキューブ導体 (`isRedstoneConductor`=true) なので **solid 同等**に扱い、
 > ダストの上下斜め接続を切り (`isWireCutBlock`)、直接充電されると隣を活性化しうる (`isConductor`)。
 > POWERED 変化はオブザーバー検知対象 (`observableChanged`)。mcstate/viewer(`minecraft:note_block`)/nbtIO/
@@ -212,7 +206,7 @@
   一方、ホッパーのアイテム転送計時 (8gt) やドロッパー/ディスペンサーの発射といった**アイテム物流**は
   自動仕分け・アイテムクロック等で使うが、本 sim の論理範囲からは外縁。
 - **C6 充填率読み = I5 担当 (割当済)**。02 §6 comparator の充填率式
-  `lerpDiscrete(f,0,15) = floor(f*14) + (f>0?1:0)` [確定: I1 で確定] を、I5 (#13) が
+  「f が 0 なら 0、それ以外は f × 14 の切り捨て + 1」(vanilla の lerpDiscrete(f,0,15) 相当) [確定: I1 で確定] を、I5 (#13) が
   「コンテナ充填率読み」として実装予定。**本書での新規判断は不要 (I5 #13 に帰属)**。
   ただし sim にアイテム物流が無い以上、I5 のコンテナは**ユーザが充填率 (0〜満杯) を手で与える静的入力**として
   実装されるのが現実的 (実アイテム移動は伴わない)。
@@ -253,12 +247,12 @@
 > 26.2 `RedStoneWireBlock.getSignal` を精査し、**dot の給電挙動を確定**した:
 > | 出力方向 | vanilla getSignal (`direction`=中心→ダスト) | dot が給電するか |
 > |---|---|---|
-> | 水平 (横) | `getConnectionState(...).getValue(dir.opposite).isConnected()` が false → **0** | **しない** |
-> | 直下 (down) | `direction==UP` 分岐で接続に依らず **power** を返す | **する** (弱充電) |
-> | 直上 (up) | 冒頭 `direction != DOWN` ガードで **0** | **しない** |
+> | 水平 (横) | 再計算した接続状態の「その方向の反対側」が非接続 → **0** | **しない** |
+> | 直下 (down) | 方向が UP の分岐に入り、接続に依らず **power** を返す | **する** (弱充電) |
+> | 直上 (up) | 冒頭の DOWN 除外ガードに掛かり **0** | **しない** |
 >
 > **確定挙動: dot は横にも上にも給電せず、直下のブロックのみ弱充電する**。これは既存 `power.ts`
-> `getEmittedSignal` の wire 分岐 (`toDir==='down'→power` / `up→0` / 水平→`connections[toDir]`) が
+> `getEmittedSignal` の wire 分岐 (down→power / up→0 / 水平→`connections[toDir]`) が
 > connections 全 false でそのまま満たしており、**power.ts の改修は不要**だった (02 §5.4「給電=接続方向の
 > 水平隣接のみ」とも整合)。テストで横=給電なし / 直下=弱充電あり (強充電なし) / 直上=給電なし を pin。
 > なお vanilla の getSignal は**都度再計算した** connection state を使う (孤立 dot は再計算しても dot のまま)

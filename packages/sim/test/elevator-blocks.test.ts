@@ -93,8 +93,8 @@ describe('装飾は 1 型に集約しつつ名前を保持する', () => {
 
 describe('書見台のコンパレーター出力 (#240)', () => {
   // [確定: 26.2 LecternBlockEntity.getRedstoneSignal]
-  //   pageProgress = pageCount > 1 ? page / (pageCount - 1) : 1
-  //   signal = floor(pageProgress * 14) + (hasBook ? 1 : 0)
+  //   ページ進捗 = ページ数が 2 以上なら page ÷ (ページ数 - 1)、1 以下なら 1
+  //   signal = 進捗 × 14 の切り捨て + (本の実体があれば 1)
   // 実機で確認 (5 ページ本): Page 0→1 / 1→4 / 2→8 / 3→11 / 4→15、本無しは 14
   const lectern = (hasBook: boolean, page: number, pages: number): BlockState =>
     ({ type: 'lectern', facing: 'east', hasBook, page, pages })

@@ -16,7 +16,7 @@
 //   - それ以外 → isSignalSource() (lever / button / torch / wall_torch /
 //     redstone_block / target / comparator / 感圧板 4 種)
 // 形状の自動拡張 (0 本→cross / 1 本→直線) と dot 保持ガード
-// (wasDot && isDot(再計算) → dot 維持) も 26.2 getConnectionState と同じ。
+// (元も再計算後も dot なら dot を維持) も 26.2 getConnectionState と同じ。
 //
 // 元は packages/editor/src/wire-connect.ts にあった配置時導出を sim へ
 // 一本化したもの (editor は本モジュールを再エクスポートして使う)。
@@ -38,7 +38,7 @@ function oppositeHDir(dir: HDir): HDir {
   return map[dir]
 }
 
-/** 26.2 shouldConnectTo(blockState, direction)。dir = ワイヤー→隣接ブロックの方向 */
+/** 26.2 RedStoneWireBlock.shouldConnectTo 相当。dir = ワイヤー→隣接ブロックの方向 */
 function shouldConnectTo(nb: BlockState, dir: HDir): boolean {
   switch (nb.type) {
     case 'wire':
@@ -115,7 +115,7 @@ export function isDotConnections(conn: WireConnections): boolean {
 /**
  * ワイヤーの接続形状を現在のグリッド状態から導出する (26.2 getConnectionState 相当)。
  * - dot 保持ガード: prev が dot (全 false) かつ再計算後も物理接続 0 本なら dot を維持
- *   [確定: 26.2 — wasDot && isDot(getMissingConnections) で拡張スキップ]
+ *   [確定: 26.2 — 呼び出し時点も getMissingConnections 後も dot なら拡張をスキップする]
  * - 自動拡張: 物理接続 0 本→cross (4 方向 side) / 1 本→反対側も side (直線)
  * prev を省略した場合 (新規配置) はガード無しで拡張する = 孤立ダストは cross。
  */

@@ -38,7 +38,7 @@ export function computeWireConnections(
 /**
  * (x, y, z) のブロックが変化した後に、接続形状の再計算が必要な周辺ワイヤーの
  * 更新一覧を返す。既存ワイヤーの現在形状を prev として渡すため、dot は
- * vanilla の保持ガード (wasDot && isDot) どおり維持される (#38/#51)。
+ * vanilla の保持ガード (元も再計算後も dot なら維持) どおり維持される (#38/#51)。
  */
 export function collectWireConnectionUpdates(
   x: number,
