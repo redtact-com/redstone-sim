@@ -1609,27 +1609,35 @@ export class SimWorld {
    * extending 時のみ。sticky は引かずに置き去りにする = 既存挙動)。
    */
   private resolvePushStructure(
-    pos: Pos3D, facing: Dir6, startAt?: Pos3D,
+    pos: Pos3D, facing: Dir6, startAt?: Pos3D, extending = true,
   ): { toPush: Pos3D[]; toDestroy: Pos3D[] } | null {
     const toPush: Pos3D[] = []
     const toDestroy: Pos3D[] = []
     const key = (p: Pos3D): string => posKey(p)
     const inPush = (p: Pos3D): number => toPush.findIndex(q => key(q) === key(p))
 
-    /** 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可 */
-    const pushable = (p: Pos3D, allowDestroy: boolean): boolean => {
+    /**
+     * 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可。
+     *
+     * `face` は**どの向きから動かそうとしているか**。PUSH_ONLY (釉薬テラコッタ) は
+     * 押し方向と一致するときだけ動く (#255)。
+     * [実機実測 2026-08-20: 正面から押す → 動く / 粘着で引く → 引けず置き去り /
+     *  スライムの横に置く → 引き連れられずその場に残る]
+     */
+    const pushable = (p: Pos3D, allowDestroy: boolean, face: Dir6): boolean => {
       const b = this.getBlockAt(p)
       if (!b) return true                                   // 空気
       if (b.type === 'piston' || b.type === 'sticky_piston') return !b.extended
       if (this.isPushDestroy(b)) return allowDestroy
+      if (b.type === 'solid' && b.pushOnly === true) return face === facing
       return this.isMovable(b)                              // それ以外は BLOCK 扱い
     }
 
     /** 26.2 PistonStructureResolver.addBlockLine */
-    const addBlockLine = (start: Pos3D): boolean => {
+    const addBlockLine = (start: Pos3D, face: Dir6): boolean => {
       const first = this.getBlockAt(start)
       if (!first) return true                               // 空気 → 何も足さない
-      if (!pushable(start, false)) return true
+      if (!pushable(start, false, face)) return true
       if (key(start) === key(pos)) return true
       if (inPush(start) > -1) return true
 
@@ -1643,7 +1651,8 @@ export class SimWorld {
         const next = this.getBlockAt(back)
         if (!next
             || !canStickToEachOther(prev, next)
-            || !pushable(back, false)
+            // 後ろに繋がる塊は「押し方向の逆」から足しに行くので PUSH_ONLY は入らない
+            || !pushable(back, false, OPPOSITE[facing])
             || key(back) === key(pos)) break
         cur = next
         if (++count + toPush.length > MAX_PUSH_DEPTH) return false
@@ -1669,7 +1678,7 @@ export class SimWorld {
         }
         const b = this.getBlockAt(p)
         if (!b) return true                                 // 空気に到達 → 押せる
-        if (!pushable(p, true) || key(p) === key(pos)) return false
+        if (!pushable(p, true, facing) || key(p) === key(pos)) return false
         if (this.isPushDestroy(b)) { toDestroy.push(p); return true }
         if (toPush.length >= MAX_PUSH_DEPTH) return false
         toPush.push(p)
@@ -1694,14 +1703,19 @@ export class SimWorld {
         if (dir === facing || dir === OPPOSITE[facing]) continue   // 押し軸は対象外
         const nPos = neighbor(from, dir)
         const nb = this.getBlockAt(nPos)
-        if (nb && canStickToEachOther(nb, fromState) && !addBlockLine(nPos)) return false
+        // **枝の向きを渡す**。glazed terracotta のような PUSH_ONLY は
+        // 押し方向と一致する向きからしか動かないので、横からは引き連れない (#255)
+        if (nb && canStickToEachOther(nb, fromState) && !addBlockLine(nPos, dir)) return false
       }
       return true
     }
 
     const start = startAt ?? neighbor(pos, facing)
     const startBlock = this.getBlockAt(start)
-    if (!pushable(start, false)) {
+    // 収縮では facing が「引く向き」なので、対象から見た向きはその逆になる。
+    // PUSH_ONLY はこれで**引けない**側に落ちる (#255)
+    const startFace = extending ? facing : OPPOSITE[facing]
+    if (!pushable(start, false, startFace)) {
       // 直前が壊れ物なら破壊して終端 (26.2 resolve の DESTROY 分岐)
       if (startBlock && this.isPushDestroy(startBlock)) {
         toDestroy.push(start)
@@ -1709,7 +1723,7 @@ export class SimWorld {
       }
       return startBlock ? null : { toPush, toDestroy }
     }
-    if (!addBlockLine(start)) return null
+    if (!addBlockLine(start, startFace)) return null
     for (let i = 0; i < toPush.length; i++) {
       const b = this.getBlockAt(toPush[i])
       if (b && isStickyBlock(b) && !addBranchingBlocks(toPush[i])) return null
@@ -1870,7 +1884,7 @@ export class SimWorld {
           return changed
         }
 
-        const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom)
+        const pulled = this.resolvePushStructure(ev.pos, pullDir, pullFrom, false)
         const pullList = pulled ? pulled.toPush : []
         if (pullList.length > 0) {
           const payloads = pullList.map(q => this.getBlockAt(q)!)
