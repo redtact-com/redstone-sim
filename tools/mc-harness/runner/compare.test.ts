@@ -289,3 +289,32 @@ describe('compareCapture — moving_piston の除外', () => {
     expect(r.ok).toBe(true)
   })
 })
+
+describe('divergentPositions は全 tick・全座標を拾う (#240)', () => {
+  // 最小化の署名判定はこれを見る。`first` は先頭 tick の先頭 8 件しか載らないので、
+  // ここが切り詰められると**署名を取り落として本命を削り落とす**
+  it('9 座標以上・2 tick 以上ズレても全部載る', () => {
+    const authored: Record<string, string> = {}
+    for (let x = 0; x < 12; x++) {
+      authored[`${x},0,0`] = 'stone'
+      authored[`${x},1,0`] = 'redstone_lamp[lit=false]'
+    }
+    // 実機側だけ「tick 1 で 6 個、tick 2 でさらに 6 個点いた」ことにする
+    const frames = [
+      { tick: 1, changes: Array.from({ length: 6 }, (_, i) => ({ pos: [i, 1, 0] as [number, number, number], block: 'redstone_lamp[lit=true]' })) },
+      { tick: 2, changes: Array.from({ length: 6 }, (_, i) => ({ pos: [i + 6, 1, 0] as [number, number, number], block: 'redstone_lamp[lit=true]' })) },
+    ]
+    const cap: Capture = {
+      name: 'many', mcVersion: '1.21.1',
+      region: { from: [0, 0, 0], to: [11, 1, 0] },
+      authored, inputs: [], ticks: 4, frames, players: [],
+      generated: { at: '', mc: '1.21.1', carpet: '' },
+    }
+    const r = compareCapture(cap)
+    expect(r.ok).toBe(false)
+    expect(r.divergentPositions).toHaveLength(12)
+    // 先頭 tick に載らない座標 (tick 2 側) も拾えていること
+    expect(r.divergentPositions).toContain('11,1,0')
+    expect(r.first!.positions.length).toBeLessThan(12)   // first は切り詰められる
+  })
+})

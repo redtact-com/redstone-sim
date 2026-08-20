@@ -227,6 +227,21 @@ export async function withHarnessLock<T>(
 }
 
 /**
+ * ロックの取得時刻を更新する (ハートビート)。
+ *
+ * **長時間の作業では必須**。最小化は 6393 ブロックだと数十分〜数時間走るが、
+ * 取得時刻を更新しないと 10 分で「残骸」とみなされて他プロセスに奪われ、
+ * 同じサーバを 2 本が並行して叩く = rcon の応答が混線して**黙って壊れた ground truth** が出る。
+ */
+export function refreshHarnessLock(lockPath: string = LOCK_PATH): void {
+  try {
+    const info = readLockInfo(lockPath)
+    if (info !== null && info.pid !== process.pid) return   // 既に奪われている
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid, at: Date.now(), iso: new Date().toISOString() }))
+  } catch { /* 消えていたら何もしない */ }
+}
+
+/**
  * 自分が握っているロックだけを消す。
  *
  * 無条件に unlink すると、**残骸とみなして奪われた側**が抜けるときに

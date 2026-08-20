@@ -209,6 +209,12 @@ export interface CompareReport {
   divergentTickCount: number
   /** 不一致 tick の一覧 (先頭 MAX_TICK_LIST 件) */
   divergentTicks: number[]
+  /**
+   * **どこかの tick で食い違った座標の全件** (昇順・重複なし)。
+   * first は先頭 tick の先頭 8 座標しか載せないので、
+   * 「この座標は食い違ったか」を機械が判定するにはこちらを見る (minimize.ts の署名)。
+   */
+  divergentPositions: string[]
   /** (tick, 座標) 差分の総件数 */
   totalDiffs: number
   /** 最初に食い違った tick とその座標 (一致なら null) */
@@ -328,6 +334,10 @@ export function compareCapture(cap: Capture, opts: { trustAuthored?: boolean } =
   const initialMismatch = kept.length > 0 && kept[0].tick === 0
     ? kept[0].diffs.length : 0
 
+  // 食い違った座標を全件集める (minimize.ts が「署名」の判定に使う)
+  const divergent = new Set<string>()
+  for (const d of kept) for (const x of d.diffs) divergent.add(x.pos)
+
   const volume = regionVolume(fx)
   return {
     initialMismatch,
@@ -345,6 +355,7 @@ export function compareCapture(cap: Capture, opts: { trustAuthored?: boolean } =
     },
     divergentTickCount: kept.length,
     divergentTicks: kept.slice(0, MAX_TICK_LIST).map(d => d.tick),
+    divergentPositions: [...divergent].sort(),
     totalDiffs,
     first,
     warnings: captureWarnings(cap, fx),
@@ -405,6 +416,8 @@ export function formatReport(r: CompareReport): string {
   if (r.first) {
     const more = r.divergentTickCount > r.divergentTicks.length ? ' ...' : ''
     lines.push(`  不一致 tick: ${r.divergentTicks.join(', ')}${more}`)
+    lines.push(`  食い違った座標: ${r.divergentPositions.length} 件`
+      + ` (最小化: npx tsx tools/mc-harness/runner/minimize.ts <定義.json> --pos ${r.divergentPositions[0] ?? 'x,y,z'})`)
     lines.push(`  最初の食い違い: tick ${r.first.tick}`)
     for (const p of r.first.positions) {
       lines.push(`    ${p.pos}`)

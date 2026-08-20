@@ -55,8 +55,14 @@ fx_setup() -> (
   fx = read_file('fixture', 'shared_json');
   if(fx == null, exit('shared/fixture.json がない'));
   global_region = fx:'region';
-  from = global_region:'from';
-  to   = global_region:'to';
+  // 掃除範囲は 'clear' があればそちら (無ければ region)。
+  // capture.ts が keep で region を縮めたときに **回路全体** を渡してくる。
+  // 縮んだ region だけを掃除すると、前回置いたブロックが region のすぐ外に
+  // 残って実機側だけに効いてしまう (最小化が偽の食い違いを追いかける)
+  cl = fx:'clear';
+  if(cl == null, cl = global_region);
+  from = cl:'from';
+  to   = cl:'to';
   // 領域クリア (更新抑制。前回 fixture の残骸を消す)。
   // ★ 領域を +8(x,z)/+6(y) パディングして掃除する。region ちょうどしか消さないと、
   //   直前に生成した大領域 fixture の残骸 (領域外) が残り、ダスト接続形状を汚染する

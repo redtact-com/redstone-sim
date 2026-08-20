@@ -75,6 +75,16 @@ export interface CaptureDef {
   players?: CaptureDefPlayer[]
   inputs?: CaptureDefInput[]
   snapshots?: number[]
+  /**
+   * **回路の一部だけを置く** (#食い違いの自動最小化)。座標キー "x,y,z" の配列で、
+   * 指定があるとその座標のブロックだけが実機に置かれ、region は
+   * **keep の bbox + pad** に縮む (指定が無ければ従来どおり回路全体)。
+   *
+   * 座標は「回路ファイルを原点寄せした後」の系 (= キャプチャ JSON / fixture と同じ)。
+   * ブロックの無い座標を書いても構わない (region を広げるだけ)。入力の当たり先を
+   * region に含めたいときに使う。
+   */
+  keep?: string[]
 }
 
 // Capture の形は **compare.ts が正**。二重定義するとドリフトして
@@ -87,18 +97,6 @@ const MC_VERSION = '1.21.1'
 const parseKey = (k: string): [number, number, number] =>
   k.split(',').map(Number) as [number, number, number]
 
-/** 'name[k=v,...]' を name と props に割る (scarpet の set() 用) */
-function splitState(s: string): { name: string; props: Record<string, string> } {
-  const i = s.indexOf('[')
-  if (i === -1) return { name: s, props: {} }
-  const props: Record<string, string> = {}
-  for (const kv of s.slice(i + 1, -1).split(',')) {
-    const eq = kv.indexOf('=')
-    if (eq !== -1) props[kv.slice(0, eq)] = kv.slice(eq + 1)
-  }
-  return { name: s.slice(0, i), props }
-}
-
 /** RawPlacedBlock の props から blockstate 文字列を組む (キー昇順) */
 function toStateString(name: string, props: Record<string, string>): string {
   const id = name.replace(/^minecraft:/, '')
@@ -106,7 +104,95 @@ function toStateString(name: string, props: Record<string, string>): string {
   return keys.length === 0 ? id : `${id}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
 }
 
-async function loadCircuit(def: CaptureDef) {
+export interface CaptureRegion {
+  from: [number, number, number]
+  to: [number, number, number]
+}
+
+export interface SelectedBlocks<T> {
+  /** 実機に置くブロック (keep 指定があればその座標だけ) */
+  blocks: T[]
+  /** 観測 + 掃除の範囲 */
+  region: CaptureRegion
+  /** keep に書いたのに回路にブロックが無かった座標 (誤字の検出用。region は広がる) */
+  missing: string[]
+}
+
+/** 座標列の bbox。空なら null */
+function bboxOf(positions: readonly [number, number, number][]): CaptureRegion | null {
+  if (positions.length === 0) return null
+  const min: [number, number, number] = [Infinity, Infinity, Infinity]
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  for (const p of positions) {
+    for (let i = 0; i < 3; i++) {
+      if (p[i] < min[i]) min[i] = p[i]
+      if (p[i] > max[i]) max[i] = p[i]
+    }
+  }
+  return { from: min, to: max }
+}
+
+/**
+ * 置くブロックを選び、region を決める純関数 (実機に触らないのでテストできる)。
+ *
+ * - `keep` 無し … 全ブロック。region は回路全体の bbox + pad
+ * - `keep` あり … その座標のブロックだけ。region は **keep 座標の bbox + pad**
+ *
+ * どちらも **下端 y だけは 0 より下げない**。回路は原点寄せ済みで y=0 が床、
+ * ワールドは void superflat なので y<0 には何も無く、掃除範囲を広げても無駄なだけ。
+ * (keep 無しの場合 min は必ず (0,0,0) になるので from = [-pad, 0, -pad] という
+ *  従来の式と完全に一致する)
+ */
+export function selectPlacedBlocks<T extends { pos: [number, number, number] }>(
+  blocks: readonly T[], pad: number, keep?: readonly string[],
+): SelectedBlocks<T> {
+  const missing: string[] = []
+  let picked: T[]
+  let anchors: [number, number, number][]
+
+  if (keep === undefined) {
+    picked = [...blocks]
+    anchors = picked.map(b => b.pos)
+  } else {
+    // keep は外から来る (最小化ループが組み立てる) ので形式を検証してから使う。
+    // 壊れたキーを黙って捨てると region がこっそり縮んで原因不明の食い違いになる
+    const wanted = new Map<string, [number, number, number]>()
+    for (const k of keep) wanted.set(k, parseKeyStrict(k))
+    picked = blocks.filter(b => wanted.has(b.pos.join(',')))
+    const placed = new Set(picked.map(b => b.pos.join(',')))
+    for (const k of wanted.keys()) if (!placed.has(k)) missing.push(k)
+    anchors = [...wanted.values()]
+  }
+
+  const bbox = bboxOf(anchors)
+  if (bbox === null) throw new Error('置くブロックが 1 つも無い (keep が空か、全て回路の外)')
+  return {
+    blocks: picked,
+    region: {
+      from: [bbox.from[0] - pad, Math.max(0, bbox.from[1] - pad), bbox.from[2] - pad],
+      to: [bbox.to[0] + pad, bbox.to[1] + pad, bbox.to[2] + pad],
+    },
+    missing,
+  }
+}
+
+/** "x,y,z" → [x,y,z]。壊れたキーは例外 (黙って捨てない) */
+function parseKeyStrict(key: string): [number, number, number] {
+  const parts = key.split(',').map(s => Number(s.trim()))
+  if (parts.length !== 3 || parts.some(n => !Number.isInteger(n))) {
+    throw new Error(`keep の座標キーが不正: "${key}" ("x,y,z" 形式で書くこと)`)
+  }
+  return [parts[0], parts[1], parts[2]]
+}
+
+/**
+ * 回路ファイルを読み、原点寄せして「置くブロック」と region を決める。
+ *
+ * `fullRegion` は keep で絞る前の回路全体の範囲。keep で縮めたときの
+ * **掃除範囲**に使う (縮めた region だけを掃除すると、前回のキャプチャで置いた
+ * ブロックが region のすぐ外に残り、実機だけが影響を受ける — README の「残骸」)。
+ */
+export async function loadCircuit(def: CaptureDef) {
   const path = def.source
   if (!existsSync(path)) throw new Error(`回路ファイルが無い: ${path}`)
   const raw = await readRawPlacedBlocks(new Uint8Array(readFileSync(path)))
@@ -128,19 +214,14 @@ async function loadCircuit(def: CaptureDef) {
       items: b.items,
     }
   })
-  let maxX = 0, maxY = 0, maxZ = 0
-  for (const b of blocks) {
-    if (b.pos[0] > maxX) maxX = b.pos[0]
-    if (b.pos[1] > maxY) maxY = b.pos[1]
-    if (b.pos[2] > maxZ) maxZ = b.pos[2]
-  }
   const pad = def.pad ?? 1
+  const picked = selectPlacedBlocks(blocks, pad, def.keep)
   return {
-    blocks,
-    region: {
-      from: [-pad, 0, -pad] as [number, number, number],
-      to: [maxX + pad, maxY + pad, maxZ + pad] as [number, number, number],
-    },
+    blocks: picked.blocks,
+    region: picked.region,
+    // keep で縮めても掃除だけは回路全体に掛ける (前回の残骸を region の外に残さない)
+    fullRegion: selectPlacedBlocks(blocks, pad).region,
+    missing: picked.missing,
   }
 }
 
@@ -219,10 +300,24 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
   }
 }
 
-export async function capture(defPath: string): Promise<Capture> {
+/** capture() の任意設定 */
+export interface CaptureOptions {
+  /**
+   * 進捗ログを出さない。最小化ループは 1 回のキャプチャにつき 10 行以上出されると
+   * 「残り何ブロックか」が流れて読めなくなるので、そこからは静かに呼ぶ
+   */
+  quiet?: boolean
+}
+
+export async function capture(defPath: string, opts: CaptureOptions = {}): Promise<Capture> {
+  const log = opts.quiet === true ? () => {} : (...a: unknown[]) => console.log(...a)
   const def = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
-  const { blocks, region } = await loadCircuit(def)
-  console.log(`[capture] ${def.name}: ${blocks.length} ブロック / region ${region.from} - ${region.to}`)
+  const { blocks, region, fullRegion, missing } = await loadCircuit(def)
+  log(`[capture] ${def.name}: ${blocks.length} ブロック / region ${region.from} - ${region.to}`)
+  if (missing.length > 0) {
+    log(`[capture] keep のうち ${missing.length} 座標には回路のブロックが無い (region を広げるだけ): `
+      + missing.slice(0, 5).join(' '))
+  }
 
   // 1. 共有 JSON へ (rcon のコマンド長 1014 文字を超えられないのでファイル経由)
   const items = blocks
@@ -231,17 +326,20 @@ export async function capture(defPath: string): Promise<Capture> {
   mkdirSync(sharedDir, { recursive: true })
   writeFileSync(join(sharedDir, 'fixture.json'), JSON.stringify({
     region,
+    // 掃除だけは回路全体に掛ける (keep で region を縮めたとき、前回置いた
+    // ブロックが region の外に残って実機側だけを動かすのを防ぐ)
+    clear: fullRegion,
     blocks: blocks.map(b => ({ pos: b.pos, name: b.name, props: b.props })),
     items,
   }))
-  console.log(`[capture] コンテナ ${items.length} 個 / スロット ${items.reduce((n, i) => n + i.slots.length, 0)}`)
+  log(`[capture] コンテナ ${items.length} 個 / スロット ${items.reduce((n, i) => n + i.slots.length, 0)}`)
 
   // 2. 設置 → 中身 → 安定化
   rcon('tick', 'freeze')
   scarpet('fx_setup()')
   if (items.length > 0) {
     const n = scarpet('fx_items()')
-    console.log(`[capture] 中身を投入: ${n.trim()}`)
+    log(`[capture] 中身を投入: ${n.trim()}`)
     scarpet('fx_settle()')   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
   }
   scarpet('fx_settle()')
@@ -262,9 +360,9 @@ export async function capture(defPath: string): Promise<Capture> {
     }
   }
   if (settleDrift.length > 0) {
-    console.log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
-    for (const d of settleDrift.slice(0, 8)) console.log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
-    if (settleDrift.length > 8) console.log(`    … 他 ${settleDrift.length - 8} 件`)
+    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
+    for (const d of settleDrift.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    if (settleDrift.length > 8) log(`    … 他 ${settleDrift.length - 8} 件`)
   }
 
   // 3b. **実機の予約 tick を読む** (#240)。
@@ -275,9 +373,9 @@ export async function capture(defPath: string): Promise<Capture> {
   const scheduled = readScheduledTicks(
     join(repoRoot, 'tools', 'mc-harness', 'data', 'world'), region.from, region.to)
   if (scheduled.length > 0) {
-    console.log(`[capture] 実機の予約 tick: ${scheduled.length} 件`)
+    log(`[capture] 実機の予約 tick: ${scheduled.length} 件`)
     for (const st of scheduled.slice(0, 5)) {
-      console.log(`    ${st.pos.join(',')} ${st.block.replace('minecraft:', '')} 残り ${st.delay}gt 優先度 ${st.priority}`)
+      log(`    ${st.pos.join(',')} ${st.block.replace('minecraft:', '')} 残り ${st.delay}gt 優先度 ${st.priority}`)
     }
   }
 
@@ -311,7 +409,7 @@ export async function capture(defPath: string): Promise<Capture> {
 
   // 6. 回収
   const saved = scarpet(`fx_cap_save('${def.name}')`)
-  console.log(`[capture] 記録: ${saved.trim()}`)
+  log(`[capture] 記録: ${saved.trim()}`)
   const raw = JSON.parse(readFileSync(join(sharedDir, 'capture.json'), 'utf-8')) as {
     ticks: number
     frames: { tick: number; changes: { pos: string; block: string }[] }[]
@@ -344,8 +442,8 @@ export async function capture(defPath: string): Promise<Capture> {
   mkdirSync(outDir, { recursive: true })
   const outPath = join(outDir, `${def.name}.json`)
   writeFileSync(outPath, JSON.stringify(out, null, 2) + '\n')
-  console.log(`[capture] 書き込み: ${outPath}`)
-  console.log(`[capture] 変化のあった tick: ${out.frames?.length ?? 0} / 記録 ${out.ticks} tick`)
+  log(`[capture] 書き込み: ${outPath}`)
+  log(`[capture] 変化のあった tick: ${out.frames?.length ?? 0} / 記録 ${out.ticks} tick`)
   return out
 }
 
