@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IsometricView } from '@redstone/viewer'
+import { IsometricView, fitDistance } from '@redstone/viewer'
 import type { CameraInput } from '@redstone/viewer'
 import { FixtureRunner } from '@redstone/sim'
 import type { Fixture, WorldSnapshot, NotePlayEvent } from '@redstone/sim'
@@ -66,6 +66,8 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
   const [reloadKey, setReloadKey] = useState(0)
 
   const cameraInputRef = useRef<CameraInput | null>(null)
+  /** setCamera で明示指定されたか (#238)。自動フィットを抑える */
+  const explicitCameraRef = useRef(false)
 
   // ready Promise はマウント同期で 1 度だけ作る (window.__demo.ready が参照)
   const readyResolveRef = useRef<(() => void) | null>(null)
@@ -100,10 +102,10 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
     const sx = fx.region.to[0] - fx.region.from[0] + 1
     const sy = fx.region.to[1] - fx.region.from[1] + 1
     const sz = fx.region.to[2] - fx.region.from[2] + 1
-    // rotX=45,rotY=45 の等角ビューで回路全体が収まる距離。70°FOV では距離 d の
-    // 中心面で高さ約 1.4d が見える。水平は回転で対角 hypot(sx,sz)、縦は sy を見て
-    // 大きい方に合わせ、キャンバスの ~7 割を占めるよう係数を詰める。
-    const distance = Math.max(Math.hypot(sx, sz) * 0.72, sy * 1.7) + 2.5
+    // 回路全体が収まる距離 (#238)。**外接球**で決めるので回転しても収まったまま。
+    // 旧: max(hypot(sx,sz)*0.72, sy*1.7) は縦に細長い回路で引きすぎて
+    // 147 段が糸のように写っていた (実測: 画面の高さの 3 割)
+    const distance = fitDistance([sx, sy, sz], { aspect: DEMO_W / DEMO_H })
     cameraInputRef.current = { distance, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
   }, [])
 
@@ -113,6 +115,10 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
    * 省略した値は今の値を保つ
    */
   const setCamera = useCallback((opts: Partial<CameraInput>) => {
+    // **明示指定があったら以後の自動フィットは走らせない** (#238)。
+    // 自動フィットはビューアの ready (テクスチャ読み込み後) に走るので、
+    // 先に距離を指定しても後から上書きされて効かなかった
+    explicitCameraRef.current = true
     const cur = cameraInputRef.current
       ?? { distance: 20, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
     cameraInputRef.current = { ...cur, ...opts }
@@ -154,7 +160,7 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
 
   const onViewerReady = useCallback(() => {
     setReady(true)
-    fitCamera()
+    if (!explicitCameraRef.current) fitCamera()
     readyResolveRef.current?.()
   }, [fitCamera])
 
