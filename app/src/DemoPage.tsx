@@ -26,9 +26,20 @@ import { FixtureRunner } from '@redstone/sim'
 import type { Fixture, WorldSnapshot, NotePlayEvent } from '@redstone/sim'
 import { resolveFixture, FIXTURE_NAMES } from './demo/fixtures'
 
-// GIF フレームの解像度を決めるデモ領域の固定サイズ (4:3)。
-const DEMO_W = 720
-const DEMO_H = 540
+// GIF / MP4 フレームの解像度を決めるデモ領域のサイズ (既定 4:3)。
+//
+// **`?w=` / `?h=` で変えられる** — 縦長の回路 (ガラスエレベーターのような
+// シャフト) を 4:3 で撮ると左右が余ってブロックが小さくなるため、
+// 撮影 CLI から縦長のコマを頼めるようにしてある。
+const demoSize = (): { w: number; h: number } => {
+  const q = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search)
+  const num = (k: string, d: number): number => {
+    const v = Number(q.get(k))
+    return Number.isFinite(v) && v >= 160 && v <= 2000 ? Math.round(v) : d
+  }
+  return { w: num('w', 720), h: num('h', 540) }
+}
+const { w: DEMO_W, h: DEMO_H } = demoSize()
 
 export interface DemoApi {
   ready: Promise<void>
