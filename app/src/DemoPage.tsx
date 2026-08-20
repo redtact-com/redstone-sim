@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IsometricView } from '@redstone/viewer'
+import { IsometricView, fitDistance } from '@redstone/viewer'
 import type { CameraInput } from '@redstone/viewer'
 import { FixtureRunner } from '@redstone/sim'
 import type { Fixture, WorldSnapshot, NotePlayEvent } from '@redstone/sim'
@@ -100,10 +100,10 @@ export function DemoPage({ fixtureName }: { fixtureName: string }) {
     const sx = fx.region.to[0] - fx.region.from[0] + 1
     const sy = fx.region.to[1] - fx.region.from[1] + 1
     const sz = fx.region.to[2] - fx.region.from[2] + 1
-    // rotX=45,rotY=45 の等角ビューで回路全体が収まる距離。70°FOV では距離 d の
-    // 中心面で高さ約 1.4d が見える。水平は回転で対角 hypot(sx,sz)、縦は sy を見て
-    // 大きい方に合わせ、キャンバスの ~7 割を占めるよう係数を詰める。
-    const distance = Math.max(Math.hypot(sx, sz) * 0.72, sy * 1.7) + 2.5
+    // 回路全体が収まる距離 (#238)。**外接球**で決めるので回転しても収まったまま。
+    // 旧: max(hypot(sx,sz)*0.72, sy*1.7) は縦に細長い回路で引きすぎて
+    // 147 段が糸のように写っていた (実測: 画面の高さの 3 割)
+    const distance = fitDistance([sx, sy, sz], { aspect: DEMO_W / DEMO_H })
     cameraInputRef.current = { distance, panX: 0, panZ: 0, rotX: 45, rotY: 45 }
   }, [])
 
