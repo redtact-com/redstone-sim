@@ -1,0 +1,1538 @@
+{
+  "name": "observer-carried-powered-landing",
+  "description": "#294 Runa.S 式 5×5 ドアを最小化して得た 17 ブロック。引き戻しで 3 つが同じ tick に着地し、引かれたオブザーバー (1,8,1) が真下の 1,7,1 を監視している。実機は 1,7,1 の着地を拾って 2gt 後に発火する。",
+  "mcVersion": "1.21.1",
+  "ticks": 180,
+  "skipUntil": "294",
+  "skipReason": "#294: t31 に 0,8,1(source) / 1,8,1(引かれたオブザーバー) / 1,7,1(source) が同時着地する。実機はオブザーバーが t33 に発火するが sim は t34。sim は 1,7,1 (seq 32) を 1,8,1 (seq 34) より先に確定させており、かつオブザーバーを powered=true のまま運んでいるため、着地時の発火経路が両方とも塞がる。",
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      5,
+      9,
+      3
+    ]
+  },
+  "trustAuthored": true,
+  "scheduled": [],
+  "comparators": [],
+  "blocks": [
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        1
+      ],
+      "block": "redstone_torch[lit=true]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        1
+      ],
+      "block": "sticky_piston[extended=true,facing=up]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        1
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        1
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        2
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        7,
+        1
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        7,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        8,
+        1
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        1
+      ],
+      "block": "repeater[delay=4,facing=east,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        7,
+        1
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        1,
+        8,
+        1
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "observer[facing=east,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "sticky_piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "lever[face=wall,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        1
+      ],
+      "block": "lime_wool"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=wall,facing=north,powered=true]"
+    },
+    {
+      "tick": 140,
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=wall,facing=north,powered=false]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "lever[face=wall,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=up]"
+        },
+        {
+          "pos": [
+            3,
+            2,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
+        }
+      ]
+    },
+    {
+      "tick": 7,
+      "changes": [
+        {
+          "pos": [
+            3,
+            2,
+            1
+          ],
+          "block": "piston_head[facing=up,short=false,type=sticky]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "observer[facing=east,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 9,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "observer[facing=east,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 15,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            1
+          ],
+          "block": "repeater[delay=4,facing=east,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "note_block[instrument=harp,note=0,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 17,
+      "changes": [
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            1
+          ],
+          "block": "redstone_torch[lit=false]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 19,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=up]"
+        }
+      ]
+    },
+    {
+      "tick": 21,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 23,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            1
+          ],
+          "block": "repeater[delay=4,facing=east,locked=false,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "note_block[instrument=harp,note=0,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 25,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            1
+          ],
+          "block": "redstone_torch[lit=true]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=up]"
+        }
+      ]
+    },
+    {
+      "tick": 27,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "piston_head[facing=up,short=false,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        }
+      ]
+    },
+    {
+      "tick": 29,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 31,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 32,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        }
+      ]
+    },
+    {
+      "tick": 33,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 35,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 37,
+      "changes": [
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 39,
+      "changes": [
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 140,
+      "changes": [
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "lever[face=wall,facing=north,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 141,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
+        },
+        {
+          "pos": [
+            3,
+            2,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 143,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=up]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "observer[facing=east,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 145,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "observer[facing=east,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 151,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            1
+          ],
+          "block": "repeater[delay=4,facing=east,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "note_block[instrument=harp,note=0,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 153,
+      "changes": [
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            1
+          ],
+          "block": "redstone_torch[lit=false]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 155,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=up]"
+        }
+      ]
+    },
+    {
+      "tick": 157,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 159,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            1
+          ],
+          "block": "repeater[delay=4,facing=east,locked=false,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "note_block[instrument=harp,note=0,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 161,
+      "changes": [
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            1
+          ],
+          "block": "redstone_torch[lit=true]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=up]"
+        }
+      ]
+    },
+    {
+      "tick": 163,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "piston_head[facing=up,short=false,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        }
+      ]
+    },
+    {
+      "tick": 165,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 167,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            8,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            5,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 168,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        }
+      ]
+    },
+    {
+      "tick": 169,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            7,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            6,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            7,
+            1
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 171,
+      "changes": [
+        {
+          "pos": [
+            1,
+            7,
+            1
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 173,
+      "changes": [
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 175,
+      "changes": [
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-21T11:22:57.950Z",
+    "mc": "1.21.1",
+    "carpet": "unknown"
+  }
+}
