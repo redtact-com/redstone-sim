@@ -90,20 +90,33 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
       'water_cauldron', 'composter', 'lectern', 'oak_stairs',
     ]
     const blocks = new Map<string, BlockState>()
-    const want = new Map<string, string>()   // 座標 → 期待する型
+    const want = new Map<string, BlockState>()   // 座標 → 期待する状態
     names.forEach((n, i) => {
       const b = mcToSim(n)
       if (b === null) return
       blocks.set(`${i},0,0`, b)
-      want.set(`${i},0,0`, b.type)
+      want.set(`${i},0,0`, b)
     })
     const back = await importFromNbtBytes(exportToNbtBytes(blocks as never, names.length, 1))
-    // **型まで見る**。存在だけ見ると、隣の case へ落ちて別のブロックになっていても気付けない
+    // **型だけでなくプロパティまで見る** (#274)。
+    // 型しか比べていなかったせいで、音符ブロックの instrument が落ちているのを
+    // 何度も往復しても捕まえられなかった。落ちた 1 個が実回路を壊した
+    // (undefined → 引き直しで直上のオブザーバーを偽発火させる)。
+    // sim が動的に決めるプロパティ (充電状態など) は往復で変わり得るので比較から外す
+    const DYNAMIC = new Set(['powered', 'lit', 'cooldownUntil', 'slots', 'outputPower'])
     const broken: string[] = []
-    for (const [key, type] of want) {
+    for (const [key, exp] of want) {
       const got = back.blocks.get(key)
-      if (got === undefined) broken.push(`${type}: 消えた`)
-      else if (got.type !== type) broken.push(`${type}: ${got.type} になった`)
+      if (got === undefined) { broken.push(`${exp.type}: 消えた`); continue }
+      if (got.type !== exp.type) { broken.push(`${exp.type}: ${got.type} になった`); continue }
+      for (const k of Object.keys(exp) as (keyof BlockState)[]) {
+        if (k === 'type' || DYNAMIC.has(k as string)) continue
+        // 元が undefined のものは比較しない (**失いようがない**)。
+        // ここでは素の名前から作っているので facing 等が入っていない
+        if (exp[k] === undefined) continue
+        const a = JSON.stringify(exp[k]), b = JSON.stringify((got as BlockState)[k])
+        if (a !== b) broken.push(`${exp.type}.${String(k)}: ${a} → ${b}`)
+      }
     }
     expect(broken, '書き出し → 読み直しで壊れたブロック').toEqual([])
   })
