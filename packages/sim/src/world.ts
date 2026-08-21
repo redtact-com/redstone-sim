@@ -219,6 +219,9 @@ function isFullCube(b: BlockState | null | undefined): boolean {
   }
 }
 
+/** 既定の空集合 (#300。finalizeMovingPiston の既定引数に使う) */
+const EMPTY_POS_SET: ReadonlySet<string> = new Set<string>()
+
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
@@ -575,10 +578,15 @@ export class SimWorld {
     // 同 tick 確定は seq 順 (旧 ST 相 tile tick の予約順を再現)
     dueMoving.sort((a, b) =>
       (this.getBlockAt(a) as MovingPistonState).seq - (this.getBlockAt(b) as MovingPistonState).seq)
+    // **この tick に確定する座標の集合**。着地したオブザーバーの facing 先が
+    // ここに入っているかで近隣更新を配るかが決まる (#292。finalizeMovingPiston 参照)。
+    // **フィールドに持たせない** — BE 相 (phase8) から呼ばれる #231 経路が
+    // 前 tick の集合を読んでしまうため (#300)
+    const finalizingThisTick = new Set(dueMoving.map(posKey))
     for (const pos of dueMoving) {
       const mp = this.getBlockAt(pos)
       if (mp?.type !== 'moving_piston') continue
-      this.finalizeMovingPiston(pos, mp, changed)
+      this.finalizeMovingPiston(pos, mp, changed, finalizingThisTick)
     }
 
     // #91: BE 登録順 (= 設置順 = Map 挿入順) で走査する。座標順ソートは top-down 配置
@@ -663,7 +671,19 @@ export class SimWorld {
    * BlockEntity 相 (phase10) で呼ぶ。setBlock 相当の PP (観測面オブザーバー起動) +
    * NC 伝播を行う。トレースは確定先の abbr で TE (TileEntity) フェーズとして記録。
    */
-  private finalizeMovingPiston(pos: Pos3D, mp: MovingPistonState, changed: Set<string>): void {
+  /**
+   * moving_piston を着地させる。
+   *
+   * `finalizingThisTick` は**この tick に確定する座標の集合**で、
+   * 着地したオブザーバーが近隣更新を配るかの判定に使う (#292)。
+   * BE 相 (phase8) の #231 経路から呼ぶときは**空集合**を渡すこと —
+   * その時点ではまだ phase10 の集合が張られておらず、
+   * 使い回すと**前 tick の集合**を読んでしまう (#300)。
+   */
+  private finalizeMovingPiston(
+    pos: Pos3D, mp: MovingPistonState, changed: Set<string>,
+    finalizingThisTick: ReadonlySet<string> = EMPTY_POS_SET,
+  ): void {
     const into = mp.into
     this.setBlockAt(pos, into)
     changed.add(posKey(pos))
@@ -706,12 +726,30 @@ export class SimWorld {
     if (into.type === 'piston' || into.type === 'sticky_piston') {
       this.neighborChanged(pos)
     }
+    // **facing 先がまだ確定していないオブザーバーの着地は近隣更新を配らない** (#292)。
+    // 実測 (1.21.1)。ピストンの正面セルにオブザーバーが同じ tick に着地するとき、
+    // そのオブザーバーの `facing` 先も同じ tick に確定するなら、
+    // **正面が空いたことがピストンに伝わらず伸びない**:
+    //
+    //   正面に着地するもの          facing 先        実機 t32
+    //   observer facing=down       同 tick 着地      伸びない
+    //   observer facing=west       同 tick 着地      伸びない
+    //   observer facing=east/up/north  空気          伸びる
+    //   石 / 音符ブロック / リピーター   —            伸びる
+    //   (何も着地しない)              —              伸びる
+    //
+    // ピストン側は受電しており (羊毛の強充電をダストで実測 = 15)、押し先も空いている。
+    // 同じ電源の隣のピストンは伸びるので**電源ではなく起動の問題**。
+    // ユーザ提供の Runa.S 式 5×5 ドアで sim だけがピストンを伸ばしていた原因
+    // (実機 fixture piston-land-front-land)
+    const holdNC = into.type === 'observer'
+      && finalizingThisTick.has(posKey(neighbor(pos, into.facing)))
     // 着地は vanilla では **UPDATE_ALL flag の setBlock** なので**隣接 6 マスへ NC が飛ぶ**
     // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock を UPDATE_ALL で呼ぶ]。
     // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も
     // 再評価されず伸びないまま」になる (#213 のドアで tick 135 の押し上げが
     // 起きなかった原因)。実機 fixture door-2wide-open-to-close が回帰を守る
-    this.submitMultiNC(pos)
+    if (!holdNC) this.submitMultiNC(pos)
     // **導体 1 個越しに読んでいるコンパレーターにも知らせる** (#259)。
     // submitMultiNC は隣接 6 マスにしか届かないので、
     // 「コンパレーター → 導体 → 着地したブロック」の並びだと通知が届かない。
@@ -1039,6 +1077,26 @@ export class SimWorld {
       priority,
       seq: this.seqCounter++,
     })
+    return true
+  }
+
+  /**
+   * 実機から読んだホッパーの転送クールダウンを積む (#290)。
+   *
+   * ホッパーは 1 回動かすと 8gt 休む。その残りは **blockstate に出ず
+   * BlockEntity (`TransferCooldown`) にしかない**ので、実機のスナップショットを
+   * そのまま読ませても sim だけが即座に 1 個送ってしまう。
+   * ホッパーの中身をコンパレーターで読んでピストンを動かしている機械では、
+   * これが無いと**数 tick 早く縮む** (Runa.S 式 5×5 ドアで 5 tick 早かった)。
+   *
+   * `initialize()` の**後**に呼ぶこと。
+   */
+  seedHopperCooldown(pos: Pos3D, cooldown: number): boolean {
+    const block = this.getBlockAt(pos)
+    if (block?.type !== 'hopper') return false
+    const n = Math.max(0, Math.floor(cooldown))
+    if (n === 0) return false
+    this.setBlockAt(pos, { ...block, cooldownUntil: this.currentTick + n })
     return true
   }
 
@@ -1572,6 +1630,22 @@ export class SimWorld {
           const d = dest as HopperState | DropperState | ContainerState
           this.setBlockAt(destPos, { ...d, slots: put } as BlockState)
           this.setBlockAt(pos, { ...block, slots: taken.slots })
+          // **入れた先がホッパーならクールダウンを付ける** (#290)
+          // [確定: 26.2 DropperBlock.dispenseFrom は HopperBlockEntity.addItem を通す。
+          //  addItem は受信側がホッパーなら setCooldown(8-k) を呼び、k は
+          //  **押し込み元がホッパーのときだけ** 1 になる。ドロッパーは k=0]。
+          // ホッパー同士の押し込み (上の (1)) と同じく、受信側は自 tick で -1 されるので
+          // 実効は 7gt。ドロッパーの発火は ST 相でホッパーの BE 相より前なので同じ扱い。
+          // これが無いと**入れた次の瞬間にホッパーが押し戻して**しまい、
+          // 「ドロッパーとホッパーでアイテムを往復させるクロック」が sim だけ動かない
+          // (実機 fixture dropper-into-hopper-cooldown)
+          if (d.type === 'hopper' && totalItems(destSlots!) === 0) {
+            const cur = this.getBlockAt(destPos) as HopperState
+            const remaining = (cur.cooldownUntil ?? 0) - this.currentTick
+            if (remaining <= HOPPER_COOLDOWN) {
+              this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN - 1 })
+            }
+          }
           changed.push(posKey(pos), posKey(destPos))
           this.emitComparatorUpdate(destPos)
           this.emitComparatorUpdate(pos)
@@ -1963,6 +2037,17 @@ export class SimWorld {
         changed.push(posKey(headPos))
       }
       const affected: Pos3D[] = [ev.pos, headPos]
+      // **ピストン本体の moving を引き戻す塊より先に置く** (#290)。
+      // [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) — head の finalTick のあと
+      //  まず pos に MOVING_PISTON を置いて **source の PistonMovingBlockEntity を作り**、
+      //  そのあとで isSticky 分岐に入って引き戻す塊の BE を作る]。
+      // 確定順は BE の登録順なので、この順序が逆だと**引き戻された塊のほうが先に着地**し、
+      // 直後にピストン本体が確定して形状更新を配ってしまう。
+      // 点灯したまま運ばれてきたオブザーバーは着地時の updateShape が
+      // POWERED ガードで素通りし、そのあと onPlace が消灯するだけで終わるはずが、
+      // この形状更新を受けて**実機には無い発火**をしていた
+      // (実機 fixture observer-pull-pulse)
+      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
       if (sticky) {
         // 引き戻しも vanilla は PistonStructureResolver を通る (extending=false)。
         // 押し方向は facing の逆、開始位置は piston+facing*2 = head の 1 つ先 (#121)。
@@ -1985,8 +2070,7 @@ export class SimWorld {
           const finalized = new Set<string>()
           this.finalizeMovingPiston(pullFrom, twoBlock, finalized)
           for (const k of finalized) changed.push(k)
-          // pistonPiece 相当: 引き戻しはしない
-          setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
+          // pistonPiece 相当: 引き戻しはしない (本体の moving は上で置き済み)
           this.traceOpenUpdate(ev.pos)
           this.afterPistonMove(affected)
           this.traceCloseUpdate('Pi', 'r', 0, 'BE')
@@ -2011,8 +2095,6 @@ export class SimWorld {
           affected.push(...pullList, ...pullList.map(q => neighbor(q, pullDir)))
         }
       }
-      // base 自体が moving になり 2gt 後に縮んだ piston へ戻る (実機系列で確認)
-      setMoving(ev.pos, sticky ? 'sticky' : 'normal', { ...piston, extended: false }, false)
       this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(affected)
       this.traceCloseUpdate('Pi', 'r', 0, 'BE')

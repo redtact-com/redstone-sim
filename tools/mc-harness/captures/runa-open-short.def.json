@@ -1,0 +1,18 @@
+{
+  "name": "runa-open-short",
+  "source": "/mnt/c/Users/TN256/Downloads/Runa.S_opened.nbt",
+  "ticks": 40,
+  "pad": 1,
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=wall,facing=north,powered=true]"
+    }
+  ]
+}
