@@ -1,0 +1,11 @@
+# リソースパックは**内容が変わったらパスも変わる**わけではないが、
+# ビルドごとに丸ごと入れ替わるので長期キャッシュしてよい (#276)。
+#
+# 付けていなかったので Cloudflare が `max-age=0, must-revalidate` を返し、
+# **warm リロードが初回より遅い** (3596-4517ms / 746 本中 456 本が 304 再検証) 状態だった。
+/resourcepack/*
+  Cache-Control: public, max-age=604800
+
+# ビルド成果物はファイル名にハッシュが入るので不変
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
