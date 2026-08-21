@@ -252,6 +252,17 @@ export function classifyPlainBlock(
       pages: 0,
     }
   }
+  // ガラス板 / 鉄格子 (#303)。**接続が隣の出入りで変わり、オブザーバーが検知する**ので
+  // 装飾に潰せない [確定: 26.2 IronBarsBlock — 非導体・非信号源だが CrossCollisionBlock で
+  //  north/east/south/west の接続を持つ]
+  if (id.endsWith('_pane') || id === 'iron_bars') {
+    return {
+      type: 'pane', name: id,
+      north: props.north === 'true', east: props.east === 'true',
+      south: props.south === 'true', west: props.west === 'true',
+      waterlogged: props.waterlogged === 'true',
+    }
+  }
   if (isDecorBlockName(id)) return { type: 'decor', name: formatDecorName(id, props) }
 
   // sim は材質を潰すが、**上の音符ブロックの音色は材質で決まる** ので

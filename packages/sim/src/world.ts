@@ -206,6 +206,34 @@ function connectsToWall(b: BlockState | null | undefined, dir: HDir): boolean {
   return isFullCube(b)
 }
 
+/**
+ * ガラス板 / 鉄格子が `dir` 方向の隣へ繋がるか (#303)。
+ * `dir` は**板から見た隣の方向**。
+ *
+ * [確定: 26.2 IronBarsBlock.attachsTo — その面が sturdy なら繋がる。
+ *  例外 (葉・バリア・カボチャ等) を除く。加えて**板同士・塀**へは常に繋がる]。
+ * sim は sturdy の代わりにフルキューブ判定で近似する (塀の接続と同じ扱い)。
+ *
+ * 実機で確認 (Runa.S_closed): 隣が moving_piston の間は繋がらず、
+ * 羊毛が着地した瞬間に繋がる。**その形状変化を真下のオブザーバーが検知する**
+ */
+function connectsToPane(b: BlockState | null | undefined, dir: HDir): boolean {
+  if (!b) return false
+  if (b.type === 'pane' || b.type === 'wall') return true
+  // **ピストンヘッドは板のある面だけ sturdy** (#303)。
+  // 頭は facing 側に 4px の板、反対側は細い棒なので、
+  // 板が見ている面 (= OPPOSITE[dir]) が facing と一致するときだけ繋がる。
+  // 実機で確認: facing=south の頭の南隣にある板は north=true になる
+  if (b.type === 'piston_head') return b.facing === OPPOSITE[dir as Dir6]
+  // **伸びたピストンの側面は sturdy でない**ので繋がらない (#303)。
+  // 基部の当たり判定が facing 方向に 12/16 しかなく、側面が正方形にならないため
+  // [確定: 26.2 PistonBaseBlock.getShape — EXTENDED のとき 12px の箱]。
+  // 実機で確認: 伸びたピストンの上にレバーは置けず (canSurvive が落ちる)、
+  // 隣の板も all false になる
+  if ((b.type === 'piston' || b.type === 'sticky_piston') && b.extended) return false
+  return isFullCube(b)
+}
+
 function isFullCube(b: BlockState | null | undefined): boolean {
   if (!b) return false
   switch (b.type) {
@@ -2253,6 +2281,29 @@ export class SimWorld {
    * 変わったら形状更新を出し (オブザーバーが検知)、**下の塀を再帰的に計算し直す**。
    * 実機では上端の 1 か所を変えると柱の全段が同じ tick で反転する。
    */
+  /**
+   * ガラス板 / 鉄格子の接続形状を計算し直す (#303)。
+   *
+   * 塀と違い上下へは伝播しない (板は north/east/south/west だけ)。
+   * 変化したら**形状更新を出す** — 隣のオブザーバーがこれを検知する。
+   * ユーザ提供の Runa.S_closed では、板の接続が変わったことを真下のオブザーバーが拾って
+   * ピストンの収縮を打ち消しており、これが無いと**扉が 1 回しか動かない**
+   */
+  private refreshPane(pos: Pos3D, depth = 0): void {
+    if (depth > 2) return                          // 板同士の相互参照で止まらなくなるのを防ぐ
+    const p = this.getBlockAt(pos)
+    if (p?.type !== 'pane') return
+    const side = (dir: HDir): boolean => connectsToPane(this.getBlockAt(neighbor(pos, dir)), dir)
+    const north = side('north'), south = side('south')
+    const east = side('east'), west = side('west')
+    if (p.north === north && p.south === south && p.east === east && p.west === west) return
+    this.setBlockAt(pos, { ...p, north, south, east, west })
+    this.emitShapeUpdate(pos)                      // オブザーバーが検知する
+    for (const d of ['north', 'south', 'east', 'west'] as const) {
+      this.refreshPane(neighbor(pos, d), depth + 1)
+    }
+  }
+
   private refreshWall(pos: Pos3D, depth = 0): void {
     if (depth > 512) return                       // 暴走よけ (実回路は 140 段)
     const w = this.getBlockAt(pos)
@@ -2515,6 +2566,9 @@ export class SimWorld {
     // 隣の塀は形状を計算し直す (#234)。自分自身も (置き換わった直後のため)
     for (const d of ALL_DIRS) this.refreshWall(neighbor(pos, d))
     this.refreshWall(pos)
+    // 隣のガラス板 / 鉄格子も計算し直す (#303)。自分自身も (置き換わった直後のため)
+    for (const d of ALL_DIRS) this.refreshPane(neighbor(pos, d))
+    this.refreshPane(pos)
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)

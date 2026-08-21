@@ -436,6 +436,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
           east: sim.east, north: sim.north, south: sim.south, up: String(sim.up),
           waterlogged: String(sim.waterlogged), west: sim.west,
         })
+      case 'pane':
+        // 材質は name に持っている (描き分けのため)。形状は近傍で決まる (#303)
+        return formatMcState(sim.name, {
+          east: String(sim.east), north: String(sim.north), south: String(sim.south),
+          waterlogged: String(sim.waterlogged), west: String(sim.west),
+        })
       case 'soul_sand':
         return 'soul_sand'
       case 'water':
@@ -528,6 +534,12 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.north = sim.north; props.east = sim.east
       props.south = sim.south; props.west = sim.west
       props.up = String(sim.up); props.waterlogged = String(sim.waterlogged)
+      break
+    case 'pane':
+      // 接続は隣の出入りで変わる (#303)。オブザーバーがこの変化を検知する
+      props.north = String(sim.north); props.east = String(sim.east)
+      props.south = String(sim.south); props.west = String(sim.west)
+      props.waterlogged = String(sim.waterlogged)
       break
     case 'water':
       // level は動く (水源 0 ⇄ 落下水 8)。#252
