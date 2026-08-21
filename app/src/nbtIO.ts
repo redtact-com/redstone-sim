@@ -12,7 +12,7 @@ import { Structure } from 'deepslate'
 import { sniffFormat, convertBuffer } from '@taku128/java-schematic'
 import type { DetectedFormat } from '@taku128/java-schematic'
 import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
-import { emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock } from '@redstone/sim'
+import { emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
   north: 'south', south: 'north', east: 'west', west: 'east',
@@ -506,7 +506,9 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:redstone_lamp', { lit: String((block as any).lit ?? false) }]
     case 'note_block':
       return ['minecraft:note_block', {
-        instrument: 'harp',
+        // **harp 固定にしない** (#274)。取り込みを直しても、保存 → 読み直しで
+        // 全部 harp になると同じ偽パルスが出る (harp でも「今の音色と違う」は成立する)
+        instrument: (block as any).instrument ?? 'harp',
         note: String((block as any).note ?? 0),
         powered: String((block as any).powered ?? false),
       }]
@@ -760,6 +762,11 @@ function minecraftToBlockState(
       type: 'note_block',
       powered: props.powered === 'true',
       note: Number(props.note ?? 0),
+      // **音色を落とさない** (#274)。sim は「音色は直下ブロックで決まり、
+      // 変化はオブザーバーに検知される」(#231) を実装しているので、undefined のまま置くと
+      // **最初の形状更新が届いた瞬間に引き直され、直上のオブザーバーを実機に無いパルスで叩く**。
+      // ユーザ提供の 2 幅ピストンドアが片側だけ開かなくなっていた原因
+      instrument: toNoteInstrument(props.instrument),
     } as BlockState
   }
 

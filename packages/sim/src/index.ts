@@ -84,6 +84,7 @@ export {
 } from './blocks/container.js'
 export { stackSizeOf, REPRESENTATIVE_ITEM } from './blocks/itemStacks.js'
 export { classifyPlainBlock, isSolidBlockName, toNonConductiveBlockState } from './blocks/blockNames.js'
+export { toNoteInstrument, noteInstrumentFor } from './blocks/noteInstrument.js'
 
 // fixture 再生ドライバ (CI 回帰 fixture-runner とデモページ ?demo= の共通基盤)
 export {

@@ -7,9 +7,9 @@ import {
 } from 'deepslate/render'
 import { Identifier } from 'deepslate/core'
 import { getBlockFlags } from './blockFlags'
-import { getBlockStates, getBlockModels, fetchTexture, fetchPackJson } from './mcAssets'
+import { getBlockStates, getBlockModels, fetchTexture, fetchPackJson, preloadPackBundle } from './mcAssets'
 import { collectTexturePaths, addSpecialRendererTextures } from './texturePaths'
-import { padTextureBlobs, buildAtlas32 } from './atlasUtils'
+import { buildAtlas32 } from './atlasUtils'
 
 const _loggedMissing = new Set<string>()
 
@@ -55,7 +55,10 @@ async function overlayPackData(
   const queue = [...allModelRefs]
 
   while (queue.length > 0) {
-    const batch = queue.splice(0, queue.length).filter(ref => !loaded.has(ref))
+    // **同じ ref を 1 度しか取らない** (#276)。親 ref は下の push で重複して積まれるので、
+    // ここで落とさないと同一 URL への並列 fetch が大量に走る
+    // (実測: 358 本のうちユニークは 264 本、94 本が同じ波の中の重複だった)
+    const batch = [...new Set(queue.splice(0, queue.length))].filter(ref => !loaded.has(ref))
     if (batch.length === 0) break
 
     batch.forEach(ref => loaded.add(ref))
@@ -87,6 +90,9 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
   const [statesJsonBase, modelsJsonBase] = await Promise.all([
     getBlockStates(),
     getBlockModels(),
+    // パック JSON を 1 本にまとめた bundle.json を**並行して**先読みする (#276)。
+    // 取れなければ個別取得にフォールバックするので、失敗しても壊れない
+    preloadPackBundle(),
   ])
 
   // キャッシュを汚染しないようシャローコピーを作成
@@ -190,7 +196,9 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
   )
 
   // deepslate の upperPowerOfTwo バグ対策 (詳細は atlasUtils.ts を参照)
-  padTextureBlobs(validBlobs)
+  // padTextureBlobs は呼ばない (#276)。テクスチャを 286 → 1023 に水増しするが、
+  // buildAtlas32 は自前で幅を計算するので**アトラス幅は両方 32 で不変**だった
+  // (実測: 1023 版 283ms / 286 版 88ms。完全な無駄)
 
   const actualN = Object.keys(validBlobs).length
   console.log(
