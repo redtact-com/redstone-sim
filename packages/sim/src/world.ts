@@ -1921,11 +1921,13 @@ export class SimWorld {
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
       this.traceOpenUpdate(ev.pos)
-      this.afterPistonMove([
-        ev.pos, headPos,
-        ...pushList.map(p => neighbor(p, piston.facing)),
-        ...toDestroy,
-      ])
+      this.afterPistonMove(
+        // 形状更新 (オブザーバーが見る) は**行き先**も含める。ブロックが現れるので
+        [ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing)), ...toDestroy],
+        // 近隣更新は**出発セル**だけ (#285)。行き先から出すと、そこに面した
+        // 受電していないピストンが誤って縮む
+        [ev.pos, ...pushList, ...toDestroy],
+      )
       this.traceCloseUpdate('Pi', 'p', 0, 'BE')
     } else {
       // retract
@@ -2223,7 +2225,7 @@ export class SimWorld {
    * ピストン移動後の後処理: 影響座標の周辺ワイヤー網を再計算し、
    * 各座標から NC を発行する (移動は回路トポロジーを変える)
    */
-  private afterPistonMove(positions: Pos3D[]): void {
+  private afterPistonMove(positions: Pos3D[], ncPositions?: Pos3D[]): void {
     // 接続形状の同期張り替え (#51): ピストン移動はトポロジー変化の主経路。
     // moving_piston 化 (transit 中の切断) と確定 (再接続) の両方がここを通る
     const reshaped = this.refreshWireShapesAround(positions)
@@ -2234,7 +2236,14 @@ export class SimWorld {
     // (押される/引かれるブロックの変化はオブザーバーの検知対象。02 §6 observer / wiki)。
     for (const p of positions) this.emitShapeUpdate(p)
     for (const w of changedWires) this.emitShapeUpdate(w)
-    for (const p of positions) this.submitMultiNC(p)
+    // **近隣更新は形状更新と対象が違う** (#285)。実機を rcon で直接プローブして確定した規則:
+    //   ブロックが**出ていく元**のセル … 同 tick に近隣更新を出す
+    //   ブロックが**入ってくる先** (moving_piston) … 出さない
+    //   **着地**したとき … 出す (finalizeMovingPiston 側)
+    // 行き先からも出していたので、**受電していないのに縮むピストン**が生まれていた
+    // (5×5 扉を 4 往復させると t456 で (8,7,1) が実機と食い違う)。
+    // ncPositions を渡さない経路 (収縮・着地) は今までどおり positions を使う
+    for (const p of ncPositions ?? positions) this.submitMultiNC(p)
     for (const w of changedWires) {
       for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
     }
