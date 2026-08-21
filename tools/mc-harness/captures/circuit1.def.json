@@ -1,0 +1,18 @@
+{
+  "name": "circuit1",
+  "source": "/mnt/c/Users/TN256/Downloads/circuit (1).nbt",
+  "ticks": 120,
+  "pad": 1,
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        1,
+        4,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    }
+  ]
+}

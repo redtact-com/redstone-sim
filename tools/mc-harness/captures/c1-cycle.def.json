@@ -1,0 +1,12 @@
+{
+  "name": "c1-cycle",
+  "source": "/mnt/c/Users/TN256/Downloads/circuit (1).nbt",
+  "ticks": 760,
+  "pad": 1,
+  "inputs": [
+    { "tick": 4,   "pos": [1, 4, 0], "action": "setblock", "block": "lever[face=floor,facing=north,powered=true]" },
+    { "tick": 200, "pos": [1, 4, 0], "action": "setblock", "block": "lever[face=floor,facing=north,powered=false]" },
+    { "tick": 400, "pos": [1, 4, 0], "action": "setblock", "block": "lever[face=floor,facing=north,powered=true]" },
+    { "tick": 600, "pos": [1, 4, 0], "action": "setblock", "block": "lever[face=floor,facing=north,powered=false]" }
+  ]
+}
