@@ -1592,6 +1592,22 @@ export class SimWorld {
           const d = dest as HopperState | DropperState | ContainerState
           this.setBlockAt(destPos, { ...d, slots: put } as BlockState)
           this.setBlockAt(pos, { ...block, slots: taken.slots })
+          // **入れた先がホッパーならクールダウンを付ける** (#290)
+          // [確定: 26.2 DropperBlock.dispenseFrom は HopperBlockEntity.addItem を通す。
+          //  addItem は受信側がホッパーなら setCooldown(8-k) を呼び、k は
+          //  **押し込み元がホッパーのときだけ** 1 になる。ドロッパーは k=0]。
+          // ホッパー同士の押し込み (上の (1)) と同じく、受信側は自 tick で -1 されるので
+          // 実効は 7gt。ドロッパーの発火は ST 相でホッパーの BE 相より前なので同じ扱い。
+          // これが無いと**入れた次の瞬間にホッパーが押し戻して**しまい、
+          // 「ドロッパーとホッパーでアイテムを往復させるクロック」が sim だけ動かない
+          // (実機 fixture dropper-into-hopper-cooldown)
+          if (d.type === 'hopper' && totalItems(destSlots!) === 0) {
+            const cur = this.getBlockAt(destPos) as HopperState
+            const remaining = (cur.cooldownUntil ?? 0) - this.currentTick
+            if (remaining <= HOPPER_COOLDOWN) {
+              this.setBlockAt(destPos, { ...cur, cooldownUntil: this.currentTick + HOPPER_COOLDOWN - 1 })
+            }
+          }
           changed.push(posKey(pos), posKey(destPos))
           this.emitComparatorUpdate(destPos)
           this.emitComparatorUpdate(pos)
