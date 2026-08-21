@@ -44,10 +44,25 @@ export function isConductor(block: BlockState | null): boolean {
   // PoweredRailBlock]。動力を「受ける」だけの素子で、出力に相当するのは
   // powered 変化時に真下のブロックへ配る近隣更新のみ (world.ts の neighborChanged)。
   // lodestone は石と同じフルブロックなので導体。押せないだけ (#234)
+  //
+  // dropper / dispenser / crafter / redstone_lamp も**フルキューブかつ非信号源 = 導体**
+  // (#290)。実機で 1 候補 1 列のプローブを撮って確定した
+  // (レバーで強充電 → 隣のランプが点灯するか):
+  //   導体   … stone note_block dropper dispenser barrel crafter redstone_lamp
+  //            slime_block target
+  //   非導体 … chest waxed_copper_bulb glass observer honey_block
+  // **銅の電球は非導体**、**チェストも非導体** (フルキューブでない) なのが要注意。
+  // barrel は導体だが sim は barrel と chest を同じ 'container' 型に潰していて
+  // 区別できないため、ここでは container を導体にしない (#291)。
+  //
+  // これが無いと「オブザーバー → ドロッパー → その上のドロッパー」の並びで
+  // 上のドロッパーが起動しない (Runa.S 式 5×5 ドアで実機だけが triggered=true だった)
   return !!block && (
     block.type === 'solid' || block.type === 'target' ||
     block.type === 'note_block' || block.type === 'slime_block' ||
-    block.type === 'lodestone' || block.type === 'soul_sand'
+    block.type === 'lodestone' || block.type === 'soul_sand' ||
+    block.type === 'dropper' || block.type === 'dispenser' ||
+    block.type === 'crafter' || block.type === 'lamp'
   )
 }
 

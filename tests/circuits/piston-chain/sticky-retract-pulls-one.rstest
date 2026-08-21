@@ -34,6 +34,11 @@ ticks 16
 
 # strict: 収縮で pull されるのは 1 個 (13gt の確定に Bl{c.2} が 1 つだけ + base の Pi{c.2})。
 # 押し (伸長) は Bl{c.2}×2 だが、収縮は Bl{c.2}×1 = 引きが 1 個であることの証拠。
+# #290: 13gt の確定順は **ピストン本体 (Pi) が先、引かれた塊 (Bl) が後**。
+# [確定: 26.2 PistonBaseBlock.triggerEvent (b0=1/2) — pos の
+#  PistonMovingBlockEntity を作ってから isSticky 分岐で引き戻す塊の BE を作る]。
+# 実機 fixture observer-pull-pulse がこの順序でしか再現しない
+# (逆順だと本体の確定が配る形状更新で、着地したオブザーバーが実機に無い発火をする)。
 trace strict {
   2gt[PI]: Le{n.0}
   2gt[BE]: Pi(p.s)
@@ -44,8 +49,8 @@ trace strict {
   10gt[PI]: Le{f.0}
   10gt[BE]: Pi(r.s)
   11gt[BE]: Pi{r.0}
-  13gt[TE]: Bl{c.2}
   13gt[TE]: Pi{c.2}
+  13gt[TE]: Bl{c.2}
 }
 
 state {

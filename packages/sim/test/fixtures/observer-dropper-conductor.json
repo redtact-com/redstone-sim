@@ -1,0 +1,301 @@
+{
+  "name": "observer-dropper-conductor",
+  "description": "#290 オブザーバー → ドロッパー → **その上のドロッパー** の並び。ドロッパーはフルキューブかつ非信号源なので**強充電を通す導体**であり、下のドロッパーに入った強充電が上のドロッパーを起動する。sim は isConductor にドロッパーを入れておらず、上のドロッパーが triggered にならなかった。ユーザ提供の Runa.S 式 5×5 ドアを最小化して得た 13 ブロック。",
+  "mcVersion": "1.21.1",
+  "ticks": 40,
+  "region": {
+    "from": [
+      3,
+      0,
+      -1
+    ],
+    "to": [
+      11,
+      12,
+      4
+    ]
+  },
+  "trustAuthored": true,
+  "scheduled": [
+    {
+      "pos": [
+        6,
+        10,
+        1
+      ],
+      "block": "minecraft:repeater",
+      "delay": 4,
+      "priority": -1
+    }
+  ],
+  "comparators": [
+    {
+      "pos": [
+        7,
+        10,
+        1
+      ],
+      "output": 1
+    }
+  ],
+  "blocks": [
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "lever[face=wall,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        6,
+        9,
+        1
+      ],
+      "block": "observer[facing=up,powered=false]"
+    },
+    {
+      "pos": [
+        6,
+        10,
+        1
+      ],
+      "block": "repeater[delay=2,facing=east,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        7,
+        9,
+        1
+      ],
+      "block": "observer[facing=west,powered=false]"
+    },
+    {
+      "pos": [
+        7,
+        9,
+        2
+      ],
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        7,
+        9,
+        3
+      ],
+      "block": "dropper[facing=up,triggered=false]",
+      "items": [
+        {
+          "count": 1,
+          "id": "light_blue_wool",
+          "slot": 0
+        }
+      ]
+    },
+    {
+      "pos": [
+        7,
+        10,
+        1
+      ],
+      "block": "comparator[facing=east,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        7,
+        10,
+        3
+      ],
+      "block": "dropper[facing=down,triggered=false]"
+    },
+    {
+      "pos": [
+        8,
+        10,
+        1
+      ],
+      "block": "dropper[facing=east,triggered=false]",
+      "items": [
+        {
+          "count": 1,
+          "id": "light_blue_wool",
+          "slot": 0
+        }
+      ]
+    },
+    {
+      "pos": [
+        9,
+        10,
+        1
+      ],
+      "block": "dropper[facing=west,triggered=false]"
+    },
+    {
+      "pos": [
+        9,
+        11,
+        1
+      ],
+      "block": "sticky_piston[extended=false,facing=west]"
+    },
+    {
+      "pos": [
+        10,
+        10,
+        1
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        10,
+        11,
+        1
+      ],
+      "block": "light_blue_wool"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=wall,facing=north,powered=true]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            6,
+            10,
+            1
+          ],
+          "block": "repeater[delay=2,facing=east,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "lever[face=wall,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            6,
+            9,
+            1
+          ],
+          "block": "observer[facing=up,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            7,
+            9,
+            1
+          ],
+          "block": "observer[facing=west,powered=true]"
+        },
+        {
+          "pos": [
+            6,
+            9,
+            1
+          ],
+          "block": "observer[facing=up,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            7,
+            9,
+            3
+          ],
+          "block": "dropper[facing=up,triggered=true]"
+        },
+        {
+          "pos": [
+            7,
+            10,
+            3
+          ],
+          "block": "dropper[facing=down,triggered=true]"
+        },
+        {
+          "pos": [
+            7,
+            9,
+            2
+          ],
+          "block": "observer[facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            7,
+            9,
+            1
+          ],
+          "block": "observer[facing=west,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            7,
+            9,
+            3
+          ],
+          "block": "dropper[facing=up,triggered=false]"
+        },
+        {
+          "pos": [
+            7,
+            10,
+            3
+          ],
+          "block": "dropper[facing=down,triggered=false]"
+        },
+        {
+          "pos": [
+            7,
+            9,
+            2
+          ],
+          "block": "observer[facing=north,powered=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-21T06:55:21.370Z",
+    "mc": "1.21.1",
+    "carpet": "unknown"
+  }
+}
