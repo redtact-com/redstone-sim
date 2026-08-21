@@ -12,8 +12,11 @@ export function isWireCutBlock(block: BlockState | null): boolean {
   // target / note_block は既定フルキューブ導体 (isRedstoneConductor=true) なので
   // 上下斜め接続を切る。redstone_block は isRedstoneConductor(never) = 非導体なので
   // 切らない [確定: 1.21.1 Blocks.REDSTONE_BLOCK / TargetBlock、26.2 NoteBlock]。
+  // dropper / dispenser / crafter も既定フルキューブ導体なので切る (#300)。
+  // **isConductor (power.ts) と同じ集合に保つ** — どちらも isRedstoneConductor 由来
   return !!block && (block.type === 'solid' || block.type === 'lamp'
-    || block.type === 'target' || block.type === 'note_block')
+    || block.type === 'target' || block.type === 'note_block'
+    || block.type === 'dropper' || block.type === 'dispenser' || block.type === 'crafter')
 }
 
 /**

@@ -1,0 +1,906 @@
+{
+  "name": "wire-cut-conductor",
+  "description": "#300 ダストの上りステップ接続を切るブロック = 導体か、を 12 種並べて実機と突き合わせる。(x,1,0) のダストから (x+1,2,0) のダストへの上り接続は、(x,2,0) が導体なら切れる。切るブロックは tick 4 の setblock で後から置くので、sim は形状を計算し直す必要がある。実機の結果: 切る = stone / dropper / dispenser / crafter / redstone_lamp / note_block / target / barrel、切らない = glass / observer / chest / waxed_copper_bulb / hopper。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      35,
+      3,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        15,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        15,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        18,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        18,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        19,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        19,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        19,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        21,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        21,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        22,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        22,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        22,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        24,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        24,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        25,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        25,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        25,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        27,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        27,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        28,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        28,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        28,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        30,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        30,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        31,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        31,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        31,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        33,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        33,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        34,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        34,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        34,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=side]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "dropper[facing=north,triggered=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        6,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "dispenser[facing=north,triggered=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        9,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "crafter[crafting=false,orientation=north_up,triggered=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        12,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        15,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "note_block[instrument=harp,note=0,powered=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        18,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "target[power=0]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        21,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "glass"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        24,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "observer[facing=north,powered=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        27,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "chest[facing=north,type=single,waterlogged=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        30,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "waxed_copper_bulb[lit=false,powered=false]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        33,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "hopper[enabled=true,facing=down]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            4,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            2,
+            0
+          ],
+          "block": "dropper[facing=north,triggered=false]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            2,
+            0
+          ],
+          "block": "dispenser[facing=north,triggered=false]"
+        },
+        {
+          "pos": [
+            7,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            9,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            10,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            9,
+            2,
+            0
+          ],
+          "block": "crafter[crafting=false,orientation=north_up,triggered=false]"
+        },
+        {
+          "pos": [
+            12,
+            2,
+            0
+          ],
+          "block": "redstone_lamp[lit=false]"
+        },
+        {
+          "pos": [
+            13,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            12,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            15,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            15,
+            2,
+            0
+          ],
+          "block": "note_block[instrument=harp,note=0,powered=false]"
+        },
+        {
+          "pos": [
+            16,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            18,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            18,
+            2,
+            0
+          ],
+          "block": "target[power=0]"
+        },
+        {
+          "pos": [
+            21,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            21,
+            2,
+            0
+          ],
+          "block": "glass"
+        },
+        {
+          "pos": [
+            24,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            24,
+            2,
+            0
+          ],
+          "block": "observer[facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            27,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            27,
+            2,
+            0
+          ],
+          "block": "chest[facing=north,type=single,waterlogged=false]"
+        },
+        {
+          "pos": [
+            30,
+            2,
+            0
+          ],
+          "block": "waxed_copper_bulb[lit=false,powered=false]"
+        },
+        {
+          "pos": [
+            30,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            33,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            33,
+            2,
+            0
+          ],
+          "block": "hopper[enabled=true,facing=down]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            24,
+            2,
+            0
+          ],
+          "block": "observer[facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            24,
+            2,
+            0
+          ],
+          "block": "observer[facing=north,powered=false]"
+        }
+      ]
+    }
+  ],
+  "trustAuthored": true,
+  "scheduled": [],
+  "comparators": [],
+  "cooldowns": [],
+  "generated": {
+    "at": "2026-08-21T12:08:35.215Z",
+    "mc": "1.21.1",
+    "carpet": "unknown"
+  },
+  "skipUntil": "301",
+  "skipReason": "#301: 接続が上りステップ 1 本だけのダストが直線化しない (反対側が side にならない)。切れない側 6 列でだけ出る既存バグで、#300 の isWireCutBlock 修正とは別件。"
+}
