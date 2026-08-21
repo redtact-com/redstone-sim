@@ -1,8 +1,8 @@
 {
-  "name": "piston-land-front-land",
-  "description": "#290 / #292 Runa.S 式 5×5 ドアを最小化して得た 15 ブロック。同じ tick (31) に 0,8,1 の粘着ピストン・その正面 1,8,1 のオブザーバー・1,7,1 の粘着ピストンが着地し、同じ tick に 0,6,1 のオブザーバーが真上の羊毛 0,7,1 を強充電する。実機で伸びるのは正面が空気だった 1,7,1 だけで、正面がまだ moving_piston だった 0,8,1 は伸びない。",
+  "name": "piston-land-front-stone",
+  "description": "#292 の対照: ピストンの正面に **石** が同じ tick に着地する。着地したブロックが近隣更新を配るのでピストンは伸びる。piston-land-front-land (正面がオブザーバーで伸びない) と 1 ブロックしか違わない。",
   "mcVersion": "1.21.1",
-  "ticks": 180,
+  "ticks": 45,
   "region": {
     "from": [
       -1,
@@ -15,9 +15,6 @@
       2
     ]
   },
-  "trustAuthored": true,
-  "scheduled": [],
-  "comparators": [],
   "blocks": [
     {
       "pos": [
@@ -42,6 +39,14 @@
         1
       ],
       "block": "sticky_piston[extended=true,facing=up]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        1
+      ],
+      "block": "piston_head[facing=up,short=false,type=sticky]"
     },
     {
       "pos": [
@@ -105,7 +110,7 @@
         8,
         1
       ],
-      "block": "observer[facing=down,powered=false]"
+      "block": "stone"
     },
     {
       "pos": [
@@ -150,16 +155,6 @@
       ],
       "action": "setblock",
       "block": "lever[face=wall,facing=north,powered=true]"
-    },
-    {
-      "tick": 140,
-      "pos": [
-        4,
-        1,
-        0
-      ],
-      "action": "setblock",
-      "block": "lever[face=wall,facing=north,powered=false]"
     }
   ],
   "expect": [
@@ -367,7 +362,7 @@
             8,
             1
           ],
-          "block": "observer[facing=down,powered=false]"
+          "block": "stone"
         },
         {
           "pos": [
@@ -424,14 +419,6 @@
       "changes": [
         {
           "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
-        },
-        {
-          "pos": [
             1,
             7,
             1
@@ -475,14 +462,6 @@
     {
       "tick": 25,
       "changes": [
-        {
-          "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
         {
           "pos": [
             0,
@@ -656,7 +635,7 @@
             8,
             1
           ],
-          "block": "observer[facing=down,powered=false]"
+          "block": "stone"
         },
         {
           "pos": [
@@ -689,8 +668,32 @@
       "changes": [
         {
           "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
             1,
             7,
+            1
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            8,
             1
           ],
           "block": "sticky_piston[extended=true,facing=east]"
@@ -710,8 +713,24 @@
       "changes": [
         {
           "pos": [
+            2,
+            8,
+            1
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
             1,
             7,
+            1
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            8,
             1
           ],
           "block": "moving_piston[facing=east,type=sticky]"
@@ -726,24 +745,19 @@
         },
         {
           "pos": [
+            1,
+            8,
+            1
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
             2,
             7,
             1
           ],
           "block": "air"
-        }
-      ]
-    },
-    {
-      "tick": 34,
-      "changes": [
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
         }
       ]
     },
@@ -757,312 +771,6 @@
             1
           ],
           "block": "sticky_piston[extended=false,facing=east]"
-        }
-      ]
-    },
-    {
-      "tick": 36,
-      "changes": [
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        }
-      ]
-    },
-    {
-      "tick": 140,
-      "changes": [
-        {
-          "pos": [
-            4,
-            1,
-            0
-          ],
-          "block": "lever[face=wall,facing=north,powered=false]"
-        }
-      ]
-    },
-    {
-      "tick": 141,
-      "changes": [
-        {
-          "pos": [
-            3,
-            1,
-            1
-          ],
-          "block": "moving_piston[facing=up,type=sticky]"
-        },
-        {
-          "pos": [
-            3,
-            2,
-            1
-          ],
-          "block": "air"
-        }
-      ]
-    },
-    {
-      "tick": 143,
-      "changes": [
-        {
-          "pos": [
-            3,
-            1,
-            1
-          ],
-          "block": "sticky_piston[extended=false,facing=up]"
-        },
-        {
-          "pos": [
-            2,
-            1,
-            1
-          ],
-          "block": "observer[facing=east,powered=true]"
-        }
-      ]
-    },
-    {
-      "tick": 145,
-      "changes": [
-        {
-          "pos": [
-            2,
-            1,
-            1
-          ],
-          "block": "observer[facing=east,powered=false]"
-        }
-      ]
-    },
-    {
-      "tick": 151,
-      "changes": [
-        {
-          "pos": [
-            1,
-            1,
-            1
-          ],
-          "block": "repeater[delay=4,facing=east,locked=false,powered=true]"
-        },
-        {
-          "pos": [
-            0,
-            1,
-            1
-          ],
-          "block": "note_block[instrument=harp,note=0,powered=true]"
-        }
-      ]
-    },
-    {
-      "tick": 153,
-      "changes": [
-        {
-          "pos": [
-            0,
-            4,
-            1
-          ],
-          "block": "moving_piston[facing=up,type=normal]"
-        },
-        {
-          "pos": [
-            0,
-            2,
-            1
-          ],
-          "block": "redstone_torch[lit=false]"
-        },
-        {
-          "pos": [
-            0,
-            3,
-            1
-          ],
-          "block": "moving_piston[facing=up,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            5,
-            1
-          ],
-          "block": "air"
-        }
-      ]
-    },
-    {
-      "tick": 155,
-      "changes": [
-        {
-          "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=normal]"
-        },
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "sticky_piston[extended=true,facing=east]"
-        },
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            8,
-            1
-          ],
-          "block": "sticky_piston[extended=true,facing=east]"
-        },
-        {
-          "pos": [
-            0,
-            6,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
-        },
-        {
-          "pos": [
-            0,
-            4,
-            1
-          ],
-          "block": "observer[facing=west,powered=false]"
-        },
-        {
-          "pos": [
-            2,
-            7,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            3,
-            1
-          ],
-          "block": "sticky_piston[extended=false,facing=up]"
-        }
-      ]
-    },
-    {
-      "tick": 157,
-      "changes": [
-        {
-          "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            8,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            6,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
-        {
-          "pos": [
-            0,
-            4,
-            1
-          ],
-          "block": "observer[facing=west,powered=true]"
-        },
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "air"
-        },
-        {
-          "pos": [
-            2,
-            7,
-            1
-          ],
-          "block": "air"
-        }
-      ]
-    },
-    {
-      "tick": 159,
-      "changes": [
-        {
-          "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
-        },
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "sticky_piston[extended=false,facing=east]"
-        },
-        {
-          "pos": [
-            1,
-            1,
-            1
-          ],
-          "block": "repeater[delay=4,facing=east,locked=false,powered=false]"
-        },
-        {
-          "pos": [
-            0,
-            1,
-            1
-          ],
-          "block": "note_block[instrument=harp,note=0,powered=false]"
         },
         {
           "pos": [
@@ -1071,321 +779,16 @@
             1
           ],
           "block": "sticky_piston[extended=false,facing=east]"
-        },
-        {
-          "pos": [
-            0,
-            4,
-            1
-          ],
-          "block": "observer[facing=west,powered=false]"
-        }
-      ]
-    },
-    {
-      "tick": 161,
-      "changes": [
-        {
-          "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
-        {
-          "pos": [
-            0,
-            4,
-            1
-          ],
-          "block": "moving_piston[facing=up,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            5,
-            1
-          ],
-          "block": "moving_piston[facing=up,type=normal]"
-        },
-        {
-          "pos": [
-            0,
-            2,
-            1
-          ],
-          "block": "redstone_torch[lit=true]"
-        },
-        {
-          "pos": [
-            0,
-            3,
-            1
-          ],
-          "block": "sticky_piston[extended=true,facing=up]"
-        }
-      ]
-    },
-    {
-      "tick": 163,
-      "changes": [
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "sticky_piston[extended=true,facing=east]"
-        },
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            8,
-            1
-          ],
-          "block": "sticky_piston[extended=true,facing=east]"
-        },
-        {
-          "pos": [
-            0,
-            6,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
-        },
-        {
-          "pos": [
-            0,
-            4,
-            1
-          ],
-          "block": "piston_head[facing=up,short=false,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            5,
-            1
-          ],
-          "block": "observer[facing=west,powered=false]"
-        },
-        {
-          "pos": [
-            2,
-            7,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        }
-      ]
-    },
-    {
-      "tick": 165,
-      "changes": [
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=normal]"
-        },
-        {
-          "pos": [
-            0,
-            8,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            6,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
-        {
-          "pos": [
-            0,
-            5,
-            1
-          ],
-          "block": "observer[facing=west,powered=true]"
-        },
-        {
-          "pos": [
-            2,
-            8,
-            1
-          ],
-          "block": "air"
-        },
-        {
-          "pos": [
-            2,
-            7,
-            1
-          ],
-          "block": "air"
-        }
-      ]
-    },
-    {
-      "tick": 167,
-      "changes": [
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "sticky_piston[extended=false,facing=east]"
-        },
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
-        {
-          "pos": [
-            0,
-            8,
-            1
-          ],
-          "block": "sticky_piston[extended=false,facing=east]"
-        },
-        {
-          "pos": [
-            0,
-            6,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
-        },
-        {
-          "pos": [
-            0,
-            5,
-            1
-          ],
-          "block": "observer[facing=west,powered=false]"
-        }
-      ]
-    },
-    {
-      "tick": 168,
-      "changes": [
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "sticky_piston[extended=true,facing=east]"
-        },
-        {
-          "pos": [
-            2,
-            7,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        }
-      ]
-    },
-    {
-      "tick": 169,
-      "changes": [
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "moving_piston[facing=east,type=sticky]"
-        },
-        {
-          "pos": [
-            0,
-            6,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
-        },
-        {
-          "pos": [
-            2,
-            7,
-            1
-          ],
-          "block": "air"
-        }
-      ]
-    },
-    {
-      "tick": 170,
-      "changes": [
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=true]"
-        }
-      ]
-    },
-    {
-      "tick": 171,
-      "changes": [
-        {
-          "pos": [
-            1,
-            7,
-            1
-          ],
-          "block": "sticky_piston[extended=false,facing=east]"
-        }
-      ]
-    },
-    {
-      "tick": 172,
-      "changes": [
-        {
-          "pos": [
-            1,
-            8,
-            1
-          ],
-          "block": "observer[facing=down,powered=false]"
         }
       ]
     }
   ],
+  "trustAuthored": true,
+  "scheduled": [],
+  "comparators": [],
+  "cooldowns": [],
   "generated": {
-    "at": "2026-08-21T08:51:39.845Z",
+    "at": "2026-08-21T10:06:07.634Z",
     "mc": "1.21.1",
     "carpet": "unknown"
   }

@@ -561,6 +561,9 @@ export class SimWorld {
    * (vanilla HopperBlockEntity.add の setCooldown(8-k) + 自 tick の -1 が相補的)。
    * 2 ホッパー clock の 14gt 周期はこれで実機一致する。
    */
+  /** この tick に確定する moving_piston の座標 (#292)。tickBlockEntities が毎 tick 張り替える */
+  private finalizingThisTick: Set<string> = new Set()
+
   private tickBlockEntities(changed: Set<string>): void {
     // #80: moving_piston の確定 (phase10 PistonMovingBlockEntity.tick 相当)。
     // BE フェーズ (phase8) の後に確定するため、確定ブロックが下流ピストンを
@@ -575,6 +578,9 @@ export class SimWorld {
     // 同 tick 確定は seq 順 (旧 ST 相 tile tick の予約順を再現)
     dueMoving.sort((a, b) =>
       (this.getBlockAt(a) as MovingPistonState).seq - (this.getBlockAt(b) as MovingPistonState).seq)
+    // **この tick に確定する座標の集合**。着地したオブザーバーの facing 先が
+    // ここに入っているかで近隣更新を配るかが決まる (#292。finalizeMovingPiston 参照)
+    this.finalizingThisTick = new Set(dueMoving.map(posKey))
     for (const pos of dueMoving) {
       const mp = this.getBlockAt(pos)
       if (mp?.type !== 'moving_piston') continue
@@ -706,12 +712,30 @@ export class SimWorld {
     if (into.type === 'piston' || into.type === 'sticky_piston') {
       this.neighborChanged(pos)
     }
+    // **facing 先がまだ確定していないオブザーバーの着地は近隣更新を配らない** (#292)。
+    // 実測 (1.21.1)。ピストンの正面セルにオブザーバーが同じ tick に着地するとき、
+    // そのオブザーバーの `facing` 先も同じ tick に確定するなら、
+    // **正面が空いたことがピストンに伝わらず伸びない**:
+    //
+    //   正面に着地するもの          facing 先        実機 t32
+    //   observer facing=down       同 tick 着地      伸びない
+    //   observer facing=west       同 tick 着地      伸びない
+    //   observer facing=east/up/north  空気          伸びる
+    //   石 / 音符ブロック / リピーター   —            伸びる
+    //   (何も着地しない)              —              伸びる
+    //
+    // ピストン側は受電しており (羊毛の強充電をダストで実測 = 15)、押し先も空いている。
+    // 同じ電源の隣のピストンは伸びるので**電源ではなく起動の問題**。
+    // ユーザ提供の Runa.S 式 5×5 ドアで sim だけがピストンを伸ばしていた原因
+    // (実機 fixture piston-land-front-land)
+    const holdNC = into.type === 'observer'
+      && this.finalizingThisTick.has(posKey(neighbor(pos, into.facing)))
     // 着地は vanilla では **UPDATE_ALL flag の setBlock** なので**隣接 6 マスへ NC が飛ぶ**
     // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock を UPDATE_ALL で呼ぶ]。
     // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も
     // 再評価されず伸びないまま」になる (#213 のドアで tick 135 の押し上げが
     // 起きなかった原因)。実機 fixture door-2wide-open-to-close が回帰を守る
-    this.submitMultiNC(pos)
+    if (!holdNC) this.submitMultiNC(pos)
     // **導体 1 個越しに読んでいるコンパレーターにも知らせる** (#259)。
     // submitMultiNC は隣接 6 マスにしか届かないので、
     // 「コンパレーター → 導体 → 着地したブロック」の並びだと通知が届かない。
