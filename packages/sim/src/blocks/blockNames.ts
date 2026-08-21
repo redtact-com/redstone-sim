@@ -171,12 +171,22 @@ const DECOR_EXACT = new Set([
   'end_rod', 'lectern', 'lightning_rod', 'flower_pot', 'chain', 'ladder',
 ])
 
+/**
+ * 頭・頭蓋 (`player_head` / `zombie_wall_head` / `skeleton_skull` …)。
+ * 1.20.3 以降 `powered` プロパティを持つが**レッドストーン出力は無い**ので装飾でよい
+ * [確定: 26.2 SkullBlock — getSignal を持たない]。
+ * `piston_head` だけは名前が `_head` で終わるが**まったくの別物**なので必ず外す。
+ */
+const isHeadOrSkull = (id: string): boolean =>
+  id !== 'piston_head' && (id.endsWith('_head') || id.endsWith('_skull'))
+
 const stripNs = (name: string): string =>
   name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
 
 export function isDecorBlockName(name: string): boolean {
   const id = stripNs(name)
-  return DECOR_EXACT.has(id) || DECOR_SUFFIXES.some(sfx => id.endsWith(sfx))
+  return DECOR_EXACT.has(id) || isHeadOrSkull(id)
+    || DECOR_SUFFIXES.some(sfx => id.endsWith(sfx))
 }
 
 /** blockstate の数値プロパティを範囲内に収めて取り込む */

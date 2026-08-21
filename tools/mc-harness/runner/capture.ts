@@ -407,6 +407,65 @@ async function waitForTick(target: number, timeoutMs = 15 * 60 * 1000): Promise<
 }
 
 /** 入力を実機へ当てる。当てた「直後」に fx_cap_reframe を呼ぶのは呼び出し側 */
+/** `updateNeighborsAt` が近傍を叩く順序 [確定: 26.2 NeighborUpdater] */
+const NEIGHBOR_ORDER: [number, number, number][] = [
+  [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
+]
+
+const FACING_DELTA: Record<string, [number, number, number]> = {
+  north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0],
+}
+
+/**
+ * 貼り付き電源 (レバー / ボタン) が貼り付いている**支えブロック**の座標。
+ *
+ * 支え = `pos` から「貼り付き方向の逆」へ 1 つ
+ * [確定: 26.2 FaceAttachedHorizontalDirectionalBlock.getConnectedDirection]。
+ * face=floor なら下、face=ceiling なら上、face=wall なら `facing` の逆。
+ *
+ * 対象外のブロックなら null。
+ */
+export function attachedSupportPos(
+  pos: number[], block: string,
+): [number, number, number] | null {
+  const id = block.replace(/^minecraft:/, '').replace(/\[.*/, '')
+  if (id !== 'lever' && !id.endsWith('_button')) return null
+  const props = Object.fromEntries(
+    (block.match(/\[(.*)\]/)?.[1] ?? '').split(',').filter(Boolean)
+      .map(kv => kv.split('=').map(t => t.trim()) as [string, string]))
+  const face = props.face ?? 'wall'
+  const d: [number, number, number] | undefined = face === 'floor'
+    ? [0, -1, 0]
+    : face === 'ceiling'
+      ? [0, 1, 0]
+      : FACING_DELTA[props.facing ?? 'north']?.map(v => -v) as [number, number, number] | undefined
+  if (!d) return null
+  return [pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]]
+}
+
+/**
+ * `/setblock` で貼り付き電源を置いたときに足りない近傍更新を補う。
+ *
+ * バニラのレバー/ボタンは倒したとき **2 か所**へ更新を配る
+ * [確定: 26.2 LeverBlock.updateNeighbours / ButtonBlock.updateNeighbours]:
+ * レバー自身の位置と、**貼り付いている支えブロックの位置**。
+ * `/setblock` は前者しか配らないため、支えブロックの隣にある機構
+ * (ランプ・音符ブロック・リピーター・ピストン) が**強充電に気づかないまま**になり、
+ * 「レバーを ON にしたのに回路が起動しない」実機キャプチャができてしまう (#290)。
+ *
+ * 実測 (1.21.1): 羊毛の上に床レバー ON → 羊毛の下のランプは**消灯のまま**。
+ * ランプ位置に `update()` を撃つと点灯する = 強充電は効いていて更新だけ届いていない。
+ *
+ * 書見台のページ送り (`lectern`) と同じ「更新が配られない」罠 (#196)。
+ */
+function emitAttachedSupportUpdate(pos: number[], block: string): void {
+  const support = attachedSupportPos(pos, block)
+  if (!support) return
+  for (const [dx, dy, dz] of NEIGHBOR_ORDER) {
+    scarpet(`update([${support[0] + dx},${support[1] + dy},${support[2] + dz}])`)
+  }
+}
+
 async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): Promise<void> {
   const [x, y, z] = input.pos
   switch (input.action) {
@@ -423,6 +482,7 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
     case 'setblock':
       if (!input.block) throw new Error(`setblock に block が無い: ${input.pos}`)
       rcon('setblock', String(x), String(y), String(z), input.block)
+      emitAttachedSupportUpdate(input.pos, input.block)
       break
     case 'container': {
       // コンテナの中身をコンパレーター強度 signal 相当にする (#236)。
