@@ -36,7 +36,9 @@ import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture, CaptureItems } from './compare.js'
-import { readScheduledTicks, readComparatorOutputs } from './scheduled-ticks.js'
+import {
+  readScheduledTicks, readComparatorOutputs, readHopperCooldowns,
+} from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
 
@@ -701,6 +703,14 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
       + ` (${comparators.slice(0, 5).map(c => `${c.pos.join(',')}=${c.output}`).join(' ')})`)
   }
 
+  // ホッパーの転送クールダウン (#290)。0 のものは sim 側の既定と同じなので落とす
+  const cooldowns = readHopperCooldowns(worldDir, region.from, region.to)
+    .filter(c => c.cooldown !== 0)
+  if (cooldowns.length > 0) {
+    log(`[capture] ホッパーの転送クールダウン: ${cooldowns.length} 個`
+      + ` (${cooldowns.slice(0, 5).map(c => `${c.pos.join(',')}=${c.cooldown}gt`).join(' ')})`)
+  }
+
   // 元ファイルとのズレを記録する (落とさない。実機が正)
   const source: Record<string, string> = {}
   for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
@@ -783,6 +793,7 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     })),
     ...(scheduled.length > 0 ? { scheduled } : {}),
     ...(comparators.length > 0 ? { comparators } : {}),
+    ...(cooldowns.length > 0 ? { cooldowns } : {}),
     ...(settleDrift.length > 0 ? { settleDrift } : {}),
     generated: { at: new Date().toISOString(), mc: MC_VERSION, carpet: readCarpetVersion() },
   }

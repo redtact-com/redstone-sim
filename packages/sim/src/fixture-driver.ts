@@ -107,6 +107,14 @@ export interface Fixture {
    */
   comparators?: { pos: Pos3D; output: number }[]
   /**
+   * 実機のホッパーが持つ転送クールダウン (#290)。trustAuthored と併用する。
+   *
+   * ホッパーは 1 回動かすと 8gt 休むが、その残りは **BlockEntity 側にしかない**。
+   * 無いと sim だけが即座に 1 個送ってしまい、その中身をコンパレーターで
+   * 読んでいる機械が数 tick 早く動く
+   */
+  cooldowns?: { pos: Pos3D; cooldown: number }[]
+  /**
    * blocks: 各ブロックの blockstate 文字列。コンテナ (hopper/dropper/container) は
    * items で初期の中身を与えられる (アイテムは blockstate に現れないため)。
    *
@@ -194,6 +202,10 @@ export function buildFixtureWorld(fx: Fixture): { world: SimWorld; authored: Map
   // 実機から読んだ予約を積む (initialize が予約を空にした後でないといけない)
   for (const st of fx.scheduled ?? []) {
     world.seedScheduledTick(st.pos, st.delay, st.priority)
+  }
+  // ホッパーの転送クールダウンも同じく実機から持ち込む (#290)
+  for (const cd of fx.cooldowns ?? []) {
+    world.seedHopperCooldown(cd.pos, cd.cooldown)
   }
   // **trustAuthored のときは flush しない**。flush は予約を全部消化してしまうので、
   // 「あと 5gt で ON」を積んだ意味が消え、実機のスナップショットとも食い違う

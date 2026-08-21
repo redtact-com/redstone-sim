@@ -4,6 +4,7 @@
 // 扱うのは 2 つ。どちらも Anvil のチャンク NBT にしか無い:
 //   1. 予約 tick (`block_ticks`) … 「あと 5gt で ON」(#240)
 //   2. コンパレーターの出力強度 (`block_entities` の OutputSignal) … (#249)
+//   3. ホッパーの転送クールダウン (`block_entities` の TransferCooldown) … (#290)
 //
 // **ブロック状態だけでは動いている機械を再現できない**。リピーターの「あと 5gt で ON」
 // のような予約はブロック状態に出ないため、実機のスナップショットを sim に読ませても
@@ -155,6 +156,55 @@ export function readComparatorOutputs(
       const x = e.getNumber('x'), y = e.getNumber('y'), z = e.getNumber('z')
       if (!inRange(x, y, z, from, to)) continue
       out.push({ pos: [x, y, z], output: e.getNumber('OutputSignal') })
+    }
+  })
+  out.sort((a, b) => a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2])
+  return out
+}
+
+// ------------------------------------------------------------
+// 3. ホッパーの転送クールダウン (`block_entities` の TransferCooldown) … (#290)
+//
+// **blockstate に出ない**。ホッパーは 1 回動かすと 8gt 休むが、その残りは
+// BlockEntity 側にしかないので、実機のスナップショットをそのまま読ませても
+// 「sim だけ即座に 1 個送る」ことになる。
+//
+// 実際の食い違い: Runa.S 式 5×5 ドアで、ホッパーが持つ頭 1 個をコンパレーターが
+// 読んでピストンを伸ばしている。実機は t6 まで送らないので伸びたままだが、
+// sim は t1 で送ってしまい 5 tick 早く縮んだ。
+//
+// 保存データの block_entities には次の形で入っている:
+//
+//   {"id": "minecraft:hopper", "x": 0, "y": 9, "z": 3, "TransferCooldown": 6}
+// ------------------------------------------------------------
+
+export interface HopperCooldownEntry {
+  pos: [number, number, number]
+  /** あと何 gt 動けないか (0 は「すぐ動ける」= 既定と同じ) */
+  cooldown: number
+}
+
+/**
+ * 指定範囲のホッパーが持つ転送クールダウンを集める。
+ *
+ * `readScheduledTicks` と同じく、呼ぶ前に `/save-all flush` が要る。
+ */
+export function readHopperCooldowns(
+  worldDir: string,
+  from: [number, number, number],
+  to: [number, number, number],
+): HopperCooldownEntry[] {
+  const out: HopperCooldownEntry[] = []
+  forEachChunk(worldDir, from, to, chunk => {
+    const list = chunk.get('block_entities')
+    if (!(list instanceof NbtList)) return
+    for (let n = 0; n < list.length; n++) {
+      const e = list.get(n)
+      if (!(e instanceof NbtCompound)) continue
+      if (e.getString('id') !== 'minecraft:hopper') continue
+      const x = e.getNumber('x'), y = e.getNumber('y'), z = e.getNumber('z')
+      if (!inRange(x, y, z, from, to)) continue
+      out.push({ pos: [x, y, z], cooldown: e.getNumber('TransferCooldown') })
     }
   })
   out.sort((a, b) => a.pos[0] - b.pos[0] || a.pos[1] - b.pos[1] || a.pos[2] - b.pos[2])

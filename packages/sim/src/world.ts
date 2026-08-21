@@ -1043,6 +1043,26 @@ export class SimWorld {
   }
 
   /**
+   * 実機から読んだホッパーの転送クールダウンを積む (#290)。
+   *
+   * ホッパーは 1 回動かすと 8gt 休む。その残りは **blockstate に出ず
+   * BlockEntity (`TransferCooldown`) にしかない**ので、実機のスナップショットを
+   * そのまま読ませても sim だけが即座に 1 個送ってしまう。
+   * ホッパーの中身をコンパレーターで読んでピストンを動かしている機械では、
+   * これが無いと**数 tick 早く縮む** (Runa.S 式 5×5 ドアで 5 tick 早かった)。
+   *
+   * `initialize()` の**後**に呼ぶこと。
+   */
+  seedHopperCooldown(pos: Pos3D, cooldown: number): boolean {
+    const block = this.getBlockAt(pos)
+    if (block?.type !== 'hopper') return false
+    const n = Math.max(0, Math.floor(cooldown))
+    if (n === 0) return false
+    this.setBlockAt(pos, { ...block, cooldownUntil: this.currentTick + n })
+    return true
+  }
+
+  /**
    * `/setblock` 相当のブロック差し替え (#127)。**BUD の検証に使う**。
    *
    * vanilla の SetBlockCommand は **flag 2 | 256** で置く。

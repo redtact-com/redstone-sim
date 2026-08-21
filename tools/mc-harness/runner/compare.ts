@@ -86,6 +86,12 @@ export interface Capture {
    * sim 側は「今の入力から計算し直す」しかなく、**周回しながら減衰する機械が止まる**
    */
   comparators?: { pos: Pos3D; output: number }[]
+  /**
+   * ホッパーが持つ転送クールダウン (#290)。
+   * これも blockstate に出ない。無いと sim だけが**即座に 1 個送って**しまい、
+   * その中身をコンパレーターで読んでいる機械が数 tick 早く動く
+   */
+  cooldowns?: { pos: Pos3D; cooldown: number }[]
   /** 元ファイルと実機の安定状態のズレ (実機が正。参考情報) */
   settleDrift?: { pos: string; source: string; settled: string }[]
   generated?: { at: string; mc: string; carpet: string }
@@ -148,6 +154,7 @@ export function captureToFixture(cap: Capture, trustAuthored = false): Fixture {
         trustAuthored: true,
         scheduled: cap.scheduled ?? [],
         comparators: cap.comparators ?? [],
+        cooldowns: cap.cooldowns ?? [],
       }
       : {}),
     ...(cap.generated ? { generated: cap.generated } : {}),
