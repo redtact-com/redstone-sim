@@ -219,6 +219,9 @@ function isFullCube(b: BlockState | null | undefined): boolean {
   }
 }
 
+/** 既定の空集合 (#300。finalizeMovingPiston の既定引数に使う) */
+const EMPTY_POS_SET: ReadonlySet<string> = new Set<string>()
+
 export class SimWorld {
   private blocks = new Map<string, BlockState>()
   private scheduledTicks: ScheduledTick[] = []
@@ -561,9 +564,6 @@ export class SimWorld {
    * (vanilla HopperBlockEntity.add の setCooldown(8-k) + 自 tick の -1 が相補的)。
    * 2 ホッパー clock の 14gt 周期はこれで実機一致する。
    */
-  /** この tick に確定する moving_piston の座標 (#292)。tickBlockEntities が毎 tick 張り替える */
-  private finalizingThisTick: Set<string> = new Set()
-
   private tickBlockEntities(changed: Set<string>): void {
     // #80: moving_piston の確定 (phase10 PistonMovingBlockEntity.tick 相当)。
     // BE フェーズ (phase8) の後に確定するため、確定ブロックが下流ピストンを
@@ -579,12 +579,14 @@ export class SimWorld {
     dueMoving.sort((a, b) =>
       (this.getBlockAt(a) as MovingPistonState).seq - (this.getBlockAt(b) as MovingPistonState).seq)
     // **この tick に確定する座標の集合**。着地したオブザーバーの facing 先が
-    // ここに入っているかで近隣更新を配るかが決まる (#292。finalizeMovingPiston 参照)
-    this.finalizingThisTick = new Set(dueMoving.map(posKey))
+    // ここに入っているかで近隣更新を配るかが決まる (#292。finalizeMovingPiston 参照)。
+    // **フィールドに持たせない** — BE 相 (phase8) から呼ばれる #231 経路が
+    // 前 tick の集合を読んでしまうため (#300)
+    const finalizingThisTick = new Set(dueMoving.map(posKey))
     for (const pos of dueMoving) {
       const mp = this.getBlockAt(pos)
       if (mp?.type !== 'moving_piston') continue
-      this.finalizeMovingPiston(pos, mp, changed)
+      this.finalizeMovingPiston(pos, mp, changed, finalizingThisTick)
     }
 
     // #91: BE 登録順 (= 設置順 = Map 挿入順) で走査する。座標順ソートは top-down 配置
@@ -669,7 +671,19 @@ export class SimWorld {
    * BlockEntity 相 (phase10) で呼ぶ。setBlock 相当の PP (観測面オブザーバー起動) +
    * NC 伝播を行う。トレースは確定先の abbr で TE (TileEntity) フェーズとして記録。
    */
-  private finalizeMovingPiston(pos: Pos3D, mp: MovingPistonState, changed: Set<string>): void {
+  /**
+   * moving_piston を着地させる。
+   *
+   * `finalizingThisTick` は**この tick に確定する座標の集合**で、
+   * 着地したオブザーバーが近隣更新を配るかの判定に使う (#292)。
+   * BE 相 (phase8) の #231 経路から呼ぶときは**空集合**を渡すこと —
+   * その時点ではまだ phase10 の集合が張られておらず、
+   * 使い回すと**前 tick の集合**を読んでしまう (#300)。
+   */
+  private finalizeMovingPiston(
+    pos: Pos3D, mp: MovingPistonState, changed: Set<string>,
+    finalizingThisTick: ReadonlySet<string> = EMPTY_POS_SET,
+  ): void {
     const into = mp.into
     this.setBlockAt(pos, into)
     changed.add(posKey(pos))
@@ -729,7 +743,7 @@ export class SimWorld {
     // ユーザ提供の Runa.S 式 5×5 ドアで sim だけがピストンを伸ばしていた原因
     // (実機 fixture piston-land-front-land)
     const holdNC = into.type === 'observer'
-      && this.finalizingThisTick.has(posKey(neighbor(pos, into.facing)))
+      && finalizingThisTick.has(posKey(neighbor(pos, into.facing)))
     // 着地は vanilla では **UPDATE_ALL flag の setBlock** なので**隣接 6 マスへ NC が飛ぶ**
     // [確定: 26.2 PistonMovingBlockEntity.finalTick → Level.setBlock を UPDATE_ALL で呼ぶ]。
     // これが無いと「移動中 (moving_piston) で押せなかったピストンが、着地後も
