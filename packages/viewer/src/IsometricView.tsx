@@ -21,6 +21,25 @@ import { canvasPixelToBlock, FOV_F } from './renderer/coordUtils.js'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/**
+ * 2 つのスナップショットが**中身として同じ**か (#272)。
+ *
+ * `EditorPage` の snapshot は毎レンダ新しいオブジェクトリテラルなので参照比較は効かない。
+ * ブロックは sim / editor のどちらも**書き換えず新しいオブジェクトを作る**ので、
+ * エントリごとの参照比較で十分 (深い比較は 6000 ブロックで重すぎる)。
+ */
+function sameSnapshot(a: WorldSnapshot | null, b: WorldSnapshot): boolean {
+  if (a === b) return true
+  if (a === null) return false
+  const ab = a.bounds, bb = b.bounds
+  if (ab.x[0] !== bb.x[0] || ab.x[1] !== bb.x[1]
+    || ab.y[0] !== bb.y[0] || ab.y[1] !== bb.y[1]
+    || ab.z[0] !== bb.z[0] || ab.z[1] !== bb.z[1]) return false
+  if (a.blocks.size !== b.blocks.size) return false
+  for (const [k, v] of a.blocks) if (b.blocks.get(k) !== v) return false
+  return true
+}
+
 export interface CameraState {
   distance: number
   panX: number
@@ -368,7 +387,14 @@ export function IsometricView({
         structureRef.current = structure
         prevSnapshotRef.current = snapshot
 
-        const renderer = new StructureRenderer(gl, structure, resources)
+        // **見えない mesh を作らせない** (#272)。deepslate の StructureRenderer は
+        // options 未指定だと useInvisibleBlockBuffer が既定 true になり、
+        // setStructure のたびに**盤面の空セル 1 個につき 12 本の線**を積んだ mesh を作り直す。
+        // 描画するコードはこのリポジトリに 1 件も無いので、作った直後に捨てている。
+        // 盤面の**体積**に比例するので、16x147x17 で 606ms / 64³ で 11.5 秒かかっていた
+        // (実測。盤面上限は BOARD_MAX=256 なのでそこまで行くとメモリで死ぬ)
+        const renderer = new StructureRenderer(gl, structure, resources,
+          { useInvisibleBlockBuffer: false })
         rendererRef.current = renderer
 
         // アトラステクスチャの MIN_FILTER を NEAREST に（UV ブリード防止）
@@ -470,9 +496,17 @@ export function IsometricView({
 
   useEffect(() => {
     const renderer = rendererRef.current
-    console.log('[IsometricView] snapshot effect: renderer=', !!renderer, 'sameRef=', prevSnapshotRef.current === snapshot, 'blocks=', snapshot.blocks.size)
     if (!renderer) return
-    if (prevSnapshotRef.current === snapshot) return
+    // **中身で比べる** (#272)。EditorPage の snapshot は毎レンダ新しい
+    // オブジェクトリテラルなので、参照比較のガードは一度も効かない。
+    // ブロックが 1 個も変わらないパレット選択でも構造を作り直していた (実測 0.5-0.7 秒)。
+    // sim も editor も BlockState を書き換えず必ず新しいオブジェクトを作るので、
+    // **エントリごとの参照比較で変更を取りこぼさない**
+    // (in-place で書き換える経路を生やすとここが効かなくなる)
+    if (sameSnapshot(prevSnapshotRef.current, snapshot)) {
+      prevSnapshotRef.current = snapshot
+      return
+    }
 
     const { structure: newStructure } = worldSnapshotToStructure(snapshot)
     // **大きさが変わったら寄り直す** (#238)。取り込みで盤面が伸びても
@@ -488,7 +522,6 @@ export function IsometricView({
         })
       }
     }
-    console.log('[IsometricView] setStructure: blocks in structure=', newStructure.getBlocks().length)
     renderer.setStructure(newStructure)
     structureRef.current = newStructure
     prevSnapshotRef.current = snapshot
