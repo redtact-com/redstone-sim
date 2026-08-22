@@ -385,6 +385,20 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 (out/26.2、確度 [確定: 26.2])。sim 実装は `packages/sim/src/blocks/container.ts` +
 `world.ts` (`tickBlockEntities` / `emitComparatorUpdate` / dropper は `executeScheduledTick`)。
 
+- **導通は種類で割れる** [確定: 実機測定 — fixture `barrel-chest-conductor` (#291) /
+  `shulker-box-conductor` (#324)]。上に置いたレバーで強充電し、隣のダストに乗る電力を測った:
+
+  | ブロック | 隣のダスト | sim での扱い |
+  |---|---|---|
+  | 石 (対照) | 15 | 導体 |
+  | 樽 | **15** | `container.fullCube = true` |
+  | シュルカーボックス (無色・色つき / 向きによらず) | **15** | `container.fullCube = true` |
+  | チェスト / トラップチェスト | **0** | `container.fullCube = false` |
+
+  導通が違うと**ダストが繋がるか・塀や板が接続するか・強充電が抜けるか**が変わる。
+  sim はコンテナを 1 つの `container` 型に潰しているので、ここだけ `fullCube` で割っている。
+  書き出しで元のブロックに戻すため `name` も持つ (無いとシュルカーが樽になる)。
+
 - **容量の抽象化 (設計判断)**: sim は個数 1 本しか持たないため、アイテムが「スロット 0 から順に
   スタックされる」(= ホッパー/ドロッパーの実挿入順) と仮定する。この下では per-slot の充填率式
   (§6 comparator) と厳密一致し、`f = count / (スロット数×64)` になる。容量 = ホッパー **320**

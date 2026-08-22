@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMcState, canonicalize } from '@redstone/sim'
+import { emitAttachedSupportUpdate } from './capture.js'
 import type {
   Fixture, FixtureExpectEntry, FixtureChange,
 } from '../../../packages/sim/test/fixture-runner.js'
@@ -218,6 +219,11 @@ async function generateFixture(name: string): Promise<void> {
         if (!input.block) throw new Error(`setblock 入力に block がない: ${JSON.stringify(input.pos)}`)
         rcon('setblock', String(input.pos[0]), String(input.pos[1]), String(input.pos[2]),
           input.block)
+        // レバー/ボタンは**支えブロックの隣**にも更新を配る必要がある (#290)。
+        // capture.ts だけが直っていて**こちら側が漏れていた** (#324)。
+        // 漏れたままだと「レバーを ON にしたのに何も起きない」ground truth ができ、
+        // それを正解として sim を直しにいくことになる
+        emitAttachedSupportUpdate(input.pos, input.block)
         await sleep(200)
       } else if (input.action === 'summon') {
         // マインカートを召喚する (#146)。detector_rail の powered=true は実機では

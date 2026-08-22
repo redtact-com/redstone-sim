@@ -180,6 +180,33 @@ const DECOR_EXACT = new Set([
 const isHeadOrSkull = (id: string): boolean =>
   id !== 'piston_head' && (id.endsWith('_head') || id.endsWith('_skull'))
 
+/**
+ * コンテナ (`container` 型に潰す 3 系統) の判定と導通 (#291 / #324)。
+ *
+ * 実機実測 (1.21.1。fixture `barrel-chest-conductor` / `shulker-box-conductor`):
+ * 上に置いたレバーで強充電し、隣のダストに乗る電力を見た。
+ *
+ *   樽 15 / **シュルカーボックス 15 (色・向きによらず)** / チェスト 0
+ *
+ * 導通が違うと**ダストが繋がるか・塀や板が接続するか・強充電が抜けるか**が変わるので、
+ * 同じ `container` 型でも `fullCube` で割る。
+ */
+export function isShulkerBoxName(name: string): boolean {
+  return stripNs(name).endsWith('shulker_box')
+}
+
+/** `container` として取り込むブロックか (樽 / チェスト 2 種 / シュルカーボックス 17 種) */
+export function isContainerBlockName(name: string): boolean {
+  const id = stripNs(name)
+  return id === 'barrel' || id === 'chest' || id === 'trapped_chest' || isShulkerBoxName(id)
+}
+
+/** そのコンテナがフルキューブ (= 導体) か。**チェストだけが非導体** */
+export function isContainerFullCube(name: string): boolean {
+  const id = stripNs(name)
+  return id === 'barrel' || isShulkerBoxName(id)
+}
+
 const stripNs = (name: string): string =>
   name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
 

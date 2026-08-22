@@ -1,0 +1,339 @@
+{
+  "name": "shulker-box-conductor",
+  "description": "#324 シュルカーボックスは導体か。上のレバーで強充電し、隣のダストに電力が乗るかを見る。対照として石 (導体) / 樽 (導体) / チェスト (非導体) を並べ、トラップチェストも同時に測る。ダストを見るのはランプが消灯を 4gt 遅らせるため (点灯側だけ見ても判定できる状態を作らない)。",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      17,
+      3,
+      1
+    ]
+  },
+  "player": {
+    "spawn": [
+      6.5,
+      1.0,
+      4.5
+    ],
+    "facing": [
+      180,
+      0
+    ],
+    "lookAt": [
+      6.5,
+      1.5,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "barrel[facing=north,open=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        0
+      ],
+      "block": "chest[facing=north,type=single,waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        0
+      ],
+      "block": "shulker_box[facing=up]"
+    },
+    {
+      "pos": [
+        9,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        0
+      ],
+      "block": "white_shulker_box[facing=north]"
+    },
+    {
+      "pos": [
+        12,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        15,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        15,
+        1,
+        0
+      ],
+      "block": "trapped_chest[facing=north,type=single,waterlogged=false]"
+    },
+    {
+      "pos": [
+        15,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        6,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        9,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        12,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        15,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    }
+  ],
+  "trustAuthored": true
+}

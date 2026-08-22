@@ -502,7 +502,7 @@ export function attachedSupportPos(
  *
  * 書見台のページ送り (`lectern`) と同じ「更新が配られない」罠 (#196)。
  */
-function emitAttachedSupportUpdate(pos: number[], block: string): void {
+export function emitAttachedSupportUpdate(pos: number[], block: string): void {
   const support = attachedSupportPos(pos, block)
   if (!support) return
   for (const [dx, dy, dz] of NEIGHBOR_ORDER) {
