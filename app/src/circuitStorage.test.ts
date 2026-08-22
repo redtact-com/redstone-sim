@@ -208,3 +208,32 @@ describe('盤面サイズの保存 (#226)', () => {
     expect(serializeCircuit(sample(), '2026-08-17T00:00:00Z').board).toEqual({ x: 16, y: 16, z: 16 })
   })
 })
+
+describe('取り込み由来フラグ (#317)', () => {
+  // 取り込んだ回路は保存時の blockstate をそのまま出発点にする。
+  // リロードしても挙動が変わらないよう、フラグもオートセーブに載せる
+  const one = () => new Map<string, BlockState>([['0,0,0', { type: 'solid', powered: false } as BlockState]])
+
+  it('保存 → 復元でフラグが残る', () => {
+    const s = fakeStorage()
+    saveCircuit(one(), '2026-08-22T00:00:00.000Z', s, undefined, true)
+    expect(loadCircuit(s)?.imported).toBe(true)
+  })
+
+  it('既定は false', () => {
+    const s = fakeStorage()
+    saveCircuit(one(), '2026-08-22T00:00:00.000Z', s)
+    expect(loadCircuit(s)?.imported).toBe(false)
+  })
+
+  it('**フラグが無い古い保存データ**は false として読む (回路は捨てない)', () => {
+    const s = fakeStorage()
+    s.setItem(STORAGE_KEY, JSON.stringify({
+      v: STORAGE_VERSION, savedAt: '2026-01-01T00:00:00.000Z',
+      blocks: { '0,0,0': { type: 'solid', powered: false } },
+    }))
+    const got = loadCircuit(s)
+    expect(got?.blocks.size).toBe(1)
+    expect(got?.imported).toBe(false)
+  })
+})

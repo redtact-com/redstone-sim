@@ -36,6 +36,9 @@ export class SimSession {
         }
       }
     }
+    // **ここは意図的に計算し直す** (#317)。真理値表を組むために leverStates で
+    // レバーを差し替えるので、保存時の状態を信用すると差し替えが伝わらない。
+    // 取り込んだ回路を「そのまま動かす」のはアプリ側 (EditorPage / EmbedPage) の役目
     this.world.initialize()
   }
 

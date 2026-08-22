@@ -133,9 +133,11 @@ export function EmbedPage() {
       emitError('empty', '取り込めるブロックがありません')
       return
     }
-    editorRef.current.resetToBlocks(blocks)
+    // 埋め込みは**必ず取り込み由来** (postMessage で NBT を受け取る) なので、
+    // 保存時の状態をそのまま出発点にする (#317)
+    editorRef.current.resetToBlocks(blocks, true)
     const world = editorRef.current.buildSimWorld()
-    world.initialize()
+    world.initialize({ trustAuthored: true })
     putWorld(world)
     setTick(0)
     setRunning(false)
@@ -166,7 +168,7 @@ export function EmbedPage() {
     setRunning(false)
     // editor は元の配置を保持しているので再ビルドで初期状態に戻す
     const world = editorRef.current.buildSimWorld()
-    world.initialize()
+    world.initialize({ trustAuthored: editorRef.current.isImportedSnapshot() })
     putWorld(world)
     setTick(0)
     setError(null)

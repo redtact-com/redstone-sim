@@ -67,9 +67,31 @@ export class CircuitEditor {
     this.emit()
   }
 
-  /** インポート等でグリッド全体を差し替える。履歴はリセットされる。 */
-  resetToBlocks(blocks: Map<string, BlockState>): void {
+  /**
+   * **今の盤面が取り込み由来か** (#317)。
+   *
+   * Minecraft から保存したファイルは blockstate が整合しているので、
+   * シミュレーション開始時に**そのまま出発点にする** (`initialize({ trustAuthored: true })`)。
+   * 計算し直すと、blockstate に出ない値 (コンパレーターの保持出力・予約 tick・
+   * ホッパーのクールダウン) が復元できず**矛盾した状態**になり、
+   * 何も操作していないのに回路が動き出す。
+   *
+   * 手で組んだ回路は逆に計算し直さないと初期状態が出ない (ダストの power は 0 で置かれる)
+   * ので、取り込み由来のときだけ true にする。
+   */
+  private importedSnapshot = false
+
+  isImportedSnapshot(): boolean {
+    return this.importedSnapshot
+  }
+
+  /**
+   * インポート等でグリッド全体を差し替える。履歴はリセットされる。
+   * @param imported 取り込み由来なら true (#317)
+   */
+  resetToBlocks(blocks: Map<string, BlockState>, imported = false): void {
     this.grid.resetToBlocks(blocks)
+    this.importedSnapshot = imported
     this.emit()
   }
 
