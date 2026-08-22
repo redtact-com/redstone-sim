@@ -242,6 +242,8 @@ function isFullCube(b: BlockState | null | undefined): boolean {
     case 'dropper': case 'dispenser': case 'crafter': case 'slime_block': case 'observer':
     case 'piston': case 'sticky_piston':
       return true
+    case 'container':
+      return b.fullCube            // 樽はフルキューブ、チェストは違う (#291)
     default:
       return false
   }

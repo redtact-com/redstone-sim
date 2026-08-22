@@ -272,7 +272,8 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
       return { type: 'slab', half: 'bottom' }
     case 'container':
       // コンパレーター背面から読まれる実効出力 (0-15) を editor で設定する (#54)。
-      return { type: 'container', signal: opts.signal ?? 0 }
+      // エディタから置けるのは**樽** (フルキューブ = 導体) 扱い (#291)
+      return { type: 'container', fullCube: true, signal: opts.signal ?? 0 }
     case 'hopper':
       // 物流ホッパー (#65)。facing = 送り込み方向 (editor は水平のみ。既定 down)。
       // 中身は「スタック種別ごとの代表アイテムを count 個、slot 0 から」(#194)。

@@ -617,8 +617,9 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         powered: String((block as any).powered ?? false),
       }]
     case 'container':
-      // コンテナは barrel として書き出す (signal は NBT に現れないため破棄)
-      return ['minecraft:barrel', {}]
+      // 樽とチェストは**導通が違う**ので取り違えない (#291)。
+      // signal は NBT に現れないため破棄する
+      return [(block as any).fullCube ? 'minecraft:barrel' : 'minecraft:chest', {}]
     case 'hopper':
       // facing = 送り込み方向 = vanilla FACING (非反転)。count は NBT の中身依存で破棄
       return ['minecraft:hopper', {
@@ -856,13 +857,17 @@ function minecraftToBlockState(
 
   // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。
   // NBT には内容 (充填率) が現れないため signal=0 で取り込む。
+  // **樽とシュルカーボックスはフルキューブ (導体)、チェストは違う (非導体)** (#291)
   if (
     name === 'minecraft:barrel' ||
     name === 'minecraft:chest' ||
     name === 'minecraft:trapped_chest' ||
     name.endsWith('shulker_box')
   ) {
-    return { type: 'container', signal: 0, slots: buildSlots('container', items) } as BlockState
+    const fullCube = name === 'minecraft:barrel' || name.endsWith('shulker_box')
+    return {
+      type: 'container', fullCube, signal: 0, slots: buildSlots('container', items),
+    } as BlockState
   }
 
   if (name === 'minecraft:hopper') {

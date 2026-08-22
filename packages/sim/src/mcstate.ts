@@ -289,8 +289,9 @@ export function mcToSim(state: string): BlockState | null {
     case 'chest':
     case 'trapped_chest':
       // コンテナ: 充填率 (signal) は blockstate に現れないため 0 で取り込む
-      // [02 §6 comparator。実効 signal は BE の中身に依存する]
-      return { type: 'container', signal: 0 }
+      // [02 §6 comparator。実効 signal は BE の中身に依存する]。
+      // **樽はフルキューブ (導体)、チェストは違う (非導体)** ので分けて持つ (#291)
+      return { type: 'container', fullCube: name === 'barrel', signal: 0 }
     case 'hopper':
       // vanilla の facing = 送り込み方向 (down または水平) = sim と同一 (非反転)。
       // 中身は blockstate に無いため空スロットで取り込む (BE の中身)。

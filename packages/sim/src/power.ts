@@ -62,7 +62,9 @@ export function isConductor(block: BlockState | null): boolean {
     block.type === 'note_block' || block.type === 'slime_block' ||
     block.type === 'lodestone' || block.type === 'soul_sand' ||
     block.type === 'dropper' || block.type === 'dispenser' ||
-    block.type === 'crafter' || block.type === 'lamp'
+    block.type === 'crafter' || block.type === 'lamp' ||
+    // **樽は導体・チェストは非導体** (#291)。同じ container 型なので fullCube で割る
+    (block.type === 'container' && block.fullCube)
   )
 }
 
