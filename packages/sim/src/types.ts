@@ -206,6 +206,12 @@ export interface WeightedPressurePlateState {
  */
 export interface ContainerState {
   type: 'container'
+  /**
+   * フルキューブか (#291)。**樽は導体・チェストは非導体**なので、
+   * 同じ `container` 型でもここで割れる (実機実測。[[reference_mc_conductor_table]])。
+   * 導体判定・ダストの上りステップ・塀/板の接続・書き出しの名前がこれで決まる。
+   */
+  fullCube: boolean
   /** 手動計測モードでコンパレーター背面から読まれる実効出力 (0-15) */
   signal: number
   /** 物流モードのスロット (定義時は signal より優先。長さ 27) */

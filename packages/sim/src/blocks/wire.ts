@@ -16,7 +16,9 @@ export function isWireCutBlock(block: BlockState | null): boolean {
   // **isConductor (power.ts) と同じ集合に保つ** — どちらも isRedstoneConductor 由来
   return !!block && (block.type === 'solid' || block.type === 'lamp'
     || block.type === 'target' || block.type === 'note_block'
-    || block.type === 'dropper' || block.type === 'dispenser' || block.type === 'crafter')
+    || block.type === 'dropper' || block.type === 'dispenser' || block.type === 'crafter'
+    // 樽は導体なので切る。チェストは切らない (#291)
+    || (block.type === 'container' && block.fullCube))
 }
 
 /**

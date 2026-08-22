@@ -1,0 +1,228 @@
+{
+  "name": "barrel-chest-conductor",
+  "description": "#291 樽とチェストの導通差。レバーで強充電したブロックの隣にランプを置き、点くかを見る。**樽は導体で点き、チェストは非導体で点かない**。sim は両方を同じ container 型に潰していて 区別できなかったため、ContainerState に fullCube を持たせて割った。",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      8,
+      3,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "barrel[facing=north,open=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "chest[facing=north,type=single,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        6,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=true]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            3,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            6,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=true]"
+        }
+      ]
+    }
+  ],
+  "trustAuthored": true,
+  "scheduled": [],
+  "comparators": [],
+  "cooldowns": [],
+  "generated": {
+    "at": "2026-08-22T01:25:04.905Z",
+    "mc": "1.21.1",
+    "carpet": "unknown"
+  }
+}
