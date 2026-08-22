@@ -195,7 +195,16 @@ export function refreshWireShape(
   z: number,
   grid: BlockGrid3D,
   stored: WireConnections,
+  fromAbove = false,
 ): WireConnections {
+  // **真上からの更新は全再計算**になる (#301)
+  // [確定: 26.2 RedStoneWireBlock.updateShape — direction が UP のときだけ
+  //  per-side 更新を通さず getConnectionState をそのまま返す]。
+  // per-side 更新だと自動拡張 (接続 1 本なら反対側も side にする直線化) が走らず、
+  // 「接続が上りステップ 1 本だけのダスト」が実機と食い違う
+  // (実機 fixture wire-cut-conductor の、上り接続が切れない 6 列で出ていた)
+  if (fromAbove) return deriveWireConnections(x, y, z, grid, stored)
+
   const raw = computeRawWireConnections(x, y, z, grid)
 
   // 1. dot ガード
