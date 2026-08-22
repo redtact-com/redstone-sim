@@ -18,12 +18,15 @@ import { isBlockPowered } from './power.js'
 // 支持要件を持たない方針 (wire-shape.ts §「支持要件の無い sim でも」) で、
 // レールだけ落下破壊を入れると「レバーは浮くのにレールは落ちる」不整合になるため。
 //
-// ただし実機の仕様は fixture として記録してある (#144。どちらも skipUntil 付き):
+// ただし実機の仕様は fixture として記録してある (#144 / #328。すべて skipUntil 付き):
 //   - rail-support-break       … 給電中の連鎖の途中で床を抜くとレールが消え、
 //                                下流の powered が落ちる (連鎖が分断される)
 //   - rail-slope-support-break … 坂は真下だけでなく**登る側の水平隣接**も要求する
 //                                [確定: 26.2 BaseRailBlock.java:94-106]
+//   - lever-support-break      … **レバー側も同じ**。ホッパーの上に置いた床レバーは
+//                                更新が届いた時点で壊れて消える (実機は air / sim は残る)
 // 実装したくなったら skipUntil を外すだけで検証できる。
+// **入れるなら全部まとめて**入れること (一部だけだと不整合が増えるだけ)。
 // ============================================================
 
 /** 探索の打ち切り深度 [確定: 26.2 PoweredRailBlock.findPoweredRailSignal — searchDepth >= 8] */
