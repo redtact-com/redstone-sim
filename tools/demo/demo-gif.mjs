@@ -20,6 +20,7 @@
 // 本番ビルド (vite preview) に対して撮る。dev の StrictMode 二重発火や
 // canvas ピクセル校正を避け、コマンド一発で PR 品質の GIF を出す (issue #70)。
 // GIF 合成は gifenc + pngjs の pure JS で完結し Python 依存を持ち込まない。
+// フレーム間で変化しない画素は透過にして書く (#326。180 フレームで 3.5MB → 450KB)。
 // ============================================================
 
 import { chromium } from 'playwright'
@@ -65,6 +66,68 @@ function parseArgs(argv) {
   }
   if (!opts.fixture) throw new Error('fixture 名を指定してください: npm run demo-gif -- <fixture名>')
   return opts
+}
+
+// ── GIF エンコード ─────────────────────────────────────────────────────────────
+
+/**
+ * 変化しない画素を透過にする GIF エンコード (#326)。
+ *
+ * 以前は**毎フレームを全画面 + フレームごとのパレット**で書いていた。
+ * 回路デモは画面の大半が動かないので、これだと同じ背景を何十回も書き直すことになり、
+ * 3.5MB の GIF ができていた (リポジトリの追跡ファイルの 7 割が PR 用 GIF だった)。
+ *
+ * 2 つ変える:
+ *   1. **パレットを全フレーム共通**にする。フレームごとに量子化すると
+ *      同じ背景でも色番号が揺れて「変化した」ことになり、差分が効かない
+ *   2. 前フレームと**同じ画素を透過**にして、前の絵を残す (dispose=1)。
+ *      同じ値が延々と続くので LZW がまとめて潰す
+ *
+ * フレームは全画面のまま書く。gifenc の `writeFrame` は画像記述子の左上を
+ * **常に 0,0 で書く**ので (dist/gifenc.js encodeImageDescriptor)、
+ * 変化した矩形だけを部分フレームとして置くことはできない。
+ * 小さいサブ画像を渡すと**左上に縮んで貼られて絵が壊れる**。
+ *
+ * 透過に 1 色使うので、色は 255 色までに量子化する。
+ */
+function encodeGif(pngs, opts) {
+  const { width, height } = pngs[0]
+  const rgbas = pngs.map(p => new Uint8Array(p.data.buffer, p.data.byteOffset, p.data.length))
+
+  // 1. 全フレームから共通パレットを作る。全部を連結すると巨大になるので
+  //    等間隔に最大 8 枚を標本にする (背景が同じなので色の分布はほぼ変わらない)
+  const step = Math.max(1, Math.ceil(rgbas.length / 8))
+  const sample = rgbas.filter((_, i) => i % step === 0)
+  const merged = new Uint8Array(sample.reduce((n, a) => n + a.length, 0))
+  let off = 0
+  for (const a of sample) { merged.set(a, off); off += a.length }
+  // 255 色 + 透過 1 色。format は rgb444 で十分 (rgba4444 は透過分を色数に使ってしまう)
+  const palette = quantize(merged, 255, { format: 'rgb444' })
+  const transparentIndex = palette.length
+  palette.push([0, 0, 0])
+
+  const gif = GIFEncoder()
+  let prev = null
+  for (let i = 0; i < rgbas.length; i++) {
+    const cur = applyPalette(rgbas[i], palette, 'rgb444')
+    const isEdge = i === 0 || i === rgbas.length - 1
+    const delay = isEdge ? opts.holdMs : opts.frameMs
+    if (prev === null) {
+      gif.writeFrame(cur, width, height, { palette, delay, repeat: 0 })
+    } else {
+      // **cur を書き換える前に次回用の控えを取る** (透過で潰した値を次の比較に使わない)
+      const shown = Uint8Array.from(cur)
+      for (let j = 0; j < cur.length; j++) if (cur[j] === prev[j]) cur[j] = transparentIndex
+      gif.writeFrame(cur, width, height, {
+        palette, delay, transparent: true, transparentIndex, dispose: 1,
+      })
+      prev = shown
+      continue
+    }
+    prev = cur
+  }
+  gif.finish()
+  return gif.bytes()
 }
 
 // ── サーバ待機 ─────────────────────────────────────────────────────────────────
@@ -197,23 +260,8 @@ async function main() {
     console.log(`[demo-gif] captured ${frames.length} frames`)
 
     // 6. GIF 合成
-    const gif = GIFEncoder()
-    let width = 0, height = 0
-    for (let i = 0; i < frames.length; i++) {
-      const png = PNG.sync.read(frames[i].png)
-      width = png.width; height = png.height
-      const rgba = new Uint8Array(png.data.buffer, png.data.byteOffset, png.data.length)
-      const palette = quantize(rgba, 256, { format: 'rgba4444' })
-      const index = applyPalette(rgba, palette, 'rgba4444')
-      const isEdge = i === 0 || i === frames.length - 1
-      gif.writeFrame(index, width, height, {
-        palette,
-        delay: isEdge ? opts.holdMs : opts.frameMs,
-        repeat: i === 0 ? 0 : undefined,
-      })
-    }
-    gif.finish()
-    const bytes = gif.bytes()
+    const bytes = encodeGif(frames.map(f => PNG.sync.read(f.png)), opts)
+    const { width, height } = PNG.sync.read(frames[0].png)
 
     mkdirSync(dirname(outPath), { recursive: true })
     writeFileSync(outPath, bytes)
