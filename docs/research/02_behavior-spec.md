@@ -595,7 +595,8 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 | 項目 | 実機 | sim | 根拠 |
 |---|---|---|---|
 | トロッコ | レールの本来の目的 | **非実装** | 13 §2 エンティティ境界原則 |
-| 支持ブロック要件 | 支持を失うとドロップして消える | **非実装** | sim 全体が支持要件を持たない。レールだけ入れると不整合。実機仕様は fixture `rail-support-break` / `rail-slope-support-break` に `skipUntil` 付きで記録 |
+| 支持ブロック要件 | 支持を失うとドロップして消える | **非実装** | sim 全体が支持要件を持たない。一部だけ入れると不整合。実機仕様は fixture `rail-support-break` / `rail-slope-support-break` / `lever-support-break` に `skipUntil` 付きで記録 |
+| 貼り付き素子の支え | **ホッパーの上・伸びたピストンの上に置いたレバーは壊れて落ちる** | 残って給電し続ける | 上と同じ横断的判断。実測 (#328 fixture `lever-support-break`): ホッパー上の床レバーを ON にすると**レバーが消え**、ホッパーは `enabled=true` のまま。sim はレバーが残るので `enabled=false` になる。石の上のレバー (対照) は残る |
 | detector_rail のカート常駐 | 20gt ごとに数え直して通電を維持 | 20gt で必ず OFF | 折衷モデル (手動トリガ + 持続 gt)。fixture `detector-rail-cart-stay` に記録 |
 | コンパレーター読み取り | カートの中身を読む | 常に 0 | エンティティ非実装 |
 
