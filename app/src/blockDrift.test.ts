@@ -42,6 +42,9 @@ const ROUND_TRIP_NAMES = [
   'rail', 'powered_rail', 'detector_rail', 'activator_rail',
   'dispenser', 'crafter', 'chest', 'honey_block', 'waxed_copper_bulb',
   'smooth_stone_slab', 'redstone_wall_torch[facing=north]',
+  // #324 以降に足した名前。**コンテナは名前で往復する** — fullCube から
+  // 樽 / チェストを選び直していた頃はシュルカーが樽に、トラップチェストがチェストに化けた
+  'shulker_box', 'white_shulker_box', 'trapped_chest',
 ]
 
 describe('ブロック定義のドリフト検知 (#153)', () => {

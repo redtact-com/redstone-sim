@@ -12,7 +12,10 @@ import { Structure } from 'deepslate'
 import { sniffFormat, convertBuffer } from '@taku128/java-schematic'
 import type { DetectedFormat } from '@taku128/java-schematic'
 import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
-import { emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument } from '@redstone/sim'
+import {
+  emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument,
+  isContainerBlockName, isContainerFullCube,
+} from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
   north: 'south', south: 'north', east: 'west', west: 'east',
@@ -616,10 +619,14 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing: (block as any).facing ?? 'south',
         powered: String((block as any).powered ?? false),
       }]
-    case 'container':
-      // 樽とチェストは**導通が違う**ので取り違えない (#291)。
+    case 'container': {
+      // 取り込んだ名前があればそれに戻す (#324。無ければ #291 までの規則)。
+      // 樽とチェストは**導通が違う**ので取り違えない。
       // signal は NBT に現れないため破棄する
+      const name = (block as any).name as string | undefined
+      if (name) return [`minecraft:${name.replace(/^minecraft:/, '')}`, {}]
       return [(block as any).fullCube ? 'minecraft:barrel' : 'minecraft:chest', {}]
+    }
     case 'hopper':
       // facing = 送り込み方向 = vanilla FACING (非反転)。count は NBT の中身依存で破棄
       return ['minecraft:hopper', {
@@ -858,15 +865,15 @@ function minecraftToBlockState(
   // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。
   // NBT には内容 (充填率) が現れないため signal=0 で取り込む。
   // **樽とシュルカーボックスはフルキューブ (導体)、チェストは違う (非導体)** (#291)
-  if (
-    name === 'minecraft:barrel' ||
-    name === 'minecraft:chest' ||
-    name === 'minecraft:trapped_chest' ||
-    name.endsWith('shulker_box')
-  ) {
-    const fullCube = name === 'minecraft:barrel' || name.endsWith('shulker_box')
+  if (isContainerBlockName(name)) {
+    // **導通はシュルカーボックスも実機で測ってある** (#324 fixture shulker-box-conductor)。
+    // name を持たせるのは書き出しで元に戻すため (無いとシュルカーが樽になる)
     return {
-      type: 'container', fullCube, signal: 0, slots: buildSlots('container', items),
+      type: 'container',
+      name: name.replace(/^minecraft:/, ''),
+      fullCube: isContainerFullCube(name),
+      signal: 0,
+      slots: buildSlots('container', items),
     } as BlockState
   }
 
@@ -1015,12 +1022,14 @@ function regionMinCorner(region: NbtCompound): [number, number, number] {
   return [axis('x'), axis('y'), axis('z')]
 }
 
-const CONTAINER_NAMES = new Set([
+/** 中身 (Items) を読むブロック。コンテナ 3 系統は isContainerBlockName が持つ */
+const ITEM_HOLDER_NAMES = new Set([
   'minecraft:hopper', 'minecraft:dropper', 'minecraft:dispenser',
-  'minecraft:barrel', 'minecraft:chest', 'minecraft:trapped_chest',
 ])
+// 以前は `_shulker_box` で終わるかで見ていたが、**無色の `shulker_box` が漏れていた**
+// ('minecraft:shulker_box' は '_shulker_box' で終わらない)。判定は 1 か所に寄せる (#324)
 const isContainerName = (name: string): boolean =>
-  CONTAINER_NAMES.has(name) || name.endsWith('_shulker_box')
+  ITEM_HOLDER_NAMES.has(name) || isContainerBlockName(name)
 
 // ── コンテナの中身 (#194) ────────────────────────────────────────────────────
 
