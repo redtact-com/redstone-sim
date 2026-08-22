@@ -727,6 +727,7 @@ export type BlockState =
   | ComposterState
   | LecternState
   | StoneWallState
+  | PaneState
   | SoulSandState
   | WaterState
   | BubbleColumnState
@@ -833,6 +834,26 @@ export type WallSide = 'none' | 'low' | 'tall'
  * 上端の 1 か所を変えると柱の全段が同じ tick で反転する
  * (実機で確認: 7 段の柱が t=0 で全段 false → true、下端のオブザーバーが 2gt 後に発火)。
  */
+/**
+ * ガラス板 / 鉄格子 (#303)。
+ *
+ * **非導体・非信号源・フルキューブでない**ので挙動としては装飾だが、
+ * **接続の blockstate が隣の出入りで変わる** ため装飾に潰せない —
+ * 真下や横のオブザーバーがその形状変化を検知して発火する
+ * (Runa.S_closed でピストンの収縮を打ち消しているのがこれ)。
+ * 材質は描き分けのため `name` に持つ (装飾と同じ扱い)。
+ */
+export interface PaneState {
+  type: 'pane'
+  /** `light_blue_stained_glass_pane` など。名前空間なし */
+  name: string
+  north: boolean
+  east: boolean
+  south: boolean
+  west: boolean
+  waterlogged: boolean
+}
+
 export interface StoneWallState {
   type: 'wall'
   north: WallSide
@@ -1032,6 +1053,7 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
   // #234 で追加。どれも手動トリガの対象ではない
   lodestone: false,
   decor: false,
+  pane: false,
   cauldron: false,
   composter: false,
 
@@ -1043,6 +1065,12 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
 }
 
 /** 手動トリガできるブロック種の一覧 (#153)。UI 側のリストはこれと一致させる */
+/**
+ * BlockState union の**全ブロック種**。`Record<BlockType, boolean>` の網羅性を借りている。
+ * 型を足したら自動で増えるので、UI 側やコンバータの「入れ忘れ」検知に使える (#303)。
+ */
+export const ALL_BLOCK_TYPES: BlockType[] = Object.keys(IS_TRIGGERABLE) as BlockType[]
+
 export const TRIGGERABLE_TYPES: BlockType[] =
   (Object.keys(IS_TRIGGERABLE) as BlockType[]).filter(t => IS_TRIGGERABLE[t])
 

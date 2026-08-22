@@ -28,6 +28,7 @@ export {
   isRailSlope,
   isCurvedRailShape,
   isStraightRailShape,
+  ALL_BLOCK_TYPES,
   TRIGGERABLE_TYPES,
   isTriggerableType,
 } from './types.js'

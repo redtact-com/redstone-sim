@@ -115,6 +115,7 @@ export function abbrOf(b: BlockState): string {
     case 'moving_piston':  return abbrOf(b.into)
     case 'lodestone':      return 'Lo'
     case 'decor':          return 'De'
+    case 'pane':           return 'Pa'
     case 'cauldron':       return 'Ca'
     case 'composter':      return 'Co'
     case 'wall':           return 'Wl'

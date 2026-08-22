@@ -678,3 +678,19 @@ describe('書見台の本の取り込み: litematic (#240)', () => {
     expect(r.warnings.some(w => w.includes('対応付けられませんでした'))).toBe(true)
   })
 })
+
+describe('ガラス板の往復 (#303)', () => {
+  // pane 型を足したとき nbtIO の書き出し分岐を落としており、
+  // **保存するとガラス板が air になって消えていた** (取り込みは通るので気づきにくい)。
+  // 実ファイル (Runa.S_closed) で 9 枚が 0 枚になる回帰だった
+  it('取り込んで書き出すと同じ板が戻る', async () => {
+    const src = 'minecraft:light_blue_stained_glass_pane[east=true,north=false,south=true,'
+      + 'waterlogged=false,west=false]'
+    const sim = mcToSim(src)
+    expect(sim?.type).toBe('pane')
+    const bytes = exportToNbtBytes(new Map([['0,0,0', sim!]]), GRID, GRID)
+    const back = await importFromNbtBytes(bytes)
+    const got = back.blocks.get('0,0,0')
+    expect(got).toEqual(sim)
+  })
+})

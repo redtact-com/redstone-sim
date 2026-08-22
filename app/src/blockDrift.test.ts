@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { TRIGGERABLE_TYPES } from '@redstone/sim'
+import { ALL_BLOCK_TYPES, TRIGGERABLE_TYPES } from '@redstone/sim'
 import { PLACEABLE_TYPES, CircuitEditor, DEFAULT_BOARD, BOARD_MAX } from '@redstone/editor'
 import { blockStateToMinecraftStr, VIEWER_PRELOAD_BLOCKS, extraPreloadNames } from '@redstone/viewer'
 import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
@@ -21,6 +21,28 @@ import { BLOCK_PALETTE, TRIGGER_META } from './palette'
  */
 
 const sorted = (xs: readonly string[]): string[] => [...xs].sort()
+
+/**
+ * 往復 (取り込み → 書き出し → 取り込み) を確かめる代表名。
+ * **新しいブロック種を足したらここにも 1 つ足す** — 下の網羅チェックが落ちて気づける。
+ */
+const ROUND_TRIP_NAMES = [
+  'stone', 'glass', 'redstone_wire', 'repeater', 'comparator', 'redstone_torch',
+  'lever', 'redstone_lamp', 'note_block', 'observer', 'piston', 'sticky_piston',
+  'hopper', 'dropper', 'barrel', 'target', 'redstone_block', 'slime_block',
+  // #234 以降に足した型
+  'stone_brick_wall', 'bubble_column', 'soul_sand', 'water', 'lodestone',
+  'water_cauldron', 'composter', 'lectern', 'oak_stairs',
+  // #303 以降に足した型
+  'light_blue_stained_glass_pane',
+  // 網羅チェック (下) を満たすための代表名
+  'stone_button', 'oak_button', 'stone_pressure_plate', 'oak_pressure_plate',
+  'light_weighted_pressure_plate', 'heavy_weighted_pressure_plate',
+  'oak_door', 'iron_door', 'oak_trapdoor', 'iron_trapdoor', 'oak_fence_gate',
+  'rail', 'powered_rail', 'detector_rail', 'activator_rail',
+  'dispenser', 'crafter', 'chest', 'honey_block', 'waxed_copper_bulb',
+  'smooth_stone_slab', 'redstone_wall_torch[facing=north]',
+]
 
 describe('ブロック定義のドリフト検知 (#153)', () => {
   it('トリガパネルの一覧は sim の手動トリガ対象と一致する', () => {
@@ -78,17 +100,24 @@ describe('ブロック定義のドリフト検知 (#153)', () => {
     expect(extraPreloadNames({ blocks: stone })).toEqual([])
   })
 
+  it('往復テストの一覧が**全ブロック種を覆っている** (#303)', () => {
+    // 一覧が手書きなので、新しい型を足しても往復テストの対象に入らない。
+    // ガラス板 (pane) を足したとき実際にここを落とし、
+    // **保存でガラス板が air に潰れる**回帰を出した (取り込みは通るので気づきにくい)
+    const covered = new Set(ROUND_TRIP_NAMES.map(n => mcToSim(n)?.type).filter(Boolean))
+    // 名前から作れない / 往復の対象外な型
+    const EXEMPT = new Set([
+      'air',                            // 空気そのもの
+      'moving_piston', 'piston_head',   // ピストンの過渡状態 (単体では置かれない)
+    ])
+    const missing = ALL_BLOCK_TYPES.filter(t => !covered.has(t) && !EXEMPT.has(t))
+    expect(missing).toEqual([])
+  })
+
   it('**取り込めるブロックは書き出しても消えない** (#245)', async () => {
     // 書き出しに case が無いと `default` で air に潰れる。
     // 取り込んだ回路を保存すると塀・泡柱・書見台などが**黙って消えていた** (実測: 9 種すべて)
-    const names = [
-      'stone', 'glass', 'redstone_wire', 'repeater', 'comparator', 'redstone_torch',
-      'lever', 'redstone_lamp', 'note_block', 'observer', 'piston', 'sticky_piston',
-      'hopper', 'dropper', 'barrel', 'target', 'redstone_block', 'slime_block',
-      // #234 以降に足した型
-      'stone_brick_wall', 'bubble_column', 'soul_sand', 'water', 'lodestone',
-      'water_cauldron', 'composter', 'lectern', 'oak_stairs',
-    ]
+    const names = ROUND_TRIP_NAMES
     const blocks = new Map<string, BlockState>()
     const want = new Map<string, BlockState>()   // 座標 → 期待する状態
     names.forEach((n, i) => {

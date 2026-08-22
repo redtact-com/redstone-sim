@@ -80,6 +80,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'decor':
       // 取り込み元の名前で描く (判断 E)。名前空間が無ければ補う
       return block.name.startsWith('minecraft:') ? block.name : `minecraft:${block.name}`
+    case 'pane':
+      // 材質は name、接続は sim が計算した値で描く (#303)
+      return `minecraft:${block.name}[east=${block.east},north=${block.north}`
+        + `,south=${block.south},waterlogged=${block.waterlogged},west=${block.west}]`
     case 'cauldron':
       return `minecraft:water_cauldron[level=${block.level}]`
     case 'composter':
