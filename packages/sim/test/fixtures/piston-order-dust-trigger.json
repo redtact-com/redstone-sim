@@ -1,0 +1,549 @@
+{
+  "name": "piston-order-dust-trigger",
+  "description": "#294 の最小再現 (24 ブロック)。列0 と列1 は**羊毛の south 隣にダストが 1 個あるかだけ**が違う。A = 共有羊毛の up 隣 / B = east 隣 / A が引くオブザーバーが B の真上へ着地し、B も同じ tick に着地する。オブザーバーは発火 tick に持ち上げられるので点灯したまま運ばれ、着地時の発火経路は塞がっている。**ダスト有りの列だけ実機は着地の 2gt 後に発火する** = 確定順が変わっている。",
+  "mcVersion": "1.21.1",
+  "ticks": 30,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      6,
+      5,
+      7
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        5
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        5
+      ],
+      "block": "light_blue_wool"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        6
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        5
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        5
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        0
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        4,
+        5
+      ],
+      "block": "observer[facing=down,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        5
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        5
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        1,
+        5
+      ],
+      "action": "setblock",
+      "block": "stone"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            5
+          ],
+          "block": "stone"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            6
+          ],
+          "block": "redstone_wire[east=side,north=side,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            5
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            5
+          ],
+          "block": "observer[facing=down,powered=true]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            5
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            0
+          ],
+          "block": "sticky_piston[extended=true,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            6
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            5
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            5
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=sticky]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            0
+          ],
+          "block": "moving_piston[facing=east,type=normal]"
+        },
+        {
+          "pos": [
+            2,
+            4,
+            5
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            4,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            5
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            0,
+            4,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            5
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            5
+          ],
+          "block": "observer[facing=down,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            0
+          ],
+          "block": "sticky_piston[extended=false,facing=east]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            0
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            1,
+            4,
+            5
+          ],
+          "block": "observer[facing=down,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            1,
+            4,
+            5
+          ],
+          "block": "observer[facing=down,powered=false]"
+        }
+      ]
+    }
+  ],
+  "trustAuthored": true,
+  "scheduled": [],
+  "comparators": [],
+  "cooldowns": [],
+  "generated": {
+    "at": "2026-08-22T04:11:56.695Z",
+    "mc": "1.21.1",
+    "carpet": "unknown"
+  },
+  "skipUntil": "294",
+  "skipReason": "#294: 共有の電源ブロックの隣に**ダストが 1 個ある**と、引き戻しの確定順が変わって 着地したオブザーバーが発火する。列0 (ダスト無し) は一致し、列1 (ダスト有り) だけ tick 12/13 の 1,4,5 が食い違う。仕組みは未特定。"
+}
