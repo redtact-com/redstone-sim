@@ -147,6 +147,7 @@ tools/mc-harness/
   runner/minimize.ts       食い違いを小さな再現まで自動で縮める → fixture 書き出し
   runner/delta-debug.ts    縮め方のループ (純関数。実機に触らない)
   captures/*.def.json      キャプチャ定義 (回路ファイル + 入力 + ticks)
+  circuits/                回路ファイルの実体 (gitignore。source はここからの相対名)
   data/                    サーバ実体 (gitignore, Mojang 由来ファイル)
 packages/sim/src/mcstate.ts           MC blockstate 文字列 ↔ sim BlockState 変換
 packages/sim/test/fixture-runner.ts   sim 実行 + diff 共通ロジック
@@ -167,6 +168,22 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 「どこかで食い違う」と言っても、そのままでは原因も追えず fixture にもできない。
 `minimize.ts` は **対象座標の食い違いを保ったまま回路を削り**、残ったものを
 `packages/sim/test/fixtures/<name>.json` に書き出す。
+
+### 回路ファイルの置き場所
+
+定義ファイルの `source` は**ファイル名だけ**を書く。実体は `tools/mc-harness/circuits/`
+(gitignore) に置く。別の場所を使いたいときは `MC_CIRCUITS_DIR` で差し替える。
+
+```bash
+mkdir -p tools/mc-harness/circuits
+cp ~/Downloads/my-circuit.nbt tools/mc-harness/circuits/
+# あるいは
+MC_CIRCUITS_DIR=~/Downloads npm run capture -- tools/mc-harness/captures/<name>.def.json
+```
+
+**このリポジトリは公開なので、絶対パスをコミットしないこと** (ユーザ名が読める)。
+回路ファイル自体は配布していないため、パスを持っていても他の人が撮り直せるわけでもない。
+`npm test` の衛生テストが追跡ファイル内の絶対パスを見張っている (#322)。
 
 ```bash
 # 1. まず全体を撮って突き合わせ、食い違う座標を知る

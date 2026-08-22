@@ -63,6 +63,33 @@ describe('著作権まわりの衛生 (docs/ip-policy.md)', () => {
       .toEqual([])
   })
 
+  it('手元の絶対パスがコミットされていない (#322)', () => {
+    // 公開リポなので **Windows / Linux のユーザ名がそのまま読める**状態を作らない。
+    // 回路ファイルは配布物ではないため、パスを残しても再現の助けにならない
+    const ABSOLUTE: { name: string; re: RegExp }[] = [
+      { name: 'WSL 経由の Windows パス', re: /\/mnt\/[a-z]\/Users\// },
+      { name: 'Windows パス', re: /[A-Za-z]:\\Users\\/ },
+      { name: 'ホームディレクトリ', re: /\/(home|Users)\/[A-Za-z0-9._-]+\// },
+    ]
+    const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf-8' })
+      .split('\n').filter(Boolean)
+      .filter(f => !f.startsWith('.github/pr-assets/'))   // 画像は中身を見ない
+      .filter(f => f !== 'tools/ip-hygiene.test.ts')      // このファイル自身 (パターンを持っている)
+    const hits: string[] = []
+    for (const f of tracked) {
+      let text: string
+      try { text = readFileSync(join(repoRoot, f), 'utf-8') } catch { continue }
+      if (text.includes('\0')) continue                   // バイナリ
+      text.split('\n').forEach((line, i) => {
+        for (const p of ABSOLUTE) {
+          if (p.re.test(line)) hits.push(`${f}:${i + 1} [${p.name}] ${line.trim().slice(0, 100)}`)
+        }
+      })
+    }
+    expect(hits, `絶対パスをコミットしないこと (回路ファイルは circuits/ に置き source はファイル名だけ書く)\n${hits.join('\n')}`)
+      .toEqual([])
+  })
+
   it('デコンパイル済みソースがコミットされていない', () => {
     const tracked = execFileSync('git', ['ls-files', 'tools/decompile'], { cwd: repoRoot, encoding: 'utf-8' })
       .split('\n').filter(Boolean)

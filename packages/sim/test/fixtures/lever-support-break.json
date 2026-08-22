@@ -1,0 +1,121 @@
+{
+  "name": "lever-support-break",
+  "description": "#328 貼り付き素子は支えを失うと壊れて落ちる。**sim はこの挙動を意図的に実装していない** (13 §スコープ方針: sim 全体が支持要件を持たない。レールだけ / レバーだけ入れると不整合になる) ため skipUntil を付けてある。実機の答えをリポジトリに残し、将来実装したくなったら外すだけで検証できるようにする。測るのは 2 つ: (a) ホッパーの上に置いた床レバー — ホッパーの上面は sturdy でないので壊れる。(b) 石の上の床レバー (対照) — 残る。レバーは /setblock で置く (without_updates 相当で canSurvive を通らないため、実機に「本来ありえない状態」を作れる)。そのあと同じ位置へ更新が届いた時点で壊れる。",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "skipUntil": "328",
+  "skipReason": "支持ブロック要件は sim 非実装 (13 §スコープ方針の横断的判断)。実機仕様の記録用",
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      6,
+      3,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "hopper[enabled=true,facing=down]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lever[face=floor,facing=north,powered=true]"
+    }
+  ],
+  "trustAuthored": true,
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            3,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-08-22T09:19:55.543Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

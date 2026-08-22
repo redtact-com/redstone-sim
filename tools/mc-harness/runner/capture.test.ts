@@ -9,8 +9,12 @@
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   selectPlacedBlocks, collectLecternBooks, buildLecternBookArgs, buildLecternPageArgs,
+  resolveCircuitPath,
 } from './capture.js'
 import type { LecternSource } from './capture.js'
 
@@ -208,5 +212,56 @@ describe('buildLecternPageArgs — 入力アクション lectern', () => {
   it('負のページ / 非整数は投げる', () => {
     expect(() => buildLecternPageArgs([5, 2, 8], -1)).toThrow(/page が不正/)
     expect(() => buildLecternPageArgs([5, 2, 8], 1.5)).toThrow(/page が不正/)
+  })
+})
+
+// ============================================================
+// 回路ファイルの解決 (#322)。定義ファイルには**ファイル名だけ**を書く。
+// 公開リポなので絶対パス (= ユーザ名) を残さない
+// ============================================================
+
+describe('resolveCircuitPath', () => {
+  /** MC_CIRCUITS_DIR を差し替えて実行する (既定の circuits/ は手元にしか無いため) */
+  function withCircuitsDir<T>(fn: (dir: string) => T): T {
+    const dir = mkdtempSync(join(tmpdir(), 'rdsim-circuits-'))
+    const before = process.env.MC_CIRCUITS_DIR
+    process.env.MC_CIRCUITS_DIR = dir
+    try {
+      return fn(dir)
+    } finally {
+      if (before === undefined) delete process.env.MC_CIRCUITS_DIR
+      else process.env.MC_CIRCUITS_DIR = before
+    }
+  }
+
+  it('ファイル名だけなら circuits/ から探す', () => {
+    withCircuitsDir(dir => {
+      writeFileSync(join(dir, 'demo.nbt'), 'x')
+      expect(resolveCircuitPath('demo.nbt')).toBe(join(dir, 'demo.nbt'))
+    })
+  })
+
+  it('サブディレクトリも辿れる', () => {
+    withCircuitsDir(dir => {
+      mkdirSync(join(dir, 'doors'))
+      writeFileSync(join(dir, 'doors', 'a.nbt'), 'x')
+      expect(resolveCircuitPath('doors/a.nbt')).toBe(join(dir, 'doors', 'a.nbt'))
+    })
+  })
+
+  it('絶対パスはそのまま使う (手元だけの一時キャプチャ用)', () => {
+    withCircuitsDir(dir => {
+      const abs = join(dir, 'abs.nbt')
+      writeFileSync(abs, 'x')
+      expect(resolveCircuitPath(abs)).toBe(abs)
+    })
+  })
+
+  it('見つからないときは**探した場所**と環境変数名を出す', () => {
+    withCircuitsDir(dir => {
+      expect(() => resolveCircuitPath('missing.nbt')).toThrow(/回路ファイルが無い: missing\.nbt/)
+      expect(() => resolveCircuitPath('missing.nbt')).toThrow(new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      expect(() => resolveCircuitPath('missing.nbt')).toThrow(/MC_CIRCUITS_DIR/)
+    })
   })
 })

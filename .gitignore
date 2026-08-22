@@ -18,6 +18,11 @@ zz-*
 /blob-report/
 /playwright/.cache/
 
+# 実機キャプチャに食わせる回路ファイル (.litematic/.nbt/.schem)。
+# 配布物ではなく手元にしかない。定義ファイルの source はファイル名だけを書き、
+# 実体はここに置く (#322。置き場所は MC_CIRCUITS_DIR で差し替え可)
+tools/mc-harness/circuits/
+
 # Mojang 由来物 (jar / mappings / デコンパイル産物) は絶対にコミットしない
 # (docs/research/03_legal-decompile.md 参照)
 tools/decompile/jars/

@@ -25,7 +25,7 @@ import type {
 } from './types.js'
 import { OPPOSITE } from './types.js'
 import { emptySlots } from './blocks/container.js'
-import { classifyPlainBlock } from './blocks/blockNames.js'
+import { classifyPlainBlock, isContainerBlockName, isContainerFullCube } from './blocks/blockNames.js'
 
 export interface ParsedMcState {
   name: string
@@ -291,7 +291,7 @@ export function mcToSim(state: string): BlockState | null {
       // コンテナ: 充填率 (signal) は blockstate に現れないため 0 で取り込む
       // [02 §6 comparator。実効 signal は BE の中身に依存する]。
       // **樽はフルキューブ (導体)、チェストは違う (非導体)** ので分けて持つ (#291)
-      return { type: 'container', fullCube: name === 'barrel', signal: 0 }
+      return { type: 'container', name, fullCube: isContainerFullCube(name), signal: 0 }
     case 'hopper':
       // vanilla の facing = 送り込み方向 (down または水平) = sim と同一 (非反転)。
       // 中身は blockstate に無いため空スロットで取り込む (BE の中身)。
@@ -321,6 +321,11 @@ export function mcToSim(state: string): BlockState | null {
         triggered: props.triggered === 'true',
       }
     default: {
+      // シュルカーボックスは色 16 種 + 無色の 17 名あるので case で並べず接尾辞で拾う (#324)。
+      // **実機実測で導体** (fixture shulker-box-conductor。色・向きによらず 15)
+      if (isContainerBlockName(name)) {
+        return { type: 'container', name, fullCube: isContainerFullCube(name), signal: 0 }
+      }
       // 素材ブロック (固体 / ガラス / スラブ) は nbtIO と**同じ表**で判定する (#214)。
       // 以前はここで fixture 用に個別列挙し未知は例外にしていたため、実キャプチャを
       // そのまま fixture にできなかった
@@ -615,7 +620,7 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.powered = String(sim.powered)
       break
     case 'container':
-      break // signal/count は blockstate に現れない (authored 名 barrel/chest を保持)
+      break // signal/count は blockstate に現れない (authored 名 樽/チェスト/シュルカーを保持)
     case 'hopper':
       // count は BE で blockstate に無い。enabled のみ動的に上書き
       props.enabled = String(sim.enabled)

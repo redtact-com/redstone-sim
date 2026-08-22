@@ -22,7 +22,7 @@ import {
  */
 const PISTON: Capture = {
   name: 'piston-basic-capture',
-  source: '/mnt/c/captures/piston-basic.litematic',
+  source: 'piston-basic.litematic',
   mcVersion: '1.21.1',
   region: { from: [0, 0, 0], to: [5, 1, 1] },
   authored: {
