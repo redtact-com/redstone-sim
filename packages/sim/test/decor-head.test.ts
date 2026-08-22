@@ -24,3 +24,23 @@ describe('頭・頭蓋は装飾ブロック (#290)', () => {
     expect(b).toEqual({ type: 'decor', name: 'player_wall_head[facing=north,powered=false]' })
   })
 })
+
+describe('ガラス板・鉄格子は接続を持つ pane 型 (#303)', () => {
+  // Runa.S_closed が light_blue_stained_glass_pane を 9 枚使っており、
+  // **接続の blockstate が隣の出入りで変わるのを真下のオブザーバーが検知**して
+  // ピストンの収縮を打ち消している。装飾に潰すと扉が 1 回しか動かない
+  it.each(['glass_pane', 'light_blue_stained_glass_pane', 'black_stained_glass_pane', 'iron_bars'])(
+    '%s は pane 型 (装飾ではない)', name => {
+      expect(isDecorBlockName(name)).toBe(false)
+      expect(classifyPlainBlock(`minecraft:${name}`)?.type).toBe('pane')
+    })
+
+  it('材質を name に、接続を bool で持つ', () => {
+    expect(classifyPlainBlock('minecraft:light_blue_stained_glass_pane',
+      { east: 'true', north: 'false', south: 'true', waterlogged: 'false', west: 'false' }))
+      .toEqual({
+        type: 'pane', name: 'light_blue_stained_glass_pane',
+        north: false, east: true, south: true, west: false, waterlogged: false,
+      })
+  })
+})
