@@ -4,6 +4,13 @@ dist
 .wrangler
 .DS_Store
 *.local
+*.local.*
+
+# 一時スクリプト (エージェントや手元の検証で作るもの)。
+# git add -A で公開リポへ混入する事故があったので広めに弾く (#303)
+zz-*
+*.tmp.mjs
+.verify-tmp*
 
 # Playwright E2E (issue #70)
 /playwright-report/
