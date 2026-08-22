@@ -100,10 +100,16 @@ describe('nbtIO: vanilla ボタン名 → 専用型 import', () => {
 })
 
 describe('nbtIO: コンテナ / 重量板の既存往復が壊れていない', () => {
-  it('container は barrel として export → container(signal=0) で import', async () => {
+  it('樽は barrel として export → container(fullCube=true) で import', async () => {
     // signal は NBT に現れないため 0 で戻る
-    expect(await roundTrip({ type: 'container', signal: 5 }))
-      .toMatchObject({ type: 'container', signal: 0 })
+    expect(await roundTrip({ type: 'container', fullCube: true, signal: 5 }))
+      .toMatchObject({ type: 'container', fullCube: true, signal: 0 })
+  })
+
+  it('チェストは chest として export される (#291)', async () => {
+    // 樽と取り違えると**導通が変わる** (樽=導体 / チェスト=非導体)
+    expect(await roundTrip({ type: 'container', fullCube: false, signal: 0 }))
+      .toMatchObject({ type: 'container', fullCube: false })
   })
 
   it('重量板(金)は往復後も専用型で powered=false に正規化される', async () => {
