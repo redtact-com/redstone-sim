@@ -761,7 +761,11 @@ export function EditorPage({ onBack }: EditorPageProps) {
     if (!pending) return
     const { kept, dropped } = clipToBoard(pending.blocks, pending.board)
     setBoard(pending.board)
-    editorRef.current.resetToBlocks(kept)
+    // **取り込み由来かを覚える** (#317)。取り込んだ回路は保存時の blockstate が
+    // 整合しているので、シミュレーション開始時にそのまま出発点にする。
+    // 計算し直すと blockstate に出ない値 (コンパレーターの保持出力・予約 tick 等) が
+    // 復元できず、**何も操作していないのに回路が動き出す**
+    editorRef.current.resetToBlocks(kept, pending.kind === 'import')
     // 盤面が縮んで編集レイヤーが外に出たら引き戻す
     if (editorRef.current.activeLayer >= pending.board.y) {
       const y = pending.board.y - 1
@@ -830,7 +834,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
     if (restored && restored.blocks.size > 0) {
       // resetToBlocks 自体が change を発火するので、購読前のここで済ませる。
       // 描画とログ更新は次のフレームへ逃がす (effect 内の同期 setState を避ける)
-      editor.resetToBlocks(restored.blocks)
+      editor.resetToBlocks(restored.blocks, restored.imported)
       queueMicrotask(() => {
         rerender()
         const b = restored.board
@@ -843,7 +847,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
     const flush = () => {
       if (timer) { clearTimeout(timer); timer = null }
       // 盤面サイズも一緒に保存する (#226)。プレビュー中の候補は保存しない
-      saveCircuit(editor.getAllBlocks(), undefined, undefined, boardRef.current)
+      saveCircuit(editor.getAllBlocks(), undefined, undefined, boardRef.current,
+        editor.isImportedSnapshot())
     }
     const unsubscribe = editor.on('change', () => {
       if (timer) clearTimeout(timer)
@@ -910,7 +915,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       return
     }
     const world = editorRef.current.buildSimWorld()
-    world.initialize()
+    // 取り込み由来なら保存時の状態をそのまま出発点にする (#317)
+    world.initialize({ trustAuthored: editorRef.current.isImportedSnapshot() })
     // 音符ブロックの発音イベント (BE フェーズ) をログへ可視化 (C5 #38)
     world.onNotePlay(e => addLog(`♪ 音符ブロック (${e.pos[0]}, ${e.pos[1]}, ${e.pos[2]}) note=${e.note}`))
     saveCheckpoint(world, 0)
@@ -945,8 +951,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
     }
     // ブロック状態から wire 電力・スケジュール済み tick を再計算する
     // クロック回路では flush しないため、トーチの ON/OFF 状態に合わせた
-    // 次の tick のスケジュールのみが登録される
-    world.initialize()
+    // 次の tick のスケジュールのみが登録される。
+    // 取り込み由来なら開始時と同じく保存時の状態を信用する (#317)
+    world.initialize({ trustAuthored: editorRef.current.isImportedSnapshot() })
     setSimWorld(world)
     setTick(checkpointTick)
     addLog(`[sim] Clear — tick ${checkpointTick} の状態に戻しました`)

@@ -35,6 +35,11 @@ export interface SavedCircuit {
    * フィールドが増えただけで回路を捨てるのは損が大きい)
    */
   board?: BoardSize
+  /**
+   * 取り込み由来か (#317)。**version は上げない** (board と同じ方針)。
+   * これが無い古い保存データは false として読む
+   */
+  imported?: boolean
 }
 
 export interface RestoredCircuit {
@@ -42,6 +47,11 @@ export interface RestoredCircuit {
   savedAt: string
   /** 保存に盤面サイズが無ければ既定値 */
   board: BoardSize
+  /**
+   * 取り込み由来か (#317)。**version は上げない** — 無い古い保存データは false。
+   * これが true の盤面はシミュレーション開始時に保存時の状態をそのまま信用する
+   */
+  imported: boolean
 }
 
 /** localStorage は「アクセスした瞬間に throw する」環境がある (Safari のプライベート等) */
@@ -59,11 +69,11 @@ const isPosKey = (key: string): boolean => {
 }
 
 export function serializeCircuit(
-  blocks: Map<string, BlockState>, savedAt: string, board?: BoardSize,
+  blocks: Map<string, BlockState>, savedAt: string, board?: BoardSize, imported = false,
 ): SavedCircuit {
   const out: Record<string, BlockState> = {}
   for (const [key, block] of blocks) out[key] = block
-  return { v: STORAGE_VERSION, savedAt, blocks: out, board: normalizeBoardSize(board) }
+  return { v: STORAGE_VERSION, savedAt, blocks: out, board: normalizeBoardSize(board), imported }
 }
 
 /** 壊れた保存データを弾く。1 ブロックでも形が違えば全体を捨てる (中途半端な復元をしない) */
@@ -75,7 +85,7 @@ export function parseCircuit(raw: string): RestoredCircuit | null {
     return null
   }
   if (typeof data !== 'object' || data === null) return null
-  const { v, savedAt, blocks, board } = data as Partial<SavedCircuit>
+  const { v, savedAt, blocks, board, imported } = data as Partial<SavedCircuit>
   if (v !== STORAGE_VERSION) return null
   if (typeof blocks !== 'object' || blocks === null) return null
 
@@ -94,6 +104,7 @@ export function parseCircuit(raw: string): RestoredCircuit | null {
     savedAt: typeof savedAt === 'string' ? savedAt : '',
     // 盤面サイズが無い古い保存は既定 (16×16×16) として読む
     board: normalizeBoardSize(board),
+    imported: imported === true,
   }
 }
 
@@ -132,11 +143,12 @@ export function saveCircuit(
   now: string = new Date().toISOString(),
   storage?: Storage,
   board?: BoardSize,
+  imported = false,
 ): SaveResult {
   const s = safeStorage(storage)
   if (!s) return 'unavailable'
   try {
-    s.setItem(STORAGE_KEY, JSON.stringify(serializeCircuit(blocks, now, board)))
+    s.setItem(STORAGE_KEY, JSON.stringify(serializeCircuit(blocks, now, board, imported)))
     return 'saved'
   } catch {
     // 容量超過など。次の保存で回復する可能性があるので消さずに諦める
