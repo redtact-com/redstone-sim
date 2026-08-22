@@ -88,3 +88,21 @@ body {
 .rs-border-pulse {
   animation: rs-border-pulse 0.8s ease-in-out infinite;
 }
+
+/*
+ * ホットバーの横スクロールバー (#333)。
+ *
+ * 以前は `scrollbar-width: none` で消していたため、PC では
+ * **見切れたブロックに到達する手段が無かった**。細くして常に見せる。
+ *
+ * `::-webkit-scrollbar` は**使わない**。Chromium は標準プロパティ
+ * (`scrollbar-width` / `scrollbar-color`) が指定されていると webkit 側の指定を
+ * 丸ごと無視するので、両方書くと「効いていない CSS」が残るだけになる。
+ * 標準プロパティだけで Chromium と Firefox の両方に効く (実測 4px)。
+ *
+ * 細いぶん掴みにくいので、主な操作手段はホイールと ◀ ▶ ボタンの方に置いている
+ */
+.mc-hotbar-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: #8a8a8a #1c1c1c;
+}
