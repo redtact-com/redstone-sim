@@ -1623,16 +1623,104 @@ function FacingBar({
 
 // ── EditorPalette ─────────────────────────────────────────────────────────────
 
+/**
+ * ブロックパレット (ホットバー)。
+ *
+ * 41 項目 x 約 60px = 約 2460px あり **PC の画面幅にはまず収まらない**ので、
+ * はみ出したぶんへ確実に到達できるようにする (#333):
+ *
+ *   - ホイールを横スクロールに割り当てる (PC には他に手が無い)
+ *   - 両端の ◀ ▶ で 1 画面ずつ送る
+ *   - スクロールバーを常時出す (以前は `scrollbarWidth: 'none'` で消していた)
+ *   - **はみ出すときだけ中央寄せをやめる**。中央寄せのまま溢れると
+ *     左右に均等にあふれて**左端がスクロールしても届かない**
+ *
+ * タッチのスワイプは `overflow-x: auto` のままなので従来どおり効く。
+ */
 function EditorPalette({ selected, onSelect }: {
   selected:  PaletteType
   onSelect:  (type: PaletteType) => void
 }) {
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  // 端に着いたら矢印を無効化する。overflow=false のときは矢印ごと出さない
+  const [edge, setEdge] = useState({ overflow: false, atStart: true, atEnd: false })
+
+  const syncEdge = useCallback(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    // 小数の丸めでいつまでも「端でない」と判定されるのを防ぐ (1px の余裕)
+    const max = el.scrollWidth - el.clientWidth
+    setEdge({
+      overflow: max > 1,
+      atStart: el.scrollLeft <= 1,
+      atEnd: el.scrollLeft >= max - 1,
+    })
+  }, [])
+
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    syncEdge()
+    // ウィンドウ幅で溢れるかどうかが変わる。要素自身の寸法変化も拾う
+    const ro = new ResizeObserver(syncEdge)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [syncEdge])
+
+  /**
+   * ホイールの縦回転を横スクロールにする。
+   *
+   * パレットは縦にははみ出さないのでブラウザ既定では**何も起きない**。
+   * 横成分 (`deltaX`) を持つ入力 (トラックパッドの横スワイプ・シフト + ホイール) は
+   * ブラウザに任せる — 奪うと加速度や慣性が消える
+   */
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = scrollerRef.current
+    if (!el || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 1) return
+    el.scrollLeft += e.deltaY
+    syncEdge()
+  }, [syncEdge])
+
+  /** ◀ ▶ で 1 画面ぶん送る。端が半端に切れないよう少し重ねる */
+  const page = useCallback((dir: -1 | 1) => {
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * Math.max(120, el.clientWidth - 80), behavior: 'smooth' })
+  }, [])
+
+  // 選択中のブロックが見切れていたら見える位置へ寄せる。
+  // キーボードや取り消しで選択が変わったとき、どれが選ばれているか分からなくなるため
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const btn = el.querySelector(`[data-testid="palette-${selected}"]`)
+    btn?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+  }, [selected])
+
+  const arrowStyle = (disabled: boolean): React.CSSProperties => ({
+    width: 26, height: 66, fontSize: 14, lineHeight: 1,
+    opacity: disabled ? 0.3 : 1,
+    cursor: disabled ? 'default' : 'pointer',
+  })
+
   return (
-    <div className="shrink-0 flex justify-center py-2 px-2"
+    <div className="shrink-0 flex items-center justify-center gap-1 py-2 px-2"
          style={{ background: '#111', borderTop: '2px solid #2a2a2a' }}>
-      {/* ホットバー外枠 */}
-      <div className="flex gap-0.5 overflow-x-auto"
-           style={{ scrollbarWidth: 'none', background: '#373737', padding: 3, border: '2px solid #555' }}>
+      {edge.overflow && (
+        <button onClick={() => page(-1)} disabled={edge.atStart} title="左へ"
+                data-testid="palette-scroll-left"
+                className="mc-btn shrink-0 font-pixel" style={arrowStyle(edge.atStart)}>◀</button>
+      )}
+      {/* ホットバー外枠。**はみ出すときは中央寄せをやめる** (左端が届かなくなるため) */}
+      <div ref={scrollerRef} onScroll={syncEdge} onWheel={handleWheel}
+           data-testid="palette-scroller"
+           className="mc-hotbar-scroller flex gap-0.5 overflow-x-auto"
+           style={{
+             background: '#373737', padding: 3, border: '2px solid #555',
+             ...(edge.overflow ? { flex: '1 1 auto', minWidth: 0 } : {}),
+           }}>
         {BLOCK_PALETTE.map(({ type, label, texture, cssFilter }) => {
           const isSelected = type === selected
           const isEraser   = type === 'eraser'
@@ -1695,6 +1783,11 @@ function EditorPalette({ selected, onSelect }: {
           )
         })}
       </div>
+      {edge.overflow && (
+        <button onClick={() => page(1)} disabled={edge.atEnd} title="右へ"
+                data-testid="palette-scroll-right"
+                className="mc-btn shrink-0 font-pixel" style={arrowStyle(edge.atEnd)}>▶</button>
+      )}
     </div>
   )
 }
