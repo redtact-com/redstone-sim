@@ -1065,6 +1065,12 @@ const IS_TRIGGERABLE: Record<BlockType, boolean> = {
 }
 
 /** 手動トリガできるブロック種の一覧 (#153)。UI 側のリストはこれと一致させる */
+/**
+ * BlockState union の**全ブロック種**。`Record<BlockType, boolean>` の網羅性を借りている。
+ * 型を足したら自動で増えるので、UI 側やコンバータの「入れ忘れ」検知に使える (#303)。
+ */
+export const ALL_BLOCK_TYPES: BlockType[] = Object.keys(IS_TRIGGERABLE) as BlockType[]
+
 export const TRIGGERABLE_TYPES: BlockType[] =
   (Object.keys(IS_TRIGGERABLE) as BlockType[]).filter(t => IS_TRIGGERABLE[t])
 

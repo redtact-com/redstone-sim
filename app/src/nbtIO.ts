@@ -522,6 +522,16 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         up: String((block as any).up ?? false),
         waterlogged: String((block as any).waterlogged ?? false),
       }]
+    case 'pane':
+      // 材質は name、接続は sim が計算した値 (#303)。
+      // **ここを落とすと保存でガラス板が消える** (default → air に落ちるため)
+      return [`minecraft:${String((block as any).name ?? 'glass_pane')}`, {
+        north: String((block as any).north ?? false),
+        east: String((block as any).east ?? false),
+        south: String((block as any).south ?? false),
+        west: String((block as any).west ?? false),
+        waterlogged: String((block as any).waterlogged ?? false),
+      }]
     case 'bubble_column':
       return ['minecraft:bubble_column', { drag: String((block as any).drag ?? false) }]
     case 'soul_sand':
