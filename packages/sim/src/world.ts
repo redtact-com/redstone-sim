@@ -1160,6 +1160,14 @@ export class SimWorld {
       this.applyRailPlacement(pos, block.shape)
     }
 
+    // **置かれたオブザーバーは 1 回発火する** (#301)。着地 (finalizeMovingPiston) と同じ規則
+    // [確定: 26.2 ObserverBlock.onPlace + 実機 fixture wire-cut-conductor —
+    //  `/setblock` でオブザーバーを置いた 2gt 後に powered=true になる]。
+    // 着地側 (#119) だけ実装しており、コマンド設置の経路が抜けていた
+    if (block.type === 'observer' && !block.powered
+      && !this.hasScheduledTick(pos, 'observer')) {
+      this.schedule(pos, 2, 0)
+    }
     this.neighborChanged(pos)   // 置いた位置自身の再評価 (上記の実測に合わせる)
     this.emitShapeUpdate(pos)   // flag に UPDATE_KNOWN_SHAPE(16) が無い → updateShape は飛ぶ
     this.submitMultiNC(pos)     // updateNeighborsAt 相当 — 周囲 6 方向のみ
@@ -2419,6 +2427,10 @@ export class SimWorld {
    * @returns 形状が変わったワイヤー座標
    */
   private refreshWireShapesAround(positions: Pos3D[]): Pos3D[] {
+    // **真上が変わったダストは全再計算**になる (#301)。候補を集めてから
+    // 「変化点のどれかが自分の真上か」を見る (先に見つかった経路で決めない)
+    const fromAbove = new Set<string>()
+    for (const p of positions) fromAbove.add(posKey([p[0], p[1] - 1, p[2]]))
     const seen = new Set<string>()
     const changed: Pos3D[] = []
     for (const p of positions) {
@@ -2429,7 +2441,7 @@ export class SimWorld {
         const b = this.blocks.get(key)
         if (b?.type !== 'wire') continue
         const next = refreshWireShape(
-          cand[0], cand[1], cand[2], this, (b as WireState).connections)
+          cand[0], cand[1], cand[2], this, (b as WireState).connections, fromAbove.has(key))
         if (sameConnections((b as WireState).connections, next)) continue
         this.blocks.set(key, { ...(b as WireState), connections: next })
         this.emitShapeUpdate(cand)
