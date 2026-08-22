@@ -17,7 +17,7 @@
 // ```jsonc
 // {
 //   "name": "elevator-floor5",
-//   "source": "/mnt/c/Users/.../xxx.litematic",
+//   "source": "xxx.litematic",              // circuits/ からの相対 (絶対パスも可)
 //   "ticks": 200,
 //   "pad": 2,                                  // region を回路 bbox から広げる量
 //   "players": [{ "name": "gt", "spawn": [3.5, 6, 1.5] }],
@@ -46,6 +46,49 @@ const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
 const sharedDir = join(repoRoot, 'tools', 'mc-harness', 'scripts', 'shared')
 const outDir = join(repoRoot, 'tools', 'mc-harness', 'captures')
+
+/**
+ * 回路ファイル (.litematic/.nbt/.schem) の置き場所 (#322)。
+ *
+ * 定義ファイルの `source` は**ファイル名だけ**を書く。
+ * 手元の絶対パスを書くと、このリポジトリは公開なので**ユーザ名がそのまま読める**。
+ * 回路ファイル自体は配布物ではないので、パスを持っていても他の人が撮り直せるわけでもない。
+ *
+ * 置き場所は `MC_CIRCUITS_DIR` で差し替えられる (既定 `tools/mc-harness/circuits/`)。
+ * ディレクトリ自体は .gitignore 済み。
+ */
+function circuitsDir(): string {
+  // **呼ぶたびに読む**。モジュール読み込み時に固定すると、
+  // 環境変数を設定してからでないと差し替えが効かない (テストからも触れない)
+  const env = process.env.MC_CIRCUITS_DIR
+  return env ? resolve(env) : join(repoRoot, 'tools', 'mc-harness', 'circuits')
+}
+
+/** Windows のドライブレター付きも絶対パスとして扱う (WSL から `C:\\...` を渡されることがある) */
+function isAbsolutePath(p: string): boolean {
+  return p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p)
+}
+
+/**
+ * 定義ファイルの `source` を実際のファイルへ解決する (#322)。
+ *
+ * 絶対パスはそのまま使う (手元だけの一時的なキャプチャで書きたくなるため)。
+ * 相対なら circuits/ → カレントの順で探し、**どこを探したかをエラーに出す**。
+ */
+export function resolveCircuitPath(source: string): string {
+  if (isAbsolutePath(source)) {
+    if (existsSync(source)) return source
+    throw new Error(`回路ファイルが無い: ${source}`)
+  }
+  const tried = [join(circuitsDir(), source), resolve(source)]
+  for (const p of tried) if (existsSync(p)) return p
+  throw new Error(
+    `回路ファイルが無い: ${source}\n` +
+    `  探した場所:\n${tried.map(p => `    ${p}`).join('\n')}\n` +
+    `  回路ファイルは配布していない。手元のものを circuits/ に置くか、` +
+    `MC_CIRCUITS_DIR で置き場所を指定すること`,
+  )
+}
 
 /** 実機に乗せる fake player */
 export interface CaptureDefPlayer {
@@ -334,8 +377,7 @@ export function collectLecternBooks(blocks: readonly LecternSource[]): {
  * ブロックが region のすぐ外に残り、実機だけが影響を受ける — README の「残骸」)。
  */
 export async function loadCircuit(def: CaptureDef) {
-  const path = def.source
-  if (!existsSync(path)) throw new Error(`回路ファイルが無い: ${path}`)
+  const path = resolveCircuitPath(def.source)
   const raw = await readRawPlacedBlocks(new Uint8Array(readFileSync(path)))
   if (raw.length === 0) throw new Error(`ブロックが 1 つも読めなかった: ${path}`)
 
