@@ -2408,12 +2408,17 @@ export class SimWorld {
     // 形状が変わったワイヤーは電力も変わり得る (ステップ切断で網から外れる等)
     // ため BFS 起点に加える。
     const reshaped = this.refreshWireShapesAround([pos])
+    // **素子自身の NC はワイヤー電力を確定させる前に配る** (#294)。
+    // vanilla は素子が updateNeighborsAt を回す時点でダストの power はまだ古く、
+    // ダストが自分の番で neighborChanged を受けて初めて再計算する。
+    // 先に BFS で確定させると「ダストが給電しているブロックの隣のピストン」が
+    // **1 手早く電源断を見てしまい**、引き戻しの積まれる順が変わる
+    this.emitOutputShape(pos)
     const changedWires = this.propagateWireBFS(
       [...this.collectWireStarts(pos), ...reshaped])
     // ワイヤーの power 変化は blockstate 変化 = PP を発行 (観測面の隣接オブザーバー起動)。
     // vanilla のダスト setBlock (flag2 → updateNeighbourShapes) に相当し、多段 NC より先。
     for (const w of changedWires) this.emitShapeUpdate(w)
-    this.emitOutputShape(pos)
     for (const w of changedWires) {
       for (const origin of dustUpdateOrigins(w)) this.submitMultiNC(origin)
     }
