@@ -27,7 +27,7 @@ import { OPPOSITE } from './types.js'
 import { emptySlots } from './blocks/container.js'
 import {
   classifyPlainBlock, isContainerBlockName, isContainerFullCube,
-  doorLikeKindOf, buttonLikeKindOf,
+  doorLikeKindOf, buttonLikeKindOf, appearanceProps,
 } from './blocks/blockNames.js'
 
 export interface ParsedMcState {
@@ -268,7 +268,10 @@ export function mcToSim(state: string): BlockState | null {
               lit: props.lit === 'true', powered,
             }
           default:
-            return { type: doorLike.type, name: doorLike.name, facing, open, powered }
+            return {
+              type: doorLike.type, name: doorLike.name, facing, open, powered,
+              renderProps: appearanceProps(doorLike.type, props),
+            }
         }
       }
       const buttonLike = buttonLikeKindOf(name)
@@ -340,7 +343,7 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       case 'solid':
         // 押した先には authored が無いので合成する。
         // **取り込み元の名前があればそれを使う** (#343)。無ければ canonicalize と代表名を揃える
-        if (sim.name !== undefined) return sim.name
+        if (sim.name !== undefined) return formatMcState(sim.name, { ...sim.renderProps })
         if (sim.immovable === true) return 'obsidian'    // #253 (そもそも動かない)
         if (sim.pushOnly === true) {                     // #255 (押されて動く先はある)
           return formatMcState('gray_glazed_terracotta', { facing: 'north' })
@@ -348,9 +351,10 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         return 'stone'
       // 非導体フルブロックも可動 (#184)。名前が無ければ代表名で合成する
       case 'glass':
-        return sim.name ?? 'glass'
+        return formatMcState(sim.name ?? 'glass', { ...sim.renderProps })
       case 'slab':
-        return formatMcState(sim.name ?? 'smooth_stone_slab', { type: sim.half, waterlogged: 'false' })
+        return formatMcState(sim.name ?? 'smooth_stone_slab',
+          { waterlogged: 'false', ...sim.renderProps, type: sim.half })
       case 'redstone_block':
         // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
         return 'redstone_block'
@@ -609,7 +613,9 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       // 動的プロパティを持たない (#184)。ただし**名前は sim 側が正** (#343) —
       // authored を信じると、ピストンで動いたブロックが**移動先に元々あった材質**を着る
       // (#257 で facing を sim 側から書くようにしたのと同じ構図)
-      if (sim.name !== undefined && sim.name !== name) return formatMcState(sim.name, props)
+      if (sim.name !== undefined && sim.name !== name) {
+        return formatMcState(sim.name, { ...props, ...sim.renderProps })
+      }
       break
     case 'air':
       return 'air'

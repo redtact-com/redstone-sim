@@ -27,14 +27,28 @@ function flipDir(dir: string): string {
 }
 
 /**
- * 素材ブロックの描画名 (#343)。
+ * 素材ブロックの描画名 (#343 → #351)。
  *
- * **プロパティは付けない**。sim は挙動に効かないプロパティ (原木の `axis` など) を
- * 捨てているので復元できないが、`buildResources` の `getDefaultBlockProperties` が
- * blockstate 側の値から補うため、名前だけ渡せば描ける。
+ * 取り込みで拾った**見た目にだけ効くプロパティ** (原木の `axis` など) を付ける。
+ * 無ければ `buildResources` の `getDefaultBlockProperties` が blockstate 側の値から
+ * 補うので、名前だけでも描ける (パレットから置いたものはこちら)。
  */
-export function plainBlockStr(name: string): string {
-  return `minecraft:${name.replace(/^minecraft:/, '')}`
+export function plainBlockStr(name: string, renderProps?: Record<string, string>): string {
+  const id = name.replace(/^minecraft:/, '')
+  return renderProps ? `minecraft:${id}${formatProps(renderProps)}` : `minecraft:${id}`
+}
+
+/** `[k=v,...]` を組み立てる (キー昇順。空なら空文字) */
+function formatProps(props: Record<string, string>): string {
+  const keys = Object.keys(props).sort()
+  return keys.length === 0 ? '' : `[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
+}
+
+/** 動的な値を優先しつつ、見た目プロパティを下に敷く */
+function withRenderProps(
+  dynamic: Record<string, string>, renderProps?: Record<string, string>,
+): string {
+  return formatProps({ ...renderProps, ...dynamic })
 }
 
 /**
@@ -216,14 +230,19 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'trapdoor_wood':
     case 'trapdoor_iron': {
       // facing は反転する (repeater と同じく「ヒンジのある側」= 取り付け方向)。
-      // half は sim で持たないので bottom 固定 (#157)。**樹種は name で描く** (#346)
+      // 樹種は name (#346)、**上下は取り込みで拾った half** (#351。無ければ bottom)
       const name = block.name ?? (block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor')
-      return `minecraft:${name}[facing=${flipDir(block.facing)},half=bottom,`
-        + `open=${block.open},powered=${block.powered},waterlogged=false]`
+      return `minecraft:${name}` + withRenderProps({
+        facing: flipDir(block.facing),
+        open: String(block.open), powered: String(block.powered),
+      }, { half: 'bottom', waterlogged: 'false', ...block.renderProps })
     }
     case 'fence_gate':
-      return `minecraft:${block.name ?? 'oak_fence_gate'}[facing=${flipDir(block.facing)},in_wall=false,`
-        + `open=${block.open},powered=${block.powered}]`
+      // in_wall は取り込みで拾った値 (#351。塀に埋めたゲートは低く描かれる)
+      return `minecraft:${block.name ?? 'oak_fence_gate'}` + withRenderProps({
+        facing: flipDir(block.facing),
+        open: String(block.open), powered: String(block.powered),
+      }, { in_wall: 'false', ...block.renderProps })
     case 'door_wood':
     case 'door_iron': {
       // **hinge は sim が持っている** (#262 で塀の接続に効くため)。
@@ -235,11 +254,12 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     // 素材は挙動に効かないが**見た目には効く**ので name で描く (#343)。
     // 名前を持たない (パレット配置の) ものは従来どおり代表ブロック
     case 'solid':
-      return plainBlockStr(block.name ?? 'stone')
+      return plainBlockStr(block.name ?? 'stone', block.renderProps)
     case 'glass':
-      return plainBlockStr(block.name ?? 'glass')
+      return plainBlockStr(block.name ?? 'glass', block.renderProps)
     case 'slab':
-      return `minecraft:${block.name ?? 'smooth_stone_slab'}[type=${block.half}]`
+      return `minecraft:${block.name ?? 'smooth_stone_slab'}`
+        + withRenderProps({ type: block.half }, block.renderProps)
     case 'air':
       return 'minecraft:air'
   }

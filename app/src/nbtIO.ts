@@ -14,7 +14,7 @@ import type { DetectedFormat } from '@taku128/java-schematic'
 import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
 import {
   emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument,
-  isContainerBlockName, isContainerFullCube, doorLikeKindOf, buttonLikeKindOf,
+  isContainerBlockName, isContainerFullCube, doorLikeKindOf, buttonLikeKindOf, appearanceProps,
 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
@@ -588,12 +588,14 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'trapdoor_wood':
     case 'trapdoor_iron':
       return [`minecraft:${(block as any).name ?? (block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor')}`, {
-        facing: block.facing, half: 'bottom',
-        open: String(block.open), powered: String(block.powered), waterlogged: 'false',
+        half: 'bottom', waterlogged: 'false', ...(block as any).renderProps,
+        facing: block.facing,
+        open: String(block.open), powered: String(block.powered),
       }]
     case 'fence_gate':
       return [`minecraft:${(block as any).name ?? 'oak_fence_gate'}`, {
-        facing: block.facing, in_wall: 'false',
+        in_wall: 'false', ...(block as any).renderProps,
+        facing: block.facing,
         open: String(block.open), powered: String(block.powered),
       }]
     case 'copper_bulb':
@@ -690,11 +692,12 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     // 取り込み元の名前があればそれに戻す (#343)。無ければ従来の代表名。
     // **保存で材質が石に化けると `immovable` (黒曜石) や音符ブロックの音色まで失われる**
     case 'solid':
-      return [`minecraft:${(block as any).name ?? 'stone'}`, {}]
+      return [`minecraft:${(block as any).name ?? 'stone'}`, { ...(block as any).renderProps }]
     case 'glass':
-      return [`minecraft:${(block as any).name ?? 'glass'}`, {}]
+      return [`minecraft:${(block as any).name ?? 'glass'}`, { ...(block as any).renderProps }]
     case 'slab':
-      return [`minecraft:${(block as any).name ?? 'smooth_stone_slab'}`, { type: block.half }]
+      return [`minecraft:${(block as any).name ?? 'smooth_stone_slab'}`,
+        { ...(block as any).renderProps, type: block.half }]
     default:
       return ['minecraft:air', {}]
   }
@@ -816,7 +819,10 @@ function minecraftToBlockState(
         lit: props.lit === 'true', powered: common.powered,
       } as BlockState
     }
-    return { type: doorLike.type, ...common } as BlockState
+    return {
+      type: doorLike.type, ...common,
+      renderProps: appearanceProps(doorLike.type, props),
+    } as BlockState
   }
   if (name === 'minecraft:rail') {
     // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4)。通常レールだけが曲線を取る (#140)
