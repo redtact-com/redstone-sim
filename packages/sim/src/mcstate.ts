@@ -371,17 +371,19 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         // payload (into) は blockstate に現れない (vanilla も BE 内)
         return formatMcState('moving_piston', { facing: sim.facing, type: sim.kind })
       case 'solid':
-        // 押した先には authored が無いので合成する。canonicalize と代表名を揃える
+        // 押した先には authored が無いので合成する。
+        // **取り込み元の名前があればそれを使う** (#343)。無ければ canonicalize と代表名を揃える
+        if (sim.name !== undefined) return sim.name
         if (sim.immovable === true) return 'obsidian'    // #253 (そもそも動かない)
         if (sim.pushOnly === true) {                     // #255 (押されて動く先はある)
           return formatMcState('gray_glazed_terracotta', { facing: 'north' })
         }
         return 'stone'
-      // 非導体フルブロックも可動 (#184)。色・素材は保持しないので代表名で合成する
+      // 非導体フルブロックも可動 (#184)。名前が無ければ代表名で合成する
       case 'glass':
-        return 'glass'
+        return sim.name ?? 'glass'
       case 'slab':
-        return formatMcState('smooth_stone_slab', { type: sim.half, waterlogged: 'false' })
+        return formatMcState(sim.name ?? 'smooth_stone_slab', { type: sim.half, waterlogged: 'false' })
       case 'redstone_block':
         // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
         return 'redstone_block'
@@ -635,10 +637,13 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.triggered = String(sim.triggered)
       break
     case 'solid':
-      break // powered は blockstate に現れない
     case 'glass':
     case 'slab':
-      break // 動的プロパティを持たない (#184)。authored の色・素材をそのまま残す
+      // 動的プロパティを持たない (#184)。ただし**名前は sim 側が正** (#343) —
+      // authored を信じると、ピストンで動いたブロックが**移動先に元々あった材質**を着る
+      // (#257 で facing を sim 側から書くようにしたのと同じ構図)
+      if (sim.name !== undefined && sim.name !== name) return formatMcState(sim.name, props)
+      break
     case 'air':
       return 'air'
   }

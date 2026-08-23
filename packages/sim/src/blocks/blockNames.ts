@@ -41,15 +41,16 @@ export function toNonConductiveBlockState(
   const id = name.startsWith('minecraft:') ? name.slice('minecraft:'.length) : name
 
   if (GLASS_EXACT.has(id) || GLASS_SUFFIXES.some(s => id.endsWith(s))) {
-    // ガラス板 (_pane) はフルブロックではないので対象外 (この分岐にも来ない)
-    return { type: 'glass' }
+    // ガラス板 (_pane) はフルブロックではないので対象外 (この分岐にも来ない)。
+    // name は描画と書き出し用 (#343)。挙動は従来どおり材質を潰したまま
+    return { type: 'glass', name: id }
   }
 
   if (id.endsWith('_slab')) {
     // **二重スラブだけは導体**。当たり判定がフルブロックになるため
     // isRedstoneConductor の既定 (isCollisionShapeFullBlock) が true になる
-    if (props.type === 'double') return { type: 'solid', powered: false }
-    return { type: 'slab', half: props.type === 'top' ? 'top' : 'bottom' }
+    if (props.type === 'double') return { type: 'solid', powered: false, name: id }
+    return { type: 'slab', half: props.type === 'top' ? 'top' : 'bottom', name: id }
   }
 
   return null
@@ -247,7 +248,7 @@ export function classifyPlainBlock(
     const side = (v: string | undefined): 'none' | 'low' | 'tall' =>
       v === 'low' || v === 'tall' ? v : 'none'
     return {
-      type: 'wall',
+      type: 'wall', name: id,
       north: side(props.north), east: side(props.east),
       south: side(props.south), west: side(props.west),
       up: props.up !== 'false',
@@ -302,12 +303,12 @@ export function classifyPlainBlock(
   if (nonConductive) return withInstrument(nonConductive)
   if (isSolidBlockName(name)) {
     if (isImmovableSolidName(name)) {
-      return withInstrument({ type: 'solid', powered: false, immovable: true })
+      return withInstrument({ type: 'solid', powered: false, name: id, immovable: true })
     }
     if (isPushOnlySolidName(name)) {
-      return withInstrument({ type: 'solid', powered: false, pushOnly: true })
+      return withInstrument({ type: 'solid', powered: false, name: id, pushOnly: true })
     }
-    return withInstrument({ type: 'solid', powered: false })
+    return withInstrument({ type: 'solid', powered: false, name: id })
   }
   return null
 }

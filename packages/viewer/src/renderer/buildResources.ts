@@ -102,6 +102,9 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
   // パックデータをオーバーレイ（パックにあるブロックのみ上書き）
   await overlayPackData(blockNames, statesJson, modelsJson)
 
+  // variant 必須プロパティの既定値 (#343)。sim が捨てたプロパティを描画時に補う
+  const defaultProps = new Map<string, Record<string, string>>()
+
   // 構造体のブロックの BlockDefinition を構築
   const blockDefs = new Map<string, BlockDefinition>()
   for (const fullName of blockNames) {
@@ -109,6 +112,8 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
     if (statesJson[name]) {
       try {
         blockDefs.set(name, BlockDefinition.fromJson(statesJson[name]))
+        const defs = defaultPropsOf(statesJson[name])
+        if (Object.keys(defs).length > 0) defaultProps.set(name, defs)
       } catch { /* skip */ }
     }
   }
@@ -242,6 +247,45 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
       return getBlockFlags(id.path)
     },
     getBlockProperties: () => null,
-    getDefaultBlockProperties: () => null,
+    // **実装しないと variant 必須のブロックが消える** (#343)。下の defaultPropsOf 参照
+    getDefaultBlockProperties: (id: Identifier) =>
+      defaultProps.get(id.path.replace(/^block\//, '')) ?? null,
   }
+}
+
+/**
+ * blockstate の variant キーから既定プロパティを組み立てる (#343)。
+ *
+ * sim は挙動に効かないプロパティを捨てるので、`oak_log` の `axis` や
+ * `carved_pumpkin` の `facing` を持っていない。deepslate の variant 選択は
+ * **全プロパティ完全一致**なので、そのままでは**どれにも一致せず何も描かれない**
+ * (エラーにならないので気づけない。#234 で塀が消えたのと同じ症状)。
+ *
+ * `ChunkBuilder` は `getDefaultBlockProperties` で**足りないプロパティだけ**を補うので、
+ * ここで「その名前が取りうる値」を返せば、名前ごとの手書き表を持たずに全ブロックが救われる。
+ *
+ * 値の選び方: バニラの既定に近いものを優先する (縦置きの原木・北向き・雪なし)。
+ * 一覧に無ければ variant に最初に出てくる値を使う。
+ */
+const PREFERRED_VALUES = ['y', 'north', 'false', 'bottom', 'none', 'single', 'normal', '0']
+
+export function defaultPropsOf(stateJson: unknown): Record<string, string> {
+  const variants = (stateJson as { variants?: Record<string, unknown> } | null)?.variants
+  if (!variants) return {}
+  const seen = new Map<string, string[]>()
+  for (const key of Object.keys(variants)) {
+    if (key === '') return {}     // プロパティ不問の variant があるなら補う必要はない
+    for (const kv of key.split(',')) {
+      const [prop, value] = kv.split('=')
+      if (!prop || value === undefined) continue
+      const list = seen.get(prop) ?? []
+      if (!list.includes(value)) list.push(value)
+      seen.set(prop, list)
+    }
+  }
+  const out: Record<string, string> = {}
+  for (const [prop, values] of seen) {
+    out[prop] = values.find(v => PREFERRED_VALUES.includes(v)) ?? values[0]
+  }
+  return out
 }

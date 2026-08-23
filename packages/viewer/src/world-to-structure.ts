@@ -27,6 +27,17 @@ function flipDir(dir: string): string {
 }
 
 /**
+ * 素材ブロックの描画名 (#343)。
+ *
+ * **プロパティは付けない**。sim は挙動に効かないプロパティ (原木の `axis` など) を
+ * 捨てているので復元できないが、`buildResources` の `getDefaultBlockProperties` が
+ * blockstate 側の値から補うため、名前だけ渡せば描ける。
+ */
+export function plainBlockStr(name: string): string {
+  return `minecraft:${name.replace(/^minecraft:/, '')}`
+}
+
+/**
  * deepslate が描けないコンテナ名の読み替え (#343)。
  *
  * チェストとシュルカーボックスは **BlockEntity のモデル**で描かれ、通常のブロックモデルを
@@ -98,7 +109,8 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'lodestone':
       return 'minecraft:lodestone'
     case 'wall':
-      return `minecraft:stone_brick_wall[east=${block.east},north=${block.north},`
+      // 材質は name、接続形状は sim が計算した値で描く (#343)
+      return `minecraft:${block.name ?? 'stone_brick_wall'}[east=${block.east},north=${block.north},`
         + `south=${block.south},up=${block.up},waterlogged=${block.waterlogged},west=${block.west}]`
     case 'soul_sand':
       return 'minecraft:soul_sand'
@@ -114,7 +126,11 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:${block.name}[east=${block.east},north=${block.north}`
         + `,south=${block.south},waterlogged=${block.waterlogged},west=${block.west}]`
     case 'cauldron':
-      return `minecraft:water_cauldron[level=${block.level}]`
+      // **空の大釜は別ブロック**。vanilla の water_cauldron は level=1..3 しか持たず、
+      // level=0 を渡すとどの variant にも一致せず**何も描かれない** (#343)
+      return block.level === 0
+        ? 'minecraft:cauldron'
+        : `minecraft:water_cauldron[level=${block.level}]`
     case 'composter':
       return `minecraft:composter[level=${block.level}]`
     case 'lectern':
@@ -215,14 +231,14 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:${name}[facing=${flipDir(block.facing)},half=${block.half},`
         + `hinge=left,open=${block.open},powered=${block.powered}]`
     }
+    // 素材は挙動に効かないが**見た目には効く**ので name で描く (#343)。
+    // 名前を持たない (パレット配置の) ものは従来どおり代表ブロック
     case 'solid':
-      return 'minecraft:stone'
-    // 色 (16 種の stained_glass) は sim で保持しないため無色固定 (#184)
+      return plainBlockStr(block.name ?? 'stone')
     case 'glass':
-      return 'minecraft:glass'
-    // 素材は sim で保持しないため smooth_stone 固定 (#184)
+      return plainBlockStr(block.name ?? 'glass')
     case 'slab':
-      return `minecraft:smooth_stone_slab[type=${block.half}]`
+      return `minecraft:${block.name ?? 'smooth_stone_slab'}[type=${block.half}]`
     case 'air':
       return 'minecraft:air'
   }
@@ -295,6 +311,8 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:water',
   'minecraft:bubble_column',
   'minecraft:water_cauldron',
+  // 空の大釜は別ブロック (#343。level=0 は water_cauldron の variant に無い)
+  'minecraft:cauldron',
   'minecraft:composter',
   'minecraft:lectern',
 ]
