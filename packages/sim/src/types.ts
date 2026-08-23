@@ -379,6 +379,12 @@ export interface HoneyBlockState {
 export interface SolidState {
   type: 'solid'
   /**
+   * 見た目にだけ効くプロパティ (#351)。原木の `axis` / 釉薬テラコッタの `facing` /
+   * トラップドアの `half` など。**レッドストーン挙動には効かない**。
+   * 描画と書き出しで動的な値の下に敷く (動的な値が優先)
+   */
+  renderProps?: Record<string, string>
+  /**
    * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
    * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
    * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
@@ -437,6 +443,12 @@ export interface SolidState {
 export interface GlassState {
   type: 'glass'
   /**
+   * 見た目にだけ効くプロパティ (#351)。原木の `axis` / 釉薬テラコッタの `facing` /
+   * トラップドアの `half` など。**レッドストーン挙動には効かない**。
+   * 描画と書き出しで動的な値の下に敷く (動的な値が優先)
+   */
+  renderProps?: Record<string, string>
+  /**
    * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
    * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
    * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
@@ -463,6 +475,12 @@ export interface GlassState {
  */
 export interface SlabState {
   type: 'slab'
+  /**
+   * 見た目にだけ効くプロパティ (#351)。原木の `axis` / 釉薬テラコッタの `facing` /
+   * トラップドアの `half` など。**レッドストーン挙動には効かない**。
+   * 描画と書き出しで動的な値の下に敷く (動的な値が優先)
+   */
+  renderProps?: Record<string, string>
   /**
    * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
    * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
@@ -692,6 +710,12 @@ export interface CopperBulbState {
  */
 export interface DoorLikeState {
   type: 'trapdoor_wood' | 'trapdoor_iron' | 'fence_gate'
+  /**
+   * 見た目にだけ効くプロパティ (#351)。原木の `axis` / 釉薬テラコッタの `facing` /
+   * トラップドアの `half` など。**レッドストーン挙動には効かない**。
+   * 描画と書き出しで動的な値の下に敷く (動的な値が優先)
+   */
+  renderProps?: Record<string, string>
   /**
    * 元のブロック名 (#346)。**描画と書き出しのためだけに持つ**。
    * 樹種はレッドストーン挙動に効かないので、挙動側では見ない
