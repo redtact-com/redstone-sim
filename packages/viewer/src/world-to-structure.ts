@@ -26,6 +26,35 @@ function flipDir(dir: string): string {
   return dir
 }
 
+/**
+ * deepslate が描けないコンテナ名の読み替え (#343)。
+ *
+ * チェストとシュルカーボックスは **BlockEntity のモデル**で描かれ、通常のブロックモデルを
+ * 持たない。deepslate は `SpecialRenderers` で肩代わりするが、その表は
+ * **色付きシュルカー 16 色しか持たない** (`{color}_shulker_box`)。
+ * 無染色の `minecraft:shulker_box` を渡すと**何も描かれず消える**ので、
+ * バニラのアイテム表示に一番近い紫へ寄せる。
+ */
+const CONTAINER_RENDER_ALIAS: Record<string, string> = {
+  // 無染色シュルカーは deepslate に renderer が無い
+  shulker_box: 'purple_shulker_box',
+}
+
+/**
+ * コンテナの描画名。
+ *
+ * `name` はブロックモデルではなく **SpecialRenderer が名前で引く**ため、
+ * 余計なプロパティを付けない (chest は facing 既定 south、shulker は向きを持たない)。
+ * 樽だけは variant がプロパティ必須なので明示する [#58 で踏んだ罠]。
+ */
+export function containerBlockStr(name: string | undefined, fullCube: boolean): string {
+  const id = (name ?? (fullCube ? 'barrel' : 'chest')).replace(/^minecraft:/, '')
+  const drawn = CONTAINER_RENDER_ALIAS[id] ?? id
+  // 樽は facing+open のバリアント形式で、プロパティ無しだと**どれにも一致せず消える**
+  if (drawn === 'barrel') return 'minecraft:barrel[facing=up,open=false]'
+  return `minecraft:${drawn}`
+}
+
 // ── @redstone/sim の BlockState → Minecraft ブロック文字列 ──────────────
 
 export function blockStateToMinecraftStr(block: BlockState): string {
@@ -111,11 +140,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // 描画されるため。sim.facing = vanilla FACING = 観測方向)
       return `minecraft:observer[facing=${block.facing},powered=${block.powered}]`
     case 'container':
-      // コンテナは barrel として描画する (signal 値は表示に影響しない)。
-      // barrel の blockstate は facing+open キーのバリアント形式のため、
-      // プロパティ無しではどのバリアントにもマッチせず描画されない (#58)。
-      // facing=up (蓋が上) をコンテナの見た目として採用する
-      return 'minecraft:barrel[facing=up,open=false]'
+      // **取り込み元のブロックで描く** (#343)。以前は一律 barrel だったため
+      // チェストもトラップチェストもシュルカーボックスも樽に見えていた。
+      // `name` は #324 で既に保持していて、書き出しでも同じ規則を使っている
+      return containerBlockStr(block.name, block.fullCube)
     case 'hopper':
       // facing は反転しない (piston/observer と同じ規則。vanilla FACING = 送り込み方向)。
       // enabled は見た目に影響しないが blockstate バリアント選択のため付与する
@@ -272,11 +300,15 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
 ]
 
 /**
- * スナップショットに出てくる「プリロード表に無いブロック名」(#234)。
+ * スナップショットに出てくる「プリロード表に無いブロック名」(#234 → #343)。
  *
- * 装飾 (`decor`) は**取り込み元の名前をそのまま保持する**ため名前の集合が閉じておらず、
+ * 取り込み元の名前を保持する型 (`decor` / `pane` / `container` …) は名前の集合が閉じておらず、
  * 固定表に列挙できない。ここで拾って `buildResources` に足さないと、
- * その装飾は**エラーにならず静かに消える** (実際、壁が透明なまま GIF に写って気づいた)。
+ * そのブロックは**エラーにならず静かに消える** (実際、壁が透明なまま GIF に写って気づいた)。
+ *
+ * **型で絞らない** (#343)。以前は `decor` だけを見ていたため、同じく名前を持つ
+ * `pane` (ガラス板・鉄格子) が取り込んでも 3D から消えていた。
+ * 名前を持つ型が今後増えても、ここは何もしなくても追従する。
  */
 export function extraPreloadNames(
   snapshot: { blocks: ReadonlyMap<string, BlockState> },
@@ -284,9 +316,8 @@ export function extraPreloadNames(
   const known = new Set(VIEWER_PRELOAD_BLOCKS)
   const found = new Set<string>()
   for (const block of snapshot.blocks.values()) {
-    if (block.type !== 'decor') continue     // 他の型は固定表で足りる
     const name = blockStateToMinecraftStr(block).split('[')[0]
-    if (!known.has(name)) found.add(name)
+    if (name !== 'minecraft:air' && !known.has(name)) found.add(name)
   }
   return [...found].sort()
 }
