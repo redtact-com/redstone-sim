@@ -55,6 +55,9 @@ const ROUND_TRIP_NAMES = [
   'cherry_button', 'polished_blackstone_button',
   'spruce_pressure_plate', 'polished_blackstone_pressure_plate',
   'exposed_copper_bulb',
+  // #351 以降。**見た目にだけ効くプロパティ**を持つ形で往復させる
+  'oak_log[axis=x]', 'white_glazed_terracotta[facing=east]',
+  'spruce_trapdoor[facing=north,half=top,open=false,powered=false,waterlogged=false]',
 ]
 
 describe('ブロック定義のドリフト検知 (#153)', () => {

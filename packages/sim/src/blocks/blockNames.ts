@@ -43,14 +43,26 @@ export function toNonConductiveBlockState(
   if (GLASS_EXACT.has(id) || GLASS_SUFFIXES.some(s => id.endsWith(s))) {
     // ガラス板 (_pane) はフルブロックではないので対象外 (この分岐にも来ない)。
     // name は描画と書き出し用 (#343)。挙動は従来どおり材質を潰したまま
-    return { type: 'glass', name: id }
+    return { type: 'glass', name: id, renderProps: appearanceProps('glass', props) }
   }
 
   if (id.endsWith('_slab')) {
     // **二重スラブだけは導体**。当たり判定がフルブロックになるため
     // isRedstoneConductor の既定 (isCollisionShapeFullBlock) が true になる
-    if (props.type === 'double') return { type: 'solid', powered: false, name: id }
-    return { type: 'slab', half: props.type === 'top' ? 'top' : 'bottom', name: id }
+    if (props.type === 'double') {
+      // **`type=double` は必ず持ち回る** (#351)。落とすと書き出しが `oak_slab` になり、
+      // 読み直したとき単体スラブ (非導体) に化けて**導通が消える** — 見た目でなく挙動が変わる。
+      // solid の許可リストに `type` を足す形にしないのは、二重スラブ以外の solid に
+      // 巻き込みを作らないため (実測: solid になる名前で `type` を持つものは他に無い)
+      return {
+        type: 'solid', powered: false, name: id,
+        renderProps: { ...appearanceProps('solid', props), type: 'double' },
+      }
+    }
+    return {
+      type: 'slab', half: props.type === 'top' ? 'top' : 'bottom', name: id,
+      renderProps: appearanceProps('slab', props),
+    }
   }
 
   return null
@@ -303,14 +315,61 @@ export function classifyPlainBlock(
   if (nonConductive) return withInstrument(nonConductive)
   if (isSolidBlockName(name)) {
     if (isImmovableSolidName(name)) {
-      return withInstrument({ type: 'solid', powered: false, name: id, immovable: true })
+      return withInstrument({
+        type: 'solid', powered: false, name: id, immovable: true,
+        renderProps: appearanceProps('solid', props),
+      })
     }
     if (isPushOnlySolidName(name)) {
-      return withInstrument({ type: 'solid', powered: false, name: id, pushOnly: true })
+      return withInstrument({
+        type: 'solid', powered: false, name: id, pushOnly: true,
+        renderProps: appearanceProps('solid', props),
+      })
     }
-    return withInstrument({ type: 'solid', powered: false, name: id })
+    return withInstrument({
+      type: 'solid', powered: false, name: id, renderProps: appearanceProps('solid', props),
+    })
   }
   return null
+}
+
+/**
+ * **見た目にだけ効くプロパティ**を拾う (#351)。
+ *
+ * sim は挙動に関係しないプロパティを捨てる。それでよいのだが、捨てたままだと
+ * 3D で**横倒しの原木が縦置きに、天井付けのトラップドアが床付けに**見える。
+ * 名前 (#343) と同じ扱いで、描画と書き出しのためだけに持ち回る。
+ *
+ * 許可リストにするのは、**動的な値を巻き込まないため**。
+ * `powered` や `open` は sim が状態として持っているので、ここで固定してはいけない。
+ *
+ * 対象は blockstate のスナップショットで実測して決めた (1.21.4):
+ *   solid 69 名 (axis / facing / snowy) / トラップドア 20 名 (half) / ゲート 11 名 (in_wall)
+ */
+const APPEARANCE_PROPS: Record<string, readonly string[]> = {
+  solid: ['axis', 'facing', 'snowy'],
+  glass: ['axis'],                      // 現状は該当なしだが同種のブロックが増えたとき用
+  slab: ['waterlogged'],
+  trapdoor_wood: ['half', 'waterlogged'],
+  trapdoor_iron: ['half', 'waterlogged'],
+  fence_gate: ['in_wall'],
+}
+
+/**
+ * その型で見た目にだけ効くプロパティを抜き出す。何も無ければ undefined
+ * (state に空オブジェクトを載せると往復比較のノイズになる)
+ */
+export function appearanceProps(
+  type: string, props: Record<string, string>,
+): Record<string, string> | undefined {
+  const keys = APPEARANCE_PROPS[type]
+  if (!keys) return undefined
+  const out: Record<string, string> = {}
+  for (const k of keys) {
+    const v = props[k]
+    if (v !== undefined) out[k] = v
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 /**
