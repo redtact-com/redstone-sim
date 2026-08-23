@@ -50,7 +50,14 @@ export function toNonConductiveBlockState(
     // **二重スラブだけは導体**。当たり判定がフルブロックになるため
     // isRedstoneConductor の既定 (isCollisionShapeFullBlock) が true になる
     if (props.type === 'double') {
-      return { type: 'solid', powered: false, name: id, renderProps: appearanceProps('solid', props) }
+      // **`type=double` は必ず持ち回る** (#351)。落とすと書き出しが `oak_slab` になり、
+      // 読み直したとき単体スラブ (非導体) に化けて**導通が消える** — 見た目でなく挙動が変わる。
+      // solid の許可リストに `type` を足す形にしないのは、二重スラブ以外の solid に
+      // 巻き込みを作らないため (実測: solid になる名前で `type` を持つものは他に無い)
+      return {
+        type: 'solid', powered: false, name: id,
+        renderProps: { ...appearanceProps('solid', props), type: 'double' },
+      }
     }
     return {
       type: 'slab', half: props.type === 'top' ? 'top' : 'bottom', name: id,

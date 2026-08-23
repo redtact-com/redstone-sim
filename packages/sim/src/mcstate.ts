@@ -609,14 +609,21 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       break
     case 'solid':
     case 'glass':
-    case 'slab':
-      // 動的プロパティを持たない (#184)。ただし**名前は sim 側が正** (#343) —
-      // authored を信じると、ピストンで動いたブロックが**移動先に元々あった材質**を着る
-      // (#257 で facing を sim 側から書くようにしたのと同じ構図)
-      if (sim.name !== undefined && sim.name !== name) {
-        return formatMcState(sim.name, { ...props, ...sim.renderProps })
+    case 'slab': {
+      // **名前は sim 側が正** (#343) — authored を信じると、ピストンで動いたブロックが
+      // **移動先に元々あった材質**を着る (#257 で facing を sim 側から書いたのと同じ構図)。
+      // スラブの上下も同じ理由で sim 側が正 (#351)。authored の `type` を残すと、
+      // 上付きスラブが下付きスラブのあった座標へ動いたとき下付きとして書き出される
+      const patch: Record<string, string> = {
+        ...sim.renderProps,
+        ...(sim.type === 'slab' ? { type: sim.half } : {}),
       }
+      if (sim.name !== undefined && sim.name !== name) {
+        return formatMcState(sim.name, { ...props, ...patch })
+      }
+      Object.assign(props, patch)
       break
+    }
     case 'air':
       return 'air'
   }

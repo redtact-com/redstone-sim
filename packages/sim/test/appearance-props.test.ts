@@ -51,4 +51,20 @@ describe('見た目プロパティの保持 (#351)', () => {
   it('**実機比較には効かない** (canonicalize が代表名へ潰す)', () => {
     expect(canonicalize('oak_log[axis=x]')).toBe(canonicalize('stone'))
   })
+
+  it('**二重スラブは往復しても導体のまま** (type=double を落とすと非導体に化ける)', () => {
+    const b = mcToSim('oak_slab[type=double,waterlogged=false]')!
+    expect(b).toMatchObject({ type: 'solid', name: 'oak_slab', renderProps: { type: 'double' } })
+    // 書き出し → 読み直しで型が変わらないこと (変わると導通が消える)
+    const back = mcToSim(simToMc(b))!
+    expect(back.type, '往復で単体スラブ (非導体) に化けた').toBe('solid')
+  })
+
+  it('**スラブの上下は sim 側が正** (authored の値を残さない)', () => {
+    // ピストンで上付きスラブが下付きスラブのあった座標へ動くと、
+    // authored を信じたままだと下付きとして書き出される
+    const top = mcToSim('oak_slab[type=top,waterlogged=false]')!
+    expect(simToMc(top, 'smooth_stone_slab[type=bottom,waterlogged=false]'))
+      .toBe('oak_slab[type=top,waterlogged=false]')
+  })
 })
