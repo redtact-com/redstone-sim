@@ -21,6 +21,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { HScrollRow } from './HScrollRow'
 import {
   CircuitEditor, decideCellTap,
   DEFAULT_BOARD, BOARD_MIN, BOARD_MAX, normalizeBoardSize,
@@ -1174,10 +1175,16 @@ export function EditorPage({ onBack }: EditorPageProps) {
           </button>
         </div>
 
-        {/* 手動トリガパネル (レバー/感圧板/ターゲット。ON 表示は world から導出) */}
+        {/* 手動トリガパネル (レバー/感圧板/ターゲット。ON 表示は world から導出)。
+            レバーやボタンが多いと 1 行に収まらないので横スクロールの器に載せる (#338) */}
         {triggers.length > 0 && (
-          <div className="shrink-0 flex items-center gap-1.5 px-2 py-2 overflow-x-auto"
-               style={{ background: '#1a1a1a', borderBottom: '2px solid #2a2a2a', scrollbarWidth: 'none' }}>
+          <HScrollRow
+            id="trigbar"
+            outerClassName="px-2 py-2"
+            outerStyle={{ background: '#1a1a1a', borderBottom: '2px solid #2a2a2a' }}
+            className="flex items-center gap-1.5"
+            arrowHeight={40}
+          >
             <span className="font-pixel shrink-0 mr-1" style={{ fontSize: 12, color: '#555' }}>TRIG</span>
             {triggers.map(({ pos: [x, y, z], type }) => {
               const b = simWorld?.getBlockAt([x, y, z])
@@ -1255,7 +1262,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
                 </button>
               </>
             )}
-          </div>
+          </HScrollRow>
         )}
 
         {/* 3D ビュー */}
@@ -1416,7 +1423,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       {/* パレット */}
       <EditorPalette selected={selectedType} onSelect={handleSelectType} />
 
-      {/* ログバー */}
+      {/* ログバー。**ここは HScrollRow に載せない** (#338) —
+          直近 3 行を出すだけで押す対象が無く、26px の行に ◀ ▶ を足すと不格好になる */}
       <div className="shrink-0 flex items-center gap-3 px-3 py-1 overflow-x-auto"
            style={{ background: '#0d0d0d', borderTop: '2px solid #1e1e1e', scrollbarWidth: 'none', minHeight: 26 }}>
         {log.slice(-3).map((l, i) => (
@@ -1627,100 +1635,27 @@ function FacingBar({
  * ブロックパレット (ホットバー)。
  *
  * 41 項目 x 約 60px = 約 2460px あり **PC の画面幅にはまず収まらない**ので、
- * はみ出したぶんへ確実に到達できるようにする (#333):
+ * 横スクロールの器 (`HScrollRow`) に載せる (#333 → #338 で共通化)。
  *
- *   - ホイールを横スクロールに割り当てる (PC には他に手が無い)
- *   - 両端の ◀ ▶ で 1 画面ずつ送る
- *   - スクロールバーを常時出す (以前は `scrollbarWidth: 'none'` で消していた)
- *   - **はみ出すときだけ中央寄せをやめる**。中央寄せのまま溢れると
- *     左右に均等にあふれて**左端がスクロールしても届かない**
- *
- * タッチのスワイプは `overflow-x: auto` のままなので従来どおり効く。
+ * ここだけの都合は 2 つ:
+ *   - 収まるときは中央寄せのまま (`centerWhenFits`)
+ *   - 選択中の項目が見切れていたら見える位置へ寄せる (`scrollIntoView`)
  */
 function EditorPalette({ selected, onSelect }: {
   selected:  PaletteType
   onSelect:  (type: PaletteType) => void
 }) {
-  const scrollerRef = useRef<HTMLDivElement>(null)
-  // 端に着いたら矢印を無効化する。overflow=false のときは矢印ごと出さない
-  const [edge, setEdge] = useState({ overflow: false, atStart: true, atEnd: false })
-
-  const syncEdge = useCallback(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    // 小数の丸めでいつまでも「端でない」と判定されるのを防ぐ (1px の余裕)
-    const max = el.scrollWidth - el.clientWidth
-    setEdge({
-      overflow: max > 1,
-      atStart: el.scrollLeft <= 1,
-      atEnd: el.scrollLeft >= max - 1,
-    })
-  }, [])
-
-  useEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    syncEdge()
-    // ウィンドウ幅で溢れるかどうかが変わる。要素自身の寸法変化も拾う
-    const ro = new ResizeObserver(syncEdge)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [syncEdge])
-
-  /**
-   * ホイールの縦回転を横スクロールにする。
-   *
-   * パレットは縦にははみ出さないのでブラウザ既定では**何も起きない**。
-   * 横成分 (`deltaX`) を持つ入力 (トラックパッドの横スワイプ・シフト + ホイール) は
-   * ブラウザに任せる — 奪うと加速度や慣性が消える
-   */
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    const el = scrollerRef.current
-    if (!el || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
-    const max = el.scrollWidth - el.clientWidth
-    if (max <= 1) return
-    el.scrollLeft += e.deltaY
-    syncEdge()
-  }, [syncEdge])
-
-  /** ◀ ▶ で 1 画面ぶん送る。端が半端に切れないよう少し重ねる */
-  const page = useCallback((dir: -1 | 1) => {
-    const el = scrollerRef.current
-    if (!el) return
-    el.scrollBy({ left: dir * Math.max(120, el.clientWidth - 80), behavior: 'smooth' })
-  }, [])
-
-  // 選択中のブロックが見切れていたら見える位置へ寄せる。
-  // キーボードや取り消しで選択が変わったとき、どれが選ばれているか分からなくなるため
-  useEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
-    const btn = el.querySelector(`[data-testid="palette-${selected}"]`)
-    btn?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
-  }, [selected])
-
-  const arrowStyle = (disabled: boolean): React.CSSProperties => ({
-    width: 26, height: 66, fontSize: 14, lineHeight: 1,
-    opacity: disabled ? 0.3 : 1,
-    cursor: disabled ? 'default' : 'pointer',
-  })
-
   return (
-    <div className="shrink-0 flex items-center justify-center gap-1 py-2 px-2"
-         style={{ background: '#111', borderTop: '2px solid #2a2a2a' }}>
-      {edge.overflow && (
-        <button onClick={() => page(-1)} disabled={edge.atStart} title="左へ"
-                data-testid="palette-scroll-left"
-                className="mc-btn shrink-0 font-pixel" style={arrowStyle(edge.atStart)}>◀</button>
-      )}
-      {/* ホットバー外枠。**はみ出すときは中央寄せをやめる** (左端が届かなくなるため) */}
-      <div ref={scrollerRef} onScroll={syncEdge} onWheel={handleWheel}
-           data-testid="palette-scroller"
-           className="mc-hotbar-scroller flex gap-0.5 overflow-x-auto"
-           style={{
-             background: '#373737', padding: 3, border: '2px solid #555',
-             ...(edge.overflow ? { flex: '1 1 auto', minWidth: 0 } : {}),
-           }}>
+    <HScrollRow
+      id="palette"
+      outerClassName="justify-center py-2 px-2"
+      outerStyle={{ background: '#111', borderTop: '2px solid #2a2a2a' }}
+      className="flex gap-0.5"
+      style={{ background: '#373737', padding: 3, border: '2px solid #555' }}
+      centerWhenFits
+      arrowHeight={66}
+      scrollIntoView={`[data-testid="palette-${selected}"]`}
+    >
         {BLOCK_PALETTE.map(({ type, label, texture, cssFilter }) => {
           const isSelected = type === selected
           const isEraser   = type === 'eraser'
@@ -1782,13 +1717,7 @@ function EditorPalette({ selected, onSelect }: {
             </button>
           )
         })}
-      </div>
-      {edge.overflow && (
-        <button onClick={() => page(1)} disabled={edge.atEnd} title="右へ"
-                data-testid="palette-scroll-right"
-                className="mc-btn shrink-0 font-pixel" style={arrowStyle(edge.atEnd)}>▶</button>
-      )}
-    </div>
+    </HScrollRow>
   )
 }
 

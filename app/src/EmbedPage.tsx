@@ -30,6 +30,7 @@ import {
   type InboundMessage, type OutboundMessage, type EmbedErrorCode,
 } from './embed/protocol'
 import { TRIGGER_META, TRIGGER_TYPES, isTriggerOn } from './palette'
+import { HScrollRow } from './HScrollRow'
 import type { TriggerEntry } from './palette'
 
 /**
@@ -329,8 +330,13 @@ export function EmbedPage() {
 
       {/* interact モードのトリガパネル */}
       {mode === 'interact' && triggers.length > 0 && (
-        <div className="shrink-0 flex items-center gap-1.5 px-2 py-1.5 overflow-x-auto"
-             style={{ background: '#1a1a1a', borderBottom: '2px solid #2a2a2a', scrollbarWidth: 'none' }}>
+        <HScrollRow
+          id="embed-trigbar"
+          outerClassName="px-2 py-1.5"
+          outerStyle={{ background: '#1a1a1a', borderBottom: '2px solid #2a2a2a' }}
+          className="flex items-center gap-1.5"
+          arrowHeight={32}
+        >
           <span className="font-pixel shrink-0 mr-1" style={{ fontSize: 11, color: '#555' }}>TRIG</span>
           {triggers.map(({ pos: [x, y, z], type }) => {
             const b = simWorld?.getBlockAt([x, y, z])
@@ -354,7 +360,7 @@ export function EmbedPage() {
               </button>
             )
           })}
-        </div>
+        </HScrollRow>
       )}
 
       {/* 3D ビュー */}
