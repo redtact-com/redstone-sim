@@ -14,7 +14,7 @@ import type { DetectedFormat } from '@taku128/java-schematic'
 import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
 import {
   emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument,
-  isContainerBlockName, isContainerFullCube,
+  isContainerBlockName, isContainerFullCube, doorLikeKindOf, buttonLikeKindOf,
 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
@@ -519,7 +519,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     // **書き出しに case が無いと default で air に潰れる**。
     // 取り込んだ回路を保存すると塀・泡柱・書見台などが消えていた (実測: 9 種すべて消滅)
     case 'wall':
-      return ['minecraft:stone_brick_wall', {
+      return [`minecraft:${(block as any).name ?? 'stone_brick_wall'}`, {
         north: (block as any).north, east: (block as any).east,
         south: (block as any).south, west: (block as any).west,
         up: String((block as any).up ?? false),
@@ -580,24 +580,25 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:rail', { shape: block.shape, waterlogged: 'false' }]
     case 'door_wood':
     case 'door_iron':
-      return [block.type === 'door_iron' ? 'minecraft:iron_door' : 'minecraft:oak_door', {
+      // 樹種は name に持っている (#346)。無ければ従来の代表名
+      return [`minecraft:${(block as any).name ?? (block.type === 'door_iron' ? 'iron_door' : 'oak_door')}`, {
         facing: block.facing, half: block.half, hinge: (block as any).hinge ?? 'left',
         open: String(block.open), powered: String(block.powered),
       }]
     case 'trapdoor_wood':
     case 'trapdoor_iron':
-      return [block.type === 'trapdoor_iron' ? 'minecraft:iron_trapdoor' : 'minecraft:oak_trapdoor', {
+      return [`minecraft:${(block as any).name ?? (block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor')}`, {
         facing: block.facing, half: 'bottom',
         open: String(block.open), powered: String(block.powered), waterlogged: 'false',
       }]
     case 'fence_gate':
-      return ['minecraft:oak_fence_gate', {
+      return [`minecraft:${(block as any).name ?? 'oak_fence_gate'}`, {
         facing: block.facing, in_wall: 'false',
         open: String(block.open), powered: String(block.powered),
       }]
     case 'copper_bulb':
-      // 酸化バリアントは 1 種に集約しているので素の銅の電球として書き出す (#155)
-      return ['minecraft:copper_bulb', {
+      // 挙動は 1 種に集約しているが、**酸化段階は name に持っている** (#346)
+      return [`minecraft:${(block as any).name ?? 'copper_bulb'}`, {
         lit: String(block.lit),
         powered: String(block.powered),
       }]
@@ -653,16 +654,16 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'button_stone': {
       // 取付面つきで往復する (#111)。感圧板と同様に専用型で往復する (#54)
       const { face, facing } = dir6ToFaceFacing((block as any).facing)
-      return ['minecraft:stone_button', { face, facing, powered: String(block.powered) }]
+      return [`minecraft:${(block as any).name ?? 'stone_button'}`, { face, facing, powered: String(block.powered) }]
     }
     case 'button_wood': {
       const { face, facing } = dir6ToFaceFacing((block as any).facing)
-      return ['minecraft:oak_button', { face, facing, powered: String(block.powered) }]
+      return [`minecraft:${(block as any).name ?? 'oak_button'}`, { face, facing, powered: String(block.powered) }]
     }
     case 'pressure_plate_wood':
-      return ['minecraft:oak_pressure_plate', { powered: String((block as any).powered ?? false) }]
+      return [`minecraft:${(block as any).name ?? 'oak_pressure_plate'}`, { powered: String((block as any).powered ?? false) }]
     case 'pressure_plate_stone':
-      return ['minecraft:stone_pressure_plate', { powered: String((block as any).powered ?? false) }]
+      return [`minecraft:${(block as any).name ?? 'stone_pressure_plate'}`, { powered: String((block as any).powered ?? false) }]
     case 'weighted_pressure_plate_light':
       // 手動モデルの pressedPower は POWER として保存 (踏まれ中のみ >0 になる vanilla とは
       // 意味が異なるため、非作動時は 0 を書く)
@@ -686,13 +687,14 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing: (block as any).facing ?? 'north',
         type: (block as any).sticky ? 'sticky' : 'normal',
       }]
+    // 取り込み元の名前があればそれに戻す (#343)。無ければ従来の代表名。
+    // **保存で材質が石に化けると `immovable` (黒曜石) や音符ブロックの音色まで失われる**
     case 'solid':
-      return ['minecraft:stone', {}]
-    // 非導体 (#184)。色・素材を保持しないので代表名で書き出す
+      return [`minecraft:${(block as any).name ?? 'stone'}`, {}]
     case 'glass':
-      return ['minecraft:glass', {}]
+      return [`minecraft:${(block as any).name ?? 'glass'}`, {}]
     case 'slab':
-      return ['minecraft:smooth_stone_slab', { type: block.half }]
+      return [`minecraft:${(block as any).name ?? 'smooth_stone_slab'}`, { type: block.half }]
     default:
       return ['minecraft:air', {}]
   }
@@ -790,41 +792,31 @@ function minecraftToBlockState(
 
   if (name === 'minecraft:slime_block') return { type: 'slime_block' } as BlockState
   if (name === 'minecraft:honey_block') return { type: 'honey_block' } as BlockState
-  if (name.endsWith('_door')) {
-    // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#159)
-    return {
-      type: name === 'minecraft:iron_door' ? 'door_iron' : 'door_wood',
-      half: props.half === 'upper' ? 'upper' : 'lower',
+  // 扉 / トラップドア / フェンスゲート / 銅の電球。
+  // **挙動は木・鉄の 2 種 (電球は 1 種) に集約したまま**で、名前は見た目と保存のために持つ (#346)。
+  // 判定は sim 側と共有する — 以前は接尾辞 (ここ) と case 列挙 (mcstate) でズレていた
+  const doorLike = doorLikeKindOf(name)
+  if (doorLike) {
+    const common = {
+      name: doorLike.name,
       facing: (props.facing ?? 'north'),
       open: props.open === 'true',
       powered: props.powered === 'true',
-      hinge: props.hinge === 'right' ? 'right' : 'left',
-    } as BlockState
-  }
-  if (name.endsWith('_trapdoor')) {
-    // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#157)
-    return {
-      type: name === 'minecraft:iron_trapdoor' ? 'trapdoor_iron' : 'trapdoor_wood',
-      facing: (props.facing ?? 'north'),
-      open: props.open === 'true',
-      powered: props.powered === 'true',
-    } as BlockState
-  }
-  if (name.endsWith('_fence_gate')) {
-    return {
-      type: 'fence_gate',
-      facing: (props.facing ?? 'north'),
-      open: props.open === 'true',
-      powered: props.powered === 'true',
-    } as BlockState
-  }
-  if (name.endsWith('copper_bulb')) {
-    // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
-    return {
-      type: 'copper_bulb',
-      lit: props.lit === 'true',
-      powered: props.powered === 'true',
-    } as BlockState
+    }
+    if (doorLike.type === 'door_wood' || doorLike.type === 'door_iron') {
+      return {
+        type: doorLike.type, ...common,
+        half: props.half === 'upper' ? 'upper' : 'lower',
+        hinge: props.hinge === 'right' ? 'right' : 'left',
+      } as BlockState
+    }
+    if (doorLike.type === 'copper_bulb') {
+      return {
+        type: 'copper_bulb', name: doorLike.name,
+        lit: props.lit === 'true', powered: common.powered,
+      } as BlockState
+    }
+    return { type: doorLike.type, ...common } as BlockState
   }
   if (name === 'minecraft:rail') {
     // SHAPE は RAIL_SHAPE (直線2+坂4+曲線4)。通常レールだけが曲線を取る (#140)
@@ -914,11 +906,10 @@ function minecraftToBlockState(
   // ボタン類 → 専用型 (石系 = stone_button / polished_blackstone_button、
   // その他木材系 = button_wood)。取付面は face/facing から復元する (#111)。
   // 押下状態は momentary で entity 由来のため常に OFF で取り込む。
-  if (name.endsWith('_button')) {
-    const isStone =
-      name === 'minecraft:stone_button' || name === 'minecraft:polished_blackstone_button'
+  const buttonLike = buttonLikeKindOf(name)
+  if (buttonLike && (buttonLike.type === 'button_stone' || buttonLike.type === 'button_wood')) {
     return {
-      type: isStone ? 'button_stone' : 'button_wood',
+      type: buttonLike.type, name: buttonLike.name,
       facing: faceFacingToDir6(props.face, props.facing),
       powered: false,
     } as BlockState
@@ -931,12 +922,9 @@ function minecraftToBlockState(
   if (name === 'minecraft:heavy_weighted_pressure_plate') {
     return { type: 'weighted_pressure_plate_heavy', powered: false, pressedPower: 15 } as BlockState
   }
-  if (name === 'minecraft:stone_pressure_plate') {
-    return { type: 'pressure_plate_stone', powered: false } as BlockState
-  }
-  if (name.endsWith('_pressure_plate')) {
-    // 木材各種はまとめて木の感圧板として取り込む
-    return { type: 'pressure_plate_wood', powered: false } as BlockState
+  if (buttonLike) {
+    // 木材各種はまとめて木の感圧板、石系は石の感圧板 (重量感圧板は上で処理済み)
+    return { type: buttonLike.type, name: buttonLike.name, powered: false } as BlockState
   }
 
   // 素材ブロック (固体 / ガラス / スラブ) の判定は sim 側と共有する (#214)

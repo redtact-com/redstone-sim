@@ -264,9 +264,9 @@ describe('initialize: authored の踏まれ板を OFF に戻す', () => {
 describe('mcstate: 感圧板 4 種の相互変換', () => {
   it('oak/stone pressure_plate の往復', () => {
     expect(mcToSim('minecraft:oak_pressure_plate[powered=false]'))
-      .toEqual({ type: 'pressure_plate_wood', powered: false })
+      .toEqual({ type: 'pressure_plate_wood', name: 'oak_pressure_plate', powered: false })
     expect(mcToSim('minecraft:stone_pressure_plate[powered=true]'))
-      .toEqual({ type: 'pressure_plate_stone', powered: true })
+      .toEqual({ type: 'pressure_plate_stone', name: 'stone_pressure_plate', powered: true })
     expect(canonicalize(simToMc(
       { type: 'pressure_plate_wood', powered: true }, 'oak_pressure_plate[powered=false]')))
       .toBe('oak_pressure_plate[powered=true]')

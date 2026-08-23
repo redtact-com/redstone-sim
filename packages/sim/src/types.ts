@@ -111,6 +111,12 @@ export interface LeverState {
 
 export interface ButtonState {
   type: 'button_stone' | 'button_wood'
+  /**
+   * 元のブロック名 (#346)。**描画と書き出しのためだけに持つ**。
+   * 樹種や酸化段階はレッドストーン挙動に効かないので、挙動側では見ない。
+   * 無ければ従来どおり代表ブロック (oak_* / 素の銅) で描く/書き出す
+   */
+  name?: string
   facing: Dir6
   powered: boolean
 }
@@ -164,6 +170,12 @@ export interface NoteBlockState {
  */
 export interface PressurePlateState {
   type: 'pressure_plate_wood' | 'pressure_plate_stone'
+  /**
+   * 元のブロック名 (#346)。**描画と書き出しのためだけに持つ**。
+   * 樹種や酸化段階はレッドストーン挙動に効かないので、挙動側では見ない。
+   * 無ければ従来どおり代表ブロック (oak_* / 素の銅) で描く/書き出す
+   */
+  name?: string
   powered: boolean
 }
 
@@ -367,6 +379,12 @@ export interface HoneyBlockState {
 export interface SolidState {
   type: 'solid'
   /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
+  /**
    * ピストンで押せないか (#253)。[確定: 26.2 — 黒曜石・岩盤などは pushReaction(BLOCK)]
    *
    * sim は導体フルブロックを材質ごと 1 種に潰しているが、**押せるかどうかだけは
@@ -418,6 +436,12 @@ export interface SolidState {
  */
 export interface GlassState {
   type: 'glass'
+  /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
   /** 上の音符ブロックへ与える音色 (#231)。取り込み時に実ブロック名から載せる */
   instrument?: NoteInstrument
 }
@@ -439,6 +463,12 @@ export interface GlassState {
  */
 export interface SlabState {
   type: 'slab'
+  /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
   half: 'top' | 'bottom'
   /** 上の音符ブロックへ与える音色 (#231)。取り込み時に実ブロック名から載せる */
   instrument?: NoteInstrument
@@ -630,6 +660,12 @@ export interface DetectorRailState {
  */
 export interface CopperBulbState {
   type: 'copper_bulb'
+  /**
+   * 元のブロック名 (#346)。**描画と書き出しのためだけに持つ**。
+   * 樹種や酸化段階はレッドストーン挙動に効かないので、挙動側では見ない。
+   * 無ければ従来どおり代表ブロック (oak_* / 素の銅) で描く/書き出す
+   */
+  name?: string
   /** 点灯状態。立ち上がりでのみ反転する = 記憶ビット */
   lit: boolean
   /** 直前に見た入力。エッジ判定のために保持する */
@@ -656,6 +692,11 @@ export interface CopperBulbState {
  */
 export interface DoorLikeState {
   type: 'trapdoor_wood' | 'trapdoor_iron' | 'fence_gate'
+  /**
+   * 元のブロック名 (#346)。**描画と書き出しのためだけに持つ**。
+   * 樹種はレッドストーン挙動に効かないので、挙動側では見ない
+   */
+  name?: string
   /** 描画用。回路挙動には影響しない */
   facing: HDir
   open: boolean
@@ -680,6 +721,12 @@ export interface DoorLikeState {
  */
 export interface DoorState {
   type: 'door_wood' | 'door_iron'
+  /**
+   * 元のブロック名 (#346)。**描画と書き出しのためだけに持つ**。
+   * 樹種や酸化段階はレッドストーン挙動に効かないので、挙動側では見ない。
+   * 無ければ従来どおり代表ブロック (oak_* / 素の銅) で描く/書き出す
+   */
+  name?: string
   half: 'lower' | 'upper'
   /** 描画用。回路挙動には影響しない */
   facing: HDir
@@ -871,6 +918,12 @@ export interface PaneState {
 
 export interface StoneWallState {
   type: 'wall'
+  /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
   north: WallSide
   east: WallSide
   south: WallSide

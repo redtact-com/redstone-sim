@@ -25,7 +25,10 @@ import type {
 } from './types.js'
 import { OPPOSITE } from './types.js'
 import { emptySlots } from './blocks/container.js'
-import { classifyPlainBlock, isContainerBlockName, isContainerFullCube } from './blocks/blockNames.js'
+import {
+  classifyPlainBlock, isContainerBlockName, isContainerFullCube,
+  doorLikeKindOf, buttonLikeKindOf,
+} from './blocks/blockNames.js'
 
 export interface ParsedMcState {
   name: string
@@ -107,7 +110,7 @@ export function mcToSim(state: string): BlockState | null {
     case 'repeater':
       return {
         type: 'repeater',
-        facing: OPPOSITE[props.facing as HDir] as HDir,
+        facing: OPPOSITE[(props.facing ?? 'north') as HDir] as HDir,
         delay: Number(props.delay ?? '1') as 1 | 2 | 3 | 4,
         powered: props.powered === 'true',
         locked: props.locked === 'true',
@@ -115,7 +118,7 @@ export function mcToSim(state: string): BlockState | null {
     case 'comparator':
       return {
         type: 'comparator',
-        facing: OPPOSITE[props.facing as HDir] as HDir,
+        facing: OPPOSITE[(props.facing ?? 'north') as HDir] as HDir,
         mode: (props.mode ?? 'compare') as 'compare' | 'subtract',
         powered: props.powered === 'true',
         // outputPower は blockstate に現れない (BE の OutputSignal)。
@@ -127,7 +130,7 @@ export function mcToSim(state: string): BlockState | null {
     case 'redstone_wall_torch':
       return {
         type: 'wall_torch',
-        facing: OPPOSITE[props.facing as HDir] as HDir,
+        facing: OPPOSITE[(props.facing ?? 'north') as HDir] as HDir,
         lit: props.lit === 'true',
       }
     case 'lever': {
@@ -135,29 +138,9 @@ export function mcToSim(state: string): BlockState | null {
       const facing =
         face === 'floor' ? 'up' :
         face === 'ceiling' ? 'down' :
-        (props.facing as HDir)
+        ((props.facing ?? 'north') as HDir)
       return { type: 'lever', facing, powered: props.powered === 'true' }
     }
-    case 'stone_button':
-    case 'oak_button': {
-      const face = props.face ?? 'wall'
-      const facing =
-        face === 'floor' ? 'up' :
-        face === 'ceiling' ? 'down' :
-        (props.facing as HDir)
-      return {
-        type: name === 'stone_button' ? 'button_stone' : 'button_wood',
-        facing,
-        powered: props.powered === 'true',
-      }
-    }
-    case 'oak_pressure_plate':
-    case 'stone_pressure_plate':
-      // 木/石 感圧板。POWERED なら出力 15、でなければ 0 [確定: 26.2 PressurePlateBlock]
-      return {
-        type: name === 'stone_pressure_plate' ? 'pressure_plate_stone' : 'pressure_plate_wood',
-        powered: props.powered === 'true',
-      }
     case 'light_weighted_pressure_plate':
     case 'heavy_weighted_pressure_plate': {
       // 重量感圧板。POWER (0-15) = 現在出力。手動モデルは設定値 pressedPower を
@@ -222,66 +205,6 @@ export function mcToSim(state: string): BlockState | null {
       // SHAPE は RAIL_SHAPE_STRAIGHT。powered はカート検出で立つ (#146)
       return { type: 'detector_rail', shape: (props.shape ?? 'north_south') as StraightRailShape,
                powered: props.powered === 'true' }
-    case 'oak_door':
-    case 'spruce_door':
-    case 'birch_door':
-    case 'jungle_door':
-    case 'acacia_door':
-    case 'dark_oak_door':
-    case 'mangrove_door':
-    case 'cherry_door':
-    case 'bamboo_door':
-    case 'crimson_door':
-    case 'warped_door':
-    case 'iron_door':
-      // 樹種は挙動に影響しないので木/鉄の 2 種に集約する (#159)
-      return {
-        type: name === 'iron_door' ? 'door_iron' : 'door_wood',
-        half: (props.half === 'upper' ? 'upper' : 'lower'),
-        facing: (props.facing ?? 'north') as HDir,
-        open: props.open === 'true', powered: props.powered === 'true',
-        hinge: props.hinge === 'right' ? 'right' : 'left',
-      }
-    case 'oak_trapdoor':
-    case 'spruce_trapdoor':
-    case 'birch_trapdoor':
-    case 'jungle_trapdoor':
-    case 'acacia_trapdoor':
-    case 'dark_oak_trapdoor':
-    case 'mangrove_trapdoor':
-    case 'cherry_trapdoor':
-    case 'bamboo_trapdoor':
-    case 'crimson_trapdoor':
-    case 'warped_trapdoor':
-      // 木のトラップドアは樹種を問わず挙動が同じなので 1 種に集約する (#157)
-      return { type: 'trapdoor_wood', facing: (props.facing ?? 'north') as HDir,
-               open: props.open === 'true', powered: props.powered === 'true' }
-    case 'iron_trapdoor':
-      return { type: 'trapdoor_iron', facing: (props.facing ?? 'north') as HDir,
-               open: props.open === 'true', powered: props.powered === 'true' }
-    case 'oak_fence_gate':
-    case 'spruce_fence_gate':
-    case 'birch_fence_gate':
-    case 'jungle_fence_gate':
-    case 'acacia_fence_gate':
-    case 'dark_oak_fence_gate':
-    case 'mangrove_fence_gate':
-    case 'cherry_fence_gate':
-    case 'bamboo_fence_gate':
-    case 'crimson_fence_gate':
-    case 'warped_fence_gate':
-      return { type: 'fence_gate', facing: (props.facing ?? 'north') as HDir,
-               open: props.open === 'true', powered: props.powered === 'true' }
-    case 'copper_bulb':
-    case 'exposed_copper_bulb':
-    case 'weathered_copper_bulb':
-    case 'oxidized_copper_bulb':
-    case 'waxed_copper_bulb':
-    case 'waxed_exposed_copper_bulb':
-    case 'waxed_weathered_copper_bulb':
-    case 'waxed_oxidized_copper_bulb':
-      // 酸化 8 バリアントはレッドストーン挙動が同一なので 1 種に集約する (#155)
-      return { type: 'copper_bulb', lit: props.lit === 'true', powered: props.powered === 'true' }
     case 'target':
       // OUTPUT_POWER = BlockStateProperties.POWER ('power'), 0-15
       return { type: 'target', outputPower: Number(props.power ?? '0') }
@@ -321,6 +244,50 @@ export function mcToSim(state: string): BlockState | null {
         triggered: props.triggered === 'true',
       }
     default: {
+      // 建具・入力素子は**接尾辞で広く受ける** (#346)。以前はここが case 列挙で、
+      // nbtIO が取り込める copper_door / polished_blackstone_button / 木の感圧板が
+      // **実機キャプチャからは例外になっていた**。
+      // 押下状態は blockstate のとおり取り込む (実機の状態が正)
+      const doorLike = doorLikeKindOf(name)
+      if (doorLike) {
+        const facing = (props.facing ?? 'north') as HDir
+        const open = props.open === 'true'
+        const powered = props.powered === 'true'
+        switch (doorLike.type) {
+          case 'door_wood':
+          case 'door_iron':
+            return {
+              type: doorLike.type, name: doorLike.name,
+              half: props.half === 'upper' ? 'upper' : 'lower',
+              facing, open, powered,
+              hinge: props.hinge === 'right' ? 'right' : 'left',
+            }
+          case 'copper_bulb':
+            return {
+              type: 'copper_bulb', name: doorLike.name,
+              lit: props.lit === 'true', powered,
+            }
+          default:
+            return { type: doorLike.type, name: doorLike.name, facing, open, powered }
+        }
+      }
+      const buttonLike = buttonLikeKindOf(name)
+      if (buttonLike) {
+        if (buttonLike.type === 'button_stone' || buttonLike.type === 'button_wood') {
+          const face = props.face ?? 'wall'
+          const facing: Dir6 =
+            face === 'floor' ? 'up' : face === 'ceiling' ? 'down'
+              : ((props.facing ?? 'north') as HDir)
+          return {
+            type: buttonLike.type, name: buttonLike.name, facing,
+            powered: props.powered === 'true',
+          }
+        }
+        return {
+          type: buttonLike.type, name: buttonLike.name,
+          powered: props.powered === 'true',
+        }
+      }
       // シュルカーボックスは色 16 種 + 無色の 17 名あるので case で並べず接尾辞で拾う (#324)。
       // **実機実測で導体** (fixture shulker-box-conductor。色・向きによらず 15)
       if (isContainerBlockName(name)) {
@@ -371,17 +338,19 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         // payload (into) は blockstate に現れない (vanilla も BE 内)
         return formatMcState('moving_piston', { facing: sim.facing, type: sim.kind })
       case 'solid':
-        // 押した先には authored が無いので合成する。canonicalize と代表名を揃える
+        // 押した先には authored が無いので合成する。
+        // **取り込み元の名前があればそれを使う** (#343)。無ければ canonicalize と代表名を揃える
+        if (sim.name !== undefined) return sim.name
         if (sim.immovable === true) return 'obsidian'    // #253 (そもそも動かない)
         if (sim.pushOnly === true) {                     // #255 (押されて動く先はある)
           return formatMcState('gray_glazed_terracotta', { facing: 'north' })
         }
         return 'stone'
-      // 非導体フルブロックも可動 (#184)。色・素材は保持しないので代表名で合成する
+      // 非導体フルブロックも可動 (#184)。名前が無ければ代表名で合成する
       case 'glass':
-        return 'glass'
+        return sim.name ?? 'glass'
       case 'slab':
-        return formatMcState('smooth_stone_slab', { type: sim.half, waterlogged: 'false' })
+        return formatMcState(sim.name ?? 'smooth_stone_slab', { type: sim.half, waterlogged: 'false' })
       case 'redstone_block':
         // #51 で可動化 (ピストン移動先に authored が無い) ため合成対象に追加
         return 'redstone_block'
@@ -635,10 +604,13 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
       props.triggered = String(sim.triggered)
       break
     case 'solid':
-      break // powered は blockstate に現れない
     case 'glass':
     case 'slab':
-      break // 動的プロパティを持たない (#184)。authored の色・素材をそのまま残す
+      // 動的プロパティを持たない (#184)。ただし**名前は sim 側が正** (#343) —
+      // authored を信じると、ピストンで動いたブロックが**移動先に元々あった材質**を着る
+      // (#257 で facing を sim 側から書くようにしたのと同じ構図)
+      if (sim.name !== undefined && sim.name !== name) return formatMcState(sim.name, props)
+      break
     case 'air':
       return 'air'
   }

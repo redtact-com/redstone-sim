@@ -45,6 +45,16 @@ const ROUND_TRIP_NAMES = [
   // #324 以降に足した名前。**コンテナは名前で往復する** — fullCube から
   // 樽 / チェストを選び直していた頃はシュルカーが樽に、トラップチェストがチェストに化けた
   'shulker_box', 'white_shulker_box', 'trapped_chest',
+  // #343 以降。**代表名ではない素材**を並べる。ここが代表名だけだと
+  // 「名前を捨てる実装」でもテストが緑のまま通ってしまう
+  'obsidian', 'black_wool', 'oak_planks', 'red_concrete', 'gray_glazed_terracotta',
+  'glowstone', 'sea_lantern', 'light_blue_stained_glass',
+  'oak_slab', 'cobblestone_wall',
+  // #346 以降。樹種・酸化段階。**実機側の変換器が例外を投げていた名前**も混ぜる
+  'spruce_door', 'copper_door', 'warped_trapdoor', 'bamboo_fence_gate',
+  'cherry_button', 'polished_blackstone_button',
+  'spruce_pressure_plate', 'polished_blackstone_pressure_plate',
+  'exposed_copper_bulb',
 ]
 
 describe('ブロック定義のドリフト検知 (#153)', () => {

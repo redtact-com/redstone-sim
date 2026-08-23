@@ -26,6 +26,46 @@ function flipDir(dir: string): string {
   return dir
 }
 
+/**
+ * 素材ブロックの描画名 (#343)。
+ *
+ * **プロパティは付けない**。sim は挙動に効かないプロパティ (原木の `axis` など) を
+ * 捨てているので復元できないが、`buildResources` の `getDefaultBlockProperties` が
+ * blockstate 側の値から補うため、名前だけ渡せば描ける。
+ */
+export function plainBlockStr(name: string): string {
+  return `minecraft:${name.replace(/^minecraft:/, '')}`
+}
+
+/**
+ * deepslate が描けないコンテナ名の読み替え (#343)。
+ *
+ * チェストとシュルカーボックスは **BlockEntity のモデル**で描かれ、通常のブロックモデルを
+ * 持たない。deepslate は `SpecialRenderers` で肩代わりするが、その表は
+ * **色付きシュルカー 16 色しか持たない** (`{color}_shulker_box`)。
+ * 無染色の `minecraft:shulker_box` を渡すと**何も描かれず消える**ので、
+ * バニラのアイテム表示に一番近い紫へ寄せる。
+ */
+const CONTAINER_RENDER_ALIAS: Record<string, string> = {
+  // 無染色シュルカーは deepslate に renderer が無い
+  shulker_box: 'purple_shulker_box',
+}
+
+/**
+ * コンテナの描画名。
+ *
+ * `name` はブロックモデルではなく **SpecialRenderer が名前で引く**ため、
+ * 余計なプロパティを付けない (chest は facing 既定 south、shulker は向きを持たない)。
+ * 樽だけは variant がプロパティ必須なので明示する [#58 で踏んだ罠]。
+ */
+export function containerBlockStr(name: string | undefined, fullCube: boolean): string {
+  const id = (name ?? (fullCube ? 'barrel' : 'chest')).replace(/^minecraft:/, '')
+  const drawn = CONTAINER_RENDER_ALIAS[id] ?? id
+  // 樽は facing+open のバリアント形式で、プロパティ無しだと**どれにも一致せず消える**
+  if (drawn === 'barrel') return 'minecraft:barrel[facing=up,open=false]'
+  return `minecraft:${drawn}`
+}
+
 // ── @redstone/sim の BlockState → Minecraft ブロック文字列 ──────────────
 
 export function blockStateToMinecraftStr(block: BlockState): string {
@@ -56,12 +96,12 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'button_stone': {
       const face = block.facing === 'up' ? 'floor' : block.facing === 'down' ? 'ceiling' : 'wall'
       const facing = (block.facing === 'up' || block.facing === 'down') ? 'north' : block.facing
-      return `minecraft:stone_button[face=${face},facing=${facing},powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'stone_button'}[face=${face},facing=${facing},powered=${block.powered}]`
     }
     case 'button_wood': {
       const face = block.facing === 'up' ? 'floor' : block.facing === 'down' ? 'ceiling' : 'wall'
       const facing = (block.facing === 'up' || block.facing === 'down') ? 'north' : block.facing
-      return `minecraft:oak_button[face=${face},facing=${facing},powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'oak_button'}[face=${face},facing=${facing},powered=${block.powered}]`
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
@@ -69,7 +109,8 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'lodestone':
       return 'minecraft:lodestone'
     case 'wall':
-      return `minecraft:stone_brick_wall[east=${block.east},north=${block.north},`
+      // 材質は name、接続形状は sim が計算した値で描く (#343)
+      return `minecraft:${block.name ?? 'stone_brick_wall'}[east=${block.east},north=${block.north},`
         + `south=${block.south},up=${block.up},waterlogged=${block.waterlogged},west=${block.west}]`
     case 'soul_sand':
       return 'minecraft:soul_sand'
@@ -85,7 +126,11 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       return `minecraft:${block.name}[east=${block.east},north=${block.north}`
         + `,south=${block.south},waterlogged=${block.waterlogged},west=${block.west}]`
     case 'cauldron':
-      return `minecraft:water_cauldron[level=${block.level}]`
+      // **空の大釜は別ブロック**。vanilla の water_cauldron は level=1..3 しか持たず、
+      // level=0 を渡すとどの variant にも一致せず**何も描かれない** (#343)
+      return block.level === 0
+        ? 'minecraft:cauldron'
+        : `minecraft:water_cauldron[level=${block.level}]`
     case 'composter':
       return `minecraft:composter[level=${block.level}]`
     case 'lectern':
@@ -95,9 +140,9 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
       return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`
     case 'pressure_plate_wood':
-      return `minecraft:oak_pressure_plate[powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'oak_pressure_plate'}[powered=${block.powered}]`
     case 'pressure_plate_stone':
-      return `minecraft:stone_pressure_plate[powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'stone_pressure_plate'}[powered=${block.powered}]`
     case 'weighted_pressure_plate_light':
       return `minecraft:light_weighted_pressure_plate[power=${block.powered ? block.pressedPower : 0}]`
     case 'weighted_pressure_plate_heavy':
@@ -111,11 +156,10 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // 描画されるため。sim.facing = vanilla FACING = 観測方向)
       return `minecraft:observer[facing=${block.facing},powered=${block.powered}]`
     case 'container':
-      // コンテナは barrel として描画する (signal 値は表示に影響しない)。
-      // barrel の blockstate は facing+open キーのバリアント形式のため、
-      // プロパティ無しではどのバリアントにもマッチせず描画されない (#58)。
-      // facing=up (蓋が上) をコンテナの見た目として採用する
-      return 'minecraft:barrel[facing=up,open=false]'
+      // **取り込み元のブロックで描く** (#343)。以前は一律 barrel だったため
+      // チェストもトラップチェストもシュルカーボックスも樽に見えていた。
+      // `name` は #324 で既に保持していて、書き出しでも同じ規則を使っている
+      return containerBlockStr(block.name, block.fullCube)
     case 'hopper':
       // facing は反転しない (piston/observer と同じ規則。vanilla FACING = 送り込み方向)。
       // enabled は見た目に影響しないが blockstate バリアント選択のため付与する
@@ -167,34 +211,35 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'detector_rail':
       return `minecraft:detector_rail[powered=${block.powered},shape=${block.shape},waterlogged=false]`
     case 'copper_bulb':
-      // 酸化段階は sim で持たないので素の銅の電球で描画する (#155)
-      return `minecraft:copper_bulb[lit=${block.lit},powered=${block.powered}]`
+      // 酸化段階は挙動に効かないが**見た目には効く**ので name で描く (#346)
+      return `minecraft:${block.name ?? 'copper_bulb'}[lit=${block.lit},powered=${block.powered}]`
     case 'trapdoor_wood':
     case 'trapdoor_iron': {
       // facing は反転する (repeater と同じく「ヒンジのある側」= 取り付け方向)。
-      // half は sim で持たないので bottom 固定 (#157)
-      const name = block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor'
+      // half は sim で持たないので bottom 固定 (#157)。**樹種は name で描く** (#346)
+      const name = block.name ?? (block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor')
       return `minecraft:${name}[facing=${flipDir(block.facing)},half=bottom,`
         + `open=${block.open},powered=${block.powered},waterlogged=false]`
     }
     case 'fence_gate':
-      return `minecraft:oak_fence_gate[facing=${flipDir(block.facing)},in_wall=false,`
+      return `minecraft:${block.name ?? 'oak_fence_gate'}[facing=${flipDir(block.facing)},in_wall=false,`
         + `open=${block.open},powered=${block.powered}]`
     case 'door_wood':
     case 'door_iron': {
-      // hinge は sim で持たないので left 固定 (#159)
-      const name = block.type === 'door_iron' ? 'iron_door' : 'oak_door'
+      // **hinge は sim が持っている** (#262 で塀の接続に効くため)。
+      // コメントが古く left 固定のままだったので実際の値で描く (#346)。樹種も name で
+      const name = block.name ?? (block.type === 'door_iron' ? 'iron_door' : 'oak_door')
       return `minecraft:${name}[facing=${flipDir(block.facing)},half=${block.half},`
-        + `hinge=left,open=${block.open},powered=${block.powered}]`
+        + `hinge=${block.hinge},open=${block.open},powered=${block.powered}]`
     }
+    // 素材は挙動に効かないが**見た目には効く**ので name で描く (#343)。
+    // 名前を持たない (パレット配置の) ものは従来どおり代表ブロック
     case 'solid':
-      return 'minecraft:stone'
-    // 色 (16 種の stained_glass) は sim で保持しないため無色固定 (#184)
+      return plainBlockStr(block.name ?? 'stone')
     case 'glass':
-      return 'minecraft:glass'
-    // 素材は sim で保持しないため smooth_stone 固定 (#184)
+      return plainBlockStr(block.name ?? 'glass')
     case 'slab':
-      return `minecraft:smooth_stone_slab[type=${block.half}]`
+      return `minecraft:${block.name ?? 'smooth_stone_slab'}[type=${block.half}]`
     case 'air':
       return 'minecraft:air'
   }
@@ -267,16 +312,22 @@ export const VIEWER_PRELOAD_BLOCKS: string[] = [
   'minecraft:water',
   'minecraft:bubble_column',
   'minecraft:water_cauldron',
+  // 空の大釜は別ブロック (#343。level=0 は water_cauldron の variant に無い)
+  'minecraft:cauldron',
   'minecraft:composter',
   'minecraft:lectern',
 ]
 
 /**
- * スナップショットに出てくる「プリロード表に無いブロック名」(#234)。
+ * スナップショットに出てくる「プリロード表に無いブロック名」(#234 → #343)。
  *
- * 装飾 (`decor`) は**取り込み元の名前をそのまま保持する**ため名前の集合が閉じておらず、
+ * 取り込み元の名前を保持する型 (`decor` / `pane` / `container` …) は名前の集合が閉じておらず、
  * 固定表に列挙できない。ここで拾って `buildResources` に足さないと、
- * その装飾は**エラーにならず静かに消える** (実際、壁が透明なまま GIF に写って気づいた)。
+ * そのブロックは**エラーにならず静かに消える** (実際、壁が透明なまま GIF に写って気づいた)。
+ *
+ * **型で絞らない** (#343)。以前は `decor` だけを見ていたため、同じく名前を持つ
+ * `pane` (ガラス板・鉄格子) が取り込んでも 3D から消えていた。
+ * 名前を持つ型が今後増えても、ここは何もしなくても追従する。
  */
 export function extraPreloadNames(
   snapshot: { blocks: ReadonlyMap<string, BlockState> },
@@ -284,9 +335,8 @@ export function extraPreloadNames(
   const known = new Set(VIEWER_PRELOAD_BLOCKS)
   const found = new Set<string>()
   for (const block of snapshot.blocks.values()) {
-    if (block.type !== 'decor') continue     // 他の型は固定表で足りる
     const name = blockStateToMinecraftStr(block).split('[')[0]
-    if (!known.has(name)) found.add(name)
+    if (name !== 'minecraft:air' && !known.has(name)) found.add(name)
   }
   return [...found].sort()
 }

@@ -56,6 +56,26 @@ export class CircuitEditor {
     this.emit()
   }
 
+  /**
+   * **既存ブロックの属性だけを更新する** (#343)。
+   *
+   * バーから遅延や信号を変えるときに `placeBlock` を通すと `buildBlockState` が
+   * 状態を作り直すため、**パレットが知らない情報が消える**。
+   * 実測: 取り込んだトラップチェストの signal を触ると
+   * `{type:'container',fullCube:true,signal:5}` になり、名前が消えるだけでなく
+   * **非導体から導体へ変わっていた**。
+   *
+   * ここでは作り直した状態に、元のブロックが持っていた「取り込み由来の素性」を戻す。
+   * 型が変わる場合は素性を引き継がない (別のブロックを置いたのと同じ)。
+   */
+  updateBlock(x: number, z: number, type: PlaceableType, opts: PlaceOptions = {}): void {
+    const prev = this.grid.getBlock(x, z)
+    const next = buildBlockState(type, opts)
+    if (!next) return
+    this.grid.placeBlock(x, z, prev && prev.type === next.type ? carryIdentity(prev, next) : next)
+    this.emit()
+  }
+
   removeBlock(x: number, z: number): void {
     this.grid.removeBlock(x, z)
     this.emit()
@@ -318,4 +338,20 @@ function buildBlockState(type: PlaceableType, rawOpts: PlaceOptions): BlockState
     default:
       return null
   }
+}
+
+/**
+ * 取り込み由来の素性 (パレットからは決められない値) を引き継ぐ (#343)。
+ *
+ * - `name` … 元の Minecraft ブロック名。**描画と書き出しにだけ効く**
+ * - `fullCube` … コンテナの導通。樽/シュルカーは導体・チェストは非導体 (#291/#324)
+ */
+function carryIdentity(prev: BlockState, next: BlockState): BlockState {
+  const carried: Record<string, unknown> = { ...next }
+  const from = prev as unknown as Record<string, unknown>
+  if (typeof from.name === 'string') carried.name = from.name
+  if (next.type === 'container' && typeof from.fullCube === 'boolean') {
+    carried.fullCube = from.fullCube
+  }
+  return carried as unknown as BlockState
 }
