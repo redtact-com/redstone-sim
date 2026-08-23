@@ -519,7 +519,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     // **書き出しに case が無いと default で air に潰れる**。
     // 取り込んだ回路を保存すると塀・泡柱・書見台などが消えていた (実測: 9 種すべて消滅)
     case 'wall':
-      return ['minecraft:stone_brick_wall', {
+      return [`minecraft:${(block as any).name ?? 'stone_brick_wall'}`, {
         north: (block as any).north, east: (block as any).east,
         south: (block as any).south, west: (block as any).west,
         up: String((block as any).up ?? false),
@@ -686,13 +686,14 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         facing: (block as any).facing ?? 'north',
         type: (block as any).sticky ? 'sticky' : 'normal',
       }]
+    // 取り込み元の名前があればそれに戻す (#343)。無ければ従来の代表名。
+    // **保存で材質が石に化けると `immovable` (黒曜石) や音符ブロックの音色まで失われる**
     case 'solid':
-      return ['minecraft:stone', {}]
-    // 非導体 (#184)。色・素材を保持しないので代表名で書き出す
+      return [`minecraft:${(block as any).name ?? 'stone'}`, {}]
     case 'glass':
-      return ['minecraft:glass', {}]
+      return [`minecraft:${(block as any).name ?? 'glass'}`, {}]
     case 'slab':
-      return ['minecraft:smooth_stone_slab', { type: block.half }]
+      return [`minecraft:${(block as any).name ?? 'smooth_stone_slab'}`, { type: block.half }]
     default:
       return ['minecraft:air', {}]
   }

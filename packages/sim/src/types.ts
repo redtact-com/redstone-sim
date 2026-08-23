@@ -367,6 +367,12 @@ export interface HoneyBlockState {
 export interface SolidState {
   type: 'solid'
   /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
+  /**
    * ピストンで押せないか (#253)。[確定: 26.2 — 黒曜石・岩盤などは pushReaction(BLOCK)]
    *
    * sim は導体フルブロックを材質ごと 1 種に潰しているが、**押せるかどうかだけは
@@ -418,6 +424,12 @@ export interface SolidState {
  */
 export interface GlassState {
   type: 'glass'
+  /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
   /** 上の音符ブロックへ与える音色 (#231)。取り込み時に実ブロック名から載せる */
   instrument?: NoteInstrument
 }
@@ -439,6 +451,12 @@ export interface GlassState {
  */
 export interface SlabState {
   type: 'slab'
+  /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
   half: 'top' | 'bottom'
   /** 上の音符ブロックへ与える音色 (#231)。取り込み時に実ブロック名から載せる */
   instrument?: NoteInstrument
@@ -871,6 +889,12 @@ export interface PaneState {
 
 export interface StoneWallState {
   type: 'wall'
+  /**
+   * 元のブロック名 (#343)。**描画と書き出しのためだけに持つ**。
+   * レッドストーン挙動には一切効かない (効くのは導通・可動などの他のフィールド)。
+   * 無ければ従来どおり代表ブロックで描く/書き出す (パレットから置いたものは持たない)
+   */
+  name?: string
   north: WallSide
   east: WallSide
   south: WallSide

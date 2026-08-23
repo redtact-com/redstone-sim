@@ -37,7 +37,7 @@ const upAt = (w: SimWorld, y: number): boolean => (w.getBlock(1, y, 1) as { up: 
 describe('塀の形状', () => {
   it('取り込める (4 辺 + up + waterlogged)', () => {
     expect(mcToSim('stone_brick_wall[east=none,north=tall,south=tall,up=false,waterlogged=true,west=none]'))
-      .toEqual({ type: 'wall', north: 'tall', south: 'tall', east: 'none', west: 'none', up: false, waterlogged: true })
+      .toEqual({ type: 'wall', name: 'stone_brick_wall', north: 'tall', south: 'tall', east: 'none', west: 'none', up: false, waterlogged: true })
   })
 
   it('南北がガラスなら up=false で安定する', () => {
