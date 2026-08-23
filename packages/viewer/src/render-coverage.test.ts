@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { classifyPlainBlock } from '@redstone/sim'
+import { mcToSim } from '@redstone/sim'
 import { blockStateToMinecraftStr } from './world-to-structure.js'
 import { defaultPropsOf } from './renderer/buildResources.js'
 
@@ -55,7 +55,9 @@ describe('取り込めるブロックは 3D でも描ける (#343)', () => {
     let checked = 0
     for (const id of Object.keys(VARIANTS)) {
       let sim = null
-      try { sim = classifyPlainBlock(id, {}) } catch { /* 取り込めない名前は対象外 */ }
+      // **mcToSim を通す** (#346)。classifyPlainBlock だけだと扉やボタンのように
+      // 手前の分岐で処理される型が検査から漏れる
+      try { sim = mcToSim(id) } catch { /* 取り込めない名前は対象外 */ }
       if (!sim) continue
       checked++
       const drawn = blockStateToMinecraftStr(sim)

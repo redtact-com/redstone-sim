@@ -96,12 +96,12 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'button_stone': {
       const face = block.facing === 'up' ? 'floor' : block.facing === 'down' ? 'ceiling' : 'wall'
       const facing = (block.facing === 'up' || block.facing === 'down') ? 'north' : block.facing
-      return `minecraft:stone_button[face=${face},facing=${facing},powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'stone_button'}[face=${face},facing=${facing},powered=${block.powered}]`
     }
     case 'button_wood': {
       const face = block.facing === 'up' ? 'floor' : block.facing === 'down' ? 'ceiling' : 'wall'
       const facing = (block.facing === 'up' || block.facing === 'down') ? 'north' : block.facing
-      return `minecraft:oak_button[face=${face},facing=${facing},powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'oak_button'}[face=${face},facing=${facing},powered=${block.powered}]`
     }
     case 'lamp':
       return `minecraft:redstone_lamp[lit=${block.lit}]`
@@ -140,9 +140,9 @@ export function blockStateToMinecraftStr(block: BlockState): string {
       // instrument は sim で保持しないため harp 固定 (見た目に差は出ない)
       return `minecraft:note_block[instrument=harp,note=${block.note},powered=${block.powered}]`
     case 'pressure_plate_wood':
-      return `minecraft:oak_pressure_plate[powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'oak_pressure_plate'}[powered=${block.powered}]`
     case 'pressure_plate_stone':
-      return `minecraft:stone_pressure_plate[powered=${block.powered}]`
+      return `minecraft:${block.name ?? 'stone_pressure_plate'}[powered=${block.powered}]`
     case 'weighted_pressure_plate_light':
       return `minecraft:light_weighted_pressure_plate[power=${block.powered ? block.pressedPower : 0}]`
     case 'weighted_pressure_plate_heavy':
@@ -211,25 +211,26 @@ export function blockStateToMinecraftStr(block: BlockState): string {
     case 'detector_rail':
       return `minecraft:detector_rail[powered=${block.powered},shape=${block.shape},waterlogged=false]`
     case 'copper_bulb':
-      // 酸化段階は sim で持たないので素の銅の電球で描画する (#155)
-      return `minecraft:copper_bulb[lit=${block.lit},powered=${block.powered}]`
+      // 酸化段階は挙動に効かないが**見た目には効く**ので name で描く (#346)
+      return `minecraft:${block.name ?? 'copper_bulb'}[lit=${block.lit},powered=${block.powered}]`
     case 'trapdoor_wood':
     case 'trapdoor_iron': {
       // facing は反転する (repeater と同じく「ヒンジのある側」= 取り付け方向)。
-      // half は sim で持たないので bottom 固定 (#157)
-      const name = block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor'
+      // half は sim で持たないので bottom 固定 (#157)。**樹種は name で描く** (#346)
+      const name = block.name ?? (block.type === 'trapdoor_iron' ? 'iron_trapdoor' : 'oak_trapdoor')
       return `minecraft:${name}[facing=${flipDir(block.facing)},half=bottom,`
         + `open=${block.open},powered=${block.powered},waterlogged=false]`
     }
     case 'fence_gate':
-      return `minecraft:oak_fence_gate[facing=${flipDir(block.facing)},in_wall=false,`
+      return `minecraft:${block.name ?? 'oak_fence_gate'}[facing=${flipDir(block.facing)},in_wall=false,`
         + `open=${block.open},powered=${block.powered}]`
     case 'door_wood':
     case 'door_iron': {
-      // hinge は sim で持たないので left 固定 (#159)
-      const name = block.type === 'door_iron' ? 'iron_door' : 'oak_door'
+      // **hinge は sim が持っている** (#262 で塀の接続に効くため)。
+      // コメントが古く left 固定のままだったので実際の値で描く (#346)。樹種も name で
+      const name = block.name ?? (block.type === 'door_iron' ? 'iron_door' : 'oak_door')
       return `minecraft:${name}[facing=${flipDir(block.facing)},half=${block.half},`
-        + `hinge=left,open=${block.open},powered=${block.powered}]`
+        + `hinge=${block.hinge},open=${block.open},powered=${block.powered}]`
     }
     // 素材は挙動に効かないが**見た目には効く**ので name で描く (#343)。
     // 名前を持たない (パレット配置の) ものは従来どおり代表ブロック

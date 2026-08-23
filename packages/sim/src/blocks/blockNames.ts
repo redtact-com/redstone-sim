@@ -12,7 +12,7 @@
 // ============================================================
 
 import { noteInstrumentOfBlockName } from './noteInstrument.js'
-import type { BlockState, HDir } from '../types.js'
+import type { BlockState, BlockType, HDir } from '../types.js'
 
 // ── 非導体ブロック (#184) ────────────────────────────────────────────────────
 //
@@ -309,6 +309,64 @@ export function classifyPlainBlock(
       return withInstrument({ type: 'solid', powered: false, name: id, pushOnly: true })
     }
     return withInstrument({ type: 'solid', powered: false, name: id })
+  }
+  return null
+}
+
+/**
+ * 建具・入力素子の **名前 → sim の型** (#346)。
+ *
+ * この一群は `classifyPlainBlock` を通らず、**2 本の変換器に別々の実装**があった。
+ * しかも受理する名前がズレていて、`app/src/nbtIO.ts` は接尾辞で広く取るのに
+ * `packages/sim/src/mcstate.ts` は case 列挙で、`copper_door` (9 名) /
+ * `copper_trapdoor` (9 名) / `polished_blackstone_button` / 木の感圧板各種が
+ * **「アプリでは取り込めるのに実機キャプチャを fixture にできない」**状態だった。
+ *
+ * ここで返すのは型と名前だけ。**状態の作り方は各変換器に任せる** — 押下状態の扱いが
+ * 意図的に違うため (アプリの取り込みは常に OFF / 実機キャプチャは blockstate のとおり)。
+ */
+export interface NamedBlockKind<T extends BlockType = BlockType> {
+  type: T
+  /** 元のブロック名 (名前空間なし)。描画と書き出しに使う */
+  name: string
+}
+
+export type DoorLikeType =
+  'door_wood' | 'door_iron' | 'trapdoor_wood' | 'trapdoor_iron' | 'fence_gate' | 'copper_bulb'
+export type ButtonLikeType =
+  'button_stone' | 'button_wood' | 'pressure_plate_stone' | 'pressure_plate_wood'
+
+/** 扉・トラップドア・フェンスゲート・銅の電球。当てはまらなければ null */
+export function doorLikeKindOf(name: string): NamedBlockKind<DoorLikeType> | null {
+  const id = stripNs(name)
+  if (id.endsWith('_door')) {
+    return { type: id === 'iron_door' ? 'door_iron' : 'door_wood', name: id }
+  }
+  if (id.endsWith('_trapdoor')) {
+    return { type: id === 'iron_trapdoor' ? 'trapdoor_iron' : 'trapdoor_wood', name: id }
+  }
+  if (id.endsWith('_fence_gate')) return { type: 'fence_gate', name: id }
+  if (id === 'copper_bulb' || id.endsWith('_copper_bulb')) {
+    return { type: 'copper_bulb', name: id }
+  }
+  return null
+}
+
+/**
+ * ボタン・感圧板。当てはまらなければ null。
+ *
+ * **重量感圧板は別型**なので接尾辞では拾わない (出力が 0-15 で挙動が違う)。
+ */
+export function buttonLikeKindOf(name: string): NamedBlockKind<ButtonLikeType> | null {
+  const id = stripNs(name)
+  if (id.endsWith('_button')) {
+    const stone = id === 'stone_button' || id === 'polished_blackstone_button'
+    return { type: stone ? 'button_stone' : 'button_wood', name: id }
+  }
+  if (id === 'light_weighted_pressure_plate' || id === 'heavy_weighted_pressure_plate') return null
+  if (id.endsWith('_pressure_plate')) {
+    const stone = id === 'stone_pressure_plate' || id === 'polished_blackstone_pressure_plate'
+    return { type: stone ? 'pressure_plate_stone' : 'pressure_plate_wood', name: id }
   }
   return null
 }
