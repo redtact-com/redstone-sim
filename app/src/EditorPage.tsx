@@ -563,7 +563,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'repeater') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
-          editorRef.current.placeBlock(prev[0], prev[1], 'repeater', { facing: f, delay: newDelay })
+          editorRef.current.updateBlock(prev[0], prev[1], 'repeater', { facing: f, delay: newDelay })
           rerender()
         }
       }
@@ -580,7 +580,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'comparator') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
-          editorRef.current.placeBlock(prev[0], prev[1], 'comparator', { facing: f, mode: newMode })
+          editorRef.current.updateBlock(prev[0], prev[1], 'comparator', { facing: f, mode: newMode })
           rerender()
         }
       }
@@ -597,7 +597,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'weighted_pressure_plate_light' ||
             block?.type === 'weighted_pressure_plate_heavy') {
-          editorRef.current.placeBlock(prev[0], prev[1], block.type, { pressedPower: newP })
+          editorRef.current.updateBlock(prev[0], prev[1], block.type, { pressedPower: newP })
           rerender()
         }
       }
@@ -613,7 +613,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
       if (prev) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'container') {
-          editorRef.current.placeBlock(prev[0], prev[1], 'container', { signal: newSignal })
+          editorRef.current.updateBlock(prev[0], prev[1], 'container', { signal: newSignal })
           rerender()
         }
       }
@@ -632,7 +632,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         if (block?.type === 'hopper' || block?.type === 'dropper') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
           const n = totalItems(block.slots)
-          editorRef.current.placeBlock(prev[0], prev[1], block.type,
+          editorRef.current.updateBlock(prev[0], prev[1], block.type,
             { facing: f, count: n, stack: newStack })
           rerender()
         }
@@ -648,7 +648,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const block = editorRef.current.getBlock(prev[0], prev[1])
         if (block?.type === 'hopper' || block?.type === 'dropper') {
           const f = (block as unknown as Record<string, unknown>).facing as HDir
-          editorRef.current.placeBlock(prev[0], prev[1], block.type,
+          editorRef.current.updateBlock(prev[0], prev[1], block.type,
             { facing: f, count: newCount, stack })
           rerender()
         }
