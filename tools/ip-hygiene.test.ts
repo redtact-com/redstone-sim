@@ -67,6 +67,9 @@ describe('著作権まわりの衛生 (docs/ip-policy.md)', () => {
     // 公開リポなので **Windows / Linux のユーザ名がそのまま読める**状態を作らない。
     // 回路ファイルは配布物ではないため、パスを残しても再現の助けにならない
     const ABSOLUTE: { name: string; re: RegExp }[] = [
+      // #358: テストが手元にしか無いファイルを絶対パスで参照して CI だけ落ちた。
+      // 「絶対パスをコミットしない」規則で同時に防げる
+      { name: 'エージェントの一時ディレクトリ', re: /\/tmp\/claude-\d+\// },
       { name: 'WSL 経由の Windows パス', re: /\/mnt\/[a-z]\/Users\// },
       { name: 'Windows パス', re: /[A-Za-z]:\\Users\\/ },
       { name: 'ホームディレクトリ', re: /\/(home|Users)\/[A-Za-z0-9._-]+\// },

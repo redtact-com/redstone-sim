@@ -1,11 +1,15 @@
 import { test, expect } from '@playwright/test'
+import { exportToNbtBytes } from '../app/src/nbtIO'
+import { mcToSim } from '@redstone/sim'
+import type { BlockState } from '@redstone/sim'
 
 // 選択中のブロックが**取り込んだ元のブロック**だと分かること (#356)。
 //
 // パレットは「置ける種類」の選択肢なので、黒曜石を選んでも「石」が光るだけ。
 // 3D の見た目 (#343 / #351) が元どおりになっても、名前は画面のどこにも出ていなかった。
-
-const NBT = '/tmp/claude-1000/-home-ntaku-laravel-project/e68b192c-552b-45f4-af2a-42d3d2c978df/scratchpad/sel.nbt'
+//
+// 素材の .nbt は**テストの中で作る** (#358)。最初はローカルのファイルを絶対パスで
+// 参照していて CI だけ ENOENT で落ちた。ファイルを置かず buffer で渡せば手元と CI で同じになる。
 
 declare global {
   interface Window {
@@ -18,12 +22,23 @@ declare global {
   }
 }
 
+/** 取り込み由来の状態 (name を持つ) を作るための .nbt */
+function buildNbt(): Buffer {
+  const blocks = new Map<string, BlockState>([
+    ['0,0,0', mcToSim('obsidian')!],
+    ['1,0,0', mcToSim('oak_log[axis=x]')!],
+  ])
+  return Buffer.from(exportToNbtBytes(blocks, 2, 1))
+}
+
 test('取り込んだブロックを選ぶと元の名前が出る / パレット配置では出ない', async ({ page }) => {
   await page.goto('/')
   await page.waitForFunction(() => !!window.__editorTest)
 
   // 1) 取り込む (obsidian と oak_log[axis=x])
-  await page.setInputFiles('[data-testid="nbt-file-input"]', NBT)
+  await page.setInputFiles('[data-testid="nbt-file-input"]', {
+    name: 'selected-block.nbt', mimeType: 'application/octet-stream', buffer: buildNbt(),
+  })
   await page.waitForSelector('[data-testid="preview-commit"]')
   await page.click('[data-testid="preview-commit"]')
   await page.waitForFunction(() => window.__editorTest!.getEditorBlockAt(0, 0, 0)?.type === 'solid')
