@@ -388,6 +388,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
   // 向き・遅延バーを表示するか
   const gridBlockHasFacing = gridFacingUsable
 
+  // 選んだセルが取り込み由来なら、その元のブロック名 (#356)。
+  // パレットから置いたものは名前を持たないので null になり、表示は増えない
+  const selectedBlockName = describeImportedBlock(gridBlock)
   const selectedMeta = BLOCK_PALETTE.find(b => b.type === selectedType)
   const showFacingBar = mode === 'edit' && selectedType !== 'eraser' && (
     !!(selectedMeta?.hasFacing) ||
@@ -1427,6 +1430,16 @@ export function EditorPage({ onBack }: EditorPageProps) {
           直近 3 行を出すだけで押す対象が無く、26px の行に ◀ ▶ を足すと不格好になる */}
       <div className="shrink-0 flex items-center gap-3 px-3 py-1 overflow-x-auto"
            style={{ background: '#0d0d0d', borderTop: '2px solid #1e1e1e', scrollbarWidth: 'none', minHeight: 26 }}>
+        {/* **選んだブロックが何なのかを出す** (#356)。パレットは「置ける種類」の選択肢なので
+            黒曜石を選んでも「石」が光るだけ。向き・遅延バーは調整項目のあるブロックでしか
+            出ないため、常にあるログバーの左端に置く */}
+        {selectedBlockName && (
+          <span className="font-mono shrink-0" data-testid="selected-block-name"
+                title="取り込んだ元のブロック"
+                style={{ fontSize: 11, color: '#8a8a6a' }}>
+            {selectedBlockName}
+          </span>
+        )}
         {log.slice(-3).map((l, i) => (
           <span key={i} className="font-mono shrink-0" style={{ fontSize: 11, color: '#3a3a3a' }}>{l}</span>
         ))}
@@ -1482,6 +1495,12 @@ function FacingBar({
   const label = selectedPos
     ? `(${selectedPos[0]}, ${selectedPos[1]}) Y=${activeLayer}`
     : `次の配置 Y=${activeLayer}`
+
+  // **取り込んだブロックが何なのかを出す** (#356)。
+  // パレットは「置ける種類」なので黒曜石を選んでも「石」が光るだけで、
+  // 3D の見た目 (#343 / #351) が元どおりになっても名前は確認できなかった。
+  // パレットから置いたものは名前を持たないので何も出さない
+  const importedName = describeImportedBlock(gridBlock)
 
   const dirLabel: Record<Dir6, string> = { north: '北', south: '南', east: '東', west: '西', up: '床', down: '天' }
 
@@ -1624,9 +1643,31 @@ function FacingBar({
       )}
 
       <div className="flex-1" />
+      {importedName && (
+        <span className="font-mono shrink-0" data-testid="selected-block-name"
+              title="取り込んだ元のブロック"
+              style={{ fontSize: 11, color: '#7a7a5a', marginRight: 8 }}>
+          {importedName}
+        </span>
+      )}
       <span className="font-pixel shrink-0" style={{ fontSize: 11, color: '#444' }}>{label}</span>
     </div>
   )
+}
+
+/**
+ * 取り込み由来のブロックを `名前[k=v,...]` の形で表す (#356)。
+ *
+ * 名前 (#343) と見た目プロパティ (#351) を持っているのは**取り込んだブロックだけ**。
+ * パレットから置いたものは持たないので null を返し、表示を増やさない。
+ */
+export function describeImportedBlock(block: BlockState | null | undefined): string | null {
+  const b = block as { name?: unknown; renderProps?: unknown } | null | undefined
+  const name = typeof b?.name === 'string' ? b.name : null
+  if (!name) return null
+  const props = (b?.renderProps ?? {}) as Record<string, string>
+  const keys = Object.keys(props).sort()
+  return keys.length === 0 ? name : `${name}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
 }
 
 // ── EditorPalette ─────────────────────────────────────────────────────────────
