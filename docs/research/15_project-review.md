@@ -250,7 +250,7 @@ deepslate 等) は本書では繰り返さない。以下は **今回新たに�
 | 項目 | 訂正 |
 |---|---|
 | Mojang 公式配布物の URL | `https://piston-data.mojang.com/` は **404**。実際の入口は `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json` |
-| 赤石基礎論 ArcFrout | 「記事本体は現時点で 404」と注記されているが **200 で生存**。P5 監視対象として再訪の価値あり |
+| 赤石基礎論 ArcFrout | 「記事本体は現時点で 404」と注記されているが **200 で生存**。P5 監視対象として再訪の価値あり。**追記 2026-09-13**: 本体は著者の共同編集ドキュメントに移り、CC BY 4.0 が明記された。01 §4 を更新済み |
 | theosib RedstoneWireTurbo | URL が MCHPRS を指しており、名前が示す資料 (RedstoneWireTurbo / openredstone フォーラム thread-14591) のどちらでもない。MCHPRS の実質 3 重登録 |
 | SubTick / DecompilerMC 等 | 1 エントリに複数実装・複数資料が混ざり URL が 1 本のみ。02 §1 の [要検証] は「chiraag 版 / lntricate1 版のどちらを読んだか」が典拠として効くので分離が必要 |
 | 競合 3 サイト | Redstone Companion / Redstone Studio / CraftMC はいずれもクローズドソースで精度の根拠は自己申告。**ベンチマークには使うが 02 の挙動仕様の典拠には一切使わない** |
