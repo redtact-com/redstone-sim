@@ -6,6 +6,9 @@ enokilovin 氏の **descriptive logics** (処理記述法) を採用・適応す
 
 - 出典: https://note.com/enokilovin/n/nc2952f9d228c (descriptive logics II、2026 参照)
 - 本書は同記法の**本プロジェクト向け適応版**であり、原典の要約 + sim 実装上の割当を加えたもの。原典の著作権は enokilovin 氏に帰属する
+- 原典 ArcFrout のライセンス: **[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)** (2026-09-13 著者明記)。クレジット: `Frouts, "ArcFrout" (https://enokilovin.github.io/ArcFrout)`
+- **改変の明示**: 上記のとおり本書は原典を要約し、sim の内部イベントへの割当 (§1-4) と出力レベル (§5) を加えている
+- 版の関係: 本書が採用したのは note 記事時点の記法 (原典でいう旧記述法 v1-2 側)。原典では現在 `II-ChGph` で **v3** まで整理されている。v3 への追従は未対応 (別 issue で判断)
 - 02 §2.2 (tile tick priority) との整合は確認済み [確定]: Repeater -3/-2/-1、Comparator -1/0、Torch 0、Observer 0
 
 ---

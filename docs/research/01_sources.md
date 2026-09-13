@@ -49,22 +49,22 @@ redstone-sim (Java Edition 準拠レッドストーンシミュレータ) の仕
 
 | 項目 | 内容 |
 |---|---|
-| URL | https://enokilovin.github.io/ArcFrout/ / https://github.com/enokilovin/ArcFrout |
-| カバー範囲 | 構想上は赤石仕様全域 7 章。**現時点で公開済みはトップ+notes+invitation の 3 ページのみで記事本体は全て 404** [確定 2026-07-02]。削除済み旧草稿 (chap1/chap2) から強/弱動力・BUD・QC・BU/SU/CU 分類・斜めダスト切断規則等を復元取得済み |
+| URL | https://enokilovin.github.io/ArcFrout/ (著者指定の引用先) / https://github.com/enokilovin/ArcFrout |
+| カバー範囲 | 赤石仕様全域を 7 部 (赤石七科: 初歩論 I / 時間論 II / 負荷論 III / 技術論 IV / 形式論理学 V / 計算機科学 VI / 小事典 VII) で体系化。**本体は著者の共同編集ドキュメントに移った** [確定 2026-09-13]。移行に伴い章番号が一部変わった (赤石記述法は旧 `II-07` → **`II-ChGph`**)。GitHub Pages 側で記事本体が 404 だったのは移行前の状態 [2026-07-02]。本プロジェクトが 02 で参照した chap1/chap2 は git 履歴から復元した**旧草稿** |
 | 由来 | ゲーム内実験 (BU 連鎖の再現性検証) 主体 + 将来デコンパイル解析を計画。対象バージョン非明記 |
 | 信頼度 | 概念体系としては中〜高、数値・順序の一次典拠としては**現状使えない** (未公開・草稿・査読なし)。草稿の内容は wiki 既知知識と整合。なお草稿の「BEC は tick 最終盤」はデコンパイルと不整合が確認された (02 の棄却済み欄参照) |
-| ライセンス | **不明 (LICENSE なし)** → 著作権保留として転載不可。用語・概念の参照のみ |
-| 使い方 | P5 監視 (II-PrOrd / II-UpOrd / II-Locat / VII-Bug 公開時に日本語圏最有力になる見込み) + 概念語彙 (PLC/STC/BEC、BU/SU/CU、powered/activated 分離) とエッジケースチェックリストの供給源 |
+| ライセンス | **CC BY 4.0** [確定 2026-09-13 著者明記]。共有・改変・商用可。条件はクレジット / ライセンスへのリンク / 改変した場合はその旨。指定の書式: `Frouts, "ArcFrout" (https://enokilovin.github.io/ArcFrout)`。それ以前 (〜2026-09-12) はライセンス不明として事実参照のみで扱っていた |
+| 使い方 | P5 監視 (II-PrOrd / II-UpOrd / II-Locat / VII-Bug。章番号は移行後も同じ) + 概念語彙 (PLC/STC/BEC、BU/SU/CU、powered/activated 分離) とエッジケースチェックリストの供給源 |
 
 ## 5. enokilovin note 記事群 (全 3 本)
 
 | 項目 | 内容 |
 |---|---|
-| URL | https://note.com/enokilovin/n/n6a8033e8d0e7 (全体構想案)、https://note.com/enokilovin/n/nc2952f9d228c (II-07 赤石記述法)、HOME |
+| URL | https://note.com/enokilovin/n/n6a8033e8d0e7 (全体構想案)、https://note.com/enokilovin/n/nc2952f9d228c (II-07 赤石記述法。**現在は ArcFrout 本体の `II-ChGph` に収録**)、HOME |
 | カバー範囲 | 7 章構成の目次 (対象 Java 1.12〜1.20)、BU/SU/CU/SF 分類、RSC 記法、オブザーバー→コンパレーターのパルス飲み込み例、MC 番号付き既知バグ 7 件 (MC-2340/3703/11193/54711/81098/189954/231071) |
-| 由来 | 実験 + DecompilerMC 使用を明言。II-07 自体は経験則ベースで著者自身が「実験的」と留保 |
+| 由来 | 実験 + DecompilerMC 使用を明言。II-07 (現 ArcFrout `II-ChGph`) 自体は経験則ベースで著者自身が「実験的」と留保 (note 記事時点の記述) |
 | 信頼度 | 現象の指摘・用語としては中〜高。パルス飲み込み例はデコンパイル (ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER) で**裏付け済み** [確定] |
-| ライセンス | 不明 (note 規約、著者帰属) → 転載不可、事実参照のみ |
+| ライセンス | 不明 (note 規約、著者帰属) → 転載不可、事実参照のみ。**ArcFrout の CC BY 4.0 は「この文書 ArcFrout」が対象と明記されており、別の公開物である note 記事には据え置く**。同じ内容は ArcFrout 本体 (`II-ChGph`) にも収録されたので、今後の出典は本体を優先する |
 | 使い方 | P1 テストケース供給 (パルス飲み込み、MC 番号バグ) + P2 トレースログ書式 (RSC 記法) の参考 |
 
 ## 6. fabric-carpet (gnembon) + バニラ /tick
@@ -212,5 +212,5 @@ Minecraft EULA (https://www.minecraft.net/en-us/eula, /ja-jp/eula)、Microsoft �
 ## 情報源運用の要点
 
 1. **仕様の最終典拠は常に公式 jar のローカルデコンパイル** (26.x なら非難読化 jar 直読)。Wiki/techmcdocs は入口と突合用。
-2. **転載可否**: MIT (carpet, MCHPRS, rubix_mod, chiraag-SubTick, Alternate Current, **RSMM**) のみコード/テキスト流用可。CC BY-NC-SA (wiki) は条件付き。GPL/LGPL (Pumpkin, HLPtool, lntricate-subtick, **Carpet-TIS-Addition=LGPL-3.0**) は読解・外部 mod 実行のみ (派生の配布は各コピーレフト条件に従う)。無ライセンス (ArcFrout, note, techmcdocs, MC-ticker, Mordritch) は事実参照のみ。**いずれの検証ツールでも「観測された挙動・更新順という事実」の fixture 化は著作権対象外で自由** (03 参照)。
+2. **転載可否**: MIT (carpet, MCHPRS, rubix_mod, chiraag-SubTick, Alternate Current, **RSMM**) のみコード/テキスト流用可。CC BY-NC-SA (wiki) は条件付き。GPL/LGPL (Pumpkin, HLPtool, lntricate-subtick, **Carpet-TIS-Addition=LGPL-3.0**) は読解・外部 mod 実行のみ (派生の配布は各コピーレフト条件に従う)。**CC BY 4.0 (ArcFrout, 2026-09-13〜) はクレジット・ライセンスリンク・改変の明示を条件に転載・改変可**。無ライセンス (note, techmcdocs, MC-ticker, Mordritch) は事実参照のみ。**いずれの検証ツールでも「観測された挙動・更新順という事実」の fixture 化は著作権対象外で自由** (03 参照)。
 3. **バージョン軸**: 検証 mod は 1.20.1 (lntricate-subtick) / 1.20.4 (MCHPRS) まで、ワイヤ更新順刷新 (Orientation) は 1.21.2+ だが **experimental flag 付きで既定挙動は 26.2 現在も 1.21.1 と同一** (#15)、非難読化 jar は 26.x〜。対象バージョンは**典拠 1.21.1 + 26.x 併読**で確定 (CONTRIBUTING.md / 04 §4.1)。

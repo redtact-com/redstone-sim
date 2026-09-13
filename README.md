@@ -80,3 +80,8 @@ npm run typecheck    # packages の型チェック
 自動フォールバックします。
 
 > 同梱は**作者の了解のもと**で行っています (作者はプロジェクト所有者の知人)。
+
+トレース出力の記法 ([docs/research/08_trace-notation.md](docs/research/08_trace-notation.md)) は、
+Frouts, "ArcFrout"（赤石基礎論） — <https://enokilovin.github.io/ArcFrout> の赤石記述法を
+本プロジェクト向けに要約・適応したものです (ライセンス: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))。
+仕様の調査でも同資料を参照しています ([docs/research/01_sources.md](docs/research/01_sources.md) §4)。

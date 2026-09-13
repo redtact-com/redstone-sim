@@ -109,7 +109,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 ### 2.4 サブティック順序の具体例: オブザーバー→コンパレーターのパルス飲み込み [確定]
 - ObserverBlock.tick はオン時に自身のオフ tick (NORMAL) を近傍更新より先に登録し、コンパレーターも通常 NORMAL で登録するため、同 tick・同 priority では挿入順 (subTickOrder) によりオブザーバーのオフが先に実行される → **コンパレーターはオブザーバー単体のパルスを通せない**。
 - 例外: コンパレーターが別ダイオードに向く場合は priority -1 になりパルスが通る。
-- 出典: note II-07 (https://note.com/enokilovin/n/nc2952f9d228c) + デコンパイル (ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER) + https://minecraft.wiki/w/Redstone_circuits/Pulse で三重裏付け。
+- 出典: note II-07 (https://note.com/enokilovin/n/nc2952f9d228c。現 ArcFrout `II-ChGph`) + デコンパイル (ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER) + https://minecraft.wiki/w/Redstone_circuits/Pulse で三重裏付け。
 - **→ 回帰テストの最重要ケース。**
 
 ---
@@ -137,7 +137,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 | **CU** (コンパレーター更新) | updateNeighbourForOutputSignal | コンパレーターのみ | コンテナ越し読み取りの根拠 |
 | SF (自己更新) | scheduled self-update | — | [要検証: note 単一源の分類] |
 
-- 出典: https://ja.minecraft.wiki/w/ブロック更新 + ArcFrout chap1 草稿 (I-Upd-01) + note II-07 の 3 源一致。
+- 出典: https://ja.minecraft.wiki/w/ブロック更新 + ArcFrout chap1 草稿 (I-Upd-01) + note II-07 (現 ArcFrout `II-ChGph`) の 3 源一致。
 - 「オブザーバーは PP/SU で起動し NC/BU では起動しない」は**デコンパイルで確定** (批評#7 解消):
   ObserverBlock は `neighborChanged` を一切 override せず (BlockBehaviour 既定 = no-op)、
   `updateShape` (PP 受信) でのみ `startSignal` → tile tick 予約を行う (1.21.1/26.2 で一致) [確定]。
