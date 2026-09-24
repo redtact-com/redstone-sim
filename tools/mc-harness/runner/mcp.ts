@@ -17,7 +17,8 @@ import { z } from 'zod'
 import {
   acquireHarnessLock, releaseHarnessLock, harnessLockHolder, refreshHarnessLock,
 } from './rcon.js'
-import { HarnessSession, isHarnessUp, listFixtures } from './live-session.js'
+import { HarnessSession, isHarnessUp, listFixtures, listCaptureDefs } from './live-session.js'
+import type { SessionKind } from './live-session.js'
 import type { LiveChange } from './live-protocol.js'
 
 /**
@@ -49,7 +50,7 @@ class Holder {
     this.idleTimer = setTimeout(() => this.release('無操作が続いたため'), IDLE_RELEASE_MS)
   }
 
-  async open(name: string, withHidden: boolean): Promise<HarnessSession> {
+  async open(name: string, withHidden: boolean, kind: SessionKind): Promise<HarnessSession> {
     if (this.locked) this.release('開き直しのため')
     const holder = harnessLockHolder()
     if (holder !== null) {
@@ -63,7 +64,7 @@ class Holder {
     // 長く握るのでハートビートを打つ (打たないと 10 分で奪われて応答が混線する)
     this.heartbeat = setInterval(() => refreshHarnessLock(), 60_000)
     try {
-      this.session = await HarnessSession.open(name, { withHidden })
+      this.session = await HarnessSession.open(name, { withHidden, kind })
     } catch (e) {
       this.release('開けなかったため')
       throw e
@@ -122,27 +123,31 @@ export function createServer(): McpServer {
         `ロック: ${lock === null ? 'なし' : `pid=${lock.pid} 経過 ${Math.round(lock.ageMs / 1000)}s`}`
           + (holder.isLocked ? ' (このサーバが保持)' : ''),
         s === null ? '回路: 開いていない' : `回路: ${s.info.name} / tick ${s.tick}`,
-        `開ける回路: ${listFixtures().length} 本 (harness_open に名前を渡す)`,
+        `開ける回路: fixture ${listFixtures().length} 本 / 実回路 ${listCaptureDefs().length} 本`
+          + ' (harness_open に名前と kind を渡す)',
       ].join('\n'))
     },
   )
 
   server.tool(
     'harness_open',
-    'fixture 定義の回路を実機に置いて開く (掃除 → 設置 → settle)。ロックを取る',
+    '回路を実機に置いて開く (掃除 → 設置 → settle)。ロックを取る',
     {
-      name: z.string().describe('fixture 名 (tools/mc-harness/fixtures/<name>.json)'),
+      name: z.string().describe('fixture 名、または実回路のキャプチャ定義名'),
+      kind: z.enum(['fixture', 'capture']).default('fixture')
+        .describe("fixture=fixtures/<name>.json / capture=captures/<name>.def.json (実回路)"),
       withHidden: z.boolean().optional()
         .describe('予約 tick / コンパレーター保持 / クールダウンを保存ファイルから読む (既定 true)'),
     },
-    async ({ name, withHidden }) => {
+    async ({ name, kind, withHidden }) => {
       if (!isHarnessUp()) {
         return text('実機が起きていない。`npm run harness:up` を実行すること')
       }
-      if (!listFixtures().includes(name)) {
-        return text(`そんな fixture は無い: ${name}\n候補: ${listFixtures().slice(0, 20).join(', ')} ...`)
+      const known = kind === 'capture' ? listCaptureDefs() : listFixtures()
+      if (!known.includes(name)) {
+        return text(`そんな ${kind} は無い: ${name}\n候補: ${known.slice(0, 20).join(', ')} ...`)
       }
-      const s = await holder.open(name, withHidden !== false)
+      const s = await holder.open(name, withHidden !== false, kind)
       const h = s.hidden()
       return text([
         `${name} を開いた (tick ${s.tick})`,

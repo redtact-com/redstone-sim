@@ -20,7 +20,7 @@
  * ブラウザが `ERR_INSUFFICIENT_RESOURCES` を返して 2 枚目以降が真っ白になる (実測)。
  *
  * `window.__live` (CLI / E2E から操作。`DemoPage` の `window.__demo` と同じ思想):
- *   - use(pos) / step(n) / reset() / inspect(pos)
+ *   - use(pos) / setblock(pos, block) / step(n) / reset() / inspect(pos)
  *   - getTick() / getDiffs() / getStatus() / getReal() / getSim()
  *
  * このページは**開発時だけ**。`App.tsx` が `import.meta.env.DEV` で囲んでいる。
@@ -39,15 +39,24 @@ type Key = `${number},${number},${number}`
 const keyOf = (p: Pos3D): Key => `${p[0]},${p[1]},${p[2]}`
 const posOf = (k: string): Pos3D => k.split(',').map(Number) as Pos3D
 
-/** 実機の状態マップ → ビューア用スナップショット */
-function toSnapshot(map: BlockMap, region: Fixture['region']): WorldSnapshot {
+/**
+ * 実機の状態マップ → ビューア用スナップショット。
+ *
+ * **描けなかった数も返す**。`mcToSim` が知らないブロックは描き飛ばすしかないが、
+ * 黙って落とすと「実機と sim で絵が違う = 食い違いがある」と誤解する
+ * (実際に circuit1 で 2 ブロックが実機側だけ消えて見えた。状態は一致していた)。
+ */
+function toSnapshot(
+  map: BlockMap, region: Fixture['region'],
+): { snapshot: WorldSnapshot; undrawable: string[] } {
   const blocks = new Map<Key, BlockState>()
+  const undrawable: string[] = []
   for (const [k, state] of Object.entries(map)) {
     let b: BlockState | null = null
-    try { b = mcToSim(state) } catch { b = null }   // sim が知らないブロックは描かない
+    try { b = mcToSim(state) } catch { undrawable.push(`${k} ${state}`) }
     if (b !== null) blocks.set(k as Key, b)
   }
-  return { blocks, bounds: boundsOf(region) }
+  return { snapshot: { blocks, bounds: boundsOf(region) }, undrawable }
 }
 
 const boundsOf = (region: Fixture['region']): WorldSnapshot['bounds'] => ({
@@ -95,6 +104,15 @@ export function LivePage() {
   const [real, setReal] = useState<BlockMap>({})
   const [simState, setSimState] = useState<StateMap>(new Map())
   const [inspected, setInspected] = useState<DiffRow | null>(null)
+  /**
+   * sim を組めなかった理由 (#372)。
+   *
+   * **実機にピストンが動いている最中のブロックがあると組めない**
+   * (`moving_piston` は運んでいる中身が BlockEntity にあって blockstate に出ない)。
+   * キャプチャが「初期状態に moving_piston があれば撮らない」のと同じ理由。
+   * このとき**実機側の表示は続ける** — 実機を見るだけなら sim は要らない
+   */
+  const [simError, setSimError] = useState<string | null>(null)
   // 差分ビューは**既定 OFF**。3 枚同時はテクスチャ取得が枯れる
   const [showDiffView, setShowDiffView] = useState(false)
   /** 真上から見るときのクリック対象レイヤー */
@@ -148,8 +166,7 @@ export function LivePage() {
           comparators: msg.hidden?.comparators,
           cooldowns: msg.hidden?.cooldowns,
         }
-        const { world, authored } = buildFixtureWorld(fx)
-        simRef.current = { fx, world, authored, tick: 0 }
+        // **実機側を先に出す**。sim が組めなくても実機は見られるようにする
         setRegion(msg.session.region)
         // 回路は床 (y=0) の上に組むので、既定は 1 段上を触らせる
         setLayerY(Math.min(msg.session.region.from[1] + 1, msg.session.region.to[1]))
@@ -158,7 +175,16 @@ export function LivePage() {
         setTick(msg.tick)
         setCause('接続')
         setInspected(null)
-        refreshSim()
+        try {
+          const { world, authored } = buildFixtureWorld(fx)
+          simRef.current = { fx, world, authored, tick: 0 }
+          setSimError(null)
+          setSimState(snapshotFixtureRegion(world, fx, authored))
+        } catch (e) {
+          simRef.current = null
+          setSimState(new Map())
+          setSimError(e instanceof Error ? e.message : String(e))
+        }
         return
       }
       if (msg.type === 'frame') {
@@ -214,9 +240,22 @@ export function LivePage() {
     send({ type: 'use', pos })
   }, [refreshSim, send])
 
+  /** 実機に blockstate を置く (レバーを倒す等)。sim にも同じ入力を流す */
+  const setblock = useCallback((pos: Pos3D, block: string) => {
+    const s = simRef.current
+    if (s) {
+      s.fx.inputs.push({ tick: s.tick, pos, action: 'setblock', block })
+      applyFixtureInputsAt(s.world, s.fx, s.tick, s.authored)
+      refreshSim()
+    }
+    send({ type: 'setblock', pos, block })
+  }, [refreshSim, send])
+
   const reset = useCallback(() => send({ type: 'reset' }), [send])
 
-  const diffs = useMemo(() => compare(real, simState), [real, simState])
+  const diffs = useMemo(
+    () => (simError === null ? compare(real, simState) : []), [real, simState, simError],
+  )
   const diffKeys = useMemo(() => diffs.map(d => d.key), [diffs])
 
   // ─── 外から触れる口 (E2E / 手元の確認用) ──────────────────────
@@ -225,6 +264,7 @@ export function LivePage() {
   useEffect(() => {
     const api = {
       use: (pos: Pos3D) => use(pos),
+      setblock: (pos: Pos3D, block: string) => setblock(pos, block),
       step: (n = 1) => step(n),
       reset: () => reset(),
       inspect: (pos: Pos3D) => send({ type: 'inspect', pos }),
@@ -233,13 +273,16 @@ export function LivePage() {
       getDiffs: () => diffs,
       getReal: () => real,
       getSim: () => Object.fromEntries(simState),
+      getUndrawable: () => realView?.undrawable ?? [],
+      getSimError: () => simError,
     }
     ;(window as unknown as { __live: typeof api }).__live = api
   }, [use, step, reset, send, tick, status, diffs, real, simState])
 
-  const realSnapshot = useMemo(
+  const realView = useMemo(
     () => (region ? toSnapshot(real, region) : null), [real, region],
   )
+  const realSnapshot = realView?.snapshot ?? null
   const simSnapshot = useMemo(() => {
     const s = simRef.current
     if (!s || !region) return null
@@ -265,9 +308,18 @@ export function LivePage() {
         <span>接続: {status} <span style={{ color: '#888' }}>({wsUrl})</span></span>
         <span>tick {tick}</span>
         <span style={{ color: '#888' }}>{cause}</span>
-        <span style={{ color: diffs.length === 0 ? '#5c5' : '#f66' }}>
-          食い違い {diffs.length} 件
-        </span>
+        {simError === null ? (
+          <span style={{ color: diffs.length === 0 ? '#5c5' : '#f66' }}>
+            食い違い {diffs.length} 件
+          </span>
+        ) : (
+          <span style={{ color: '#fa0' }}>sim を組めない</span>
+        )}
+        {realView && realView.undrawable.length > 0 && (
+          <span style={{ color: '#fa0' }} title={realView.undrawable.slice(0, 10).join('\n')}>
+            描けない {realView.undrawable.length} 個
+          </span>
+        )}
         <button onClick={() => step(1)}>1 tick</button>
         <button onClick={() => step(8)}>8 tick</button>
         <button onClick={reset}>初期化</button>
@@ -284,6 +336,14 @@ export function LivePage() {
         </label>
       </div>
 
+      {simError !== null && (
+        <p style={{ background: '#3a2a00', border: '1px solid #a70', padding: 8, fontSize: 12 }}>
+          sim を組めない: {simError}
+          <br />
+          実機の表示は続きます。<b>「初期化」を押すか、tick を進めてピストンが止まってから</b>
+          つなぎ直すと sim も出ます。
+        </p>
+      )}
       <p style={{ color: '#888', fontSize: 12 }}>
         左クリック = 実機のレバー等を押す / 右クリック = その座標の状態を読む (y の層が対象)
       </p>
@@ -303,7 +363,7 @@ export function LivePage() {
             />
           </Panel>
         )}
-        {simSnapshot && mounted >= 2 && (
+        {simError === null && simSnapshot && mounted >= 2 && (
           <Panel title="sim">
             <IsometricView
               snapshot={simSnapshot}

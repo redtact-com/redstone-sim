@@ -582,9 +582,28 @@ export interface CaptureOptions {
   quiet?: boolean
 }
 
-export async function capture(defPath: string, opts: CaptureOptions = {}): Promise<Capture> {
-  const log = opts.quiet === true ? () => {} : (...a: unknown[]) => console.log(...a)
-  const def = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
+/**
+ * 実回路を実機に置いて落ち着かせる (#372 で capture() から切り出し)。
+ *
+ * **順序に意味がある**。掃除 → 空回し → 設置 の順でないと前回の予約 tick が
+ * 残って結果が変わり (#240)、本を入れ直さないと書見台の出力が張り付き (#240)、
+ * moving_piston が残ったまま撮ると初期状態を sim 側で復元できない (#244 / #248)。
+ * どれも 1 周無駄にして分かったことなので、**ライブ観測 (#372) とキャプチャが
+ * 同じ関数を呼ぶ**形にしてある (写経すると必ずずれる)。
+ */
+export async function placeCircuit(
+  def: CaptureDef,
+  log: (...a: unknown[]) => void = () => {},
+): Promise<{
+  blocks: Awaited<ReturnType<typeof loadCircuit>>['blocks']
+  region: CaptureRegion
+  fullRegion: CaptureRegion
+  players: CaptureDefPlayer[]
+  /** 実機へ入れたコンテナの中身 (キャプチャ側が「実機から読み直した値」と比べる) */
+  placeItems: { pos: [number, number, number]; slots: { slot: number; id: string; count: number }[] }[]
+  /** 入れ直した書見台の本 (blockstate に出ないのでキャプチャに載せる) */
+  lecternBooks: ReturnType<typeof collectLecternBooks>['books']
+}> {
   const { blocks, region, fullRegion, missing } = await loadCircuit(def)
   log(`[capture] ${def.name}: ${blocks.length} ブロック / region ${region.from} - ${region.to}`)
   if (missing.length > 0) {
@@ -681,6 +700,13 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     rcon('player', p.name, 'spawn', 'at', String(p.spawn[0]), String(p.spawn[1]), String(p.spawn[2]))
     await sleep(300)
   }
+  return { blocks, region, fullRegion, players, placeItems, lecternBooks }
+}
+
+export async function capture(defPath: string, opts: CaptureOptions = {}): Promise<Capture> {
+  const log = opts.quiet === true ? () => {} : (...a: unknown[]) => console.log(...a)
+  const def = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
+  const { blocks, region, players, placeItems, lecternBooks } = await placeCircuit(def, log)
 
   // 5. 記録開始 → 入力を挟みながら tick を進める。
   //

@@ -3,6 +3,7 @@
 //
 // 前提: tools/mc-harness で `docker compose up -d` 済み。
 // 使い方: npm run live -- <fixture名> [--port 8791] [--no-hidden]
+//         npm run live -- --def <キャプチャ定義名>   … 実回路 (#372)
 //
 // 既存の generate.ts / capture.ts は**一発実行**で、走り終わるとロックを返す。
 // こちらは**実機を保持して命令を待つ**。ブラウザ (?live=1) が WebSocket で
@@ -50,9 +51,11 @@ export function parseClientMsg(raw: string): ClientMsg | null {
 
 // ─── セッション ──────────────────────────────────────────────────
 
-async function serve(name: string, port: number, withHidden: boolean): Promise<void> {
-  console.log(`=== ライブ: ${name} ===`)
-  const session = await HarnessSession.open(name, { withHidden })
+async function serve(
+  name: string, port: number, withHidden: boolean, kind: 'fixture' | 'capture',
+): Promise<void> {
+  console.log(`=== ライブ: ${name} (${kind === 'capture' ? '実回路' : 'fixture'}) ===`)
+  const session = await HarnessSession.open(name, { withHidden, kind })
 
   const wss = new WebSocketServer({ host: '127.0.0.1', port })
 
@@ -167,12 +170,15 @@ async function main(): Promise<void> {
   const name = args.find(a => !a.startsWith('-'))
   if (name === undefined) {
     console.error('使い方: npm run live -- <fixture名> [--port 8791] [--no-hidden]')
+    console.error('        npm run live -- --def <キャプチャ定義名>   (実回路)')
     process.exit(1)
   }
+  // **自動判定しない**。同名があったときにどちらを開いたか分からなくなる
+  const kind = args.includes('--def') ? 'capture' as const : 'fixture' as const
   const portArg = args.find(a => a.startsWith('--port'))
   const port = portArg ? Number(portArg.split('=')[1] ?? args[args.indexOf(portArg) + 1]) : LIVE_PORT
   const withHidden = !args.includes('--no-hidden')
-  await withHarnessLock(() => serve(name, port, withHidden))
+  await withHarnessLock(() => serve(name, port, withHidden, kind))
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

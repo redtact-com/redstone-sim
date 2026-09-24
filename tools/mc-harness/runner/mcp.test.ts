@@ -11,6 +11,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('./live-session.js', () => ({
   isHarnessUp: vi.fn(() => false),
   listFixtures: vi.fn(() => ['repeater-delay-1', 'torch-basic']),
+  listCaptureDefs: vi.fn(() => ['circuit1', 'runa-open-short']),
   HarnessSession: { open: vi.fn() },
 }))
 vi.mock('./rcon.js', () => ({
@@ -75,6 +76,23 @@ describe('実機が落ちているとき', () => {
 })
 
 describe('引数の検査', () => {
+  it('実回路 (capture) も開ける', async () => {
+    const client = await connect()
+    const t = (await client.listTools()).tools.find(x => x.name === 'harness_open')
+    expect(JSON.stringify(t?.inputSchema)).toContain('capture')
+  })
+
+  it('無い実回路は capture の候補を添えて返す', async () => {
+    const { isHarnessUp } = await import('./live-session.js')
+    vi.mocked(isHarnessUp).mockReturnValueOnce(true)
+    const client = await connect()
+    const out = textOf(await client.callTool({
+      name: 'harness_open', arguments: { name: '無い', kind: 'capture' },
+    }))
+    expect(out).toContain('そんな capture は無い')
+    expect(out).toContain('circuit1')
+  })
+
   it('無い fixture は候補を添えて返す', async () => {
     const { isHarnessUp } = await import('./live-session.js')
     vi.mocked(isHarnessUp).mockReturnValueOnce(true)
