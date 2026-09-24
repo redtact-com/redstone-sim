@@ -5,6 +5,7 @@
 //   /script in dump run fx_setup()          … shared/fixture.json を読み without_updates で設置
 //   /script in dump run fx_settle()         … 全ブロックに update をかけ authored 状態の安定性を確認
 //   /script in dump run fx_settle_comparators() … コンパレーターだけ update (schematic 用 #376)
+//   /script in dump run fx_state([x,y,z])  … 1 ブロックの blockstate を読む
 //   /script in dump run fx_dump(<t>)        … 対象領域を走査し tick t のスナップショットを蓄積
 //   /script in dump run fx_save('<name>')   … 蓄積結果を shared/result.json へ書き出し
 //
@@ -33,6 +34,13 @@ _canon(x, y, z) -> (
     name,
     str('%s[%s]', name, join(',', map(ks, str('%s=%s', _, get(props, _)))))
   )
+);
+
+// ── 1 ブロックだけ読む (#378 の空振り判定) ───────────────────────
+// `str(block(...))` は props を落とすので使えない (face/facing が見えない)。
+fx_state(pos) -> (
+  s = _canon(pos:0, pos:1, pos:2);
+  if(s == null, 'air', s)
 );
 
 // ── 領域走査: {'x,y,z' -> canon} (air は含めない) ────────────────

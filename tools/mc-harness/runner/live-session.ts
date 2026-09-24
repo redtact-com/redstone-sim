@@ -12,6 +12,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMcState } from '@redstone/sim'
 import { rcon, scarpet, reloadDumpApp, sleep } from './rcon.js'
+import { pressBlock, readState, aimArgs, standCandidates, type Pos3, type PressResult } from './aim.js'
 import {
   emitAttachedSupportUpdate, placeCircuit, splitDrift, scanLiveRegion,
   type CaptureDef, type CaptureDefPlayer,
@@ -344,6 +345,18 @@ export class HarnessSession {
     return changes
   }
 
+  /**
+   * その座標に立てるか (足元と頭の 2 マスが空いているか)。
+   *
+   * 最後に読んだ盤面で見る。**埋まっている所へ tp すると窒息して死ぬ**ので、
+   * 候補を絞るのに要る
+   */
+  private canStand(p: Pos3): boolean {
+    const cell = (dy: number): string =>
+      this.prev[[Math.floor(p[0]), Math.floor(p[1]) + dy, Math.floor(p[2])].join(',')] ?? 'air'
+    return cell(0) === 'air' && cell(1) === 'air'
+  }
+
   async use(pos: [number, number, number]): Promise<LiveChange[]> {
     // 実回路は定義が持つ fake player を使う (fixture は固定名 GT)
     const who = this.kind === 'capture' ? this.players[0]?.name : PLAYER_NAME
@@ -351,13 +364,50 @@ export class HarnessSession {
       throw new Error(`${this.def.name} には players が無いので押せない (定義に players を足すこと)`)
     }
     this.announcer.say(`レバー等を押します (${pos.join(',')})`, { big: true })
-    const [lx, ly, lz] = lookTarget(pos, this.info.lookY)
-    rcon('player', who, 'look', 'at', lx, ly, lz)
-    await sleep(200)
-    rcon('player', who, 'use', 'once')
-    await sleep(200)
+    // fixture は定義の `lookAt` の Y 小数部が正 (#157)。実回路はブロック中心から始め、
+    // 外したら形状に合わせて狙い直す (#378)
+    const state = readState(pos)
+    const firstAim = lookTarget(pos, this.info.lookY).map(Number) as Pos3
+    const stands = standCandidates(pos, state).filter(p => this.canStand(p))
+    const press = async (warnOnFail: boolean): Promise<PressResult> => pressBlock(pos, state, {
+      use: async aim => {
+        rcon('player', who, 'look', 'at', ...aimArgs(aim))
+        await sleep(200)
+        rcon('player', who, 'use', 'once')
+        await sleep(200)
+      },
+      read: () => readState(pos),
+      log: msg => console.error(msg),
+    }, { firstAim, warnOnFail })
+
+    // 立ち位置を変える手が残っているうちは警告を出さない
+    let result = await press(stands.length === 0)
+    // **届いていないなら立ち位置を変える** (#378)。
+    // 狙点を直しても、定義の spawn が遠ければ押せない
+    // (エレベーターの呼びボタンは y=59 で fake player は y=6 に湧く)。
+    // ライブ・MCP は人が触っている場なので動かしてよい。
+    // キャプチャは tick 精度のため動かさない (`tp` 入力を書く)
+    if (result.responded === false) {
+      for (const [i, at] of stands.entries()) {
+        console.error(`[aim] ${who} を ${at.join(',')} へ動かして押し直す (${i + 1}/${stands.length})`)
+        rcon('tp', who, ...aimArgs(at))
+        await sleep(300)
+        result = await press(i === stands.length - 1)
+        if (result.responded !== false) {
+          this.announcer.say(`${who} が ${at.map(n => Math.floor(n)).join(',')} へ移動しました`)
+          break
+        }
+      }
+    }
+
     const changes = this.publish()
-    this.announcer.say(`▶ 押しました (${pos.join(',')})。${changesSummary(changes)}`)
+    if (result.responded === false) {
+      this.announcer.say(
+        `⚠ ${pos.join(',')} を押せませんでした (狙点と立ち位置を変えても反応なし)`,
+        { color: 'red' })
+    } else {
+      this.announcer.say(`▶ 押しました (${pos.join(',')})。${changesSummary(changes)}`)
+    }
     return changes
   }
 
