@@ -155,6 +155,8 @@ export const aimArgs = (p: Pos3): [string, string, string] =>
 export interface PressResult {
   /** 実際に使った狙点 */
   aim: Pos3
+  /** 押すために動かした先 (動かしていなければ null) */
+  movedTo: Pos3 | null
   /** 空振りを検出して狙い直したか */
   retried: boolean
   /**
@@ -165,8 +167,16 @@ export interface PressResult {
 }
 
 export interface PressDeps {
-  /** 照準して 1 回だけ使う */
-  use: (aim: Pos3) => Promise<void>
+  /**
+   * 照準して 1 回だけ使う。
+   *
+   * `moveTo` が付いたら**同じ rcon バッチで先に動かす** (#382)。
+   * `/tick freeze` は**プレイヤーを止めない**ので、足場の無い所に置いた fake player は
+   * 実時間で落ちていく (Runa のドアは壁レバーの前に床が無く、tp してから
+   * 別コマンドで押すと 600 ミリ秒で 1.8 ブロック落ちて外す)。
+   * tp → 照準 → 使用を 1 バッチで送れば落ちる前に押し切れる。
+   */
+  use: (aim: Pos3, moveTo?: Pos3) => Promise<void>
   /** 対象の blockstate を読む (判定に使う。読めなければ undefined) */
   read: () => string | undefined
   log?: (msg: string) => void
@@ -181,28 +191,46 @@ export interface PressDeps {
  */
 export async function pressBlock(
   pos: Pos3, state: string | undefined, deps: PressDeps,
-  opts: { firstAim?: Pos3; warnOnFail?: boolean } = {},
+  opts: { firstAim?: Pos3; warnOnFail?: boolean; stands?: Pos3[] } = {},
 ): Promise<PressResult> {
-  const cands = aimCandidates(pos, state, opts.firstAim)
   const log = deps.log ?? (() => {})
-  let last: PressResult = { aim: cands[0], retried: false, responded: null }
+  const aims = aimCandidates(pos, state, opts.firstAim)
+  const shape = state === undefined ? null : shapeAim(pos, state)
+  let last: PressResult = { aim: aims[0], movedTo: null, retried: false, responded: null }
 
-  for (let i = 0; i < cands.length; i++) {
+  // 1. いまの場所から狙点を変えながら押す
+  for (let i = 0; i < aims.length; i++) {
     const before = deps.read()
-    await deps.use(cands[i])
+    await deps.use(aims[i])
     const responded = didRespond(before, deps.read())
-    last = { aim: cands[i], retried: i > 0, responded }
+    last = { aim: aims[i], movedTo: null, retried: i > 0, responded }
     if (responded !== false) return last
-    if (i + 1 < cands.length) {
+    if (i + 1 < aims.length) {
       log(`[aim] ${pos.join(',')} をセル中心で押せなかった (${before})。`
-        + `形状に合わせて ${cands[i + 1].join(',')} を狙い直す`)
+        + `形状に合わせて ${aims[i + 1].join(',')} を狙い直す`)
     }
   }
 
-  // 呼び元が立ち位置を変えて押し直すつもりなら、ここでは警告しない
+  // 2. それでも駄目なら**動かして押す**。tp と押すのを 1 バッチで送るので
+  //    足場が無くても落ちる前に押し切れる
+  const stands = opts.stands ?? []
+  for (const at of stands) {
+    const aim = shape ?? aims[0]
+    const before = deps.read()
+    await deps.use(aim, at)
+    const responded = didRespond(before, deps.read())
+    last = { aim, movedTo: at, retried: true, responded }
+    if (responded !== false) {
+      log(`[aim] ${pos.join(',')} は ${at.join(',')} へ動かして押した`)
+      return last
+    }
+  }
+
+  // 呼び元が別の手を持っているなら、ここでは警告しない
   if (opts.warnOnFail !== false) {
     log(`[aim] ⚠ ${pos.join(',')} を押せなかった (${state ?? '不明'})。`
-      + 'fake player が facing 側に居るか、視線が遮られていないかを疑うこと')
+      + `狙点 ${aims.length} 通り / 立ち位置 ${stands.length} 通りを試した。`
+      + '視線が遮られていないか、facing 側に立てるかを疑うこと')
   }
   return last
 }

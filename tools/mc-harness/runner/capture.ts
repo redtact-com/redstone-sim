@@ -34,14 +34,14 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
+import { rcon, rconBatch, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture, CaptureItems } from './compare.js'
 import {
   readScheduledTicks, readComparatorOutputs, readHopperCooldowns,
 } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
-import { pressBlock, readState, aimArgs } from './aim.js'
+import { pressBlock, readState, standCandidates } from './aim.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
@@ -201,15 +201,22 @@ export function splitDrift(drift: DriftEntry[]): { structural: DriftEntry[]; sta
   }
 }
 
-/** 2 つの盤面 (座標キー → blockstate 文字列) のズレを取る */
+/**
+ * 2 つの盤面 (座標キー → blockstate 文字列) のズレを取る。
+ *
+ * **「キーが無い」と `'air'` は同じもの**として比べる (#382)。
+ * 片方だけが air を明示していると (キャプチャ側の `authored` は明示することがある)
+ * `undefined !== 'air'` で差分に化け、**表示は両方 `air`** という読めない行が
+ * 大量に出る。Runa で 284〜460 件出ていて、本物のズレ 8 件が埋もれていた。
+ */
 export function diffStates(
   source: Record<string, string>, settled: Record<string, string>,
 ): DriftEntry[] {
   const out: DriftEntry[] = []
   for (const k of new Set([...Object.keys(source), ...Object.keys(settled)])) {
-    if (source[k] !== settled[k]) {
-      out.push({ pos: k, source: source[k] ?? 'air', settled: settled[k] ?? 'air' })
-    }
+    const a = source[k] ?? 'air'
+    const b = settled[k] ?? 'air'
+    if (a !== b) out.push({ pos: k, source: a, settled: b })
   }
   return out
 }
@@ -579,17 +586,22 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
     case 'use': {
       const name = input.player ?? players[0]?.name
       if (!name) throw new Error(`use には fake player が要る (players を定義する): ${input.pos}`)
-      // **まずブロック中心**を狙う (従来と同じ)。外したら形状に合わせて狙い直す (#378)
-      await pressBlock([x, y, z], readState([x, y, z]), {
-        use: async aim => {
-          rcon('player', name, 'look', 'at', ...aimArgs(aim))
-          await sleep(150)
-          rcon('player', name, 'use', 'once')
-          await sleep(150)
+      // **まずブロック中心**を狙う (従来と同じ)。外したら形状に合わせて狙い直し、
+      // それでも駄目なら facing 側へ動かして押す (#378 / #382)。
+      // どれも tick を進めないので、キャプチャの tick 精度は崩れない
+      const state = readState([x, y, z])
+      await pressBlock([x, y, z], state, {
+        use: async (aim, moveTo) => {
+          rconBatch([
+            ...(moveTo === undefined ? [] : [`tp ${name} ${moveTo.join(' ')}`]),
+            `player ${name} look at ${aim.join(' ')}`,
+            `player ${name} use once`,
+          ], { ignoreResponses: true })
+          await sleep(200)
         },
         read: () => readState([x, y, z]),
         log: msg => console.log(msg),
-      })
+        }, { stands: standCandidates([x, y, z], state) })
       break
     }
     case 'setblock':

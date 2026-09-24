@@ -3,6 +3,7 @@
   "source": "Runa.S_closed (1).nbt",
   "ticks": 20,
   "pad": 1,
+  "settle": false,
   "inputs": [
     {
       "tick": 4,
