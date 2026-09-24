@@ -34,14 +34,14 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
+import { rcon, rconBatch, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture, CaptureItems } from './compare.js'
 import {
   readScheduledTicks, readComparatorOutputs, readHopperCooldowns,
 } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
-import { pressBlock, readState, aimArgs } from './aim.js'
+import { pressBlock, readState, standCandidates } from './aim.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
@@ -153,6 +153,28 @@ export interface CaptureDef {
    * 下流のピストンへも波及しない (実測: ファイルとの差 0)。
    */
   settle?: boolean
+  /**
+   * 記録を始める前に空回しする tick 数 (#382)。
+   *
+   * **ファイルが動いている途中の状態で保存されていることがある**。
+   * `Runa.S_opened` は置いた直後の 3 tick で勝手に動き出すので、
+   * そのまま撮ると **tick 0 が「閉まりかけ」**の動画になり、
+   * 入力で何が起きたのか分からなくなる。
+   *
+   * ピストンの停止待ち (`fx_moving`) は**動いているピストンしか見ない**ので、
+   * ダストやオブザーバーだけが動いている間は抜けてしまう。ここで明示的に回す。
+   */
+  warmup?: number
+  /**
+   * 記録を始める**前に**当てる入力 (#382)。`tick` は無視され、書いた順に当たる。
+   *
+   * **ファイルが中途半端な状態で保存されていることがある**。
+   * `Runa.S_closed` はドアが半開き (ドア材が通る 53 マスのうち 25 マスが空) で
+   * 保存されていて、そのまま撮ると「0 tick で既に閉まりかけ」の動画になる。
+   * ここで 1 回動かし切ってから `warmup` で落ち着かせると、
+   * **tick 0 が意味のある状態**になる。
+   */
+  preInputs?: CaptureDefInput[]
 }
 
 // Capture の形は **compare.ts が正**。二重定義するとドリフトして
@@ -201,15 +223,22 @@ export function splitDrift(drift: DriftEntry[]): { structural: DriftEntry[]; sta
   }
 }
 
-/** 2 つの盤面 (座標キー → blockstate 文字列) のズレを取る */
+/**
+ * 2 つの盤面 (座標キー → blockstate 文字列) のズレを取る。
+ *
+ * **「キーが無い」と `'air'` は同じもの**として比べる (#382)。
+ * 片方だけが air を明示していると (キャプチャ側の `authored` は明示することがある)
+ * `undefined !== 'air'` で差分に化け、**表示は両方 `air`** という読めない行が
+ * 大量に出る。Runa で 284〜460 件出ていて、本物のズレ 8 件が埋もれていた。
+ */
 export function diffStates(
   source: Record<string, string>, settled: Record<string, string>,
 ): DriftEntry[] {
   const out: DriftEntry[] = []
   for (const k of new Set([...Object.keys(source), ...Object.keys(settled)])) {
-    if (source[k] !== settled[k]) {
-      out.push({ pos: k, source: source[k] ?? 'air', settled: settled[k] ?? 'air' })
-    }
+    const a = source[k] ?? 'air'
+    const b = settled[k] ?? 'air'
+    if (a !== b) out.push({ pos: k, source: a, settled: b })
   }
   return out
 }
@@ -579,17 +608,26 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
     case 'use': {
       const name = input.player ?? players[0]?.name
       if (!name) throw new Error(`use には fake player が要る (players を定義する): ${input.pos}`)
-      // **まずブロック中心**を狙う (従来と同じ)。外したら形状に合わせて狙い直す (#378)
-      await pressBlock([x, y, z], readState([x, y, z]), {
-        use: async aim => {
-          rcon('player', name, 'look', 'at', ...aimArgs(aim))
-          await sleep(150)
-          rcon('player', name, 'use', 'once')
-          await sleep(150)
+      // **まずブロック中心**を狙う (従来と同じ)。外したら形状に合わせて狙い直し、
+      // それでも駄目なら facing 側へ動かして押す (#378 / #382)。
+      // どれも tick を進めないので、キャプチャの tick 精度は崩れない
+      const state = readState([x, y, z])
+      await pressBlock([x, y, z], state, {
+        use: async (aim, moveTo) => {
+          rconBatch([
+            // spawn も撃つ (足場が無いと落ちて死んでいることがある。生きていれば何も起きない)
+            ...(moveTo === undefined ? [] : [
+              `player ${name} spawn at ${moveTo.join(' ')}`,
+              `tp ${name} ${moveTo.join(' ')}`,
+            ]),
+            `player ${name} look at ${aim.join(' ')}`,
+            `player ${name} use once`,
+          ], { ignoreResponses: true })
+          await sleep(200)
         },
         read: () => readState([x, y, z]),
         log: msg => console.log(msg),
-      })
+        }, { stands: standCandidates([x, y, z], state) })
       break
     }
     case 'setblock':
@@ -796,11 +834,28 @@ export async function placeCircuit(
     log(`[capture] 元ファイルと状態だけのズレ ${stateOnly.length} か所 (実機を採用)`)
   }
 
+  // 3.6 **記録を始める前の入力** (#382)。中途半端な状態で保存されたファイルを
+  // 動かし切ってから撮るのに使う。プレイヤーが要るので 4 の後に回す
+
+  // 3.7 **記録を始める前に空回しする** (#382)。
+  // ファイルが動いている途中の状態で保存されていると tick 0 が
+  // 「閉まりかけ」になり、入力で何が起きたのか分からなくなる
   // 4. プレイヤーを置く
   const players = def.players ?? []
   for (const p of players) {
     rcon('player', p.name, 'spawn', 'at', String(p.spawn[0]), String(p.spawn[1]), String(p.spawn[2]))
     await sleep(300)
+  }
+
+  // 5. 記録前の入力 → 空回し
+  for (const input of def.preInputs ?? []) {
+    log(`[capture] 記録前の入力: ${input.action} ${input.pos.join(',')}`)
+    await applyInput(input, players)
+  }
+  const warmup = def.warmup ?? 0
+  if (warmup > 0) {
+    log(`[capture] 記録前に ${warmup} tick 空回しする (warmup)`)
+    await waitForDrain(warmup)
   }
   return { blocks, region, fullRegion, players, placeItems, lecternBooks, drift }
 }

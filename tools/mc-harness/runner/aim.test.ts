@@ -85,6 +85,15 @@ describe('空振りの判定', () => {
     expect(didRespond(on, on)).toBeNull()
   })
 
+  it('**ON のレバーは判定できる** (倒すと反転するため)', () => {
+    // ここをボタンと一緒に「判定できない」にしていたため、
+    // ON のレバーを OFF にする入力が狙い直しも移動もせず空振りしていた
+    const on = 'lever[face=wall,facing=north,powered=true]'
+    const off = 'lever[face=wall,facing=north,powered=false]'
+    expect(didRespond(on, off)).toBe(true)
+    expect(didRespond(on, on)).toBe(false)
+  })
+
   it('ボタン・レバー以外は判定しない', () => {
     expect(didRespond('oak_door[facing=north,open=false]', 'oak_door[facing=north,open=true]'))
       .toBeNull()
@@ -104,7 +113,36 @@ describe('pressBlock', () => {
     })
     expect(aims).toEqual([[1.5, 59.5, 8.5]])
     expect(r.retried).toBe(false)
+    expect(r.movedTo).toBeNull()
     expect(r.responded).toBe(true)
+  })
+
+  it('**狙点を使い切ったら動かして押す**。tp は同じ呼びで渡る', async () => {
+    const calls: [Pos3, Pos3 | undefined][] = []
+    let state = wall('false')
+    const stands: Pos3[] = [[1.5, 58, 7.5], [1.5, 58, 6.5]]
+    const r = await pressBlock(POS, state, {
+      // 動かさないと当たらない実機を模す
+      use: async (aim, moveTo) => {
+        calls.push([aim, moveTo])
+        if (moveTo !== undefined && moveTo[2] === 7.5) state = wall('true')
+      },
+      read: () => state,
+    }, { stands })
+    expect(calls.map(c => c[1])).toEqual([undefined, undefined, stands[0]])
+    expect(r.movedTo).toEqual(stands[0])
+    expect(r.responded).toBe(true)
+  })
+
+  it('立ち位置も使い切ったら警告する', async () => {
+    const logs: string[] = []
+    const r = await pressBlock(POS, wall('false'), {
+      use: async () => {},
+      read: () => wall('false'),
+      log: m => logs.push(m),
+    }, { stands: [[1.5, 58, 7.5]] })
+    expect(r.responded).toBe(false)
+    expect(logs.some(m => m.includes('⚠') && m.includes('立ち位置 1 通り'))).toBe(true)
   })
 
   it('外したら形状に合わせて狙い直す', async () => {
