@@ -44,6 +44,14 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return isPos(m.pos) ? { type: 'inspect', id: m.id, pos: m.pos } : null
     case 'reset':
       return { type: 'reset', id: m.id }
+    case 'say':
+      return typeof m.text === 'string' && m.text.length > 0
+        ? {
+            type: 'say', id: m.id, text: m.text,
+            big: m.big === true,
+            countdown: typeof m.countdown === 'number' ? Math.min(10, Math.max(0, Math.floor(m.countdown))) : undefined,
+          }
+        : null
     default:
       return null
   }
@@ -130,6 +138,9 @@ async function serve(
           case 'reset':
             await session.reset()
             broadcast(hello())
+            break
+          case 'say':
+            await session.say(msg.text, { big: msg.big, countdown: msg.countdown })
             break
         }
         send(ws, { type: 'ack', id: msg.id })

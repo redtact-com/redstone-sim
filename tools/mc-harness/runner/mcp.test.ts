@@ -41,8 +41,9 @@ describe('道具立て', () => {
     const client = await connect()
     const names = (await client.listTools()).tools.map(t => t.name).sort()
     expect(names).toEqual([
-      'harness_close', 'harness_inspect', 'harness_open', 'harness_reset',
-      'harness_scan', 'harness_setblock', 'harness_status', 'harness_step', 'harness_use',
+      'harness_announce', 'harness_close', 'harness_inspect', 'harness_open', 'harness_reset',
+      'harness_say', 'harness_scan', 'harness_setblock', 'harness_status', 'harness_step',
+      'harness_use',
     ])
   })
 
@@ -118,6 +119,23 @@ describe('引数の検査', () => {
     const client = await connect()
     const r = await client.callTool({ name: 'harness_step', arguments: { n: 1 } })
     expect(textOf(r) + JSON.stringify(r)).toContain('harness_open')
+  })
+})
+
+describe('合図 (#374)', () => {
+  it('文面・big・カウントダウンを受ける', async () => {
+    const client = await connect()
+    const t = (await client.listTools()).tools.find(x => x.name === 'harness_say')
+    const schema = JSON.stringify(t?.inputSchema)
+    expect(schema).toContain('text')
+    expect(schema).toContain('big')
+    expect(schema).toContain('countdown')
+  })
+
+  it('自動通知の切り替えがある', async () => {
+    const client = await connect()
+    const t = (await client.listTools()).tools.find(x => x.name === 'harness_announce')
+    expect(t).toBeTruthy()
   })
 })
 

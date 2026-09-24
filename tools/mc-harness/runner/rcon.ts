@@ -101,8 +101,14 @@ export function rcon(...args: string[]): string {
  * 戻り値は応答の行配列 (コマンドと同じ並び)。
  * `script run` のような**複数行応答のコマンドも混ぜない**こと (行と要素の対応がずれる。
  * ずれた場合は警告を出すが、対応付けは呼び出し側で保証すること)。
+ *
+ * **応答を使わないなら `ignoreResponses: true`** を渡す (#374)。
+ * `tellraw` / `title` は複数行返すので、警告だけが出て邪魔になる。
  */
-export function rconBatch(cmds: string[]): string[] {
+export function rconBatch(
+  cmds: string[],
+  opts: { ignoreResponses?: boolean } = {},
+): string[] {
   if (cmds.length === 0) return []
   for (const c of cmds) assertCommandLen(c)
   const input = cmds.join('\n') + '\n'
@@ -115,7 +121,7 @@ export function rconBatch(cmds: string[]): string[] {
   // 空行を一括で捨てると以降の対応がずれる)
   const body = out.endsWith('\n') ? out.slice(0, -1) : out
   const lines = body === '' ? [] : body.split('\n').map(l => l.trim())
-  if (lines.length !== cmds.length) {
+  if (lines.length !== cmds.length && opts.ignoreResponses !== true) {
     console.warn(
       `[rconBatch] 応答行数がコマンド数と一致しない (cmds=${cmds.length} lines=${lines.length})。`
       + '複数行応答のコマンドが混ざっている可能性がある',
