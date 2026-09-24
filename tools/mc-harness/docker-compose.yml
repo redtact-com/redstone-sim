@@ -11,6 +11,16 @@ services:
   mc:
     image: itzg/minecraft-server:java21
     container_name: redstone-sim-mc-harness
+    # ゲームポートだけを**ホストのループバック限定**で公開する (#368)。
+    #
+    # `- "25565:25565"` と書くと 0.0.0.0 に開く。WSL2 のポートは Windows 側へも
+    # 転送されるので、同じ LAN の誰でも入れてしまう。
+    # **`ONLINE_MODE: "FALSE"`** なので認証も無く、任意の名前で入れる —
+    # つまり `127.0.0.1:` を付けることが唯一の防壁になっている。
+    #
+    # **rcon (25575) は公開しない**。操作は `docker compose exec mc rcon-cli` 経由。
+    ports:
+      - "127.0.0.1:25565:25565"
     environment:
       EULA: "TRUE"
       TYPE: FABRIC
