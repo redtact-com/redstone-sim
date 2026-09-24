@@ -153,6 +153,28 @@ export interface CaptureDef {
    * 下流のピストンへも波及しない (実測: ファイルとの差 0)。
    */
   settle?: boolean
+  /**
+   * 記録を始める前に空回しする tick 数 (#382)。
+   *
+   * **ファイルが動いている途中の状態で保存されていることがある**。
+   * `Runa.S_opened` は置いた直後の 3 tick で勝手に動き出すので、
+   * そのまま撮ると **tick 0 が「閉まりかけ」**の動画になり、
+   * 入力で何が起きたのか分からなくなる。
+   *
+   * ピストンの停止待ち (`fx_moving`) は**動いているピストンしか見ない**ので、
+   * ダストやオブザーバーだけが動いている間は抜けてしまう。ここで明示的に回す。
+   */
+  warmup?: number
+  /**
+   * 記録を始める**前に**当てる入力 (#382)。`tick` は無視され、書いた順に当たる。
+   *
+   * **ファイルが中途半端な状態で保存されていることがある**。
+   * `Runa.S_closed` はドアが半開き (ドア材が通る 53 マスのうち 25 マスが空) で
+   * 保存されていて、そのまま撮ると「0 tick で既に閉まりかけ」の動画になる。
+   * ここで 1 回動かし切ってから `warmup` で落ち着かせると、
+   * **tick 0 が意味のある状態**になる。
+   */
+  preInputs?: CaptureDefInput[]
 }
 
 // Capture の形は **compare.ts が正**。二重定義するとドリフトして
@@ -812,11 +834,28 @@ export async function placeCircuit(
     log(`[capture] 元ファイルと状態だけのズレ ${stateOnly.length} か所 (実機を採用)`)
   }
 
+  // 3.6 **記録を始める前の入力** (#382)。中途半端な状態で保存されたファイルを
+  // 動かし切ってから撮るのに使う。プレイヤーが要るので 4 の後に回す
+
+  // 3.7 **記録を始める前に空回しする** (#382)。
+  // ファイルが動いている途中の状態で保存されていると tick 0 が
+  // 「閉まりかけ」になり、入力で何が起きたのか分からなくなる
   // 4. プレイヤーを置く
   const players = def.players ?? []
   for (const p of players) {
     rcon('player', p.name, 'spawn', 'at', String(p.spawn[0]), String(p.spawn[1]), String(p.spawn[2]))
     await sleep(300)
+  }
+
+  // 5. 記録前の入力 → 空回し
+  for (const input of def.preInputs ?? []) {
+    log(`[capture] 記録前の入力: ${input.action} ${input.pos.join(',')}`)
+    await applyInput(input, players)
+  }
+  const warmup = def.warmup ?? 0
+  if (warmup > 0) {
+    log(`[capture] 記録前に ${warmup} tick 空回しする (warmup)`)
+    await waitForDrain(warmup)
   }
   return { blocks, region, fullRegion, players, placeItems, lecternBooks, drift }
 }

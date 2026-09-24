@@ -85,6 +85,15 @@ describe('空振りの判定', () => {
     expect(didRespond(on, on)).toBeNull()
   })
 
+  it('**ON のレバーは判定できる** (倒すと反転するため)', () => {
+    // ここをボタンと一緒に「判定できない」にしていたため、
+    // ON のレバーを OFF にする入力が狙い直しも移動もせず空振りしていた
+    const on = 'lever[face=wall,facing=north,powered=true]'
+    const off = 'lever[face=wall,facing=north,powered=false]'
+    expect(didRespond(on, off)).toBe(true)
+    expect(didRespond(on, on)).toBe(false)
+  })
+
   it('ボタン・レバー以外は判定しない', () => {
     expect(didRespond('oak_door[facing=north,open=false]', 'oak_door[facing=north,open=true]'))
       .toBeNull()

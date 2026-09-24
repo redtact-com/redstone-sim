@@ -136,15 +136,20 @@ export function aimCandidates(
 /**
  * `use` が当たったか。
  *
- * ボタンもレバーも押せれば `powered` が変わる。**押す前から `powered=true`
- * のボタン**は押しても `true` のままなので、その場合は判定できない
- * (`null` を返して「分からない」と伝える。空振り扱いにすると
- * 連打したときに毎回警告が出る)。
+ * ボタンもレバーも押せれば `powered` が変わる。ただし**押す前から `powered=true`
+ * のボタン**は押しても `true` のままなので判定できない (`null` を返して
+ * 「分からない」と伝える。空振り扱いにすると連打で毎回警告が出る)。
+ *
+ * **レバーは倒すと反転するので、ON でも判定できる** (#382)。
+ * ここをボタンと一緒に扱っていたため、ON のレバーを OFF にする入力が
+ * 「判定できない」で 1 回目の狙点のまま返り、**狙い直しも移動もせず空振り**していた
+ * (ドアを開ける動作が撮れなかった原因)。
  */
 export function didRespond(before: string | undefined, after: string | undefined): boolean | null {
   if (before === undefined || after === undefined) return null
   if (!isVerifiable(before)) return null
-  if (parseMcState(before).props.powered === 'true') return null
+  const { name, props } = parseMcState(before)
+  if (name.endsWith('_button') && props.powered === 'true') return null
   return before !== after
 }
 
