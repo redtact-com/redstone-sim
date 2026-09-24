@@ -12,13 +12,14 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMcState } from '@redstone/sim'
 import { rcon, scarpet, reloadDumpApp, sleep } from './rcon.js'
-import { emitAttachedSupportUpdate } from './capture.js'
+import { emitAttachedSupportUpdate, placeCircuit, type CaptureDef, type CaptureDefPlayer } from './capture.js'
 import { ensureWorldSetup } from './world-setup.js'
 import { readScheduledTicks, readComparatorOutputs, readHopperCooldowns } from './scheduled-ticks.js'
 import type { BlockMap, LiveChange, LiveHiddenState, LiveSessionInfo } from './live-protocol.js'
 
 const harnessDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const fixturesDefDir = join(harnessDir, 'fixtures')
+const capturesDefDir = join(harnessDir, 'captures')
 const sharedDir = join(harnessDir, 'scripts', 'shared')
 const worldDir = join(harnessDir, 'data', 'world')
 
@@ -173,6 +174,18 @@ export function listFixtures(): string[] {
     .sort()
 }
 
+/** キャプチャ定義 (実回路) の一覧 */
+export function listCaptureDefs(): string[] {
+  if (!existsSync(capturesDefDir)) return []
+  return readdirSync(capturesDefDir)
+    .filter(f => f.endsWith('.def.json'))
+    .map(f => f.replace(/\.def\.json$/, ''))
+    .sort()
+}
+
+/** 何を開いているか。**狙点の流儀が違う**ので種類を持ち回る */
+export type SessionKind = 'fixture' | 'capture'
+
 /**
  * 実機を保持したセッション。
  *
@@ -188,12 +201,24 @@ export class HarnessSession {
   private readonly withHidden: boolean
   readonly info: LiveSessionInfo
 
-  private constructor(def: LiveDef, withHidden: boolean) {
+  private constructor(
+    def: LiveDef, withHidden: boolean,
+    private readonly kind: SessionKind = 'fixture',
+    private readonly capDef: CaptureDef | null = null,
+  ) {
     this.def = def
     this.withHidden = withHidden
     this.prev = {}
     this._hidden = null
-    const lookY = def.player ? def.player.lookAt[1] - Math.floor(def.player.lookAt[1]) : 0.5
+    /*
+     * `use` の狙点 (**種類で流儀が違う**)。
+     *
+     * - fixture … `player.lookAt` の Y 小数部を使う (床レバー .35 / 床ボタン .06)
+     * - capture … ブロック中心 (`capture.ts` の applyInput と同じ `+0.5`)
+     */
+    const lookY = kind === 'capture'
+      ? 0.5
+      : def.player ? def.player.lookAt[1] - Math.floor(def.player.lookAt[1]) : 0.5
     this.info = {
       name: def.name,
       mcVersion: '1.21.1',
@@ -206,15 +231,36 @@ export class HarnessSession {
     }
   }
 
-  /** fixture を開く。掃除 → 設置 → settle まで済ませる */
-  static async open(name: string, opts: { withHidden?: boolean } = {}): Promise<HarnessSession> {
+  /**
+   * 回路を開く。掃除 → 設置 → settle まで済ませる。
+   *
+   * - `fixture` … `fixtures/<name>.json` (手書きの小さな回路)
+   * - `capture` … `captures/<name>.def.json` + 回路ファイル (**実回路**)
+   *
+   * **自動判定はしない**。同名があったときにどちらを開いたのか分からなくなる
+   */
+  static async open(
+    name: string, opts: { withHidden?: boolean; kind?: SessionKind } = {},
+  ): Promise<HarnessSession> {
+    const kind = opts.kind ?? 'fixture'
+    ensureWorldSetup()
+    reloadDumpApp()   // dump.sc を読み直す (script load だけでは読み直さない)
+
+    if (kind === 'capture') {
+      const defPath = join(capturesDefDir, `${name}.def.json`)
+      if (!existsSync(defPath)) throw new Error(`キャプチャ定義が無い: ${name}`)
+      const capDef = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
+      capDef.name = name
+      const s = new HarnessSession({ name, region: { from: [0, 0, 0], to: [0, 0, 0] }, blocks: [] }, opts.withHidden !== false, 'capture', capDef)
+      await s.reset()
+      return s
+    }
+
     const defPath = join(fixturesDefDir, `${name}.json`)
     if (!existsSync(defPath)) throw new Error(`fixture 定義が無い: ${name}`)
     const def = JSON.parse(readFileSync(defPath, 'utf-8')) as LiveDef
     def.name = name
-    const s = new HarnessSession(def, opts.withHidden !== false)
-    ensureWorldSetup()
-    reloadDumpApp()   // dump.sc を読み直す (script load だけでは読み直さない)
+    const s = new HarnessSession(def, opts.withHidden !== false, 'fixture')
     await s.reset()
     return s
   }
@@ -228,9 +274,25 @@ export class HarnessSession {
     return this.prev[pos.join(',')] ?? 'air'
   }
 
+  /** 実回路のときの fake player (use に要る)。定義が持っていなければ null */
+  private players: CaptureDefPlayer[] = []
+
   /** 置き直して 0 tick へ */
   async reset(): Promise<void> {
-    await setupCircuit(this.def)
+    if (this.kind === 'capture' && this.capDef !== null) {
+      // **キャプチャと同じ関数**で置く (順序に意味があるので写経しない)
+      const placed = await placeCircuit(this.capDef, (...a) => console.error(...a))
+      this.players = placed.players
+      // 走査範囲は placeCircuit → fx_setup が shared/fixture.json から
+      // global_region に入れているので、こちらで教え直す必要はない
+      this.def.region = { from: placed.region.from, to: placed.region.to }
+      this.info.region = {
+        from: placed.region.from as [number, number, number],
+        to: placed.region.to as [number, number, number],
+      }
+    } else {
+      await setupCircuit(this.def)
+    }
     this._tick = 0
     this.prev = scanRegion()
     this._hidden = this.withHidden ? readHidden(this.def) : null
@@ -246,10 +308,15 @@ export class HarnessSession {
   }
 
   async use(pos: [number, number, number]): Promise<LiveChange[]> {
+    // 実回路は定義が持つ fake player を使う (fixture は固定名 GT)
+    const who = this.kind === 'capture' ? this.players[0]?.name : PLAYER_NAME
+    if (who === undefined) {
+      throw new Error(`${this.def.name} には players が無いので押せない (定義に players を足すこと)`)
+    }
     const [lx, ly, lz] = lookTarget(pos, this.info.lookY)
-    rcon('player', PLAYER_NAME, 'look', 'at', lx, ly, lz)
+    rcon('player', who, 'look', 'at', lx, ly, lz)
     await sleep(200)
-    rcon('player', PLAYER_NAME, 'use', 'once')
+    rcon('player', who, 'use', 'once')
     await sleep(200)
     return this.publish()
   }

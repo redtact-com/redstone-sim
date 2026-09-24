@@ -173,7 +173,8 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 
 ```bash
 npm run harness:up
-npm run live -- repeater-delay-1        # 実機を立てて待機 (--port で番号を変えられる)
+npm run live -- repeater-delay-1        # fixture 定義 (--port で番号を変えられる)
+npm run live -- --def circuit1          # **実回路** (captures/<名前>.def.json) (#372)
 npm run dev                             # 別の端末で
 # → http://localhost:5173/?live=1
 ```
@@ -210,6 +211,31 @@ docker compose exec mc rcon-cli -- op <自分の名前>   # 必要なら
 | 世界は止まって見える | `/tick freeze` 中。`npm run live` の `1 tick` / `8 tick` を押すと動く |
 | **region の外にブロックを置かない** | `fx_setup` の掃除は region + パディングの中だけ。外に残ると予約 tick が残り、同条件で撮り直しても結果がずれる (#240) |
 | 落下に注意 | void superflat なので床の外は空。`MODE: survival` |
+
+### 実回路を開く (#372)
+
+`--def <名前>` で `captures/*.def.json` の実回路を開ける。設置は**キャプチャと同じ関数**
+(`placeCircuit`) を通るので、掃除 → 空回し → 設置 → 中身 → 本 → settle → ピストン停止待ち
+の順序がそのまま効く。
+
+- `use` の狙点は**ブロック中心** (fixture は `player.lookAt` の小数部)。定義が持つ
+  `players[0]` を使うので、`players` の無い定義では押せない (その旨を返す)
+- **ピストンが動いている最中に繋ぐと sim だけ組めない**
+  (`moving_piston は authored に使えません`)。実機の表示は続くので、
+  「初期化」を押すか tick を進めて止まってから繋ぎ直す
+
+#### 所要 (circuit1 / 474 ブロック / region 13x13x9 の実測)
+
+| 操作 | 所要 |
+|---|---|
+| 開く (設置 + settle) | 6.6 秒 |
+| `step 1` | 0.3 秒 |
+| `setblock` | 0.9 秒 |
+| `step 8` | 1.7 秒 |
+| `scan` (読むだけ) | 2 ミリ秒 |
+
+**1 命令ごとに region を全走査する**ので、エレベーター (6393 ブロック) は 1 桁重くなる。
+大きい回路は定義の `keep` で region を縮めて開くこと。
 
 ### ライブ観測の制約
 
