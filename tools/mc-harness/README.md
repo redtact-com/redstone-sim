@@ -186,6 +186,31 @@ npm run dev                             # 別の端末で
 - 接続時に `/save-all flush` して**予約 tick・コンパレーターの保持出力・ホッパーのクールダウン**を
   読み、`trustAuthored` で sim の出発点をそろえる (`--no-hidden` で切れる)
 
+### クライアントで入る (#368)
+
+ライブ観測で操作しながら、**自分のクライアントで世界を見る**こともできる。
+
+```bash
+npm run harness:up
+# Minecraft 1.21.1 (バニラのクライアントでよい) で「マルチプレイ」→ サーバー追加
+#   アドレス: localhost:25565
+docker compose exec mc rcon-cli -- op <自分の名前>   # 必要なら
+```
+
+ゲームポートは **`127.0.0.1` 限定**で公開している (`docker-compose.yml` の `ports`)。
+`ONLINE_MODE: "FALSE"` なので認証は無く、**ループバック限定であることが唯一の防壁**。
+`- "25565:25565"` のように書き換えないこと。rcon (25575) は公開していない。
+
+#### 入るときの注意
+
+| 注意 | 理由 |
+|---|---|
+| **spawn (0, 4, 0) に立ち止まらない** | fake player (GT) の spawn が弾かれ、**`use` 入力が全部空振りする**。原因究明にいちばん時間を使った罠 (README「掃除と残骸」) |
+| **名前に `GT` を使わない** | fake player と同名になり、ハーネスの `player GT kill` / `spawn` が自分を巻き込む |
+| 世界は止まって見える | `/tick freeze` 中。`npm run live` の `1 tick` / `8 tick` を押すと動く |
+| **region の外にブロックを置かない** | `fx_setup` の掃除は region + パディングの中だけ。外に残ると予約 tick が残り、同条件で撮り直しても結果がずれる (#240) |
+| 落下に注意 | void superflat なので床の外は空。`MODE: survival` |
+
 ### ライブ観測の制約
 
 - **真上から (topDown) で描く**。`IsometricView` は 3D のときクリックをカメラ回転に使うので
