@@ -12,7 +12,10 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMcState } from '@redstone/sim'
 import { rcon, scarpet, reloadDumpApp, sleep } from './rcon.js'
-import { emitAttachedSupportUpdate, placeCircuit, type CaptureDef, type CaptureDefPlayer } from './capture.js'
+import {
+  emitAttachedSupportUpdate, placeCircuit, splitDrift, scanLiveRegion,
+  type CaptureDef, type CaptureDefPlayer,
+} from './capture.js'
 import { ensureWorldSetup } from './world-setup.js'
 import { readScheduledTicks, readComparatorOutputs, readHopperCooldowns } from './scheduled-ticks.js'
 import { Announcer, changesSummary } from './announce.js'
@@ -78,14 +81,8 @@ function readCarpetVersion(): string {
   }
 }
 
-/** いまの region を実機から読む。dump.sc が shared/live.json に書いたものを回収する */
-function scanRegion(): BlockMap {
-  scarpet('fx_live_save()')
-  const path = join(sharedDir, 'live.json')
-  if (!existsSync(path)) throw new Error(`live.json が無い: ${path}`)
-  const json = JSON.parse(readFileSync(path, 'utf-8')) as { blocks: BlockMap }
-  return json.blocks ?? {}
-}
+/** いまの region を実機から読む (実装は capture.ts と共有する) */
+const scanRegion = (): BlockMap => scanLiveRegion()
 
 /** 回路を置き直して落ち着かせる。掃除 → 空回し → 設置 の順は capture.ts と同じ理由 (#240) */
 async function setupCircuit(def: LiveDef): Promise<void> {
@@ -305,6 +302,17 @@ export class HarnessSession {
       this.players = placed.players
       // 定義の fake player も観客に数えない (#374)
       this.announcer.exclude(...placed.players.map(p => p.name))
+      // **構造のズレはチャットにも出す** (#376)。
+      // 見ている人にとっては「置いた瞬間に機械が壊れている」という一番知りたい情報で、
+      // ホスト側のログには届かない
+      const { structural } = splitDrift(placed.drift)
+      if (structural.length > 0) {
+        const head = structural.slice(0, 2).map(d => `${d.pos} ${d.source}→${d.settled}`).join(' / ')
+        this.announcer.say(
+          `⚠ 置いた結果が元ファイルと ${structural.length} か所ズレています (${head})`,
+          { color: 'red' },
+        )
+      }
       // 走査範囲は placeCircuit → fx_setup が shared/fixture.json から
       // global_region に入れているので、こちらで教え直す必要はない
       this.def.region = { from: placed.region.from, to: placed.region.to }

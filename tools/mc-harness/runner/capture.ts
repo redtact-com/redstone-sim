@@ -135,6 +135,23 @@ export interface CaptureDef {
    * region に含めたいときに使う。
    */
   keep?: string[]
+  /**
+   * 置いた後に region 全体へ `update()` を撒くか (**省略時 true = 従来どおり**)。
+   *
+   * `false` にするのは `.litematic` など **blockstate に通電状態を持つ回路** (#376)。
+   * 全体に update を撒くと、伸びたまま保存されたピストンが「電源が無いのに伸びている」
+   * と判定されて縮み、**粘着で隣のブロックを引きずる**
+   * (エレベーターのかごが 1 ブロック上にずれた。実測 24 か所)。
+   * ピストンだけ update から外しても、隣のダスト経由で同じことが起きるので直らない。
+   *
+   * 手書き fixture は通電状態を持たないので settle が要る。**既定を変えてはいけない**。
+   *
+   * `false` でも `fx_items` / 本の入れ直しの後は `fx_settle_comparators()` を撃つ
+   * (中身は blockstate に出ないのでコンパレーターに読み直させる必要がある #196)。
+   * コンパレーターは受け身なので、ファイルの出力が正しければ値が変わらず
+   * 下流のピストンへも波及しない (実測: ファイルとの差 0)。
+   */
+  settle?: boolean
 }
 
 // Capture の形は **compare.ts が正**。二重定義するとドリフトして
@@ -158,6 +175,51 @@ function toStateString(name: string, props: Record<string, string>): string {
   const id = name.replace(/^minecraft:/, '')
   const keys = Object.keys(props).sort()
   return keys.length === 0 ? id : `${id}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
+}
+
+/** 元ファイルと実機のズレ 1 件 */
+export interface DriftEntry {
+  pos: string
+  source: string
+  settled: string
+}
+
+/**
+ * ズレを **構造 (ブロックの種類が変わった) と状態だけ** に分ける (#376)。
+ *
+ * 構造のズレは「機械が壊れた」に等しい (ピストンが縮んで粘着ブロックが動いた等)。
+ * 状態だけのズレはダストの強度が計算し直された程度なので害が無いことが多い。
+ * 同じ扱いにしていたため、エレベーターのかごが動いていたのに
+ * ログの 1 行に埋もれて気付かれなかった。
+ */
+export function splitDrift(drift: DriftEntry[]): { structural: DriftEntry[]; stateOnly: DriftEntry[] } {
+  const kind = (s: string): string => s.split('[')[0]
+  return {
+    structural: drift.filter(d => kind(d.source) !== kind(d.settled)),
+    stateOnly: drift.filter(d => kind(d.source) === kind(d.settled)),
+  }
+}
+
+/** 2 つの盤面 (座標キー → blockstate 文字列) のズレを取る */
+export function diffStates(
+  source: Record<string, string>, settled: Record<string, string>,
+): DriftEntry[] {
+  const out: DriftEntry[] = []
+  for (const k of new Set([...Object.keys(source), ...Object.keys(settled)])) {
+    if (source[k] !== settled[k]) {
+      out.push({ pos: k, source: source[k] ?? 'air', settled: settled[k] ?? 'air' })
+    }
+  }
+  return out
+}
+
+/** いまの region を実機から読む (dump.sc が shared/live.json に書いたものを回収する) */
+export function scanLiveRegion(): Record<string, string> {
+  scarpet('fx_live_save()')
+  const path = join(sharedDir, 'live.json')
+  if (!existsSync(path)) throw new Error(`live.json が無い: ${path}`)
+  const json = JSON.parse(readFileSync(path, 'utf-8')) as { blocks?: Record<string, string> }
+  return json.blocks ?? {}
 }
 
 export interface CaptureRegion {
@@ -603,6 +665,8 @@ export async function placeCircuit(
   placeItems: { pos: [number, number, number]; slots: { slot: number; id: string; count: number }[] }[]
   /** 入れ直した書見台の本 (blockstate に出ないのでキャプチャに載せる) */
   lecternBooks: ReturnType<typeof collectLecternBooks>['books']
+  /** 元ファイルと置いた結果のズレ (#376)。構造のズレは呼び元が警告する */
+  drift: DriftEntry[]
 }> {
   const { blocks, region, fullRegion, missing } = await loadCircuit(def)
   log(`[capture] ${def.name}: ${blocks.length} ブロック / region ${region.from} - ${region.to}`)
@@ -656,10 +720,14 @@ export async function placeCircuit(
   rcon('kill', '@e[type=!player]')
   await waitForDrain(DRAIN_TICKS)
   scarpet('fx_setup()')
+  // 全体 settle をするか (def の `settle` 参照。**省略時は従来どおり撒く**)。
+  // 撒かないときも中身の投入後はコンパレーターだけ起こす (#376 / #196)
+  const fullSettle = def.settle !== false
+  const reread = (): void => { scarpet(fullSettle ? 'fx_settle()' : 'fx_settle_comparators()') }
   if (placeItems.length > 0) {
     const n = scarpet('fx_items()')
     log(`[capture] 中身を投入: ${n.trim()}`)
-    scarpet('fx_settle()')   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
+    reread()   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
   }
   if (lecternBooks.length > 0) {
     // set() は blockstate しか作らないので、本は設置の**後**に rcon で入れ直す
@@ -668,9 +736,14 @@ export async function placeCircuit(
       + `(${lecternBooks.slice(0, 3).map(b => `${b.pos.join(',')} ${b.page + 1}/${b.pages}p`).join(' ')})`)
     // コンテナの中身と同じ理由 (#196)。without_updates で置いた後に block entity だけ
     // 変えてもコンパレーターは読みに行かないので、更新を配り直す
-    scarpet('fx_settle()')
+    reread()
   }
-  scarpet('fx_settle()')
+  if (fullSettle) {
+    scarpet('fx_settle()')
+  } else {
+    log('[capture] 全体 settle を飛ばした (settle: false)。'
+      + 'ファイルの通電状態をそのまま実機の初期状態にする')
+  }
   await waitForDrain(8)
 
   // 3. **ピストンが動き終わるまで待つ** (#244)。
@@ -694,13 +767,35 @@ export async function placeCircuit(
     await waitForDrain(1)
   }
 
+  // 3.5 **元ファイルとのズレを置いた直後に見る** (#376)。
+  //
+  // 以前はキャプチャの最後にまとめて見ていたため、「実機を採用」の 1 行に埋もれて
+  // **エレベーターのかごが 1 ブロック動いていたのに誰も気付かなかった**。
+  // ブロックの種類が変わるズレは機械が壊れたのと同じなので、ここで大きく出す。
+  const source: Record<string, string> = {}
+  for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
+  const drift = diffStates(source, scanLiveRegion())
+  const { structural, stateOnly } = splitDrift(drift)
+  if (structural.length > 0) {
+    log(`[capture] ⚠ 置いた結果が元ファイルと構造的に ${structural.length} か所ズレた`
+      + ' (ブロックの種類が変わった = 機械が壊れている可能性がある)')
+    for (const d of structural.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    if (structural.length > 8) log(`    … 他 ${structural.length - 8} 件`)
+    if (def.settle !== false) {
+      log('    settle が原因かもしれない。def に "settle": false を入れて試すこと (#376)')
+    }
+  }
+  if (stateOnly.length > 0) {
+    log(`[capture] 元ファイルと状態だけのズレ ${stateOnly.length} か所 (実機を採用)`)
+  }
+
   // 4. プレイヤーを置く
   const players = def.players ?? []
   for (const p of players) {
     rcon('player', p.name, 'spawn', 'at', String(p.spawn[0]), String(p.spawn[1]), String(p.spawn[2]))
     await sleep(300)
   }
-  return { blocks, region, fullRegion, players, placeItems, lecternBooks }
+  return { blocks, region, fullRegion, players, placeItems, lecternBooks, drift }
 }
 
 export async function capture(defPath: string, opts: CaptureOptions = {}): Promise<Capture> {
@@ -780,17 +875,18 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   }
 
   // 元ファイルとのズレを記録する (落とさない。実機が正)
-  const source: Record<string, string> = {}
-  for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
-  const settleDrift: Capture['settleDrift'] = []
-  for (const k of new Set([...Object.keys(source), ...Object.keys(authored)])) {
-    if (source[k] !== authored[k]) {
-      settleDrift.push({ pos: k, source: source[k] ?? 'air', settled: authored[k] ?? 'air' })
-    }
-  }
+  const sourceStates: Record<string, string> = {}
+  for (const b of blocks) sourceStates[b.pos.join(',')] = toStateString(b.name, b.props)
+  const settleDrift: Capture['settleDrift'] = diffStates(sourceStates, authored)
   if (settleDrift.length > 0) {
-    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
-    for (const d of settleDrift.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    // **構造のズレを分けて出す** (#376)。合計だけ出していたので
+    // 「かごが動いた」が状態のズレに埋もれていた
+    const { structural, stateOnly } = splitDrift(settleDrift)
+    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`
+      + ` — 構造 ${structural.length} / 状態のみ ${stateOnly.length}`)
+    for (const d of [...structural, ...stateOnly].slice(0, 8)) {
+      log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    }
     if (settleDrift.length > 8) log(`    … 他 ${settleDrift.length - 8} 件`)
   }
 
