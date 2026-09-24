@@ -712,6 +712,18 @@ export async function placeCircuit(
 
   // 2. 設置 → 中身 → 安定化
   reloadDumpApp()
+  // **前回の fake player を先に消す** (#239)。
+  //
+  // 消さずに `player <名前> spawn` を撃つと、既に入っている同名のプレイヤーには
+  // 何も起きず、**前回どこに流れ着いたかも分からない位置のまま**になる。
+  // このエレベーターは泡柱で人を押し上げるので、置き直したつもりが
+  // シャフトの上の方に居たり、水没して死ぬ直前だったりする。
+  // そうなると `use` が届かず「ボタンを押せない」に化けて、狙点の問題と見分けが付かない。
+  //
+  // **unfreeze 区間でやる**。freeze 中は player の kill / spawn が保留される
+  rcon('tick', 'unfreeze')
+  for (const p of def.players ?? []) rcon('player', p.name, 'kill')
+  await sleep(300)
   rcon('tick', 'freeze')
   // **掃除 → 空回し → 設置** の順にする (#240)。
   // 続けてやると前回の実行が残した**予約 tick がキューに残ったまま**になり、
