@@ -34,6 +34,10 @@ npm run ground-truth -- <fixture名>   # 1本
 npm run ground-truth -- --all         # 全定義
 npm run ground-truth -- --diff-only <fixture名>  # 実機なしで diff のみ
 
+# 2'. ビューアーで見ながら操作する (#366)
+npm run live -- <fixture名>           # 実機を保持して待機
+npm run dev                            # 別端末 → http://localhost:5173/?live=1
+
 # 3. 終了
 cd tools/mc-harness && docker compose down
 ```
@@ -161,6 +165,39 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 2. `npm run ground-truth -- <name>` — settle 照合に失敗したら実機の教える安定状態に `blocks` を直す
 3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成
 4. `npm test` が通ることを確認してコミット
+
+## ライブ観測 (#366)
+
+実機を保持したまま**ビューアーで見ながら操作する**モード。fixture を作る前の当たり付けや、
+食い違いの原因座標を探すのに使う。
+
+```bash
+npm run harness:up
+npm run live -- repeater-delay-1        # 実機を立てて待機 (--port で番号を変えられる)
+npm run dev                             # 別の端末で
+# → http://localhost:5173/?live=1
+```
+
+- **実機と sim を並べて描き、食い違った座標を 3 枚目の「差分ビュー」に目印ブロックで出す**。
+  blockstate は下の表でも読める
+- 左クリックでレバー等を押し、右クリックでその座標の状態を読む。HUD から `1 tick` / `8 tick` / `初期化`
+- sim は**ブラウザ側で回す**。`buildFixtureWorld` / `applyFixtureInputsAt` /
+  `snapshotFixtureRegion` は CI の fixture テストと同じ関数なので、ここで合えば CI でも同じ系列になる
+- 接続時に `/save-all flush` して**予約 tick・コンパレーターの保持出力・ホッパーのクールダウン**を
+  読み、`trustAuthored` で sim の出発点をそろえる (`--no-hidden` で切れる)
+
+### ライブ観測の制約
+
+- **真上から (topDown) で描く**。`IsometricView` は 3D のときクリックをカメラ回転に使うので
+  `onBlockClick` が発火せず、クリック操作が成立しない。3D でのピッキングは別 issue
+- **パネルは 1 枚ずつ順に mount する**。`IsometricView` はインスタンスごとにテクスチャを
+  取り直す (共有キャッシュが無い) ので、3 枚を同時に出すとブラウザが
+  `ERR_INSUFFICIENT_RESOURCES` を返して 2 枚目以降が真っ白になる。差分ビューは既定 OFF
+- **1 命令ごとに region を全走査する**。fixture 規模なら十分速いが、
+  6393 ブロックのような実回路では 1 命令が数秒かかる (キャプチャ側の差分機構は使っていない)
+- **WebSocket は `127.0.0.1` にしか bind しない**。ライブページも開発ビルドにしか無い
+  (本番 `rdsim.com` に実機操作の口は出ない)
+- 既定ポートは **8791**。8787 は開発機で他のツールと衝突した
 
 ## 食い違いの自動最小化 (minimize)
 
