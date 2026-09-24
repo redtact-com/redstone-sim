@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mc-harness": {
+      "command": "npx",
+      "args": ["tsx", "tools/mc-harness/runner/mcp.ts"],
+      "env": {}
+    }
+  }
+}

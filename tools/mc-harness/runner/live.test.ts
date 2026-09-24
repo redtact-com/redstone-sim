@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { diffBlockMaps, lookTarget, parseClientMsg } from './live.js'
+import { parseClientMsg } from './live.js'
+import { diffBlockMaps, lookTarget } from './live-session.js'
 import { WORLD_SETUP_COMMANDS } from './world-setup.js'
 
 /**

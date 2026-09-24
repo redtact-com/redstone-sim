@@ -224,6 +224,41 @@ docker compose exec mc rcon-cli -- op <自分の名前>   # 必要なら
   (本番 `rdsim.com` に実機操作の口は出ない)
 - 既定ポートは **8791**。8787 は開発機で他のツールと衝突した
 
+## MCP から触る (#369)
+
+ハーネスの操作を MCP の道具として出している。**ロックの直列化**と
+**コマンド長 1014 バイト**の制約が内側に閉じているので、呼ぶ側は座標とブロックだけ考えればよい。
+
+登録はリポジトリ直下の `.mcp.json`。リポジトリを開けば使える (stdio)。
+
+| 道具 | 内容 |
+|---|---|
+| `harness_status` | 実機が起きているか / ロックの持ち主 / 開いている回路 / tick |
+| `harness_open` | fixture を置いて開く (掃除 → 設置 → settle)。**ロックを取る** |
+| `harness_step` | n tick 進める (1〜64)。戻りは変化した座標 |
+| `harness_use` | 座標を押す (レバー・ボタン) |
+| `harness_setblock` | 座標に blockstate を置く (支えへの更新も配る) |
+| `harness_scan` | region 全体 |
+| `harness_inspect` | 1 座標 |
+| `harness_reset` | 置き直して 0 tick へ |
+| `harness_close` | 閉じて**ロックを返す** |
+
+### ロックの約束
+
+MCP サーバは常駐するので、取ったロックを握りっぱなしにすると
+`ground-truth` や `capture` が**10 分間ブロックされる** (残骸とみなされて奪われるまでの時間)。
+そこで:
+
+- `harness_open` でロックを取り、以後 60 秒ごとにハートビートを打つ
+- **無操作が 5 分続いたら自動で返す**。以後の道具は「先に `harness_open` を呼ぶこと」と答える
+- `ground-truth` / `capture` / `live` を回す前は **`harness_close`** を呼ぶ
+- 他プロセスが握っていたら**待たずに** pid と経過を返す
+
+### 長時間走るものは道具にしていない
+
+`capture` と `minimize` は 1 回で数十分かかるので MCP の 1 往復には載らない。
+CLI (`npm run capture` / `npm run gt-minimize`) をそのまま使う。
+
 ## 食い違いの自動最小化 (minimize)
 
 実回路のキャプチャは大きい (エレベーターで 6393 ブロック)。`gt-compare` が
