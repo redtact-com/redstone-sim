@@ -15,6 +15,7 @@ import { rcon, scarpet, reloadDumpApp, sleep } from './rcon.js'
 import { emitAttachedSupportUpdate, placeCircuit, type CaptureDef, type CaptureDefPlayer } from './capture.js'
 import { ensureWorldSetup } from './world-setup.js'
 import { readScheduledTicks, readComparatorOutputs, readHopperCooldowns } from './scheduled-ticks.js'
+import { Announcer, changesSummary } from './announce.js'
 import type { BlockMap, LiveChange, LiveHiddenState, LiveSessionInfo } from './live-protocol.js'
 
 const harnessDir = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -201,6 +202,14 @@ export class HarnessSession {
   private readonly withHidden: boolean
   readonly info: LiveSessionInfo
 
+  /**
+   * ワールドに入っている人への合図 (#374)。
+   *
+   * **既定で知らせる**。知らせないと操作を見逃す (実際に見逃したのがこの機能の発端)。
+   * 人が居なければ中で黙るので、誰も見ていないときの余分な rcon にはならない。
+   */
+  readonly announcer = new Announcer()
+
   private constructor(
     def: LiveDef, withHidden: boolean,
     private readonly kind: SessionKind = 'fixture',
@@ -240,7 +249,8 @@ export class HarnessSession {
    * **自動判定はしない**。同名があったときにどちらを開いたのか分からなくなる
    */
   static async open(
-    name: string, opts: { withHidden?: boolean; kind?: SessionKind } = {},
+    name: string,
+    opts: { withHidden?: boolean; kind?: SessionKind; announce?: boolean } = {},
   ): Promise<HarnessSession> {
     const kind = opts.kind ?? 'fixture'
     ensureWorldSetup()
@@ -252,6 +262,7 @@ export class HarnessSession {
       const capDef = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
       capDef.name = name
       const s = new HarnessSession({ name, region: { from: [0, 0, 0], to: [0, 0, 0] }, blocks: [] }, opts.withHidden !== false, 'capture', capDef)
+      if (opts.announce === false) s.announcer.setEnabled(false)
       await s.reset()
       return s
     }
@@ -261,8 +272,17 @@ export class HarnessSession {
     const def = JSON.parse(readFileSync(defPath, 'utf-8')) as LiveDef
     def.name = name
     const s = new HarnessSession(def, opts.withHidden !== false, 'fixture')
+    if (opts.announce === false) s.announcer.setEnabled(false)
     await s.reset()
     return s
+  }
+
+  /** 合図を送る (会話で決めた文面をそのまま出す) */
+  async say(text: string, opts: { big?: boolean; countdown?: number } = {}): Promise<void> {
+    if (opts.countdown !== undefined && opts.countdown > 0) {
+      await this.announcer.countdown(opts.countdown, text)
+    }
+    this.announcer.say(text, { big: opts.big })
   }
 
   get tick(): number { return this._tick }
@@ -283,6 +303,8 @@ export class HarnessSession {
       // **キャプチャと同じ関数**で置く (順序に意味があるので写経しない)
       const placed = await placeCircuit(this.capDef, (...a) => console.error(...a))
       this.players = placed.players
+      // 定義の fake player も観客に数えない (#374)
+      this.announcer.exclude(...placed.players.map(p => p.name))
       // 走査範囲は placeCircuit → fx_setup が shared/fixture.json から
       // global_region に入れているので、こちらで教え直す必要はない
       this.def.region = { from: placed.region.from, to: placed.region.to }
@@ -296,15 +318,22 @@ export class HarnessSession {
     this._tick = 0
     this.prev = scanRegion()
     this._hidden = this.withHidden ? readHidden(this.def) : null
+    this.announcer.say(
+      `回路 ${this.def.name} を置きました (${Object.keys(this.prev).length} ブロック / tick 0)`,
+      { big: true },
+    )
   }
 
   async step(n: number): Promise<LiveChange[]> {
+    this.announcer.say(`${n} tick 進めます (いま tick ${this._tick})`, { big: true })
     for (let i = 0; i < n; i++) {
       rcon('tick', 'step', '1')
       await sleep(STEP_SETTLE_MS)
       this._tick++
     }
-    return this.publish()
+    const changes = this.publish()
+    this.announcer.say(`▶ 進めました (tick ${this._tick})。${changesSummary(changes)}`)
+    return changes
   }
 
   async use(pos: [number, number, number]): Promise<LiveChange[]> {
@@ -313,21 +342,27 @@ export class HarnessSession {
     if (who === undefined) {
       throw new Error(`${this.def.name} には players が無いので押せない (定義に players を足すこと)`)
     }
+    this.announcer.say(`レバー等を押します (${pos.join(',')})`, { big: true })
     const [lx, ly, lz] = lookTarget(pos, this.info.lookY)
     rcon('player', who, 'look', 'at', lx, ly, lz)
     await sleep(200)
     rcon('player', who, 'use', 'once')
     await sleep(200)
-    return this.publish()
+    const changes = this.publish()
+    this.announcer.say(`▶ 押しました (${pos.join(',')})。${changesSummary(changes)}`)
+    return changes
   }
 
   async setblock(pos: [number, number, number], block: string): Promise<LiveChange[]> {
+    this.announcer.say(`${block.split('[')[0]} を置きます (${pos.join(',')})`, { big: true })
     rcon('setblock', String(pos[0]), String(pos[1]), String(pos[2]), block)
     // レバー/ボタンは**支えブロックの隣**にも更新を配る (#290)。
     // 落とすと「ON にしたのに動かない」実機状態ができる
     emitAttachedSupportUpdate(pos, block)
     await sleep(200)
-    return this.publish()
+    const changes = this.publish()
+    this.announcer.say(`▶ 置きました (${pos.join(',')})。${changesSummary(changes)}`)
+    return changes
   }
 
   /** 実機を読み直して差分を返す */

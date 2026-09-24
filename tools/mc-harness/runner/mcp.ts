@@ -50,7 +50,9 @@ class Holder {
     this.idleTimer = setTimeout(() => this.release('無操作が続いたため'), IDLE_RELEASE_MS)
   }
 
-  async open(name: string, withHidden: boolean, kind: SessionKind): Promise<HarnessSession> {
+  async open(
+    name: string, withHidden: boolean, kind: SessionKind, announce = true,
+  ): Promise<HarnessSession> {
     if (this.locked) this.release('開き直しのため')
     const holder = harnessLockHolder()
     if (holder !== null) {
@@ -64,7 +66,7 @@ class Holder {
     // 長く握るのでハートビートを打つ (打たないと 10 分で奪われて応答が混線する)
     this.heartbeat = setInterval(() => refreshHarnessLock(), 60_000)
     try {
-      this.session = await HarnessSession.open(name, { withHidden, kind })
+      this.session = await HarnessSession.open(name, { withHidden, kind, announce })
     } catch (e) {
       this.release('開けなかったため')
       throw e
@@ -106,6 +108,8 @@ const fmt = (changes: LiveChange[]): string =>
     : changes.map(c => `${c.pos.join(',')} = ${c.block}`).join('\n')
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] })
+/** 引数名 `text` と衝突する道具の中で使う別名 */
+const text2 = text
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: 'mc-harness', version: '1.0.0' })
@@ -123,6 +127,13 @@ export function createServer(): McpServer {
         `ロック: ${lock === null ? 'なし' : `pid=${lock.pid} 経過 ${Math.round(lock.ageMs / 1000)}s`}`
           + (holder.isLocked ? ' (このサーバが保持)' : ''),
         s === null ? '回路: 開いていない' : `回路: ${s.info.name} / tick ${s.tick}`,
+        s === null
+          ? '合図: 回路を開いてから'
+          : `合図: ${s.announcer.isEnabled ? '入' : '切'} / 観客 ${
+              (() => {
+                const who = s.announcer.audience()
+                return who.length > 0 ? `${who.join(', ')} (見えます)` : 'なし (黙ります)'
+              })()}`,
         `開ける回路: fixture ${listFixtures().length} 本 / 実回路 ${listCaptureDefs().length} 本`
           + ' (harness_open に名前と kind を渡す)',
       ].join('\n'))
@@ -138,8 +149,10 @@ export function createServer(): McpServer {
         .describe("fixture=fixtures/<name>.json / capture=captures/<name>.def.json (実回路)"),
       withHidden: z.boolean().optional()
         .describe('予約 tick / コンパレーター保持 / クールダウンを保存ファイルから読む (既定 true)'),
+      announce: z.boolean().optional()
+        .describe('操作のたびにワールドのチャットへ知らせる (既定 true)'),
     },
-    async ({ name, kind, withHidden }) => {
+    async ({ name, kind, withHidden, announce }) => {
       if (!isHarnessUp()) {
         return text('実機が起きていない。`npm run harness:up` を実行すること')
       }
@@ -147,7 +160,7 @@ export function createServer(): McpServer {
       if (!known.includes(name)) {
         return text(`そんな ${kind} は無い: ${name}\n候補: ${known.slice(0, 20).join(', ')} ...`)
       }
-      const s = await holder.open(name, withHidden !== false, kind)
+      const s = await holder.open(name, withHidden !== false, kind, announce !== false)
       const h = s.hidden()
       return text([
         `${name} を開いた (tick ${s.tick})`,
@@ -221,6 +234,40 @@ export function createServer(): McpServer {
       const s = holder.need()
       await s.reset()
       return text(`置き直した (tick ${s.tick})`)
+    },
+  )
+
+  server.tool(
+    'harness_say',
+    'ワールドに入っている人へ合図を送る (チャット + 画面下)。人が居なければ黙る',
+    {
+      text: z.string().describe('出す文面 (先頭に [harness] が付く)'),
+      big: z.boolean().optional().describe('画面下のアクションバーにも出す (流れない)'),
+      countdown: z.number().int().min(0).max(10).optional()
+        .describe('「3 … 2 … 1」のあとに出す (目を向けてもらうため)'),
+    },
+    async ({ text, big, countdown }) => {
+      const s = holder.need()
+      await s.say(text, { big, countdown })
+      // **理由を分けて返す**。「黙らせている」と「誰も居ない」は原因も対処も違う
+      if (!s.announcer.isEnabled) {
+        return text2(`自動通知を切っているので送っていない (harness_announce で入れる / 文面: ${text})`)
+      }
+      const who = s.announcer.audience()
+      return text2(who.length > 0
+        ? `送った (${who.join(', ')} に見えます): ${text}`
+        : `誰も入っていないので送っていない (文面: ${text})`)
+    },
+  )
+
+  server.tool(
+    'harness_announce',
+    '操作のたびに自動で知らせるかを切り替える (既定は入)',
+    { on: z.boolean().describe('true=知らせる / false=黙る') },
+    async ({ on }) => {
+      const s = holder.need()
+      s.announcer.setEnabled(on)
+      return text2(on ? '操作のたびに知らせます' : '黙ります')
     },
   )
 

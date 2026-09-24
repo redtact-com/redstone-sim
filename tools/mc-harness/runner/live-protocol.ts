@@ -60,6 +60,8 @@ export type ClientMsg =
   | { type: 'inspect'; id: number; pos: [number, number, number] }
   /** 回路を置き直して 0 tick へ */
   | { type: 'reset'; id: number }
+  /** ワールドに入っている人へ合図を送る (#374) */
+  | { type: 'say'; id: number; text: string; big?: boolean; countdown?: number }
 
 /**
  * 既定のポート。**127.0.0.1 にしか bind しない** (実機操作の口を外へ出さない)。
