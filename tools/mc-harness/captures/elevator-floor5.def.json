@@ -3,6 +3,7 @@
   "source": "TAKU128_DoubleSidedGlassElevatorMultipleFloors.litematic",
   "ticks": 120,
   "pad": 1,
+  "settle": false,
   "inputs": [
     { "tick": 2, "pos": [5, 2, 8], "action": "setblock", "block": "barrel[facing=north,open=false]" },
     { "tick": 6, "pos": [5, 2, 8], "action": "container", "signal": 5 }

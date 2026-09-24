@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   selectPlacedBlocks, collectLecternBooks, buildLecternBookArgs, buildLecternPageArgs,
-  resolveCircuitPath,
+  resolveCircuitPath, diffStates, splitDrift,
 } from './capture.js'
 import type { LecternSource } from './capture.js'
 
@@ -263,5 +263,39 @@ describe('resolveCircuitPath', () => {
       expect(() => resolveCircuitPath('missing.nbt')).toThrow(new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
       expect(() => resolveCircuitPath('missing.nbt')).toThrow(/MC_CIRCUITS_DIR/)
     })
+  })
+})
+
+// ── 元ファイルとのズレの分類 (#376) ──────────────────────────────────────────
+//
+// `.litematic` はピストンを extended=true で保存するが、それを伸ばしている電源の
+// 状態は完全には戻らない。置いた後に region 全体へ update を撒くとピストンが縮み、
+// **粘着で隣のハチミツブロックを引きずる**。
+// 「ブロックの種類が変わった (構造)」と「ダストの強度が変わった (状態だけ)」を
+// 同じ 1 行にまとめて出していたため、かごが 1 ブロック動いていたのに見逃した。
+describe('ズレの分類', () => {
+  it('種類が変わったものだけ構造のズレになる', () => {
+    const { structural, stateOnly } = splitDrift([
+      { pos: '4,56,8', source: 'honey_block', settled: 'air' },
+      { pos: '0,1,0', source: 'redstone_wire[power=15]', settled: 'redstone_wire[power=0]' },
+      { pos: '4,4,9', source: 'sticky_piston[extended=true]', settled: 'moving_piston[type=sticky]' },
+    ])
+    expect(structural.map(d => d.pos)).toEqual(['4,56,8', '4,4,9'])
+    expect(stateOnly.map(d => d.pos)).toEqual(['0,1,0'])
+  })
+
+  it('同じ種類で props が同じなら何も出ない', () => {
+    expect(splitDrift([]).structural).toEqual([])
+    expect(diffStates({ '0,0,0': 'stone' }, { '0,0,0': 'stone' })).toEqual([])
+  })
+
+  it('片側に無い座標は air 扱いで構造のズレになる', () => {
+    expect(diffStates({ '1,2,3': 'honey_block' }, {})).toEqual([
+      { pos: '1,2,3', source: 'honey_block', settled: 'air' },
+    ])
+    expect(diffStates({}, { '1,2,3': 'slime_block' })).toEqual([
+      { pos: '1,2,3', source: 'air', settled: 'slime_block' },
+    ])
+    expect(splitDrift(diffStates({ '1,2,3': 'honey_block' }, {})).structural).toHaveLength(1)
   })
 })

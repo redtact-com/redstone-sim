@@ -3,5 +3,6 @@
   "source": "TAKU128_DoubleSidedGlassElevatorMultipleFloors.litematic",
   "ticks": 120,
   "pad": 1,
+  "settle": false,
   "inputs": []
 }
