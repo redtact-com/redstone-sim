@@ -41,6 +41,7 @@ import {
 } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
+import { pressBlock, readState, aimArgs } from './aim.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
@@ -578,11 +579,17 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
     case 'use': {
       const name = input.player ?? players[0]?.name
       if (!name) throw new Error(`use には fake player が要る (players を定義する): ${input.pos}`)
-      // ブロック中心へ照準し直してから 1 回だけ使う
-      rcon('player', name, 'look', 'at', String(x + 0.5), String(y + 0.5), String(z + 0.5))
-      await sleep(150)
-      rcon('player', name, 'use', 'once')
-      await sleep(150)
+      // **まずブロック中心**を狙う (従来と同じ)。外したら形状に合わせて狙い直す (#378)
+      await pressBlock([x, y, z], readState([x, y, z]), {
+        use: async aim => {
+          rcon('player', name, 'look', 'at', ...aimArgs(aim))
+          await sleep(150)
+          rcon('player', name, 'use', 'once')
+          await sleep(150)
+        },
+        read: () => readState([x, y, z]),
+        log: msg => console.log(msg),
+      })
       break
     }
     case 'setblock':
