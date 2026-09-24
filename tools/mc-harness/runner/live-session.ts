@@ -376,7 +376,13 @@ export class HarnessSession {
     const result = await pressBlock(pos, state, {
       use: async (aim, moveTo) => {
         rconBatch([
-          ...(moveTo === undefined ? [] : [`tp ${who} ${moveTo.join(' ')}`]),
+          // **spawn も撃つ**。足場の無い所に置いた fake player は落ちて死ぬので、
+          // tp だけでは「居ないプレイヤーを動かそうとして何も起きない」になる。
+          // 生きていれば spawn は何も起こさない
+          ...(moveTo === undefined ? [] : [
+            `player ${who} spawn at ${moveTo.join(' ')}`,
+            `tp ${who} ${moveTo.join(' ')}`,
+          ]),
           `player ${who} look at ${aim.join(' ')}`,
           `player ${who} use once`,
         ], { ignoreResponses: true })

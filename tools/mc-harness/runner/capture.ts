@@ -593,7 +593,11 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
       await pressBlock([x, y, z], state, {
         use: async (aim, moveTo) => {
           rconBatch([
-            ...(moveTo === undefined ? [] : [`tp ${name} ${moveTo.join(' ')}`]),
+            // spawn も撃つ (足場が無いと落ちて死んでいることがある。生きていれば何も起きない)
+            ...(moveTo === undefined ? [] : [
+              `player ${name} spawn at ${moveTo.join(' ')}`,
+              `tp ${name} ${moveTo.join(' ')}`,
+            ]),
             `player ${name} look at ${aim.join(' ')}`,
             `player ${name} use once`,
           ], { ignoreResponses: true })
