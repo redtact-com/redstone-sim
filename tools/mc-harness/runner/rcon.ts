@@ -214,6 +214,29 @@ function acquireLock(lockPath: string): void {
 }
 
 /**
+ * ロックを**明示的に**取る / 返す (#369)。
+ *
+ * `withHarnessLock` は「取って fn を回して返す」形なので、MCP サーバのように
+ * **命令をまたいで握り続ける**用途には使えない。代わりにこの 2 本を使う。
+ * 掴みっぱなしを防ぐのは呼び出し側の責任 (MCP は無操作が続いたら自分で返す)。
+ */
+export function acquireHarnessLock(lockPath: string = LOCK_PATH): void {
+  acquireLock(lockPath)
+}
+
+export function releaseHarnessLock(lockPath: string = LOCK_PATH): void {
+  releaseLock(lockPath, process.pid)
+}
+
+/** いま誰がロックを握っているか。握られていなければ null */
+export function harnessLockHolder(lockPath: string = LOCK_PATH): { pid: number; ageMs: number } | null {
+  if (!existsSync(lockPath)) return null
+  const info = readLockInfo(lockPath)
+  if (info === null) return null
+  return { pid: info.pid, ageMs: Date.now() - info.at }
+}
+
+/**
  * ハーネスのロックを取って fn を実行する (キャプチャ全体を直列化する)。
  *
  * rcon の応答バッファはサーバ側で **1 個を共有** している
