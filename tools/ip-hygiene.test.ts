@@ -25,6 +25,11 @@ const VERBATIM: { name: string; re: RegExp }[] = [
   // 落とすのは「文の写し」だけにする
   // メソッドシグネチャの写し
   { name: 'Java のメソッドシグネチャ', re: /\b(public|protected|private)\s+(static\s+)?[\w<>[\]]+\s+\w+\s*\([^)]*\)\s*\{/ },
+  // record 宣言の写し。修飾子も `{` も付けずに貼ると上のパターンをすり抜ける (#386)
+  { name: 'Java の record 宣言', re: /\brecord\s+[A-Z]\w*(<[^>]*>)?\s*\(/ },
+  // 「型 名前」の並ぶ引数リストの写し (修飾子を落とした宣言も拾う)。TypeScript は
+  // `name: Type` の順なので、`(BlockPos pos, int delay)` の形は Java の字面にしか出ない
+  { name: 'Java の型付き引数リスト', re: /\w\s*\(\s*(final\s+)?([A-Z]\w*(<[^>()]*>)?|int|long|boolean|double|float|byte|short|char)(\[\])?\s+[a-z]\w*\s*[,)]/ },
 ]
 
 /** 走査対象。生成物・fixture・デコンパイル作業ディレクトリは除く */
