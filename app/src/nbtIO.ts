@@ -15,6 +15,7 @@ import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
 import {
   emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument,
   isContainerBlockName, isContainerFullCube, doorLikeKindOf, buttonLikeKindOf, appearanceProps,
+  weightedPlatePressedPower,
 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
@@ -702,7 +703,10 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return [`minecraft:${(block as any).name ?? 'stone_pressure_plate'}`, { powered: String((block as any).powered ?? false) }]
     case 'weighted_pressure_plate_light':
       // 手動モデルの pressedPower は POWER として保存 (踏まれ中のみ >0 になる vanilla とは
-      // 意味が異なるため、非作動時は 0 を書く)
+      // 意味が異なるため、非作動時は 0 を書く)。
+      // **既知の制約** (#393): 踏まれていない重量板の pressedPower は、書き出すと POWER=0 になり、
+      // 読み直すと既定の 15 に戻る。vanilla の重量板には block entity が無く、設定値を置く
+      // 場所が無いため (独自のキーは足さない)。ブラウザ保存 (JSON) なら保たれる
       return ['minecraft:light_weighted_pressure_plate', {
         power: String((block as any).powered ? ((block as any).pressedPower ?? 15) : 0),
       }]
@@ -955,12 +959,19 @@ function minecraftToBlockState(
     } as BlockState
   }
 
-  // 感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)
+  // 重量感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)。
+  // 踏んだときの出力は POWER から採る。規則は mcstate と共有する (#393。以前は常に 15)
   if (name === 'minecraft:light_weighted_pressure_plate') {
-    return { type: 'weighted_pressure_plate_light', powered: false, pressedPower: 15 } as BlockState
+    return {
+      type: 'weighted_pressure_plate_light', powered: false,
+      pressedPower: weightedPlatePressedPower(props.power),
+    } as BlockState
   }
   if (name === 'minecraft:heavy_weighted_pressure_plate') {
-    return { type: 'weighted_pressure_plate_heavy', powered: false, pressedPower: 15 } as BlockState
+    return {
+      type: 'weighted_pressure_plate_heavy', powered: false,
+      pressedPower: weightedPlatePressedPower(props.power),
+    } as BlockState
   }
   if (buttonLike) {
     // 木材各種はまとめて木の感圧板、石系は石の感圧板 (重量感圧板は上で処理済み)

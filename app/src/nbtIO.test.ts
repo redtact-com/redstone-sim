@@ -3,7 +3,7 @@ import { isConductor } from '@redstone/sim'
 import {
   NbtFile, NbtCompound, NbtList, NbtInt, NbtString, NbtLongArray, NbtByte,
 } from 'deepslate/nbt'
-import type { BlockState } from '@redstone/sim'
+import type { BlockState, WeightedPressurePlateState } from '@redstone/sim'
 import { mcToSim, slotsFromCount, SimWorld, effectiveContainerSignal } from '@redstone/sim'
 import { blockStateToMinecraftStr } from '@redstone/viewer'
 import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
@@ -112,11 +112,11 @@ describe('nbtIO: コンテナ / 重量板の既存往復が壊れていない', 
       .toMatchObject({ type: 'container', fullCube: false })
   })
 
-  it('重量板(金)は往復後も専用型で powered=false に正規化される', async () => {
-    // pressedPower は現状 import 時に既定 15 へ戻る (entity 由来のため OFF 正規化)。
-    // ここではボタン変更でこの既存挙動が壊れていないことを確認する。
+  it('重量板(金)は往復後も専用型で powered=false に正規化され、pressedPower 6 が保たれる', async () => {
+    // 踏まれている重量板は POWER=6 で書き出される。取り込みは POWER を pressedPower に採り、
+    // 押下状態は OFF にする (#393。以前は pressedPower が常に既定の 15 に戻っていた)
     expect(await roundTrip({ type: 'weighted_pressure_plate_light', pressedPower: 6, powered: true }))
-      .toMatchObject({ type: 'weighted_pressure_plate_light', powered: false })
+      .toMatchObject({ type: 'weighted_pressure_plate_light', powered: false, pressedPower: 6 })
   })
 })
 
@@ -504,6 +504,18 @@ describe('素材ブロックの分類: nbtIO と mcstate が一致する (#214)'
 
   it('本当に未対応のブロックは従来どおり例外にする (typo 検知を残す)', () => {
     expect(() => mcToSim('definitely_not_a_block')).toThrow(/扱えないブロック/)
+  })
+
+  it.each(['0', '1', '7', '15'])('重量感圧板 POWER=%s の pressedPower が両方で同じ (#393)', async (power) => {
+    // 以前は nbtIO だけが POWER を読まず、常に 15 だった (mcstate は POWER>0 を採る)
+    for (const id of ['light_weighted_pressure_plate', 'heavy_weighted_pressure_plate']) {
+      const viaNbt = await importVanilla(`minecraft:${id}`, { power }) as WeightedPressurePlateState
+      const viaHarness = mcToSim(`${id}[power=${power}]`) as WeightedPressurePlateState
+      expect(viaNbt.pressedPower, id).toBe(viaHarness.pressedPower)
+      expect(viaNbt.pressedPower, id).toBe(power === '0' ? 15 : Number(power))
+      // 押下状態の扱いは意図的に違う (アプリの取り込みは常に OFF / 実機キャプチャは blockstate のとおり)
+      expect(viaNbt.powered, id).toBe(false)
+    }
   })
 })
 
