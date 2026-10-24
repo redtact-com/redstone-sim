@@ -277,6 +277,14 @@ describe('固体ブロックの取り込み (#170)', () => {
     expect(await importVanilla(name)).toMatchObject(solid)
   })
 
+  it.each([
+    'minecraft:bricks', 'minecraft:terracotta', 'minecraft:waxed_copper_block',
+    'minecraft:deepslate_tiles', 'minecraft:cracked_deepslate_tiles',
+  ])('接尾辞の判定に当たらない素の名前も solid: %s (#393)', async (name) => {
+    // 'bricks' は '_bricks' で終わらないので、接尾辞だけに任せると漏れる
+    expect(await importVanilla(name)).toMatchObject(solid)
+  })
+
   it('soul_sand は導体だが独立した型 (#234)', async () => {
     // 泡柱の源になるので solid に潰さない。導体であることは変わらない
     // (実機ハーネスで測定済み)
@@ -286,8 +294,9 @@ describe('固体ブロックの取り込み (#170)', () => {
   })
 
   it('従来から solid だったものは維持される', async () => {
+    // bricks は #170 より前の固定リストにあったが、PR#171 で落ちていた (#393)
     for (const name of ['minecraft:stone', 'minecraft:oak_planks', 'minecraft:white_concrete',
-                        'minecraft:obsidian', 'minecraft:quartz_block']) {
+                        'minecraft:obsidian', 'minecraft:quartz_block', 'minecraft:bricks']) {
       expect(await importVanilla(name), name).toMatchObject(solid)
     }
   })
@@ -472,6 +481,9 @@ describe('素材ブロックの分類: nbtIO と mcstate が一致する (#214)'
     ['smooth_stone_slab', { type: 'double' }], ['oak_slab', { type: 'top' }],
     // 接尾辞判定
     ['oak_planks', {}], ['deepslate_bricks', {}], ['waxed_exposed_cut_copper', {}],
+    // 接尾辞に当たらない素の名前 (#393)。nbtIO は省き、mcstate は例外を投げていた
+    ['bricks', {}], ['terracotta', {}], ['waxed_copper_block', {}],
+    ['deepslate_tiles', {}], ['cracked_deepslate_tiles', {}],
   ]
 
   it.each(CASES)('%s %o が両方で同じ型になる', async (name, props) => {

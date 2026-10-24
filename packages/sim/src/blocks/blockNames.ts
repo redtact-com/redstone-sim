@@ -113,6 +113,13 @@ const SOLID_EXACT = new Set([
   'sponge', 'wet_sponge', 'melon', 'pumpkin', 'carved_pumpkin', 'jack_o_lantern',
   'nether_wart_block', 'warped_wart_block', 'shroomlight',   // glowstone は非導体
   'brown_mushroom_block', 'red_mushroom_block', 'mushroom_stem',
+  // 接尾辞の判定に当たらない素の名前 (#393)。同じ素材の別の形 (`_bricks` / `_terracotta` /
+  // copper_block / deepslate_bricks) はすでに導体として拾っている。
+  // 'bricks' は '_bricks' で終わらない。PR#171 で旧リストから消して接尾辞に任せたとき、
+  // 素の bricks だけが漏れた。
+  // [確定: 26.2 — 5 つとも導体判定の既定 (当たり判定がフルブロックなら導体) を
+  //  上書きしていない。実機では測っていない]
+  'bricks', 'terracotta', 'waxed_copper_block', 'deepslate_tiles', 'cracked_deepslate_tiles',
 ])
 
 /** 接尾辞で一致する導体フルブロック */
