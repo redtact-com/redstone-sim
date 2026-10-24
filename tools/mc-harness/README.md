@@ -42,9 +42,10 @@ npm run dev                            # 別端末 → http://localhost:5173/?li
 cd tools/mc-harness && docker compose down
 ```
 
-- WSL2 + Docker 29 / compose v2.22 の組み合わせでは API バージョン不整合が出る。`generate.ts` は `DOCKER_API_VERSION=1.44` を自動で付与する。手で `docker compose` を叩くときは `DOCKER_API_VERSION=1.44 docker compose ...` とする。
+- WSL2 + Docker 29 / compose v2.22 の組み合わせでは API バージョン不整合が出る。ハーネスのスクリプトが共有する rcon の口 (`runner/rcon.ts`) が `DOCKER_API_VERSION=1.44` を自動で付与する。手で `docker compose` を叩くときは `DOCKER_API_VERSION=1.44 docker compose ...` とする。
 - carpet の挙動変更ルールは全て既定 (false) のまま使う (`fastRedstoneDust` 等を有効にすると ground truth が汚染される)。
-- gamerule (daylight/weather/mob/randomTick 停止)・forceload・`tick freeze` は `generate.ts` が毎回冪等に適用する。
+- gamerule (daylight/weather/mob/randomTick 停止)・forceload・`tick freeze` の列は `runner/world-setup.ts` が持ち、`ground-truth` (generate.ts) と `live` / MCP (live-session.ts) が毎回冪等に適用する。
+- コンテナの `scripts/` (dump.sc と受け渡しの JSON) は、**コンテナを起動したチェックアウト**を bind mount している。別の worktree から `ground-truth` を回すと書き出し先がずれるので、generate.ts は result.json が書き出されなかったら止まる (#242)。
 
 ## 駆動方式の確定 (要実験項目の結果)
 
@@ -86,8 +87,10 @@ docs/research/04 §2.2-8 の「freeze 中の `__on_tick` 発火有無」を実�
 }
 ```
 
-- ブロック表現は **MC blockstate 文字列を正とする** (名前空間なし・プロパティキー昇順)。scarpet 側 `_canon()` と TS 側 `canonicalize()` が同一形式を生成する。
-- `blocks` は**実機で安定な状態**を書く (ワイヤーの power・接続形状・トーチの lit まで正確に)。生成時に「without_updates 設置 → 全ブロック update → 8 tick settle」後の実機状態と照合され、ズレていると失敗する (= 実機が正しい安定状態を教えてくれる)。
+- ブロック表現は **MC blockstate 文字列を正とする**。fixture に書く形と比べる形を分けている (#242)。
+  - **書く形** (`blocks` / `expect`): 名前空間なし・プロパティキー昇順。scarpet 側 `_canon()` の出力と同じ形で、**材質は畳まない** (ビューアーが元の見た目で描くのに使う。#343)
+  - **比べる形**: TS 側 `canonicalize()` (`packages/sim/src/mcstate.ts`)。sim が区別しない材質を代表名に畳む (導体フルブロック → `stone` / `obsidian` / `gray_glazed_terracotta`、ガラス類 → `glass`、ハーフ → `smooth_stone_slab[type=...]` で waterlogged を落とす)。settle 照合・expect の差分・sim との比較 (`fixture-runner.ts`) は、どれも**両側をこの形にしてから**比べる
+- `blocks` は**実機で安定な状態**を書く (ワイヤーの power・接続形状・トーチの lit まで正確に)。生成時に「without_updates 設置 → 全ブロック update → 8 tick settle」後の実機状態と照合され、ズレていると失敗する (= 実機が正しい安定状態を教えてくれる)。照合は比べる形で行うので、材質とハーフの waterlogged は見ない。
 - `expect` は変化のあった tick の差分のみ。消滅は `"block": "air"`。
 - sim との対応付けは `packages/sim/src/mcstate.ts` (`mcToSim` / `simToMc`)。**facing の罠**: MC の repeater/comparator の `facing` は入力側 (sim は出力方向)、`redstone_wall_torch` の `facing` は壁から離れる方向 (sim は壁方向) で、いずれも OPPOSITE 変換する [確定: 1.21.1 DiodeBlock デコンパイル + 実機 dump で検証]。
 
@@ -161,7 +164,7 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 
 ## 新しい fixture の追加手順
 
-1. `fixtures/<name>.json` を書く (回路 + 入力 + region + player)
+1. `fixtures/<name>.json` を書く (回路 + 入力 + region + player)。材質 (羊毛・色付きガラス・グロウストーンなど) はそのまま書いてよい。照合は材質とハーフの waterlogged を見ない (#242)
 2. `npm run ground-truth -- <name>` — settle 照合に失敗したら実機の教える安定状態に `blocks` を直す
 3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成
 4. `npm test` が通ることを確認してコミット
@@ -367,6 +370,10 @@ MCP サーバは常駐するので、取ったロックを握りっぱなしに�
 - **無操作が 5 分続いたら自動で返す**。以後の道具は「先に `harness_open` を呼ぶこと」と答える
 - `ground-truth` / `capture` / `live` を回す前は **`harness_close`** を呼ぶ
 - 他プロセスが握っていたら**待たずに** pid と経過を返す
+- **`ground-truth` (generate.ts) もロックを取る** (#242)。握られていたら待たずに止まる。
+  実行中は 60 秒ごとにハートビートを打ち、Ctrl-C で止めたときもロックを返す
+- ロックはチェックアウトごとのファイル (`tools/mc-harness/.lock`) なので、**別の worktree から
+  回すものとは排他にならない** (コンテナは 1 つ)。回す前に他の会話がハーネスを使っていないか確かめる
 
 ### 長時間走るものは道具にしていない
 
