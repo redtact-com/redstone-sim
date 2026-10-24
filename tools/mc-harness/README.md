@@ -75,7 +75,7 @@ docs/research/04 §2.2-8 の「freeze 中の `__on_tick` 発火有無」を実�
   "name": "repeater-delay-1",
   "description": "...",
   "mcVersion": "1.21.1",
-  "skipUntil": "I2",            // 省略可: 既知ギャップで sim 不一致の fixture に付ける (issue ID)
+  "skipUntil": "I2",            // 省略可: 付けると CI で it.skip になる (issue 番号や R-n などの ID)。使い分けは fixtures.test.ts の冒頭
   "skipReason": "...",          // 省略可: 理由
   "ticks": 18,                  // tick 0..N を記録
   "region": { "from": [0,0,0], "to": [4,1,1] },   // 実機で走査する領域
@@ -132,8 +132,8 @@ docs/research/04 §2.2-8 の「freeze 中の `__on_tick` 発火有無」を実�
 | short-pulse-repeater | ✔ 一致 | 実機はリピーターが 1gt パルスを 2gt に整形 (tick4 ON→tick6 OFF)。伝播順序修正の副次効果で sim も一致し、当初想定の skipUntil I3 は不要になった |
 | comparator-compare | ✔ 一致 | back=13 ≥ side=11 → 13 出力。コンパレーター→dust は減衰なし (dust=13) を実機で確認 |
 | comparator-subtract | ✔ 一致 | 13 − 11 = 2 出力 |
-| dust-block-repeater | △ skipUntil **I2** | 実機: dust が指す固体の弱充電をリピーターが読む (tick4 ON)。sim は弱充電を機構入力にできない (G2-G5) |
-| torch-not-floor | △ skipUntil **I2** | 実機: 床置きトーチが水平隣接 dust へ給電。sim は G3 未実装で初期安定状態 (tick 0) から不一致 |
+| dust-block-repeater | ✔ 一致 | 実機: dust が指す固体の弱充電をリピーターが読む (tick4 ON)。当初は sim が弱充電を機構入力にできず skipUntil I2 だったが、弱/強充電モデルの実装で一致し同日外した (f56ba59) |
+| torch-not-floor | ✔ 一致 | 実機: 床置きトーチが水平隣接 dust へ給電。当初は sim が G3 未実装で skipUntil I2 だったが、同日外した (f56ba59) |
 
 このハーネスで発見し修正した sim バグ:
 - `propagateWireBFS` が Phase 2 の途中 (連結成分の一部がゼロ化されたままの過渡状態) で近傍機構を更新していたため、リピーターが「入力消失」と誤認して偽の turn_off を予約し 2gt 周期で発振していた (repeater-delay-1/2/3 の diff で検出)。近傍更新を全ワイヤー電力確定後の Phase 3 に遅延して修正。
@@ -166,7 +166,7 @@ packages/sim/test/fixtures/*.json     生成済み fixture (コミット対象)
 
 1. `fixtures/<name>.json` を書く (回路 + 入力 + region + player)。材質 (羊毛・色付きガラス・グロウストーンなど) はそのまま書いてよい。照合は材質とハーフの waterlogged を見ない (#242)
 2. `npm run ground-truth -- <name>` — settle 照合に失敗したら実機の教える安定状態に `blocks` を直す
-3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成
+3. diff 一致 → そのままコミット / 不一致 → sim のバグか既知ギャップか判断し、後者なら `skipUntil` + `skipReason` を定義に付けて再生成。直して外すときも定義から消す (生成済みだけ消すと、作り直したときに戻る。fixtures.test.ts が食い違いを検出する)
 4. `npm test` が通ることを確認してコミット
 
 ## ライブ観測 (#366)

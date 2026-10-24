@@ -28,7 +28,7 @@ import { OPPOSITE } from './types.js'
 import { emptySlots } from './blocks/container.js'
 import {
   classifyPlainBlock, isContainerBlockName, isContainerFullCube,
-  doorLikeKindOf, buttonLikeKindOf, appearanceProps,
+  doorLikeKindOf, buttonLikeKindOf, appearanceProps, weightedPlatePressedPower,
 } from './blocks/blockNames.js'
 
 export interface ParsedMcState {
@@ -153,13 +153,13 @@ export function mcToSim(state: string): BlockState | null {
     case 'light_weighted_pressure_plate':
     case 'heavy_weighted_pressure_plate': {
       // 重量感圧板。POWER (0-15) = 現在出力。手動モデルは設定値 pressedPower を
-      // 保持する。authored の POWER>0 は乗った状態なので pressedPower に採用し、
-      // rest (POWER=0) では既定値 15 とする [確定: 26.2 WeightedPressurePlateBlock]
+      // 保持する。POWER → pressedPower の規則は nbtIO と共有する (#393)。
+      // 実機キャプチャでは押下状態も blockstate のとおり (POWER>0 なら乗っている)
       const power = Number(props.power ?? '0')
       return {
         type: name === 'heavy_weighted_pressure_plate'
           ? 'weighted_pressure_plate_heavy' : 'weighted_pressure_plate_light',
-        pressedPower: power > 0 ? power : 15,
+        pressedPower: weightedPlatePressedPower(props.power),
         powered: power > 0,
       }
     }

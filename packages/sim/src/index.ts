@@ -87,7 +87,7 @@ export { stackSizeOf, REPRESENTATIVE_ITEM } from './blocks/itemStacks.js'
 export {
   classifyPlainBlock, isSolidBlockName, toNonConductiveBlockState,
   isShulkerBoxName, isContainerBlockName, isContainerFullCube,
-  doorLikeKindOf, buttonLikeKindOf, appearanceProps,
+  doorLikeKindOf, buttonLikeKindOf, appearanceProps, weightedPlatePressedPower,
 } from './blocks/blockNames.js'
 export { toNoteInstrument, noteInstrumentFor } from './blocks/noteInstrument.js'
 

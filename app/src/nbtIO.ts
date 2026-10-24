@@ -15,6 +15,7 @@ import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
 import {
   emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument,
   isContainerBlockName, isContainerFullCube, doorLikeKindOf, buttonLikeKindOf, appearanceProps,
+  weightedPlatePressedPower, slotsForSignal,
 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
@@ -47,9 +48,15 @@ function flipFacingForVanillaNbt(facing: string | undefined): string {
  * コンテナの中身を block entity NBT として書き出す (#194)。
  * 中身を落とすと**コンパレーター強度の微調整が失われる**ため往復で保持する。
  * Items が空なら undefined (不要な nbt を付けない)。
+ *
+ * slots を持たない container (エディタで置いた樽や、取り込んだコンテナをバーで
+ * 書き換えたもの) は signal しか持たない。**同じ強度になる中身 (代表アイテム) に直して
+ * 書く** (#393。以前は何も書かず、読み直すと 0 になっていた)。読み直すと slots つきに
+ * なるが、コンパレーターが読む値は変わらない (slotsForSignal は fillSignal の逆。#236)
  */
 function containerNbt(block: BlockState, name: string): NbtCompound | undefined {
   const slots = containerSlotsOf(block)
+    ?? (block.type === 'container' ? slotsForSignal('container', block.signal) : undefined)
   if (!slots) return undefined
   const entries: NbtCompound[] = []
   slots.forEach((s, i) => {
@@ -63,6 +70,41 @@ function containerNbt(block: BlockState, name: string): NbtCompound | undefined 
   return new NbtCompound()
     .set('id', new NbtString(name))
     .set('Items', new NbtList<NbtCompound>(entries))
+}
+
+/** 本と羽根ペンのページ数の上限 [確定: 26.2 WritableBookContent] */
+const MAX_WRITABLE_BOOK_PAGES = 100
+
+/**
+ * 書見台の本を block entity NBT として書き出す (#393)。
+ * 落とすと**読み直したとき出力が常に 14 になり、階数指定が効かない**。
+ *
+ * コンパレーターが読むのはページ数と開いているページだけで、本文は読まない
+ * [確定: 26.2 LecternBlockEntity]。sim も本文を持っていないので、ページ数ぶんの
+ * 空ページを持つ writable_book にする (実機ハーネスの capture.ts の dummyBookSnbt と同じ考え方)。
+ * 元が署名済みの本でも、ページの数え方は同じなので出力は変わらない。
+ *
+ * - 本の無い書見台・本の中身が無い書見台 (pages=0) には付けない。読み直しても同じ状態に戻る
+ * - 100 ページで頭打ちにする。vanilla から読んだ本が上限を超えることは無い
+ * - 書き出すファイルには DataVersion が無いので、vanilla は 500 とみなして全部の data fixer を通す。
+ *   1.20.5 のアイテム変換は `Count` (大文字) の無いアイテムをそのまま通すので、
+ *   コンテナの Items と同じ 1.20.5 以降の形 (`count` / `components`) で書けば崩れない
+ *   [確定: 26.2 の構造ファイルの読み込みと ItemStackComponentizationFix。vanilla で読ませてはいない]
+ */
+function lecternNbt(block: BlockState): NbtCompound | undefined {
+  if (block.type !== 'lectern' || !block.hasBook || block.pages < 1) return undefined
+  const pages = Math.min(block.pages, MAX_WRITABLE_BOOK_PAGES)
+  // vanilla も読み込み時に Page をページ数の範囲へ収める
+  const page = Math.min(Math.max(0, Math.floor(block.page)), pages - 1)
+  const content = new NbtCompound().set('pages', new NbtList<NbtString>(
+    Array.from({ length: pages }, () => new NbtString(''))))
+  return new NbtCompound()
+    .set('id', new NbtString('minecraft:lectern'))
+    .set('Book', new NbtCompound()
+      .set('id', new NbtString('minecraft:writable_book'))
+      .set('count', new NbtInt(1))
+      .set('components', new NbtCompound().set('minecraft:writable_book_content', content)))
+    .set('Page', new NbtInt(page))
 }
 
 // ── エクスポート ─────────────────────────────────────────────────────────────
@@ -105,7 +147,7 @@ export function exportToNbtBytes(
     const [x, y, z] = key.split(',').map(Number)
     const [name, props] = blockStateToMinecraft(block)
     const state = getOrAdd(name, props)
-    blockEntries.push({ x, y, z, state, nbt: containerNbt(block, name) })
+    blockEntries.push({ x, y, z, state, nbt: containerNbt(block, name) ?? lecternNbt(block) })
     if (y > maxY) maxY = y
   }
 
@@ -119,7 +161,7 @@ export function exportToNbtBytes(
       c.set('state', new NbtInt(state))
       const pos = new NbtList<NbtInt>([new NbtInt(x), new NbtInt(y), new NbtInt(z)])
       c.set('pos', pos)
-      if (nbt) c.set('nbt', nbt)   // コンテナの中身 (#194)
+      if (nbt) c.set('nbt', nbt)   // コンテナの中身 (#194)・書見台の本 (#393)
       return c
     })
   )
@@ -408,6 +450,20 @@ export async function importFromNbtBytes(
   return { blocks: resultBlocks, warnings, size }
 }
 
+/**
+ * 取り込み結果が空なら、利用者に見せる理由を返す。空でなければ null (#390)。
+ *
+ * エディタは空の結果をプレビューに進めない。確定すると今の盤面が空で置き換わり、
+ * 履歴も消える (resetToBlocks) ので、何も得られないまま回路だけを失うため。
+ * 理由は警告をそのまま使い、警告が無い (= 空気だけのファイル) ときだけ既定の一文にする。
+ */
+export function emptyImportReason(result: Pick<ImportResult, 'blocks' | 'warnings'>): string | null {
+  if (result.blocks.size > 0) return null
+  return result.warnings.length > 0
+    ? result.warnings.join(' / ')
+    : '取り込めるブロックがありません (空気だけのファイルです)'
+}
+
 // ── 生ブロック読み取り (sim を経由しない経路) ───────────────────────────────
 
 export type { RawPlacedBlock, RawItem, RawLectern }
@@ -496,7 +552,8 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:repeater', {
         facing:  flipFacingForVanillaNbt((block as any).facing),
         delay:   String((block as any).delay ?? 1),
-        locked:  'false',
+        // 以前は 'false' 固定で、ロック中のリピーターが保存で外れていた (#393)。mcstate の simToMc と同じ
+        locked:  String((block as any).locked ?? false),
         powered: String((block as any).powered ?? false),
       }]
     case 'comparator':
@@ -550,7 +607,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:composter', { level: String((block as any).level ?? 0) }]
     case 'lectern':
       // ページ数と現在ページは BE 側なので blockstate には出ない (#240)。
-      // 保存すると階数指定が失われる — 既知の穴として #245 に書いてある
+      // 本は lecternNbt が block entity として書く (#393)
       return ['minecraft:lectern', {
         facing: (block as any).facing ?? 'north',
         has_book: String((block as any).hasBook ?? false),
@@ -625,7 +682,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'container': {
       // 取り込んだ名前があればそれに戻す (#324。無ければ #291 までの規則)。
       // 樽とチェストは**導通が違う**ので取り違えない。
-      // signal は NBT に現れないため破棄する
+      // 中身と signal は blockstate に出ないので containerNbt が block entity として書く (#393)
       const name = (block as any).name as string | undefined
       if (name) return [`minecraft:${name.replace(/^minecraft:/, '')}`, {}]
       return [(block as any).fullCube ? 'minecraft:barrel' : 'minecraft:chest', {}]
@@ -668,7 +725,10 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return [`minecraft:${(block as any).name ?? 'stone_pressure_plate'}`, { powered: String((block as any).powered ?? false) }]
     case 'weighted_pressure_plate_light':
       // 手動モデルの pressedPower は POWER として保存 (踏まれ中のみ >0 になる vanilla とは
-      // 意味が異なるため、非作動時は 0 を書く)
+      // 意味が異なるため、非作動時は 0 を書く)。
+      // **既知の制約** (#393): 踏まれていない重量板の pressedPower は、書き出すと POWER=0 になり、
+      // 読み直すと既定の 15 に戻る。vanilla の重量板には block entity が無く、設定値を置く
+      // 場所が無いため (独自のキーは足さない)。ブラウザ保存 (JSON) なら保たれる
       return ['minecraft:light_weighted_pressure_plate', {
         power: String((block as any).powered ? ((block as any).pressedPower ?? 15) : 0),
       }]
@@ -861,7 +921,7 @@ function minecraftToBlockState(
   }
 
   // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。
-  // NBT には内容 (充填率) が現れないため signal=0 で取り込む。
+  // 中身は block entity の Items から slots として取り込む (#194。signal は使わないので 0)。
   // **樽とシュルカーボックスはフルキューブ (導体)、チェストは違う (非導体)** (#291)
   if (isContainerBlockName(name)) {
     // **導通はシュルカーボックスも実機で測ってある** (#324 fixture shulker-box-conductor)。
@@ -921,12 +981,19 @@ function minecraftToBlockState(
     } as BlockState
   }
 
-  // 感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)
+  // 重量感圧板 (踏まれ状態は entity 由来のため常に OFF で取り込む。initialize でも OFF 化される)。
+  // 踏んだときの出力は POWER から採る。規則は mcstate と共有する (#393。以前は常に 15)
   if (name === 'minecraft:light_weighted_pressure_plate') {
-    return { type: 'weighted_pressure_plate_light', powered: false, pressedPower: 15 } as BlockState
+    return {
+      type: 'weighted_pressure_plate_light', powered: false,
+      pressedPower: weightedPlatePressedPower(props.power),
+    } as BlockState
   }
   if (name === 'minecraft:heavy_weighted_pressure_plate') {
-    return { type: 'weighted_pressure_plate_heavy', powered: false, pressedPower: 15 } as BlockState
+    return {
+      type: 'weighted_pressure_plate_heavy', powered: false,
+      pressedPower: weightedPlatePressedPower(props.power),
+    } as BlockState
   }
   if (buttonLike) {
     // 木材各種はまとめて木の感圧板、石系は石の感圧板 (重量感圧板は上で処理済み)
