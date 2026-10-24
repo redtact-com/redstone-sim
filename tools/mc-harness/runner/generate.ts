@@ -45,6 +45,10 @@ const sharedDir = join(harnessDir, 'scripts', 'shared')
 const outDir = join(repoRoot, 'packages', 'sim', 'test', 'fixtures')
 
 const PLAYER_NAME = 'GT'
+/** carpet が「そのプレイヤーは居ない」と返したか (`player` コマンドの応答) */
+export function isMissingPlayer(response: string): boolean {
+  return response.includes('Can only manipulate existing players')
+}
 
 /**
  * ロックの取得時刻を更新する間隔。--all は 30 分ほどかかるが、
@@ -228,11 +232,24 @@ async function generateFixture(name: string): Promise<void> {
     const [sx, sy, sz] = def.player.spawn
     const [yaw, pitch] = def.player.facing
     rcon('tick', 'unfreeze')
-    rcon('player', PLAYER_NAME, 'spawn', 'at', String(sx), String(sy), String(sz),
-      'facing', String(yaw), String(pitch), 'in', 'minecraft:overworld', 'in', 'survival')
-    await sleep(800)
     const [lx, ly, lz] = def.player.lookAt
-    rcon('player', PLAYER_NAME, 'look', 'at', String(lx), String(ly), String(lz))
+    // carpet の `player spawn` は応答を返さないまま失敗することがある (直前の fixture で
+    // kill した GT の後始末が終わっていないときなど)。居ないまま進むと入力が全部空振りし、
+    // **変化 0 件の expect を正解として書いてしまう**。look の応答で居ることを確かめ、
+    // 居なければ出し直す (2026-10-24 に 3 本続けて撮ったとき 3 本目で再現)
+    let spawned = false
+    for (let attempt = 1; attempt <= 3 && !spawned; attempt++) {
+      if (attempt > 1) {
+        console.warn(`  fake player が居ないので出し直す (${attempt} 回目)`)
+        rcon('player', PLAYER_NAME, 'kill')
+        await sleep(400)
+      }
+      rcon('player', PLAYER_NAME, 'spawn', 'at', String(sx), String(sy), String(sz),
+        'facing', String(yaw), String(pitch), 'in', 'minecraft:overworld', 'in', 'survival')
+      await sleep(800)
+      spawned = !isMissingPlayer(rcon('player', PLAYER_NAME, 'look', 'at', String(lx), String(ly), String(lz)))
+    }
+    if (!spawned) throw new Error(`${name}: fake player を出せない (3 回試した)`)
     await sleep(300)
     rcon('tick', 'freeze')
   }
@@ -252,11 +269,15 @@ async function generateFixture(name: string): Promise<void> {
         // 高さは fixture の player.lookAt の Y オフセットを流用する
         // (床レバー 1.35 / 床ボタン 1.06 などブロック種で異なるため)
         const lookY = def.player!.lookAt[1] - Math.floor(def.player!.lookAt[1])
-        rcon('player', PLAYER_NAME, 'look', 'at',
+        const looked = rcon('player', PLAYER_NAME, 'look', 'at',
           String(input.pos[0] + 0.5), String(input.pos[1] + lookY), String(input.pos[2] + 0.5))
         await sleep(200)
-        rcon('player', PLAYER_NAME, 'use', 'once')
+        const used = rcon('player', PLAYER_NAME, 'use', 'once')
         await sleep(200)
+        // 居ないまま進むと空振りした結果を正解として書いてしまうので止める
+        if (isMissingPlayer(looked) || isMissingPlayer(used)) {
+          throw new Error(`${name}: tick ${t} の use で fake player が居ない`)
+        }
       } else if (input.action === 'setblock') {
         // `/setblock` は flag 2|256 で置くので近隣更新を伴わず、そのあと
         // updateNeighboursOnBlockSet が **周囲6方向にだけ** 更新を配る。

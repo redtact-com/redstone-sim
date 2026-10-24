@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { settleMismatches, buildExpect, fixtureBlocks, stateMapDiff } from './generate.js'
+import { settleMismatches, buildExpect, fixtureBlocks, stateMapDiff, isMissingPlayer } from './generate.js'
 import type { Fixture } from '../../../packages/sim/test/fixture-runner.js'
 
 /**
@@ -209,4 +209,11 @@ describe('既存の expect を今の差分の取り方で作り直しても変�
       expect(buildExpect(fx.blocks, ticks, fx.ticks)).toEqual(fx.expect)
     })
   }
+})
+
+describe('fake player が居ないことの判定', () => {
+  it('carpet の「居ない」応答だけを居ないとみなす', () => {
+    expect(isMissingPlayer('Can only manipulate existing players')).toBe(true)
+    expect(isMissingPlayer('')).toBe(false)
+  })
 })
