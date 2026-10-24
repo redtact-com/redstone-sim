@@ -537,7 +537,8 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:repeater', {
         facing:  flipFacingForVanillaNbt((block as any).facing),
         delay:   String((block as any).delay ?? 1),
-        locked:  'false',
+        // 以前は 'false' 固定で、ロック中のリピーターが保存で外れていた (#393)。mcstate の simToMc と同じ
+        locked:  String((block as any).locked ?? false),
         powered: String((block as any).powered ?? false),
       }]
     case 'comparator':
