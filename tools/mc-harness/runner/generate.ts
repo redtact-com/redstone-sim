@@ -18,14 +18,22 @@
 //     必ず落ちる。fixture-runner が sim と比べるときも両側を畳んでいる
 //   - 書くとき (fixture の blocks / expect) は**畳まない**。名前空間を外してキーを並べるだけ
 //     (ビューアーが元の見た目で描くのに使う。#343)
+//
+// rcon・ワールド初期化・ロックは rcon.ts / world-setup.ts の共通の経路を使う (#242)。
+// 実行中はハーネスのロックを握る。capture / live / MCP と並行して叩くと rcon の応答が混線する。
 // ============================================================
 
-import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs'
+import { constants as osConstants } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseMcState, formatMcState, canonicalize } from '@redstone/sim'
 import { emitAttachedSupportUpdate } from './capture.js'
+import {
+  rcon, scarpet, sleep, reloadDumpApp, readCarpetVersion,
+  withHarnessLock, refreshHarnessLock, releaseHarnessLock,
+} from './rcon.js'
+import { ensureWorldSetup } from './world-setup.js'
 import type {
   Fixture, FixtureExpectEntry, FixtureChange,
 } from '../../../packages/sim/test/fixture-runner.js'
@@ -37,67 +45,17 @@ const sharedDir = join(harnessDir, 'scripts', 'shared')
 const outDir = join(repoRoot, 'packages', 'sim', 'test', 'fixtures')
 
 const PLAYER_NAME = 'GT'
-// WSL2 + compose v2.22 / docker 29 の API バージョン不整合回避 (README 参照)
-const env = { ...process.env, DOCKER_API_VERSION: process.env.DOCKER_API_VERSION ?? '1.44' }
 
-const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-
-function rcon(...args: string[]): string {
-  const out = execFileSync(
-    'docker',
-    ['compose', 'exec', '-T', 'mc', 'rcon-cli', '--', ...args],
-    { cwd: harnessDir, env, encoding: 'utf-8' },
-  )
-  if (process.env.GT_DEBUG) console.log(`[rcon] ${args.join(' ')} => ${out.trim()}`)
-  return out.trim()
-}
-
-/** scarpet 関数呼び出し。' = ok' 応答以外はエラー扱い */
-function scarpet(expr: string): string {
-  const out = rcon('script', 'in', 'dump', 'run', expr)
-  if (/error|failed|exception/i.test(out)) {
-    throw new Error(`scarpet 実行エラー: ${expr}\n${out}`)
-  }
-  return out
-}
-
-/** 冪等なワールド初期化 (gamerule / forceload / freeze) */
-function ensureWorldSetup(): void {
-  const cmds: string[][] = [
-    ['gamerule', 'doDaylightCycle', 'false'],
-    ['gamerule', 'doWeatherCycle', 'false'],
-    ['gamerule', 'doMobSpawning', 'false'],
-    ['gamerule', 'doFireTick', 'false'],
-    ['gamerule', 'randomTickSpeed', '0'],
-    ['gamerule', 'announceAdvancements', 'false'],
-    ['gamerule', 'spawnChunkRadius', '0'],
-    ['setworldspawn', '0', '4', '0'],
-    ['weather', 'clear'],
-    ['forceload', 'add', '-16', '-16', '47', '31'],
-    ['tick', 'freeze'],
-  ]
-  for (const c of cmds) rcon(...c)
-  const loaded = rcon('script', 'load', 'dump')
-  if (!/reloaded|loaded/.test(loaded)) throw new Error(`dump.sc をロードできない: ${loaded}`)
-}
+/**
+ * ロックの取得時刻を更新する間隔。--all は 30 分ほどかかるが、
+ * ロックは 10 分 (LOCK_STALE_MS) で残骸とみなされて他の実行に奪われる
+ */
+const LOCK_HEARTBEAT_MS = 60_000
 
 interface McDumpResult {
   name: string
   mc_world_time: number
   ticks: { tick: number; blocks: Record<string, string> }[]
-}
-
-function readCarpetVersion(): string {
-  try {
-    const out = execFileSync(
-      'docker', ['compose', 'exec', '-T', 'mc', 'ls', '/data/mods'],
-      { cwd: harnessDir, env, encoding: 'utf-8' },
-    )
-    const jar = out.split('\n').find(l => /carpet.*\.jar/i.test(l))
-    return jar?.replace(/\.jar$/, '').replace(/^fabric-carpet-|^carpet-/, '') ?? 'unknown'
-  } catch {
-    return 'unknown'
-  }
 }
 
 // ─── 照合と書き出し (純粋な部分。generate.test.ts が実機なしで検査する) ───
@@ -360,12 +318,24 @@ async function generateFixture(name: string): Promise<void> {
     scarpet(`fx_dump(${t})`)
   }
 
-  // 6. 保存して回収
+  // 6. 保存して回収。**前回の result.json を読まない**よう、保存の前に消して名前も確かめる。
+  // コンテナの scripts/ はコンテナを起動したチェックアウトを bind mount しているので、
+  // 別のチェックアウトから回すと書き出し先がずれ、残っていた古い結果を新しい結果として書いてしまう
+  const resultPath = join(sharedDir, 'result.json')
+  rmSync(resultPath, { force: true })
   scarpet(`fx_save('${name}')`)
   if (hasInputs) rcon('player', PLAYER_NAME, 'kill')
-  const result = JSON.parse(
-    readFileSync(join(sharedDir, 'result.json'), 'utf-8'),
-  ) as McDumpResult
+  if (!existsSync(resultPath)) {
+    throw new Error(
+      `${resultPath} が書き出されていない。`
+      + 'コンテナの scripts/ がこのチェックアウトを mount しているか確かめること '
+      + '(docker inspect redstone-sim-mc-harness の /data/world/scripts の Source)',
+    )
+  }
+  const result = JSON.parse(readFileSync(resultPath, 'utf-8')) as McDumpResult
+  if (result.name !== name) {
+    throw new Error(`result.json の name が違う: ${result.name} (期待: ${name})`)
+  }
 
   // 7. settled (tick -1) が authored と一致するか検証 (両側を canonicalize して比べる)
   const settled = result.ticks.find(x => x.tick === -1)
@@ -399,16 +369,35 @@ async function generateFixture(name: string): Promise<void> {
   console.log(`expect エントリ数: ${expect.length} (変化があった tick: ${expect.map(e => e.tick).join(', ')})`)
 }
 
-async function main() {
+async function main(): Promise<void> {
   const names = process.argv.slice(2)
   if (names.length === 0) {
     console.error('使い方: npx tsx tools/mc-harness/runner/generate.ts <fixture名> [...]')
     process.exit(1)
   }
-  ensureWorldSetup()
-  for (const name of names) {
-    await generateFixture(name)
-  }
+  // ロックが握られていたら待たずに止まる (capture・live・MCP と同じ)
+  await withHarnessLock(async () => {
+    const heartbeat = setInterval(() => refreshHarnessLock(), LOCK_HEARTBEAT_MS)
+    // Ctrl-C や kill では finally を通らないので、ここでロックを返してから終わる
+    // (返さないと残骸とみなされるまでの 10 分間、他の実行が止まる)
+    const onSignal = (sig: NodeJS.Signals): void => {
+      clearInterval(heartbeat)
+      releaseHarnessLock()
+      console.error(`${sig} を受けたので中断した (ロックは返した)`)
+      process.exit(128 + osConstants.signals[sig])
+    }
+    process.once('SIGINT', onSignal)
+    process.once('SIGTERM', onSignal)
+    try {
+      ensureWorldSetup()
+      reloadDumpApp()   // unload → load (load だけでは dump.sc を読み直さない)
+      for (const name of names) await generateFixture(name)
+    } finally {
+      clearInterval(heartbeat)
+      process.off('SIGINT', onSignal)
+      process.off('SIGTERM', onSignal)
+    }
+  })
 }
 
 // テストから import しても CLI が走らないようにする。
