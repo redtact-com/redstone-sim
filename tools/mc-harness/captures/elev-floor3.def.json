@@ -1,0 +1,12 @@
+{
+  "name": "elev-floor3",
+  "source": "TAKU128_DoubleSidedGlassElevatorMultipleFloors.litematic",
+  "ticks": 240,
+  "pad": 1,
+  "settle": false,
+  "players": [{ "name": "Rider", "spawn": [1.5, 57.0, 7.5] }],
+  "inputs": [
+    { "tick": 2, "pos": [1, 57, 9], "action": "lectern", "page": 2 },
+    { "tick": 4, "pos": [1, 59, 8], "action": "use" }
+  ]
+}
