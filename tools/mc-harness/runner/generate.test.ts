@@ -149,16 +149,13 @@ const defs = readdirSync(defDir).filter(f => f.endsWith('.json')).sort()
   .filter(f => existsSync(join(outDir, f)))
 
 /**
- * 既知のずれ。ファイル名 → 比べないキー。
+ * 既知のずれ。ファイル名 → 比べないキー。今は無い。
  *
- * door-2wide-open-to-close の skipUntil / skipReason は定義にだけ残っている。
- * 定義から外すのは #388 (PR#389) の担当なので、この PR では触らない。
- * TODO(#388): PR#389 がマージされたらこの項目を消す。消し忘れても、ずれが解消した時点で
- * 下のテストが「KNOWN_DRIFT から消すこと」と言って落ちる
+ * 足すときは理由と、いつ消すかを書く。ずれが解消した時点で
+ * 下のテストが「KNOWN_DRIFT から消すこと」と言って落ちるので、消し忘れは起きない。
+ * (door-2wide-open-to-close の skipUntil / skipReason は #388 (PR#389) で定義から消えた)
  */
-const KNOWN_DRIFT: Readonly<Record<string, readonly string[]>> = {
-  'door-2wide-open-to-close.json': ['skipUntil', 'skipReason'],
-}
+const KNOWN_DRIFT: Readonly<Record<string, readonly string[]>> = {}
 
 describe('定義と生成物がずれていない', () => {
   /**
