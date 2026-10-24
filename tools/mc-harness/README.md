@@ -88,7 +88,7 @@ docs/research/04 §2.2-8 の「freeze 中の `__on_tick` 発火有無」を実�
 ```
 
 - ブロック表現は **MC blockstate 文字列を正とする**。fixture に書く形と比べる形を分けている (#242)。
-  - **書く形** (`blocks` / `expect`): 名前空間なし・プロパティキー昇順。scarpet 側 `_canon()` の出力と同じ形で、**材質は畳まない** (ビューアーが元の見た目で描くのに使う。#343)
+  - **書く形** (`blocks` / `expect`): 名前空間なし・プロパティキー昇順。scarpet 側 `_canon()` の出力と同じ形で、**材質は畳まない**。`blocks` はビューアーが元の見た目で描くのに使う (#343)。`expect` には実機の生の文字列をそのまま書く
   - **比べる形**: TS 側 `canonicalize()` (`packages/sim/src/mcstate.ts`)。sim が区別しない材質を代表名に畳む (導体フルブロック → `stone` / `obsidian` / `gray_glazed_terracotta`、ガラス類 → `glass`、ハーフ → `smooth_stone_slab[type=...]` で waterlogged を落とす)。settle 照合・expect の差分・sim との比較 (`fixture-runner.ts`) は、どれも**両側をこの形にしてから**比べる
 - `blocks` は**実機で安定な状態**を書く (ワイヤーの power・接続形状・トーチの lit まで正確に)。生成時に「without_updates 設置 → 全ブロック update → 8 tick settle」後の実機状態と照合され、ズレていると失敗する (= 実機が正しい安定状態を教えてくれる)。照合は比べる形で行うので、材質とハーフの waterlogged は見ない。
 - `expect` は変化のあった tick の差分のみ。消滅は `"block": "air"`。
