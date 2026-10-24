@@ -60,6 +60,9 @@ mappings ライセンスの一次資料を当たったもの)。**本書はそ�
   redstone-maker も同じパックの一部を `public/mk2/` に vendoring している
 - 無い場合はバニラテクスチャ ([misode/mcmeta](https://github.com/misode/mcmeta)) に
   自動フォールバックする実装がある
+- 取得先を試す順番 (#395): パック (`bundle.json` の一覧にあるものだけ。一覧はパスだけ) → mcmeta →
+  PrismarineJS。後ろ 2 つは raw.githubusercontent.com → jsDelivr の順に**同じリポの同じ版**を取り、
+  どこにも届かなければ単色で描く。jsDelivr も利用者のブラウザが実行時に取るだけで、同梱も中継もしない
 
 > 口頭の了解はあるが、**許諾の範囲を `credit.md` に書き残しておく**とあとで揉めない
 > (誰が・どのパックを・どの用途で・再配布可か)。第三者が fork したときの扱いも決めておくとよい。

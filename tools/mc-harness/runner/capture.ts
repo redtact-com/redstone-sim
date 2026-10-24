@@ -34,13 +34,14 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { rcon, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
+import { rcon, rconBatch, scarpet, withHarnessLock, sleep, reloadDumpApp, MAX_COMMAND_LEN } from './rcon.js'
 import type { Capture, CaptureItems } from './compare.js'
 import {
   readScheduledTicks, readComparatorOutputs, readHopperCooldowns,
 } from './scheduled-ticks.js'
 import { readRawPlacedBlocks } from '../../../app/src/nbtIO.js'
 import type { RawPlacedBlock } from '../../../app/src/nbtIO.js'
+import { pressBlock, readState, standCandidates } from './aim.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
@@ -135,6 +136,45 @@ export interface CaptureDef {
    * region に含めたいときに使う。
    */
   keep?: string[]
+  /**
+   * 置いた後に region 全体へ `update()` を撒くか (**省略時 true = 従来どおり**)。
+   *
+   * `false` にするのは `.litematic` など **blockstate に通電状態を持つ回路** (#376)。
+   * 全体に update を撒くと、伸びたまま保存されたピストンが「電源が無いのに伸びている」
+   * と判定されて縮み、**粘着で隣のブロックを引きずる**
+   * (エレベーターのかごが 1 ブロック上にずれた。実測 24 か所)。
+   * ピストンだけ update から外しても、隣のダスト経由で同じことが起きるので直らない。
+   *
+   * 手書き fixture は通電状態を持たないので settle が要る。**既定を変えてはいけない**。
+   *
+   * `false` でも `fx_items` / 本の入れ直しの後は `fx_settle_comparators()` を撃つ
+   * (中身は blockstate に出ないのでコンパレーターに読み直させる必要がある #196)。
+   * コンパレーターは受け身なので、ファイルの出力が正しければ値が変わらず
+   * 下流のピストンへも波及しない (実測: ファイルとの差 0)。
+   */
+  settle?: boolean
+  /**
+   * 記録を始める前に空回しする tick 数 (#382)。
+   *
+   * **ファイルが動いている途中の状態で保存されていることがある**。
+   * `Runa.S_opened` は置いた直後の 3 tick で勝手に動き出すので、
+   * そのまま撮ると **tick 0 が「閉まりかけ」**の動画になり、
+   * 入力で何が起きたのか分からなくなる。
+   *
+   * ピストンの停止待ち (`fx_moving`) は**動いているピストンしか見ない**ので、
+   * ダストやオブザーバーだけが動いている間は抜けてしまう。ここで明示的に回す。
+   */
+  warmup?: number
+  /**
+   * 記録を始める**前に**当てる入力 (#382)。`tick` は無視され、書いた順に当たる。
+   *
+   * **ファイルが中途半端な状態で保存されていることがある**。
+   * `Runa.S_closed` はドアが半開き (ドア材が通る 53 マスのうち 25 マスが空) で
+   * 保存されていて、そのまま撮ると「0 tick で既に閉まりかけ」の動画になる。
+   * ここで 1 回動かし切ってから `warmup` で落ち着かせると、
+   * **tick 0 が意味のある状態**になる。
+   */
+  preInputs?: CaptureDefInput[]
 }
 
 // Capture の形は **compare.ts が正**。二重定義するとドリフトして
@@ -158,6 +198,58 @@ function toStateString(name: string, props: Record<string, string>): string {
   const id = name.replace(/^minecraft:/, '')
   const keys = Object.keys(props).sort()
   return keys.length === 0 ? id : `${id}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
+}
+
+/** 元ファイルと実機のズレ 1 件 */
+export interface DriftEntry {
+  pos: string
+  source: string
+  settled: string
+}
+
+/**
+ * ズレを **構造 (ブロックの種類が変わった) と状態だけ** に分ける (#376)。
+ *
+ * 構造のズレは「機械が壊れた」に等しい (ピストンが縮んで粘着ブロックが動いた等)。
+ * 状態だけのズレはダストの強度が計算し直された程度なので害が無いことが多い。
+ * 同じ扱いにしていたため、エレベーターのかごが動いていたのに
+ * ログの 1 行に埋もれて気付かれなかった。
+ */
+export function splitDrift(drift: DriftEntry[]): { structural: DriftEntry[]; stateOnly: DriftEntry[] } {
+  const kind = (s: string): string => s.split('[')[0]
+  return {
+    structural: drift.filter(d => kind(d.source) !== kind(d.settled)),
+    stateOnly: drift.filter(d => kind(d.source) === kind(d.settled)),
+  }
+}
+
+/**
+ * 2 つの盤面 (座標キー → blockstate 文字列) のズレを取る。
+ *
+ * **「キーが無い」と `'air'` は同じもの**として比べる (#382)。
+ * 片方だけが air を明示していると (キャプチャ側の `authored` は明示することがある)
+ * `undefined !== 'air'` で差分に化け、**表示は両方 `air`** という読めない行が
+ * 大量に出る。Runa で 284〜460 件出ていて、本物のズレ 8 件が埋もれていた。
+ */
+export function diffStates(
+  source: Record<string, string>, settled: Record<string, string>,
+): DriftEntry[] {
+  const out: DriftEntry[] = []
+  for (const k of new Set([...Object.keys(source), ...Object.keys(settled)])) {
+    const a = source[k] ?? 'air'
+    const b = settled[k] ?? 'air'
+    if (a !== b) out.push({ pos: k, source: a, settled: b })
+  }
+  return out
+}
+
+/** いまの region を実機から読む (dump.sc が shared/live.json に書いたものを回収する) */
+export function scanLiveRegion(): Record<string, string> {
+  scarpet('fx_live_save()')
+  const path = join(sharedDir, 'live.json')
+  if (!existsSync(path)) throw new Error(`live.json が無い: ${path}`)
+  const json = JSON.parse(readFileSync(path, 'utf-8')) as { blocks?: Record<string, string> }
+  return json.blocks ?? {}
 }
 
 export interface CaptureRegion {
@@ -516,11 +608,26 @@ async function applyInput(input: CaptureDefInput, players: CaptureDefPlayer[]): 
     case 'use': {
       const name = input.player ?? players[0]?.name
       if (!name) throw new Error(`use には fake player が要る (players を定義する): ${input.pos}`)
-      // ブロック中心へ照準し直してから 1 回だけ使う
-      rcon('player', name, 'look', 'at', String(x + 0.5), String(y + 0.5), String(z + 0.5))
-      await sleep(150)
-      rcon('player', name, 'use', 'once')
-      await sleep(150)
+      // **まずブロック中心**を狙う (従来と同じ)。外したら形状に合わせて狙い直し、
+      // それでも駄目なら facing 側へ動かして押す (#378 / #382)。
+      // どれも tick を進めないので、キャプチャの tick 精度は崩れない
+      const state = readState([x, y, z])
+      await pressBlock([x, y, z], state, {
+        use: async (aim, moveTo) => {
+          rconBatch([
+            // spawn も撃つ (足場が無いと落ちて死んでいることがある。生きていれば何も起きない)
+            ...(moveTo === undefined ? [] : [
+              `player ${name} spawn at ${moveTo.join(' ')}`,
+              `tp ${name} ${moveTo.join(' ')}`,
+            ]),
+            `player ${name} look at ${aim.join(' ')}`,
+            `player ${name} use once`,
+          ], { ignoreResponses: true })
+          await sleep(200)
+        },
+        read: () => readState([x, y, z]),
+        log: msg => console.log(msg),
+        }, { stands: standCandidates([x, y, z], state) })
       break
     }
     case 'setblock':
@@ -582,9 +689,30 @@ export interface CaptureOptions {
   quiet?: boolean
 }
 
-export async function capture(defPath: string, opts: CaptureOptions = {}): Promise<Capture> {
-  const log = opts.quiet === true ? () => {} : (...a: unknown[]) => console.log(...a)
-  const def = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
+/**
+ * 実回路を実機に置いて落ち着かせる (#372 で capture() から切り出し)。
+ *
+ * **順序に意味がある**。掃除 → 空回し → 設置 の順でないと前回の予約 tick が
+ * 残って結果が変わり (#240)、本を入れ直さないと書見台の出力が張り付き (#240)、
+ * moving_piston が残ったまま撮ると初期状態を sim 側で復元できない (#244 / #248)。
+ * どれも 1 周無駄にして分かったことなので、**ライブ観測 (#372) とキャプチャが
+ * 同じ関数を呼ぶ**形にしてある (写経すると必ずずれる)。
+ */
+export async function placeCircuit(
+  def: CaptureDef,
+  log: (...a: unknown[]) => void = () => {},
+): Promise<{
+  blocks: Awaited<ReturnType<typeof loadCircuit>>['blocks']
+  region: CaptureRegion
+  fullRegion: CaptureRegion
+  players: CaptureDefPlayer[]
+  /** 実機へ入れたコンテナの中身 (キャプチャ側が「実機から読み直した値」と比べる) */
+  placeItems: { pos: [number, number, number]; slots: { slot: number; id: string; count: number }[] }[]
+  /** 入れ直した書見台の本 (blockstate に出ないのでキャプチャに載せる) */
+  lecternBooks: ReturnType<typeof collectLecternBooks>['books']
+  /** 元ファイルと置いた結果のズレ (#376)。構造のズレは呼び元が警告する */
+  drift: DriftEntry[]
+}> {
   const { blocks, region, fullRegion, missing } = await loadCircuit(def)
   log(`[capture] ${def.name}: ${blocks.length} ブロック / region ${region.from} - ${region.to}`)
   if (missing.length > 0) {
@@ -622,6 +750,18 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
 
   // 2. 設置 → 中身 → 安定化
   reloadDumpApp()
+  // **前回の fake player を先に消す** (#239)。
+  //
+  // 消さずに `player <名前> spawn` を撃つと、既に入っている同名のプレイヤーには
+  // 何も起きず、**前回どこに流れ着いたかも分からない位置のまま**になる。
+  // このエレベーターは泡柱で人を押し上げるので、置き直したつもりが
+  // シャフトの上の方に居たり、水没して死ぬ直前だったりする。
+  // そうなると `use` が届かず「ボタンを押せない」に化けて、狙点の問題と見分けが付かない。
+  //
+  // **unfreeze 区間でやる**。freeze 中は player の kill / spawn が保留される
+  rcon('tick', 'unfreeze')
+  for (const p of def.players ?? []) rcon('player', p.name, 'kill')
+  await sleep(300)
   rcon('tick', 'freeze')
   // **掃除 → 空回し → 設置** の順にする (#240)。
   // 続けてやると前回の実行が残した**予約 tick がキューに残ったまま**になり、
@@ -637,10 +777,14 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   rcon('kill', '@e[type=!player]')
   await waitForDrain(DRAIN_TICKS)
   scarpet('fx_setup()')
+  // 全体 settle をするか (def の `settle` 参照。**省略時は従来どおり撒く**)。
+  // 撒かないときも中身の投入後はコンパレーターだけ起こす (#376 / #196)
+  const fullSettle = def.settle !== false
+  const reread = (): void => { scarpet(fullSettle ? 'fx_settle()' : 'fx_settle_comparators()') }
   if (placeItems.length > 0) {
     const n = scarpet('fx_items()')
     log(`[capture] 中身を投入: ${n.trim()}`)
-    scarpet('fx_settle()')   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
+    reread()   // #196: 中身を入れた後にもう一度更新を配らないとコンパレーターが読まない
   }
   if (lecternBooks.length > 0) {
     // set() は blockstate しか作らないので、本は設置の**後**に rcon で入れ直す
@@ -649,9 +793,14 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
       + `(${lecternBooks.slice(0, 3).map(b => `${b.pos.join(',')} ${b.page + 1}/${b.pages}p`).join(' ')})`)
     // コンテナの中身と同じ理由 (#196)。without_updates で置いた後に block entity だけ
     // 変えてもコンパレーターは読みに行かないので、更新を配り直す
-    scarpet('fx_settle()')
+    reread()
   }
-  scarpet('fx_settle()')
+  if (fullSettle) {
+    scarpet('fx_settle()')
+  } else {
+    log('[capture] 全体 settle を飛ばした (settle: false)。'
+      + 'ファイルの通電状態をそのまま実機の初期状態にする')
+  }
   await waitForDrain(8)
 
   // 3. **ピストンが動き終わるまで待つ** (#244)。
@@ -675,12 +824,58 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
     await waitForDrain(1)
   }
 
+  // 3.5 **元ファイルとのズレを置いた直後に見る** (#376)。
+  //
+  // 以前はキャプチャの最後にまとめて見ていたため、「実機を採用」の 1 行に埋もれて
+  // **エレベーターのかごが 1 ブロック動いていたのに誰も気付かなかった**。
+  // ブロックの種類が変わるズレは機械が壊れたのと同じなので、ここで大きく出す。
+  const source: Record<string, string> = {}
+  for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
+  const drift = diffStates(source, scanLiveRegion())
+  const { structural, stateOnly } = splitDrift(drift)
+  if (structural.length > 0) {
+    log(`[capture] ⚠ 置いた結果が元ファイルと構造的に ${structural.length} か所ズレた`
+      + ' (ブロックの種類が変わった = 機械が壊れている可能性がある)')
+    for (const d of structural.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    if (structural.length > 8) log(`    … 他 ${structural.length - 8} 件`)
+    if (def.settle !== false) {
+      log('    settle が原因かもしれない。def に "settle": false を入れて試すこと (#376)')
+    }
+  }
+  if (stateOnly.length > 0) {
+    log(`[capture] 元ファイルと状態だけのズレ ${stateOnly.length} か所 (実機を採用)`)
+  }
+
+  // 3.6 **記録を始める前の入力** (#382)。中途半端な状態で保存されたファイルを
+  // 動かし切ってから撮るのに使う。プレイヤーが要るので 4 の後に回す
+
+  // 3.7 **記録を始める前に空回しする** (#382)。
+  // ファイルが動いている途中の状態で保存されていると tick 0 が
+  // 「閉まりかけ」になり、入力で何が起きたのか分からなくなる
   // 4. プレイヤーを置く
   const players = def.players ?? []
   for (const p of players) {
     rcon('player', p.name, 'spawn', 'at', String(p.spawn[0]), String(p.spawn[1]), String(p.spawn[2]))
     await sleep(300)
   }
+
+  // 5. 記録前の入力 → 空回し
+  for (const input of def.preInputs ?? []) {
+    log(`[capture] 記録前の入力: ${input.action} ${input.pos.join(',')}`)
+    await applyInput(input, players)
+  }
+  const warmup = def.warmup ?? 0
+  if (warmup > 0) {
+    log(`[capture] 記録前に ${warmup} tick 空回しする (warmup)`)
+    await waitForDrain(warmup)
+  }
+  return { blocks, region, fullRegion, players, placeItems, lecternBooks, drift }
+}
+
+export async function capture(defPath: string, opts: CaptureOptions = {}): Promise<Capture> {
+  const log = opts.quiet === true ? () => {} : (...a: unknown[]) => console.log(...a)
+  const def = JSON.parse(readFileSync(defPath, 'utf-8')) as CaptureDef
+  const { blocks, region, players, placeItems, lecternBooks } = await placeCircuit(def, log)
 
   // 5. 記録開始 → 入力を挟みながら tick を進める。
   //
@@ -754,17 +949,18 @@ export async function capture(defPath: string, opts: CaptureOptions = {}): Promi
   }
 
   // 元ファイルとのズレを記録する (落とさない。実機が正)
-  const source: Record<string, string> = {}
-  for (const b of blocks) source[b.pos.join(',')] = toStateString(b.name, b.props)
-  const settleDrift: Capture['settleDrift'] = []
-  for (const k of new Set([...Object.keys(source), ...Object.keys(authored)])) {
-    if (source[k] !== authored[k]) {
-      settleDrift.push({ pos: k, source: source[k] ?? 'air', settled: authored[k] ?? 'air' })
-    }
-  }
+  const sourceStates: Record<string, string> = {}
+  for (const b of blocks) sourceStates[b.pos.join(',')] = toStateString(b.name, b.props)
+  const settleDrift: Capture['settleDrift'] = diffStates(sourceStates, authored)
   if (settleDrift.length > 0) {
-    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`)
-    for (const d of settleDrift.slice(0, 8)) log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    // **構造のズレを分けて出す** (#376)。合計だけ出していたので
+    // 「かごが動いた」が状態のズレに埋もれていた
+    const { structural, stateOnly } = splitDrift(settleDrift)
+    log(`[capture] 元ファイルと実機の安定状態が ${settleDrift.length} か所ズレた (実機を採用)`
+      + ` — 構造 ${structural.length} / 状態のみ ${stateOnly.length}`)
+    for (const d of [...structural, ...stateOnly].slice(0, 8)) {
+      log(`    ${d.pos}: ファイル=${d.source} 実機=${d.settled}`)
+    }
     if (settleDrift.length > 8) log(`    … 他 ${settleDrift.length - 8} 件`)
   }
 

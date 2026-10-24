@@ -4,7 +4,8 @@
 // 実機 ground truth ハーネス (tools/mc-harness) の fixture は
 // Minecraft の blockstate 文字列 (例: 'repeater[delay=1,facing=west,...]')
 // を正とする。ここでは:
-//   - canonicalize: 名前空間除去 + プロパティのキー昇順ソート
+//   - canonicalize: 比べるための正規形 (名前空間除去 + キー昇順 + sim が
+//                   区別しない材質を代表名に畳む)
 //   - mcToSim:      blockstate 文字列 → sim BlockState
 //   - simToMc:      sim BlockState → blockstate 文字列
 //                   (authored 文字列に動的プロパティのみパッチする方式。
@@ -27,7 +28,7 @@ import { OPPOSITE } from './types.js'
 import { emptySlots } from './blocks/container.js'
 import {
   classifyPlainBlock, isContainerBlockName, isContainerFullCube,
-  doorLikeKindOf, buttonLikeKindOf, appearanceProps,
+  doorLikeKindOf, buttonLikeKindOf, appearanceProps, weightedPlatePressedPower,
 } from './blocks/blockNames.js'
 
 export interface ParsedMcState {
@@ -58,7 +59,15 @@ export function formatMcState(name: string, props: Record<string, string>): stri
   return `${name}[${keys.map(k => `${k}=${props[k]}`).join(',')}]`
 }
 
-/** blockstate 文字列を正規形へ (scarpet 側 _canon() と同一形式) */
+/**
+ * blockstate 文字列を**比べるための**正規形へ。
+ * 名前空間を外してキーを並べたうえで、sim が区別しない材質を代表名に畳む。
+ *
+ * **scarpet 側 `_canon()` と同じ形ではない** (`_canon` は名前空間を外してキーを並べるだけで、
+ * 材質は畳まない)。実機の dump と比べるときは両側をこれに通すこと (#242)。
+ * fixture に書く形は parseMcState → formatMcState を通しただけのもの
+ * (材質を残す。tools/mc-harness/runner/generate.ts の normalizeState)。
+ */
 export function canonicalize(state: string): string {
   const { name, props } = parseMcState(state)
   // sim は導体フルブロックを材質ごと `solid` 1 種に潰す (13 §2 の既知の抽象化)。
@@ -144,13 +153,13 @@ export function mcToSim(state: string): BlockState | null {
     case 'light_weighted_pressure_plate':
     case 'heavy_weighted_pressure_plate': {
       // 重量感圧板。POWER (0-15) = 現在出力。手動モデルは設定値 pressedPower を
-      // 保持する。authored の POWER>0 は乗った状態なので pressedPower に採用し、
-      // rest (POWER=0) では既定値 15 とする [確定: 26.2 WeightedPressurePlateBlock]
+      // 保持する。POWER → pressedPower の規則は nbtIO と共有する (#393)。
+      // 実機キャプチャでは押下状態も blockstate のとおり (POWER>0 なら乗っている)
       const power = Number(props.power ?? '0')
       return {
         type: name === 'heavy_weighted_pressure_plate'
           ? 'weighted_pressure_plate_heavy' : 'weighted_pressure_plate_light',
-        pressedPower: power > 0 ? power : 15,
+        pressedPower: weightedPlatePressedPower(props.power),
         powered: power > 0,
       }
     }

@@ -113,6 +113,13 @@ const SOLID_EXACT = new Set([
   'sponge', 'wet_sponge', 'melon', 'pumpkin', 'carved_pumpkin', 'jack_o_lantern',
   'nether_wart_block', 'warped_wart_block', 'shroomlight',   // glowstone は非導体
   'brown_mushroom_block', 'red_mushroom_block', 'mushroom_stem',
+  // 接尾辞の判定に当たらない素の名前 (#393)。同じ素材の別の形 (`_bricks` / `_terracotta` /
+  // copper_block / deepslate_bricks) はすでに導体として拾っている。
+  // 'bricks' は '_bricks' で終わらない。PR#171 で旧リストから消して接尾辞に任せたとき、
+  // 素の bricks だけが漏れた。
+  // [確定: 26.2 — 5 つとも導体判定の既定 (当たり判定がフルブロックなら導体) を
+  //  上書きしていない。実機では測っていない]
+  'bricks', 'terracotta', 'waxed_copper_block', 'deepslate_tiles', 'cracked_deepslate_tiles',
 ])
 
 /** 接尾辞で一致する導体フルブロック */
@@ -428,6 +435,22 @@ export function buttonLikeKindOf(name: string): NamedBlockKind<ButtonLikeType> |
     return { type: stone ? 'pressure_plate_stone' : 'pressure_plate_wood', name: id }
   }
   return null
+}
+
+/**
+ * 重量感圧板の blockstate の POWER → sim の pressedPower (#393)。**2 本の変換器で共有する**。
+ *
+ * vanilla の POWER は「今乗っているものの数で決まる出力」で、踏まれていなければ 0
+ * [確定: 26.2 WeightedPressurePlateBlock]。sim の重量板は「踏んだときの出力」を設定値として
+ * 持つ手動モデルなので、POWER>0 (乗った状態で保存されたもの) はその値を使い、
+ * 0 や読めない値は既定の 15 にする。以前は nbtIO だけが POWER を読まず、常に 15 だった。
+ *
+ * 押下状態 (powered) はここでは決めない。変換器ごとに扱いが違うため
+ * (アプリの取り込みは常に OFF / 実機キャプチャは blockstate のとおり)。
+ */
+export function weightedPlatePressedPower(power: string | undefined): number {
+  const n = Math.floor(Number(power ?? '0'))
+  return Number.isFinite(n) && n > 0 ? Math.min(15, n) : 15
 }
 
 /** 装飾の描画用に blockstate 文字列を組み立て直す (プロパティはキー昇順) */

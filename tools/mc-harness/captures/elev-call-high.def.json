@@ -1,0 +1,11 @@
+{
+  "name": "elev-call-high",
+  "source": "TAKU128_DoubleSidedGlassElevatorMultipleFloors.litematic",
+  "ticks": 120,
+  "pad": 1,
+  "settle": false,
+  "players": [{ "name": "Rider", "spawn": [1.5, 97.0, 7.5] }],
+  "inputs": [
+    { "tick": 2, "pos": [1, 99, 8], "action": "use" }
+  ]
+}

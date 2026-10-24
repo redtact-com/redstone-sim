@@ -1,6 +1,6 @@
 {
   "name": "rblock-piston-chain",
-  "description": "#79 zerotick 最前線: ピストン A が redstone_block を押し確定させ、下流ピストン B を直接起動。B が extended になる tick が と vanilla(t6, BlockEntity相) で食い違うかを実機一致 pin (#80 修正済み)。02 §6 piston line 448。",
+  "description": "#79 zerotick 最前線: ピストン A が redstone_block を押し確定させ、下流ピストン B を直接起動。B が extended になる tick が sim(t5, ST相確定) と vanilla(t6, BlockEntity相) で食い違っていたのを実機一致で pin (#80 修正済み)。02 §6 piston line 448。",
   "mcVersion": "1.21.1",
   "ticks": 12,
   "region": {

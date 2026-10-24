@@ -219,7 +219,7 @@ deepslate 等) は本書では繰り返さない。以下は **今回新たに�
 
 | 名前 | ライセンス | 意味 |
 |---|---|---|
-| [Nucleation](https://github.com/Schem-at/Nucleation) | MIT (star 15) | **最重要の要調査**。Rust+WASM で .litematic/.schem/.nbt を横断パースし、README が「vanilla-accurate tick loop, verified against captures from the game」「MCHPRS redpiler, typed circuit executors」を明記。README の GIF は **ボタン押下後に engine の position-hash 順で update カーソルが dust 上を走る** = 08 のトレース記法とほぼ同じ問題を扱っている。tick 実装と検証手法の突き合わせ相手として価値が高い。ただし star 15 の単一メンテナ規模なので **依存として採用するかは別判断** |
+| [Nucleation](https://github.com/Schem-at/Nucleation) | MIT (star 15) | **最重要の要調査**。Rust+WASM で .litematic/.schem/.nbt を横断パースし、README が「vanilla-accurate tick loop, verified against captures from the game」「MCHPRS redpiler, typed circuit executors」を明記。README の GIF は **ボタン押下後に engine の position-hash 順で update カーソルが dust 上を走る** = 08 のトレース記法とほぼ同じ問題を扱っている。tick 実装と検証手法の突き合わせ相手として価値が高い。ただし star 15 の単一メンテナ規模なので **依存として採用するかは別判断**。**追記 2026-09-28**: 16 で調査済み (依存にはせず、差分スクリーニングの道具として使う) |
 | [MCHPRS Redpiler 設計doc](https://github.com/MCHPR/MCHPRS/blob/master/docs/Redpiler.md) | MIT | ワールド→有向重み付きグラフ化 (重み = dust の減衰距離) と **LLVM 風 pass 構成** (IdentifyNodes / InputSearch / ClampWeights / DedupLinks / ConstantFold / Coalesce / PruneOrphans)、4 段 priority のローテーティングキュー。「編集は素朴グリッド / 実行はコンパイル済みグラフ」の二段構えを取る場合、pass 名と分割粒度をそのまま設計語彙に借用できる |
 | [Lodestone](https://github.com/mattzh72/lodestone) | MIT (star 21) | deepslate 由来を明記した three.js ネイティブ TS ライブラリ。chunked meshing + occlusion culling + 透過ソート + **emissive ブロック対応**。ランプ/トーチの発光表現や大規模回路で deepslate の限界に当たったときの移行先候補 |
 | [EngineHub SchematicWebViewer](https://github.com/EngineHub/SchematicWebViewer) | MIT (star 77) | WorldEdit 本家の three.js ビューア。**client jar を CORS プロキシ (Cassette Deck) 経由で実行時取得**する設計は、ローカル同梱 (genLocalModels.js) 方式に対する代替案の実装例 |
@@ -250,7 +250,7 @@ deepslate 等) は本書では繰り返さない。以下は **今回新たに�
 | 項目 | 訂正 |
 |---|---|
 | Mojang 公式配布物の URL | `https://piston-data.mojang.com/` は **404**。実際の入口は `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json` |
-| 赤石基礎論 ArcFrout | 「記事本体は現時点で 404」と注記されているが **200 で生存**。P5 監視対象として再訪の価値あり |
+| 赤石基礎論 ArcFrout | 「記事本体は現時点で 404」と注記されているが **200 で生存**。P5 監視対象として再訪の価値あり。**追記 2026-09-13**: 本体は著者の共同編集ドキュメントに移り、CC BY 4.0 が明記された。01 §4 を更新済み |
 | theosib RedstoneWireTurbo | URL が MCHPRS を指しており、名前が示す資料 (RedstoneWireTurbo / openredstone フォーラム thread-14591) のどちらでもない。MCHPRS の実質 3 重登録 |
 | SubTick / DecompilerMC 等 | 1 エントリに複数実装・複数資料が混ざり URL が 1 本のみ。02 §1 の [要検証] は「chiraag 版 / lntricate1 版のどちらを読んだか」が典拠として効くので分離が必要 |
 | 競合 3 サイト | Redstone Companion / Redstone Studio / CraftMC はいずれもクローズドソースで精度の根拠は自己申告。**ベンチマークには使うが 02 の挙動仕様の典拠には一切使わない** |

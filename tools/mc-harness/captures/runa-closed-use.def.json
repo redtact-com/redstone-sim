@@ -1,0 +1,11 @@
+{
+  "name": "runa-closed-use",
+  "source": "Runa.S_closed (1).nbt",
+  "ticks": 40,
+  "pad": 1,
+  "settle": false,
+  "players": [{ "name": "GT", "spawn": [-0.5, 3.0, 10.5] }],
+  "inputs": [
+    { "tick": 4, "pos": [0, 4, 10], "action": "use" }
+  ]
+}

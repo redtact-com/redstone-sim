@@ -1,6 +1,6 @@
 {
   "name": "observer-piston-pulse",
-  "description": "#80 検証: observer 2gt パルス駆動ピストンが収縮するか恒久伸長か。v1 は moving セル無視ガードで収縮せず伸長維持だが vanilla を実機確認。",
+  "description": "#80 検証: observer 2gt パルス駆動ピストンが収縮するか恒久伸長か。v1 は moving セル無視ガードで収縮せず伸長維持だが vanilla を実機確認。 [#82 修正済み: 短パルス収縮の実機一致 pin]",
   "mcVersion": "1.21.1",
   "ticks": 14,
   "player": {

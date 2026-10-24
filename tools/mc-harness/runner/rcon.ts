@@ -1,8 +1,8 @@
 // ============================================================
 // rcon 基盤モジュール (実機 Minecraft への口)
 //
-// generate.ts / 今後のキャプチャスクリプトが共有する rcon の低レベル層。
-// 前提は generate.ts と同じ (tools/mc-harness で `docker compose up -d` 済み)。
+// ハーネスのスクリプト (generate / capture / minimize / live / MCP) が共有する rcon の低レベル層。
+// 前提: tools/mc-harness で `docker compose up -d` 済み。
 //
 // ここに集めてあるのは「知らないと必ず踏む」3 つの落とし穴:
 //
@@ -101,8 +101,14 @@ export function rcon(...args: string[]): string {
  * 戻り値は応答の行配列 (コマンドと同じ並び)。
  * `script run` のような**複数行応答のコマンドも混ぜない**こと (行と要素の対応がずれる。
  * ずれた場合は警告を出すが、対応付けは呼び出し側で保証すること)。
+ *
+ * **応答を使わないなら `ignoreResponses: true`** を渡す (#374)。
+ * `tellraw` / `title` は複数行返すので、警告だけが出て邪魔になる。
  */
-export function rconBatch(cmds: string[]): string[] {
+export function rconBatch(
+  cmds: string[],
+  opts: { ignoreResponses?: boolean } = {},
+): string[] {
   if (cmds.length === 0) return []
   for (const c of cmds) assertCommandLen(c)
   const input = cmds.join('\n') + '\n'
@@ -115,7 +121,7 @@ export function rconBatch(cmds: string[]): string[] {
   // 空行を一括で捨てると以降の対応がずれる)
   const body = out.endsWith('\n') ? out.slice(0, -1) : out
   const lines = body === '' ? [] : body.split('\n').map(l => l.trim())
-  if (lines.length !== cmds.length) {
+  if (lines.length !== cmds.length && opts.ignoreResponses !== true) {
     console.warn(
       `[rconBatch] 応答行数がコマンド数と一致しない (cmds=${cmds.length} lines=${lines.length})。`
       + '複数行応答のコマンドが混ざっている可能性がある',
@@ -127,13 +133,34 @@ export function rconBatch(cmds: string[]): string[] {
   return lines
 }
 
-/** scarpet 関数呼び出し。error/failed/exception を含む応答はエラー扱い (generate.ts と同判定) */
+/** scarpet 関数呼び出し。error/failed/exception を含む応答はエラー扱い */
 export function scarpet(expr: string): string {
   const out = rcon('script', 'in', 'dump', 'run', expr)
   if (/error|failed|exception/i.test(out)) {
     throw new Error(`scarpet 実行エラー: ${expr}\n${out}`)
   }
   return out
+}
+
+/**
+ * コンテナに入っている carpet の版 (fixture の `generated.carpet` に書く)。
+ * 読めなければ 'unknown'。
+ *
+ * **コンテナの中の /data/mods を見る**。ホスト側の data/ はコンテナを起動した
+ * チェックアウトにしか無いので、別の worktree から回すと読めない。
+ * generate.ts と live-session.ts が同じ実装を別々に持っていたのをここへ寄せた (#242)。
+ */
+export function readCarpetVersion(): string {
+  try {
+    const out = execFileSync(
+      'docker', ['compose', 'exec', '-T', 'mc', 'ls', '/data/mods'],
+      { cwd: harnessDir, env, encoding: 'utf-8', timeout: EXEC_TIMEOUT_MS },
+    )
+    const jar = out.split('\n').find(l => /carpet.*\.jar/i.test(l))
+    return jar?.replace(/\.jar$/, '').replace(/^fabric-carpet-|^carpet-/, '') ?? 'unknown'
+  } catch {
+    return 'unknown'
+  }
 }
 
 /**
@@ -211,6 +238,29 @@ function acquireLock(lockPath: string): void {
     throw new Error(`ロックを取得できない (取り直しの直前に横取りされた): ${lockPath}`)
   }
   writeLockInfo(retry)
+}
+
+/**
+ * ロックを**明示的に**取る / 返す (#369)。
+ *
+ * `withHarnessLock` は「取って fn を回して返す」形なので、MCP サーバのように
+ * **命令をまたいで握り続ける**用途には使えない。代わりにこの 2 本を使う。
+ * 掴みっぱなしを防ぐのは呼び出し側の責任 (MCP は無操作が続いたら自分で返す)。
+ */
+export function acquireHarnessLock(lockPath: string = LOCK_PATH): void {
+  acquireLock(lockPath)
+}
+
+export function releaseHarnessLock(lockPath: string = LOCK_PATH): void {
+  releaseLock(lockPath, process.pid)
+}
+
+/** いま誰がロックを握っているか。握られていなければ null */
+export function harnessLockHolder(lockPath: string = LOCK_PATH): { pid: number; ageMs: number } | null {
+  if (!existsSync(lockPath)) return null
+  const info = readLockInfo(lockPath)
+  if (info === null) return null
+  return { pid: info.pid, ageMs: Date.now() - info.at }
 }
 
 /**

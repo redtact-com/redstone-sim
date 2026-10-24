@@ -2,6 +2,8 @@
 // トレース出力 (I10 #18)。記法は docs/research/08_trace-notation.md が正。
 //
 // enokilovin 氏の descriptive logics を sim 実装へ適応したもの。
+// 出典: Frouts, "ArcFrout" (https://enokilovin.github.io/ArcFrout) — CC BY 4.0。
+// 要約と sim への割当の詳細 (改変の範囲) は docs/research/08_trace-notation.md。
 // SimWorld の内部イベント (schedule / execute / update 発行) から
 // TraceEvent を生成し、1 行 1 イベントの文字列へ整形する。
 //

@@ -4,6 +4,8 @@
 //   /script load dump
 //   /script in dump run fx_setup()          … shared/fixture.json を読み without_updates で設置
 //   /script in dump run fx_settle()         … 全ブロックに update をかけ authored 状態の安定性を確認
+//   /script in dump run fx_settle_comparators() … コンパレーターだけ update (schematic 用 #376)
+//   /script in dump run fx_state([x,y,z])  … 1 ブロックの blockstate を読む
 //   /script in dump run fx_dump(<t>)        … 対象領域を走査し tick t のスナップショットを蓄積
 //   /script in dump run fx_save('<name>')   … 蓄積結果を shared/result.json へ書き出し
 //
@@ -32,6 +34,13 @@ _canon(x, y, z) -> (
     name,
     str('%s[%s]', name, join(',', map(ks, str('%s=%s', _, get(props, _)))))
   )
+);
+
+// ── 1 ブロックだけ読む (#378 の空振り判定) ───────────────────────
+// `str(block(...))` は props を落とすので使えない (face/facing が見えない)。
+fx_state(pos) -> (
+  s = _canon(pos:0, pos:1, pos:2);
+  if(s == null, 'air', s)
 );
 
 // ── 領域走査: {'x,y,z' -> canon} (air は含めない) ────────────────
@@ -132,9 +141,46 @@ fx_settle() -> (
   'ok'
 );
 
+// ── コンパレーターだけ安定化 (#376) ─────────────────────────────
+// `fx_settle` は region 内の全ブロックに update を撒くので、
+// **伸びたまま保存されたピストンが縮んで粘着ブロックを引きずる**
+// (エレベーターのかごが 1 ブロック上にずれた。実測 24 か所)。
+// コンテナとその隣 6 マスに絞っても、コンテナの隣がピストンなので直らない (実測 16 か所)。
+//
+// schematic は blockstate に通電状態を持っているので全体の settle は要らない。
+// ただし **コンテナの中身は blockstate に出ない**ので、`fx_items` や本の入れ直しの
+// 後はコンパレーターに読み直させないといけない (#196)。
+// コンパレーターは入力を読むだけの受け身なので、ファイルの出力が正しければ
+// update を送っても値が変わらず、下流のピストンへも波及しない。
+fx_settle_comparators() -> (
+  from = global_region:'from';
+  to   = global_region:'to';
+  n = 0;
+  c_for(x = from:0, x <= to:0, x += 1,
+    c_for(y = from:1, y <= to:1, y += 1,
+      c_for(z = from:2, z <= to:2, z += 1,
+        if(block(x, y, z) == 'comparator',
+          update([x, y, z]); n += 1
+        )
+      )
+    )
+  );
+  n
+);
+
 // ── tick スナップショット蓄積 ────────────────────────────────────
 fx_dump(t) -> (
   global_results += {'tick' -> t, 'blocks' -> _scan_region()};
+  'ok'
+);
+
+// ── ライブ観測 (#366) ────────────────────────────────────────────
+// 1 回の呼び出しで **いまの region をまるごと** shared/live.json へ書く。
+// キャプチャ側の差分機構 (__on_tick) は `/tick step N` をまとめて撃つ前提だが、
+// ライブは 1 tick ずつ人が触るので、素の全走査で足りる
+// (差分はホスト側が前回との比較で作る)。
+fx_live_save() -> (
+  write_file('live', 'shared_json', {'blocks' -> _scan_region()});
   'ok'
 );
 

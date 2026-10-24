@@ -10,14 +10,30 @@
 //   発火しない (実験済み)。よって tick step / fake player 入力は全て
 //   ホスト側から rcon で 1 コマンドずつ発行し、各 step 後に scarpet の
 //   fx_dump() でスナップショットを蓄積する。
+//
+// ブロックの文字列の扱い (#242):
+//   - 比べるとき (settle 照合・expect の差分) は**両側を canonicalize してから**比べる。
+//     実機の dump (dump.sc の _canon) は名前空間を外してキーを並べるだけで、材質は生のまま
+//     返ってくる。片側だけ畳むと、羊毛・色付きガラス・ハーフ (waterlogged) を置いた定義が
+//     必ず落ちる。fixture-runner が sim と比べるときも両側を畳んでいる
+//   - 書くとき (fixture の blocks / expect) は**畳まない**。blocks は名前空間を外してキーを
+//     並べるだけ (ビューアーが元の見た目で描くのに使う。#343)、expect は実機の生の文字列
+//
+// rcon・ワールド初期化・ロックは rcon.ts / world-setup.ts の共通の経路を使う (#242)。
+// 実行中はハーネスのロックを握る。capture / live / MCP と並行して叩くと rcon の応答が混線する。
 // ============================================================
 
-import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs'
+import { constants as osConstants } from 'node:os'
 import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { parseMcState, canonicalize } from '@redstone/sim'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { parseMcState, formatMcState, canonicalize } from '@redstone/sim'
 import { emitAttachedSupportUpdate } from './capture.js'
+import {
+  rcon, scarpet, sleep, reloadDumpApp, readCarpetVersion,
+  withHarnessLock, refreshHarnessLock, releaseHarnessLock,
+} from './rcon.js'
+import { ensureWorldSetup } from './world-setup.js'
 import type {
   Fixture, FixtureExpectEntry, FixtureChange,
 } from '../../../packages/sim/test/fixture-runner.js'
@@ -29,49 +45,16 @@ const sharedDir = join(harnessDir, 'scripts', 'shared')
 const outDir = join(repoRoot, 'packages', 'sim', 'test', 'fixtures')
 
 const PLAYER_NAME = 'GT'
-// WSL2 + compose v2.22 / docker 29 の API バージョン不整合回避 (README 参照)
-const env = { ...process.env, DOCKER_API_VERSION: process.env.DOCKER_API_VERSION ?? '1.44' }
-
-const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
-
-function rcon(...args: string[]): string {
-  const out = execFileSync(
-    'docker',
-    ['compose', 'exec', '-T', 'mc', 'rcon-cli', '--', ...args],
-    { cwd: harnessDir, env, encoding: 'utf-8' },
-  )
-  if (process.env.GT_DEBUG) console.log(`[rcon] ${args.join(' ')} => ${out.trim()}`)
-  return out.trim()
+/** carpet が「そのプレイヤーは居ない」と返したか (`player` コマンドの応答) */
+export function isMissingPlayer(response: string): boolean {
+  return response.includes('Can only manipulate existing players')
 }
 
-/** scarpet 関数呼び出し。' = ok' 応答以外はエラー扱い */
-function scarpet(expr: string): string {
-  const out = rcon('script', 'in', 'dump', 'run', expr)
-  if (/error|failed|exception/i.test(out)) {
-    throw new Error(`scarpet 実行エラー: ${expr}\n${out}`)
-  }
-  return out
-}
-
-/** 冪等なワールド初期化 (gamerule / forceload / freeze) */
-function ensureWorldSetup(): void {
-  const cmds: string[][] = [
-    ['gamerule', 'doDaylightCycle', 'false'],
-    ['gamerule', 'doWeatherCycle', 'false'],
-    ['gamerule', 'doMobSpawning', 'false'],
-    ['gamerule', 'doFireTick', 'false'],
-    ['gamerule', 'randomTickSpeed', '0'],
-    ['gamerule', 'announceAdvancements', 'false'],
-    ['gamerule', 'spawnChunkRadius', '0'],
-    ['setworldspawn', '0', '4', '0'],
-    ['weather', 'clear'],
-    ['forceload', 'add', '-16', '-16', '47', '31'],
-    ['tick', 'freeze'],
-  ]
-  for (const c of cmds) rcon(...c)
-  const loaded = rcon('script', 'load', 'dump')
-  if (!/reloaded|loaded/.test(loaded)) throw new Error(`dump.sc をロードできない: ${loaded}`)
-}
+/**
+ * ロックの取得時刻を更新する間隔。--all は 30 分ほどかかるが、
+ * ロックは 10 分 (LOCK_STALE_MS) で残骸とみなされて他の実行に奪われる
+ */
+const LOCK_HEARTBEAT_MS = 60_000
 
 interface McDumpResult {
   name: string
@@ -79,35 +62,102 @@ interface McDumpResult {
   ticks: { tick: number; blocks: Record<string, string> }[]
 }
 
-function readCarpetVersion(): string {
-  try {
-    const out = execFileSync(
-      'docker', ['compose', 'exec', '-T', 'mc', 'ls', '/data/mods'],
-      { cwd: harnessDir, env, encoding: 'utf-8' },
-    )
-    const jar = out.split('\n').find(l => /carpet.*\.jar/i.test(l))
-    return jar?.replace(/\.jar$/, '').replace(/^fabric-carpet-|^carpet-/, '') ?? 'unknown'
-  } catch {
-    return 'unknown'
-  }
+// ─── 照合と書き出し (純粋な部分。generate.test.ts が実機なしで検査する) ───
+
+/** 盤面。'x,y,z' → blockstate 文字列 (air は持たない) */
+type StateMap = Record<string, string>
+type DefBlock = Fixture['blocks'][number]
+
+/**
+ * fixture に書く形。名前空間を外してキーを並べるだけ (dump.sc の `_canon` と同じ形)。
+ * **材質は畳まない** (ビューアーが元の見た目で描くのに使う。#343)
+ */
+export function normalizeState(state: string): string {
+  const { name, props } = parseMcState(state)
+  return formatMcState(name, props)
 }
 
-function stateMapDiff(
-  prev: Record<string, string>,
-  cur: Record<string, string>,
-): FixtureChange[] {
+/**
+ * 2 つの盤面の差分。消滅は 'air' で表す。
+ *
+ * **比べるのは canonicalize した形、書くのは cur の生の文字列** (#242)。
+ * 材質だけの違い (羊毛 ⇄ 石) やハーフの waterlogged の有無は変化として数えない。
+ */
+export function stateMapDiff(prev: StateMap, cur: StateMap): FixtureChange[] {
   const keys = new Set([...Object.keys(prev), ...Object.keys(cur)])
   const changes: FixtureChange[] = []
   for (const k of [...keys].sort()) {
     const p = prev[k] ?? 'air'
     const c = cur[k] ?? 'air'
-    if (p !== c) {
+    if (canonicalize(p) !== canonicalize(c)) {
       const pos = k.split(',').map(Number) as [number, number, number]
       changes.push({ pos, block: c })
     }
   }
   return changes
 }
+
+/** 定義の blocks を盤面にする (書く形のまま) */
+export function authoredMap(blocks: readonly DefBlock[]): StateMap {
+  const m: StateMap = {}
+  for (const b of blocks) m[b.pos.join(',')] = normalizeState(b.block)
+  return m
+}
+
+export interface SettleMismatch {
+  pos: string
+  /** 定義の文字列 (書く形) */
+  authored: string
+  /** 実機の生の文字列 */
+  settled: string
+}
+
+/**
+ * settle 照合。定義の blocks と実機の tick -1 (settle 後) を両側 canonicalize して比べ、
+ * 食い違った座標を返す (空なら一致)。
+ * 報告には定義の文字列と実機の生の文字列を並べる (畳んだ形では何を直せばよいか読めない)
+ */
+export function settleMismatches(
+  blocks: readonly DefBlock[], settled: StateMap,
+): SettleMismatch[] {
+  const authored = authoredMap(blocks)
+  return stateMapDiff(authored, settled).map(c => {
+    const pos = c.pos.join(',')
+    return { pos, authored: authored[pos] ?? 'air', settled: c.block }
+  })
+}
+
+/**
+ * tick ごとの差分 (expect)。tick 0 の基準は定義の blocks。
+ * 畳んだ形で比べるので、材質を置いた座標が tick 0 の偽の変化として載ることはない
+ */
+export function buildExpect(
+  blocks: readonly DefBlock[],
+  ticks: readonly { tick: number; blocks: StateMap }[],
+  nTicks: number,
+): FixtureExpectEntry[] {
+  const expect: FixtureExpectEntry[] = []
+  let prev = authoredMap(blocks)
+  for (let t = 0; t <= nTicks; t++) {
+    const entry = ticks.find(x => x.tick === t)
+    if (!entry) throw new Error(`tick ${t} が result にない`)
+    const changes = stateMapDiff(prev, entry.blocks)
+    if (changes.length > 0) expect.push({ tick: t, changes })
+    prev = entry.blocks
+  }
+  return expect
+}
+
+/** fixture に書く blocks。材質を残し、items はそのまま */
+export function fixtureBlocks(blocks: readonly DefBlock[]): Fixture['blocks'] {
+  return blocks.map(b => ({
+    pos: b.pos,
+    block: normalizeState(b.block),
+    ...(b.items !== undefined ? { items: b.items } : {}),
+  }))
+}
+
+// ─── 実機の駆動 ───────────────────────────────────────────────────
 
 async function generateFixture(name: string): Promise<void> {
   const defPath = join(fixturesDefDir, `${name}.json`)
@@ -182,11 +232,24 @@ async function generateFixture(name: string): Promise<void> {
     const [sx, sy, sz] = def.player.spawn
     const [yaw, pitch] = def.player.facing
     rcon('tick', 'unfreeze')
-    rcon('player', PLAYER_NAME, 'spawn', 'at', String(sx), String(sy), String(sz),
-      'facing', String(yaw), String(pitch), 'in', 'minecraft:overworld', 'in', 'survival')
-    await sleep(800)
     const [lx, ly, lz] = def.player.lookAt
-    rcon('player', PLAYER_NAME, 'look', 'at', String(lx), String(ly), String(lz))
+    // carpet の `player spawn` は応答を返さないまま失敗することがある (直前の fixture で
+    // kill した GT の後始末が終わっていないときなど)。居ないまま進むと入力が全部空振りし、
+    // **変化 0 件の expect を正解として書いてしまう**。look の応答で居ることを確かめ、
+    // 居なければ出し直す (2026-10-24 に 3 本続けて撮ったとき 3 本目で再現)
+    let spawned = false
+    for (let attempt = 1; attempt <= 3 && !spawned; attempt++) {
+      if (attempt > 1) {
+        console.warn(`  fake player が居ないので出し直す (${attempt} 回目)`)
+        rcon('player', PLAYER_NAME, 'kill')
+        await sleep(400)
+      }
+      rcon('player', PLAYER_NAME, 'spawn', 'at', String(sx), String(sy), String(sz),
+        'facing', String(yaw), String(pitch), 'in', 'minecraft:overworld', 'in', 'survival')
+      await sleep(800)
+      spawned = !isMissingPlayer(rcon('player', PLAYER_NAME, 'look', 'at', String(lx), String(ly), String(lz)))
+    }
+    if (!spawned) throw new Error(`${name}: fake player を出せない (3 回試した)`)
     await sleep(300)
     rcon('tick', 'freeze')
   }
@@ -206,11 +269,15 @@ async function generateFixture(name: string): Promise<void> {
         // 高さは fixture の player.lookAt の Y オフセットを流用する
         // (床レバー 1.35 / 床ボタン 1.06 などブロック種で異なるため)
         const lookY = def.player!.lookAt[1] - Math.floor(def.player!.lookAt[1])
-        rcon('player', PLAYER_NAME, 'look', 'at',
+        const looked = rcon('player', PLAYER_NAME, 'look', 'at',
           String(input.pos[0] + 0.5), String(input.pos[1] + lookY), String(input.pos[2] + 0.5))
         await sleep(200)
-        rcon('player', PLAYER_NAME, 'use', 'once')
+        const used = rcon('player', PLAYER_NAME, 'use', 'once')
         await sleep(200)
+        // 居ないまま進むと空振りした結果を正解として書いてしまうので止める
+        if (isMissingPlayer(looked) || isMissingPlayer(used)) {
+          throw new Error(`${name}: tick ${t} の use で fake player が居ない`)
+        }
       } else if (input.action === 'setblock') {
         // `/setblock` は flag 2|256 で置くので近隣更新を伴わず、そのあと
         // updateNeighboursOnBlockSet が **周囲6方向にだけ** 更新を配る。
@@ -272,46 +339,43 @@ async function generateFixture(name: string): Promise<void> {
     scarpet(`fx_dump(${t})`)
   }
 
-  // 6. 保存して回収
+  // 6. 保存して回収。**前回の result.json を読まない**よう、保存の前に消して名前も確かめる。
+  // コンテナの scripts/ はコンテナを起動したチェックアウトを bind mount しているので、
+  // 別のチェックアウトから回すと書き出し先がずれ、残っていた古い結果を新しい結果として書いてしまう
+  const resultPath = join(sharedDir, 'result.json')
+  rmSync(resultPath, { force: true })
   scarpet(`fx_save('${name}')`)
   if (hasInputs) rcon('player', PLAYER_NAME, 'kill')
-  const result = JSON.parse(
-    readFileSync(join(sharedDir, 'result.json'), 'utf-8'),
-  ) as McDumpResult
+  if (!existsSync(resultPath)) {
+    throw new Error(
+      `${resultPath} が書き出されていない。`
+      + 'コンテナの scripts/ がこのチェックアウトを mount しているか確かめること '
+      + '(docker inspect redstone-sim-mc-harness の /data/world/scripts の Source)',
+    )
+  }
+  const result = JSON.parse(readFileSync(resultPath, 'utf-8')) as McDumpResult
+  if (result.name !== name) {
+    throw new Error(`result.json の name が違う: ${result.name} (期待: ${name})`)
+  }
 
-  // 7. settled (tick -1) が authored と一致するか検証
-  const authored: Record<string, string> = {}
-  for (const b of def.blocks) authored[b.pos.join(',')] = canonicalize(b.block)
+  // 7. settled (tick -1) が authored と一致するか検証 (両側を canonicalize して比べる)
   const settled = result.ticks.find(x => x.tick === -1)
   if (!settled) throw new Error('tick -1 (settled) が result にない')
-  const settleDiff = stateMapDiff(authored, settled.blocks)
+  const settleDiff = settleMismatches(def.blocks, settled.blocks)
   if (settleDiff.length > 0) {
     console.error('authored 状態が実機の安定状態と一致しない (fixture 定義を修正すること):')
-    for (const c of settleDiff) {
-      console.error(`  ${c.pos.join(',')}: authored=${authored[c.pos.join(',')] ?? 'air'} -> settled=${c.block}`)
-    }
+    for (const d of settleDiff) console.error(`  ${d.pos}: authored=${d.authored} -> settled=${d.settled}`)
     throw new Error(`${name}: settle 照合失敗`)
   }
 
   // 8. tick 毎差分 (expect) を計算
-  const expect: FixtureExpectEntry[] = []
-  let prev = authored
-  for (let t = 0; t <= def.ticks; t++) {
-    const entry = result.ticks.find(x => x.tick === t)
-    if (!entry) throw new Error(`tick ${t} が result にない`)
-    const changes = stateMapDiff(prev, entry.blocks)
-    if (changes.length > 0) expect.push({ tick: t, changes })
-    prev = entry.blocks
-  }
+  const expect = buildExpect(def.blocks, result.ticks, def.ticks)
 
-  // 9. packages/sim/test/fixtures/<name>.json へ書き込み
+  // 9. packages/sim/test/fixtures/<name>.json へ書き込み (blocks は材質を残す)
   const { player: _player, ...defRest } = def
   const fixture: Fixture = {
     ...defRest,
-    blocks: def.blocks.map(b => ({
-      pos: b.pos, block: canonicalize(b.block),
-      ...(b.items !== undefined ? { items: b.items } : {}),
-    })),
+    blocks: fixtureBlocks(def.blocks),
     expect,
     generated: {
       at: new Date().toISOString(),
@@ -326,19 +390,43 @@ async function generateFixture(name: string): Promise<void> {
   console.log(`expect エントリ数: ${expect.length} (変化があった tick: ${expect.map(e => e.tick).join(', ')})`)
 }
 
-async function main() {
+async function main(): Promise<void> {
   const names = process.argv.slice(2)
   if (names.length === 0) {
     console.error('使い方: npx tsx tools/mc-harness/runner/generate.ts <fixture名> [...]')
     process.exit(1)
   }
-  ensureWorldSetup()
-  for (const name of names) {
-    await generateFixture(name)
-  }
+  // ロックが握られていたら待たずに止まる (capture・live・MCP と同じ)
+  await withHarnessLock(async () => {
+    const heartbeat = setInterval(() => refreshHarnessLock(), LOCK_HEARTBEAT_MS)
+    // Ctrl-C や kill では finally を通らないので、ここでロックを返してから終わる
+    // (返さないと残骸とみなされるまでの 10 分間、他の実行が止まる)
+    const onSignal = (sig: NodeJS.Signals): void => {
+      clearInterval(heartbeat)
+      releaseHarnessLock()
+      console.error(`${sig} を受けたので中断した (ロックは返した)`)
+      process.exit(128 + osConstants.signals[sig])
+    }
+    process.once('SIGINT', onSignal)
+    process.once('SIGTERM', onSignal)
+    try {
+      ensureWorldSetup()
+      reloadDumpApp()   // unload → load (load だけでは dump.sc を読み直さない)
+      for (const name of names) await generateFixture(name)
+    } finally {
+      clearInterval(heartbeat)
+      process.off('SIGINT', onSignal)
+      process.off('SIGTERM', onSignal)
+    }
+  })
 }
 
-main().catch(e => {
-  console.error(e instanceof Error ? e.message : e)
-  process.exit(1)
-})
+// テストから import しても CLI が走らないようにする。
+// **pathToFileURL で比べる**。`file://${process.argv[1]}` の形だと、日本語を含むパスでは
+// import.meta.url (パーセントエンコードされる) と一致せず、黙って何もしない
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(e => {
+    console.error(e instanceof Error ? e.message : e)
+    process.exit(1)
+  })
+}

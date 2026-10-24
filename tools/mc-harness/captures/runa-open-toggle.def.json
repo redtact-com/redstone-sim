@@ -1,0 +1,12 @@
+{
+  "name": "runa-open-toggle",
+  "source": "Runa.S_opened.nbt",
+  "ticks": 140,
+  "pad": 1,
+  "settle": false,
+  "players": [{ "name": "GT", "spawn": [4.5, 0.0, -0.5] }],
+  "inputs": [
+    { "tick": 4, "pos": [4, 1, 0], "action": "use" },
+    { "tick": 70, "pos": [4, 1, 0], "action": "use" }
+  ]
+}
