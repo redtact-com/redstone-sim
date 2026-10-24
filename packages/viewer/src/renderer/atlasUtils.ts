@@ -19,14 +19,20 @@ export function nextPow2(n: number): number {
  *
  * UV 座標は deepslate 標準（スロット列/行インデックス ÷ 幅）と同一なので
  * StructureRenderer との互換性を保つ。
+ *
+ * `solids` は「色で塗るスロット」(#395)。テクスチャが届かなかった面や簡易表示の立方体に使う。
+ * Blob を作らず fillRect で塗る。画像のスロットの後ろに並べるので、空なら今までと同じアトラスになる。
+ * 同じ id が `textures` にあれば画像を優先する。
  */
 export async function buildAtlas32<T>(
   textures: Record<string, Blob>,
   AtlasClass: new (img: ImageData, idMap: Record<string, [number, number, number, number]>) => T,
+  solids: Record<string, string> = {},
 ): Promise<T> {
   const TEX = 32
   const keys = Object.keys(textures)
-  const width = nextPow2(Math.ceil(Math.sqrt(keys.length + 1)))
+  const solidKeys = Object.keys(solids).filter(id => !(id in textures))
+  const width = nextPow2(Math.ceil(Math.sqrt(keys.length + solidKeys.length + 1)))
   const pixelWidth = width * TEX
   const part = 1 / width
 
@@ -45,6 +51,16 @@ export async function buildAtlas32<T>(
 
   const idMap: Record<string, [number, number, number, number]> = {}
   let index = 1
+
+  // 色で塗るスロットは画像の後ろ (1 + keys.length 番目から)
+  solidKeys.forEach((id, i) => {
+    const slot = 1 + keys.length + i
+    const u = slot % width
+    const v = Math.floor(slot / width)
+    idMap[id] = [part * u, part * v, part * u + part, part * v + part]
+    ctx.fillStyle = solids[id]
+    ctx.fillRect(TEX * u, TEX * v, TEX, TEX)
+  })
 
   await Promise.all(keys.map(async (id) => {
     const u = index % width

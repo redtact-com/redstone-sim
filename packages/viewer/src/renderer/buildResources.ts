@@ -10,6 +10,7 @@ import { getBlockFlags } from './blockFlags'
 import { getBlockStates, getBlockModels, fetchTexture, fetchPackJson, preloadPackBundle } from './mcAssets'
 import { collectTexturePaths, addSpecialRendererTextures } from './texturePaths'
 import { buildAtlas32 } from './atlasUtils'
+import { buildSolidResources, solidColor } from './solidResources'
 
 const _loggedMissing = new Set<string>()
 
@@ -81,7 +82,20 @@ async function overlayPackData(
   }
 }
 
-export async function buildResources(blockNames: string[]): Promise<Resources> {
+/**
+ * テクスチャがどこまで取れたか (#395)。
+ * - `full`: 全部取れた (どこにも無いものは今までどおり市松)
+ * - `partial`: 届かないテクスチャがあり、その面を単色で描いている
+ * - `solid`: blockstates / models の JSON が届かず、全ブロックを単色の立方体で描いている
+ */
+export type AssetState = 'full' | 'partial' | 'solid'
+
+export interface BuiltResources {
+  resources: Resources
+  assets: AssetState
+}
+
+export async function buildResources(blockNames: string[]): Promise<BuiltResources> {
   const [statesJsonBase, modelsJsonBase] = await Promise.all([
     getBlockStates(),
     getBlockModels(),
@@ -89,6 +103,12 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
     // 取れなければ個別取得にフォールバックするので、失敗しても壊れない
     preloadPackBundle(),
   ])
+
+  // JSON がどのミラーからも届かない → 全ブロックを単色の立方体で描く (#395)。
+  // 以前はここで例外になり、盤面がエラー表示になっていた (2D の編集画面も同じ部品なので編集もできなかった)
+  if (!statesJsonBase || !modelsJsonBase) {
+    return { resources: await buildSolidResources(blockNames), assets: 'solid' }
+  }
 
   // キャッシュを汚染しないようシャローコピーを作成
   const statesJson: Record<string, unknown> = { ...statesJsonBase }
@@ -164,34 +184,22 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
   )
   addSpecialRendererTextures(texturePaths, uniqueBlockNames)
 
-  // テクスチャを並列フェッチ（パック → mcmeta → PrismarineJS の順で試行）
-  const textureBlobs: Record<string, Blob> = {}
-  await Promise.all(
-    [...texturePaths].map(async (path) => {
-      const blob = await fetchTexture(path)
-      if (blob) textureBlobs[`minecraft:${path}`] = blob
-    })
+  // テクスチャを並列フェッチ（パック → mcmeta → PrismarineJS の順で試行）。
+  // 取得・先頭フレームの切り出し・image/png への正規化と検証は fetchTexture が行い、
+  // 結果をページ内で覚える (#395)。作り直しのときは取り直さない
+  const results = await Promise.all(
+    [...texturePaths].map(async (path) => [path, await fetchTexture(path)] as const),
   )
-
-  // Blob の正規化と事前検証:
-  // GitHub CDN は PNG を application/octet-stream 等で返すことがあり、
-  // createImageBitmap が MIME タイプを見て失敗するケースがある。
-  // Blob を image/png に強制変換してから検証することで回避する。
+  // アトラスのスロットは texturePaths の順に並ぶ (#395)。以前は取得が終わった順に並んで読み込むたびに変わり、
+  // テクセルの境目の画素が揺れていた (同じビルドを読み込み直すだけで最大 60 画素違った)
   const validBlobs: Record<string, Blob> = {}
-  await Promise.all(
-    Object.entries(textureBlobs).map(async ([key, blob]) => {
-      try {
-        // MIME タイプを image/png に正規化
-        const typed = blob.type === 'image/png'
-          ? blob
-          : new Blob([blob], { type: 'image/png' })
-        await createImageBitmap(typed)
-        validBlobs[key] = typed
-      } catch {
-        console.warn(`[buildResources] skip invalid blob: ${key}`)
-      }
-    })
-  )
+  // 届かなかったテクスチャは、その面を単色で描く (#395)。
+  // どこにも無いもの (missing) は今までどおり市松にする。取りこぼし (#343) に気づけるように
+  const solids: Record<string, string> = {}
+  for (const [path, r] of results) {
+    if (r.kind === 'ok') validBlobs[`minecraft:${path}`] = r.blob
+    else if (r.kind === 'unreachable') solids[`minecraft:${path}`] = solidColor(path)
+  }
 
   // deepslate の upperPowerOfTwo バグ (sqrt(N+1) が整数でないとアトラスが小さくなる) は、
   // buildAtlas32 が幅を自前で計算するので影響を受けない (詳細は atlasUtils.ts の nextPow2)。
@@ -205,9 +213,9 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
     img: ImageData,
     idMap: Record<string, [number, number, number, number]>,
   ) => TextureAtlas
-  const atlas = await buildAtlas32(validBlobs, AtlasCtor)
+  const atlas = await buildAtlas32(validBlobs, AtlasCtor, solids)
 
-  return {
+  const resources: Resources = {
     getBlockDefinition(id: Identifier) {
       return blockDefs.get(id.path) ?? null
     },
@@ -237,6 +245,7 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
     getDefaultBlockProperties: (id: Identifier) =>
       defaultProps.get(id.path.replace(/^block\//, '')) ?? null,
   }
+  return { resources, assets: Object.keys(solids).length > 0 ? 'partial' : 'full' }
 }
 
 /**
