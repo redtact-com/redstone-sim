@@ -833,6 +833,52 @@ describe('取り込み → 書き出し → 取り込み で落ちない (#393)'
     expect(outputs(first.blocks), '1 回目').toEqual([10, 15, 14, 0])
     expect(outputs(second.blocks), '2 回目').toEqual([10, 15, 14, 0])
   })
+
+  /** 書き出した構造 NBT から、x 座標ごとの block entity を引く */
+  function exportedBlockEntities(blocks: Map<string, BlockState>): Map<number, NbtCompound | undefined> {
+    const list = NbtFile.read(exportToNbtBytes(blocks, blocks.size, 1)).root.getList('blocks')
+    const out = new Map<number, NbtCompound | undefined>()
+    for (let i = 0; i < list.length; i++) {
+      const entry = list.getCompound(i)
+      out.set(entry.getList('pos').getNumber(0), entry.get('nbt') as NbtCompound | undefined)
+    }
+    return out
+  }
+
+  it('書き出した書見台の block entity は writable_book と Page の形になる', () => {
+    // vanilla が読む形を固定する。本文は持っていないのでページはダミー (空文字)
+    const bes = exportedBlockEntities(new Map<string, BlockState>([
+      ['0,0,0', { type: 'lectern', facing: 'west', hasBook: true, page: 9, pages: 15 }],
+      ['1,0,0', { type: 'lectern', facing: 'west', hasBook: true, page: 0, pages: 0 }],   // 本の中身なし
+      ['2,0,0', { type: 'lectern', facing: 'west', hasBook: false, page: 0, pages: 0 }],  // 本なし
+    ]))
+    const be = bes.get(0)!
+    expect(be.getString('id')).toBe('minecraft:lectern')
+    expect(be.get('Page')).toBeInstanceOf(NbtInt)
+    expect(be.getNumber('Page')).toBe(9)
+    const book = be.getCompound('Book')
+    expect(book.getString('id')).toBe('minecraft:writable_book')
+    expect(book.get('count')).toBeInstanceOf(NbtInt)
+    expect(book.getNumber('count')).toBe(1)
+    const pages = book.getCompound('components')
+      .getCompound('minecraft:writable_book_content').getList('pages')
+    expect(pages.length).toBe(15)
+    expect(pages.getString(0)).toBe('')
+    // 本の中身が無い・本が無い書見台には何も付けない (読み直しても同じ状態に戻る)
+    expect(bes.get(1)).toBeUndefined()
+    expect(bes.get(2)).toBeUndefined()
+  })
+
+  it('101 ページ以上の本は 100 ページに収め、開いているページも範囲へ丸める', () => {
+    // 本と羽根ペンは 100 ページまで。vanilla から読んだ本が超えることは無い
+    const bes = exportedBlockEntities(new Map<string, BlockState>([
+      ['0,0,0', { type: 'lectern', facing: 'north', hasBook: true, page: 120, pages: 150 }],
+    ]))
+    const book = bes.get(0)!.getCompound('Book')
+    expect(book.getCompound('components')
+      .getCompound('minecraft:writable_book_content').getList('pages').length).toBe(100)
+    expect(bes.get(0)!.getNumber('Page')).toBe(99)
+  })
 })
 
 describe('エディタで置いた値の往復 (#393)', () => {

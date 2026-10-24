@@ -65,6 +65,40 @@ function containerNbt(block: BlockState, name: string): NbtCompound | undefined 
     .set('Items', new NbtList<NbtCompound>(entries))
 }
 
+/** 本と羽根ペンのページ数の上限 [確定: 26.2 WritableBookContent] */
+const MAX_WRITABLE_BOOK_PAGES = 100
+
+/**
+ * 書見台の本を block entity NBT として書き出す (#393)。
+ * 落とすと**読み直したとき出力が常に 14 になり、階数指定が効かない**。
+ *
+ * コンパレーターが読むのはページ数と開いているページだけで、本文は読まない
+ * [確定: 26.2 LecternBlockEntity]。sim も本文を持っていないので、ページ数ぶんの
+ * 空ページを持つ writable_book にする (実機ハーネスの capture.ts の dummyBookSnbt と同じ考え方)。
+ * 元が署名済みの本でも、ページの数え方は同じなので出力は変わらない。
+ *
+ * - 本の無い書見台・本の中身が無い書見台 (pages=0) には付けない。読み直しても同じ状態に戻る
+ * - 100 ページで頭打ちにする。vanilla から読んだ本が上限を超えることは無い
+ * - 書き出すファイルには DataVersion が無いので、vanilla は全部の data fixer を通す。
+ *   1.20.5 のアイテム変換は `Count` (大文字) の無いアイテムをそのまま通すので、
+ *   コンテナの Items と同じ 1.20.5 以降の形 (`count` / `components`) で書けば崩れない
+ */
+function lecternNbt(block: BlockState): NbtCompound | undefined {
+  if (block.type !== 'lectern' || !block.hasBook || block.pages < 1) return undefined
+  const pages = Math.min(block.pages, MAX_WRITABLE_BOOK_PAGES)
+  // vanilla も読み込み時に Page をページ数の範囲へ収める
+  const page = Math.min(Math.max(0, Math.floor(block.page)), pages - 1)
+  const content = new NbtCompound().set('pages', new NbtList<NbtString>(
+    Array.from({ length: pages }, () => new NbtString(''))))
+  return new NbtCompound()
+    .set('id', new NbtString('minecraft:lectern'))
+    .set('Book', new NbtCompound()
+      .set('id', new NbtString('minecraft:writable_book'))
+      .set('count', new NbtInt(1))
+      .set('components', new NbtCompound().set('minecraft:writable_book_content', content)))
+    .set('Page', new NbtInt(page))
+}
+
 // ── エクスポート ─────────────────────────────────────────────────────────────
 
 /** BlockState (3D key "x,y,z") → Minecraft バニラ構造 NBT バイト列 */
@@ -105,7 +139,7 @@ export function exportToNbtBytes(
     const [x, y, z] = key.split(',').map(Number)
     const [name, props] = blockStateToMinecraft(block)
     const state = getOrAdd(name, props)
-    blockEntries.push({ x, y, z, state, nbt: containerNbt(block, name) })
+    blockEntries.push({ x, y, z, state, nbt: containerNbt(block, name) ?? lecternNbt(block) })
     if (y > maxY) maxY = y
   }
 
@@ -119,7 +153,7 @@ export function exportToNbtBytes(
       c.set('state', new NbtInt(state))
       const pos = new NbtList<NbtInt>([new NbtInt(x), new NbtInt(y), new NbtInt(z)])
       c.set('pos', pos)
-      if (nbt) c.set('nbt', nbt)   // コンテナの中身 (#194)
+      if (nbt) c.set('nbt', nbt)   // コンテナの中身 (#194)・書見台の本 (#393)
       return c
     })
   )
@@ -550,7 +584,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
       return ['minecraft:composter', { level: String((block as any).level ?? 0) }]
     case 'lectern':
       // ページ数と現在ページは BE 側なので blockstate には出ない (#240)。
-      // 保存すると階数指定が失われる — 既知の穴として #245 に書いてある
+      // 本は lecternNbt が block entity として書く (#393)
       return ['minecraft:lectern', {
         facing: (block as any).facing ?? 'north',
         has_book: String((block as any).hasBook ?? false),
