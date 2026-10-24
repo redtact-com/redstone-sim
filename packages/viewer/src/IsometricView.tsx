@@ -14,7 +14,7 @@ import {
   VIEWER_PRELOAD_BLOCKS,
   extraPreloadNames,
 } from './world-to-structure.js'
-import { buildResources } from './renderer/buildResources.js'
+import { buildResources, type AssetState } from './renderer/buildResources.js'
 import { fitDistance, maxZoomOut } from './camera.js'
 import { useCamera } from './renderer/useCamera.js'
 import { canvasPixelToBlock, FOV_F } from './renderer/coordUtils.js'
@@ -120,6 +120,8 @@ export function IsometricView({
   }
 
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  /** テクスチャがどこまで取れたか (#395)。full 以外なら盤面の左下に一言出す */
+  const [assets, setAssets] = useState<AssetState>('full')
   const [loadingMsg, setLoadingMsg] = useState('Loading textures...')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -378,7 +380,8 @@ export function IsometricView({
         setStatus('loading')
         setLoadingMsg('Loading textures...')
 
-        const resources = await buildResources(
+        // 取得先に届かなくても例外にせず、単色で描くリソースを返す (#395)
+        const { resources, assets: builtAssets } = await buildResources(
           [...VIEWER_PRELOAD_BLOCKS, ...extraNamesRef.current])
         if (cancelled) return
 
@@ -417,6 +420,7 @@ export function IsometricView({
           })
         }
 
+        setAssets(builtAssets)
         setStatus('ready')
         let readyFired = false
 
@@ -531,7 +535,8 @@ export function IsometricView({
 
   if (status === 'error') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: '#f87171', fontSize: 14 }}>
+      <div data-viewer-status="error"
+           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: '#f87171', fontSize: 14 }}>
         Error: {errorMsg}
       </div>
     )
@@ -540,7 +545,8 @@ export function IsometricView({
   const editable = topDown && !!onBlockClick
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div data-viewer-status={status} data-viewer-assets={assets}
+         style={{ position: 'relative', width: '100%', height: '100%' }}>
       <canvas
         ref={canvasRef}
         style={{
@@ -564,6 +570,17 @@ export function IsometricView({
           background: 'rgba(23,23,25,0.8)', color: '#a3a3a3', fontSize: 14,
         }}>
           {loadingMsg}
+        </div>
+      )}
+      {/* 取得先に届かず単色で描いているとき (#395)。onReady はいつもどおり呼ぶ */}
+      {status === 'ready' && assets !== 'full' && (
+        <div data-testid="viewer-assets-note" style={{
+          position: 'absolute', left: 8, bottom: 8, pointerEvents: 'none',
+          padding: '2px 6px', background: 'rgba(23,23,25,0.8)', color: '#a3a3a3', fontSize: 11,
+        }}>
+          {assets === 'solid'
+            ? 'テクスチャを読み込めないため簡易表示中'
+            : '一部のテクスチャを読み込めませんでした'}
         </div>
       )}
     </div>
