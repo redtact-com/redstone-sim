@@ -9,6 +9,7 @@
  * モード:
  *  - view (既定)  : 盤面 + 再生/一時停止/1tick/リセット。編集・トリガ不可
  *  - interact     : view + レバー/ボタン/感圧板等の手動トリガのみ可
+ *                   (3D 盤面のクリック・タップか、トリガ欄のボタンで。#397)
  *
  * 親との連携なしでも「rdsim で開く」導線から本体エディタへ遷移できる。
  * E2E 用に window.__embed を公開する (postMessage 経路の状態を読むため)。
@@ -22,7 +23,7 @@ import { CircuitEditor, DEFAULT_BOARD } from '@redstone/editor'
 import { SimWorld } from '@redstone/sim'
 import type { WorldSnapshot, BlockState, Pos3D } from '@redstone/sim'
 import { IsometricView } from '@redstone/viewer'
-import type { CameraInput } from '@redstone/viewer'
+import type { CameraInput, IsometricViewHandle } from '@redstone/viewer'
 import { importFromNbtBytes } from './nbtIO'
 import type { EmbedMode } from './embed/embedTypes'
 import {
@@ -55,6 +56,11 @@ export interface EmbedApi {
   isRunning: () => boolean
   getWarnings: () => string[]
   getStateAt: (x: number, y: number, z: number) => BlockState | null
+  /**
+   * 3D 盤面で、ブロックの中心が描かれている画面座標 (clientX/Y) (#397)。
+   * e2e はこの座標を実際にクリック・タップする。描画の準備前は null
+   */
+  blockToClient: (x: number, y: number, z: number) => { x: number; y: number } | null
 }
 
 declare global {
@@ -88,6 +94,8 @@ export function EmbedPage() {
   const [reloadKey, setReloadKey] = useState(0)
 
   const cameraInputRef = useRef<CameraInput | null>(null)
+  /** 3D 盤面の命令的な口 (#397)。e2e の blockToClient が読む */
+  const viewRef = useRef<IsometricViewHandle | null>(null)
 
   // ── 親への送信 (target origin 固定。未確定時のみ '*' = ready 用) ──────────
   const trustedOriginRef = useRef<string | null>(null)
@@ -198,7 +206,9 @@ export function EmbedPage() {
     return () => clearInterval(id)
   }, [running, simWorld, rerender, postToParent])
 
-  // ── 盤面クリック (interact モードのトリガのみ) ─────────────────────────
+  // ── 盤面クリック・タップ (interact モードのトリガのみ, #397) ───────────────
+  // IsometricView は押せる素子 (isTriggerableType) に当たったときだけ呼ぶ。
+  // view モードでは onBlockClick を渡さないので、ピックもしない
   const handleBlockClick = useCallback((pos: Pos3D) => {
     if (mode !== 'interact') return
     doTrigger(pos[0], pos[1], pos[2])
@@ -262,6 +272,7 @@ export function EmbedPage() {
       isRunning: () => running,
       getWarnings: () => warnings,
       getStateAt: (x, y, z) => simWorld?.getBlockAt([x, y, z]) ?? null,
+      blockToClient: (x, y, z) => viewRef.current?.blockToClient([x, y, z]) ?? null,
     }
     return () => { delete window.__embed }
   }, [tick, mode, loaded, running, warnings, simWorld])
@@ -371,6 +382,7 @@ export function EmbedPage() {
           topDown={false}
           cameraInputRef={cameraInputRef}
           onBlockClick={mode === 'interact' ? handleBlockClick : undefined}
+          viewRef={viewRef}
         />
         {!loaded && !error && (
           <div className="absolute inset-0 flex items-center justify-center font-mono"
