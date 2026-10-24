@@ -764,6 +764,6 @@
       "action": "use"
     }
   ],
-  "skipUntil": "#52",
-  "skipReason": "demo 専用 placeholder。within-tick BE 順は microTiming で実機一致確認済み (2026-07-05, world.test.ts の describe #52 と 09_snapshots/network-piston-order.md で pin)。状態系列アンカー化は任意 (BE 順は state に出ないため優先度低)"
+  "skipUntil": "R-20",
+  "skipReason": "demo 専用の placeholder (expect が無い)。BE の順は状態に出ないので、この形では実機と照合できない。R-20 (docs/research/16 §3.1) で順序が状態に出る fixture を撮ったら置き換える"
 }
