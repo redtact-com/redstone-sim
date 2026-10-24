@@ -14,10 +14,10 @@
 //
 //   {"i": "minecraft:repeater", "x": 21, "y": 2, "z": 20, "t": 5, "p": -1}
 //
-// [確定: 26.2 SavedTick.java:13,37-40,52]
-//   `record SavedTick<T>(T type, BlockPos pos, int delay, TickPriority priority)`
-//   codec は i=type / t=delay / p=priority、`unpack` は `currentTick + this.delay` を
-//   発火 tick にする。つまり **t は残り遅延**、p は優先度そのもの。
+// [確定: 26.2 SavedTick — 保存される予約 1 件は「種類・位置・遅延・優先度」の 4 項目。
+//   キーは i が種類、x / y / z が位置、t が遅延、p が優先度。読み込むとき
+//   (SavedTick.unpack) は、その時点の tick に遅延を足した値を発火 tick にする]
+//   つまり **t は残り遅延**、p は優先度そのもの。
 //
 // scarpet には予約を読む API が無い (`block_tick` は**発火させる**関数)。
 // carpet の /log にもレッドストーン系は無い。保存データを読むのが唯一の手段。
