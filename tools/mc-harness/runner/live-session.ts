@@ -11,8 +11,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMcState } from '@redstone/sim'
-import { rcon, scarpet, reloadDumpApp, sleep } from './rcon.js'
-import { pressBlock, readState, aimArgs, standCandidates, type Pos3, type PressResult } from './aim.js'
+import { rcon, rconBatch, scarpet, reloadDumpApp, sleep } from './rcon.js'
+import { pressBlock, readState, standCandidates, type Pos3 } from './aim.js'
 import {
   emitAttachedSupportUpdate, placeCircuit, splitDrift, scanLiveRegion,
   type CaptureDef, type CaptureDefPlayer,
@@ -368,36 +368,31 @@ export class HarnessSession {
     // 外したら形状に合わせて狙い直す (#378)
     const state = readState(pos)
     const firstAim = lookTarget(pos, this.info.lookY).map(Number) as Pos3
-    const stands = standCandidates(pos, state).filter(p => this.canStand(p))
-    const press = async (warnOnFail: boolean): Promise<PressResult> => pressBlock(pos, state, {
-      use: async aim => {
-        rcon('player', who, 'look', 'at', ...aimArgs(aim))
-        await sleep(200)
-        rcon('player', who, 'use', 'once')
-        await sleep(200)
+    // 押せないときは **facing 側のセル中心へ動かして押す** (#378 / #382)。
+    // 定義の spawn が遠いこともあるし (呼びボタンは y=59 で fake player は y=6 に湧く)、
+    // 足場が無くて落ちていくこともある (Runa のドアは壁レバーの前が空)。
+    // tp と押すのを 1 バッチで送るので落ちる前に押し切れる。
+    // ライブ・MCP は人が触っている場なので動かしてよい
+    const result = await pressBlock(pos, state, {
+      use: async (aim, moveTo) => {
+        rconBatch([
+          // **spawn も撃つ**。足場の無い所に置いた fake player は落ちて死ぬので、
+          // tp だけでは「居ないプレイヤーを動かそうとして何も起きない」になる。
+          // 生きていれば spawn は何も起こさない
+          ...(moveTo === undefined ? [] : [
+            `player ${who} spawn at ${moveTo.join(' ')}`,
+            `tp ${who} ${moveTo.join(' ')}`,
+          ]),
+          `player ${who} look at ${aim.join(' ')}`,
+          `player ${who} use once`,
+        ], { ignoreResponses: true })
+        await sleep(250)
       },
       read: () => readState(pos),
       log: msg => console.error(msg),
-    }, { firstAim, warnOnFail })
-
-    // 立ち位置を変える手が残っているうちは警告を出さない
-    let result = await press(stands.length === 0)
-    // **届いていないなら立ち位置を変える** (#378)。
-    // 狙点を直しても、定義の spawn が遠ければ押せない
-    // (エレベーターの呼びボタンは y=59 で fake player は y=6 に湧く)。
-    // ライブ・MCP は人が触っている場なので動かしてよい。
-    // キャプチャは tick 精度のため動かさない (`tp` 入力を書く)
-    if (result.responded === false) {
-      for (const [i, at] of stands.entries()) {
-        console.error(`[aim] ${who} を ${at.join(',')} へ動かして押し直す (${i + 1}/${stands.length})`)
-        rcon('tp', who, ...aimArgs(at))
-        await sleep(300)
-        result = await press(i === stands.length - 1)
-        if (result.responded !== false) {
-          this.announcer.say(`${who} が ${at.map(n => Math.floor(n)).join(',')} へ移動しました`)
-          break
-        }
-      }
+    }, { firstAim, stands: standCandidates(pos, state).filter(p => this.canStand(p)) })
+    if (result.movedTo !== null) {
+      this.announcer.say(`${who} が ${result.movedTo.map(n => Math.floor(n)).join(',')} へ移動しました`)
     }
 
     const changes = this.publish()

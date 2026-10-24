@@ -289,6 +289,19 @@ describe('ズレの分類', () => {
     expect(diffStates({ '0,0,0': 'stone' }, { '0,0,0': 'stone' })).toEqual([])
   })
 
+  it('**「キーが無い」と air は同じもの**として比べる (#382)', () => {
+    // キャプチャ側の authored は air を明示することがある。
+    // 素朴に比べると undefined !== 'air' で差分に化け、
+    // 「ファイル=air / 実機=air」という読めない行が Runa で 460 件出ていた
+    expect(diffStates({}, { '0,0,0': 'air' })).toEqual([])
+    expect(diffStates({ '0,0,0': 'air' }, {})).toEqual([])
+    expect(diffStates({ '0,0,0': 'air' }, { '0,0,0': 'air' })).toEqual([])
+    // 本物のズレは残る
+    expect(diffStates({ '1,1,1': 'air' }, { '1,1,1': 'stone' })).toEqual([
+      { pos: '1,1,1', source: 'air', settled: 'stone' },
+    ])
+  })
+
   it('片側に無い座標は air 扱いで構造のズレになる', () => {
     expect(diffStates({ '1,2,3': 'honey_block' }, {})).toEqual([
       { pos: '1,2,3', source: 'honey_block', settled: 'air' },

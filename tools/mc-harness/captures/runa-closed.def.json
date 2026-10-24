@@ -3,6 +3,7 @@
   "source": "Runa.S_closed (1).nbt",
   "ticks": 400,
   "pad": 1,
+  "settle": false,
   "inputs": [
     { "tick": 4,   "pos": [0, 4, 10], "action": "setblock", "block": "stone_button[face=wall,facing=west,powered=true]" },
     { "tick": 24,  "pos": [0, 4, 10], "action": "setblock", "block": "stone_button[face=wall,facing=west,powered=false]" },
