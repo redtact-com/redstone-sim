@@ -6,7 +6,7 @@ import {
 import type { BlockState } from '@redstone/sim'
 import { mcToSim, slotsFromCount, SimWorld } from '@redstone/sim'
 import { blockStateToMinecraftStr } from '@redstone/viewer'
-import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
+import { exportToNbtBytes, importFromNbtBytes, emptyImportReason } from './nbtIO'
 
 // ============================================================
 // nbtIO: ボタン専用型の往復 (#54)
@@ -196,6 +196,38 @@ describe('nbtIO: bounds 検証と warnings 集約 (#97)', () => {
       expect(blocks.size).toBe(0)
       expect(warnings).toHaveLength(0) // 未対応ブロック警告を出さない
     }
+  })
+})
+
+describe('emptyImportReason: 0 ブロックの取り込みの理由 (#390)', () => {
+  // エディタは 0 ブロックの結果をプレビューに進めず、この理由をバーに出す。
+  // 以前はプレビューに進み、確定すると今の回路が空で置き換わって元に戻せなかった
+  it('1 ブロックでも取り込めれば null', async () => {
+    const r = await importFromNbtBytes(buildStructure('minecraft:redstone_lamp', [[0, 0, 0]]))
+    expect(emptyImportReason(r)).toBeNull()
+  })
+
+  it('未対応ブロックだけなら、その警告を理由にする', async () => {
+    const r = await importFromNbtBytes(buildStructure('minecraft:tnt', [[0, 0, 0], [1, 0, 0]]))
+    const reason = emptyImportReason(r)
+    expect(reason).toContain('未対応ブロック 2 個')
+    expect(reason).toContain('tnt')
+  })
+
+  it('空気だけ (警告なし) なら既定の一文', async () => {
+    const r = await importFromNbtBytes(buildStructure('minecraft:air', [[0, 0, 0]]))
+    expect(r.warnings).toHaveLength(0)
+    expect(emptyImportReason(r)).toBe('取り込めるブロックがありません (空気だけのファイルです)')
+  })
+
+  it('NBT ではないファイルは形式の警告を理由にする', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    expect(emptyImportReason(await importFromNbtBytes(png))).toMatch(/NBT/)
+  })
+
+  it('警告が複数あれば " / " でつなぐ', () => {
+    expect(emptyImportReason({ blocks: new Map(), warnings: ['一つ目', '二つ目'] }))
+      .toBe('一つ目 / 二つ目')
   })
 })
 
