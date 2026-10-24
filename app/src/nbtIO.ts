@@ -408,6 +408,20 @@ export async function importFromNbtBytes(
   return { blocks: resultBlocks, warnings, size }
 }
 
+/**
+ * 取り込み結果が空なら、利用者に見せる理由を返す。空でなければ null (#390)。
+ *
+ * エディタは空の結果をプレビューに進めない。確定すると今の盤面が空で置き換わり、
+ * 履歴も消える (resetToBlocks) ので、何も得られないまま回路だけを失うため。
+ * 理由は警告をそのまま使い、警告が無い (= 空気だけのファイル) ときだけ既定の一文にする。
+ */
+export function emptyImportReason(result: Pick<ImportResult, 'blocks' | 'warnings'>): string | null {
+  if (result.blocks.size > 0) return null
+  return result.warnings.length > 0
+    ? result.warnings.join(' / ')
+    : '取り込めるブロックがありません (空気だけのファイルです)'
+}
+
 // ── 生ブロック読み取り (sim を経由しない経路) ───────────────────────────────
 
 export type { RawPlacedBlock, RawItem, RawLectern }

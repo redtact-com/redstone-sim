@@ -42,7 +42,7 @@ import {
   BLOCK_PALETTE, TRIGGER_META, TRIGGER_TYPES, isTriggerOn, containerTriggerValue,
 } from './palette'
 import type { PaletteType, TriggerEntry } from './palette'
-import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array } from './nbtIO'
+import { exportToNbtBytes, importFromNbtBytes, downloadNbt, readFileAsUint8Array, emptyImportReason } from './nbtIO'
 import { saveCircuit, loadCircuit, clearCircuit } from './circuitStorage'
 
 /**
@@ -162,6 +162,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
   /** e2e から覗くための最新値 (window.__editorTest は 1 回だけ張るため) */
   const pendingRef = useRef<PendingChange | null>(null)
   pendingRef.current = pending
+
+  /**
+   * 読み込めなかった理由 (#390)。盤面には触れず、プレビューと同じ位置にバーで出す。
+   * 「閉じる」・次のファイル選択・スライドや盤面サイズのプレビュー開始で消す
+   */
+  const [importError, setImportError] = useState<string | null>(null)
 
   // モード
   const [mode, setMode] = useState<'edit' | 'sim'>('edit')
@@ -724,6 +730,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
       kind: 'slide', blocks, board: nextBoard, moved,
       label: `スライド 合計 (${sign(moved.dx)}, ${sign(moved.dy)}, ${sign(moved.dz)})`,
     })
+    // 別の操作に移ったので、前に読めなかったファイルの理由は片付ける (#390)
+    setImportError(null)
     addLog(outside > 0
       ? `スライド (${sign(moved.dx)}, ${sign(moved.dy)}, ${sign(moved.dz)}): 盤面外 ${outside} ブロック（確定すると失われます）`
       : `スライド (${sign(moved.dx)}, ${sign(moved.dy)}, ${sign(moved.dz)}): プレビュー中`)
@@ -748,6 +756,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
       kind: 'resize', blocks, board: nextBoard,
       label: `盤面 ${nextBoard.x}×${nextBoard.y}×${nextBoard.z}`,
     })
+    setImportError(null)   // slideBy と同じ (#390)
     addLog(outside > 0
       ? `盤面 ${nextBoard.x}×${nextBoard.y}×${nextBoard.z}: 盤面外 ${outside} ブロック（確定すると失われます）`
       : `盤面 ${nextBoard.x}×${nextBoard.y}×${nextBoard.z}: プレビュー中`)
@@ -796,12 +805,23 @@ export function EditorPage({ onBack }: EditorPageProps) {
   const importInputRef = useRef<HTMLInputElement>(null)
 
   const handleImportNbt = useCallback(async (file: File) => {
+    // 前回の理由は消す。読めたらプレビューに進み、読めなければ新しい理由に置き換わる
+    setImportError(null)
     try {
       const bytes = await readFileAsUint8Array(file)
       // **bounds を渡さない** (#226)。盤面に入らない分もいったん全部受け取り、
       // 原点寄せ → プレビュー → 確定で切り捨て、という流れに乗せる。
       // ここで捨ててしまうと後からスライドしても戻ってこない
-      const { blocks: raw, warnings } = await importFromNbtBytes(bytes)
+      const result = await importFromNbtBytes(bytes)
+      // 0 ブロックはプレビューに進めない (#390)。確定すると今の回路が空で置き換わり、
+      // 履歴も消えるので元に戻せない。盤面・履歴・保存には触れずに理由だけ出す
+      const reason = emptyImportReason(result)
+      if (reason) {
+        setImportError(reason)
+        addLog(`インポートできません: ${reason}`)
+        return
+      }
+      const { blocks: raw, warnings } = result
       // 判断 D: 最小座標を原点へ寄せる (端に寄った回路をスライドで直す手数を省く)
       const blocks = normalizeToOrigin(raw)
       const need = requiredBoardSize(blocks)
@@ -823,7 +843,10 @@ export function EditorPage({ onBack }: EditorPageProps) {
           + (canGrow ? '' : `（盤面の上限 ${BOARD_MAX} を超えているので全部は入りません）`)
       addLog(warnings.length > 0 ? `${head}${tail}（警告: ${warnings.join(', ')}）` : `${head}${tail}`)
     } catch (e) {
-      addLog(`インポートエラー: ${e instanceof Error ? e.message : String(e)}`)
+      // 読み込み中の例外も同じバーに出す (#390)。ログだけでは狭い画面で見えない
+      const msg = e instanceof Error ? e.message : String(e)
+      setImportError(msg)
+      addLog(`インポートエラー: ${msg}`)
     }
   }, [addLog, rerender, board])
 
@@ -1355,6 +1378,12 @@ export function EditorPage({ onBack }: EditorPageProps) {
             onCancel={cancelPending}
           />
         )}
+        {/* 読み込めなかった理由 (#390)。プレビューと同じ位置に出す。
+            ふだんはプレビューと同時には出ない (読めたら消し、スライド等の開始でも消す)。
+            プレビュー中に読めないファイルを選んだときだけ、プレビューの下に重ねて出す */}
+        {importError && (
+          <ImportErrorBar reason={importError} onClose={() => setImportError(null)} />
+        )}
 
       <div className="flex-1 min-h-0" style={{ position: 'relative' }}>
         <IsometricView
@@ -1828,6 +1857,41 @@ function PreviewBar({
       <button onClick={onCancel} data-testid="preview-cancel"
               className="mc-btn h-7 px-3 text-xs font-mono">
         取消
+      </button>
+    </div>
+  )
+}
+
+// ── ImportErrorBar (#390) ─────────────────────────────────────────────────────
+
+/**
+ * 読み込めなかったことを知らせるバー。盤面は変えていない。
+ *
+ * PreviewBar の緑 (安全) と黄 (盤面外あり) と見分けられるよう赤系にする。
+ * バーの余白は inline で付ける (index.css の `* { padding: 0 }` が Tailwind の p-* より強く、
+ * クラスでは効かない)。ボタンのクラスは PreviewBar の「取消」とそろえる。
+ */
+function ImportErrorBar({ reason, onClose }: { reason: string; onClose: () => void }) {
+  return (
+    <div
+      className="shrink-0 flex items-center"
+      data-testid="import-error"
+      role="alert"
+      style={{
+        gap: 8, padding: '6px 12px', background: '#3a1414',
+        borderTop: '2px solid', borderBottom: '2px solid', borderColor: '#8a2a2a',
+      }}
+    >
+      {/* 長い理由 (種類の多い未対応ブロック) は 3 行で切り、全文は title とログに残す */}
+      <span className="font-mono line-clamp-3" title={reason}
+            style={{ fontSize: 11, color: '#ddd', minWidth: 0, flex: 1, overflowWrap: 'anywhere' }}
+            data-testid="import-error-reason">
+        <span style={{ color: '#ff8888' }}>読み込めませんでした (今の回路はそのままです)</span>
+        {' 理由: '}{reason}
+      </span>
+      <button onClick={onClose} data-testid="import-error-close"
+              className="mc-btn h-7 px-3 text-xs font-mono shrink-0">
+        閉じる
       </button>
     </div>
   )
