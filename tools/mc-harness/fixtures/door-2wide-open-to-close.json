@@ -1,6 +1,6 @@
 {
   "name": "door-2wide-open-to-close",
-  "description": "Runa.S の 2 幅ピストンドア (#213)。ユーザ提供の opened / closed の実キャプチャ 2 状態のうち opened を再現し、レバーを ON にして closed になるまでを実機で記録する。sim はこの遷移で最終状態が 10 セルずれる (ドア可動部のみ。制御回路は一致)。レバーは実際にクリックさせる。setblock だとレバーの 6 近傍しか更新されず、取り付け先の壁ブロックの先 (ダスト) に伝わらないため回路が動かない",
+  "description": "Runa.S の 2 幅ピストンドア (#213)。ユーザ提供の opened / closed の実キャプチャ 2 状態のうち opened を再現し、レバーを ON にして closed になるまでを実機で記録する。#213 (PR#217) と #216 (PR#232) の修正で、sim は tick 0〜200 の全 tick で実機と一致する。レバーは実際にクリックさせる。setblock だとレバーの 6 近傍しか更新されず、取り付け先の壁ブロックの先 (ダスト) に伝わらないため回路が動かない",
   "mcVersion": "1.21.1",
   "ticks": 200,
   "region": {
@@ -2167,7 +2167,5 @@
       ],
       "action": "use"
     }
-  ],
-  "skipUntil": "I-piston-landing-timing",
-  "skipReason": "#213 の主因 (tick 135 の押し上げが起きない) は解消済み。残るのは着地タイミングの 1 tick ズレ (tick 136 で実機は (0,6,6) が着地済み / sim はまだ moving_piston) と、その影響で tick 148 の押し上げがずれる件 (#216)"
+  ]
 }
