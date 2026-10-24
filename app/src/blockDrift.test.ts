@@ -58,6 +58,8 @@ const ROUND_TRIP_NAMES = [
   // #351 以降。**見た目にだけ効くプロパティ**を持つ形で往復させる
   'oak_log[axis=x]', 'white_glazed_terracotta[facing=east]',
   'spruce_trapdoor[facing=north,half=top,open=false,powered=false,waterlogged=false]',
+  // #393 以降。接尾辞の判定に当たらない素の名前。**実機側の変換器は例外を投げていた**
+  'bricks', 'terracotta', 'waxed_copper_block', 'deepslate_tiles', 'cracked_deepslate_tiles',
 ]
 
 describe('ブロック定義のドリフト検知 (#153)', () => {

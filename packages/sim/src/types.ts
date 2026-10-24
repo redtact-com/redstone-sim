@@ -213,8 +213,9 @@ export interface WeightedPressurePlateState {
  *     signal = lerpDiscrete(f, 0, 15) 相当 = f が 0 なら 0、それ以外は f × 14 の切り捨て + 1
  *   (空 = 0、非空は最低 1)。
  *
- * nbtIO は barrel/chest 系を signal=0 (手動モード) で import し、viewer は
- * minecraft:barrel として描画する。
+ * nbtIO は block entity の Items を読んで slots つき (物流モード) で取り込む (#194)。
+ * 書き出しでは slots を Items に戻し、slots の無いもの (手動モード) は signal と同じ強度に
+ * なる中身を書く (#393)。viewer は name (無ければ fullCube から樽 / チェスト) で描画する。
  */
 export interface ContainerState {
   type: 'container'
