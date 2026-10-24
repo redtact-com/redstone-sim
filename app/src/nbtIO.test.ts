@@ -100,10 +100,12 @@ describe('nbtIO: vanilla ボタン名 → 専用型 import', () => {
 })
 
 describe('nbtIO: コンテナ / 重量板の既存往復が壊れていない', () => {
-  it('樽は barrel として export → container(fullCube=true) で import', async () => {
-    // signal は NBT に現れないため 0 で戻る
-    expect(await roundTrip({ type: 'container', fullCube: true, signal: 5 }))
-      .toMatchObject({ type: 'container', fullCube: true, signal: 0 })
+  it('樽は barrel として export → container(fullCube=true) で import し、signal 5 が保たれる', async () => {
+    // signal は blockstate に出ないので、同じ強度になる中身として書き出す (#393)。
+    // 読み直すと slots つきになり、コンパレーターが読む値は 5 のまま
+    const back = await roundTrip({ type: 'container', fullCube: true, signal: 5 })
+    expect(back).toMatchObject({ type: 'container', name: 'barrel', fullCube: true })
+    expect(effectiveContainerSignal(back)).toBe(5)
   })
 
   it('チェストは chest として export される (#291)', async () => {

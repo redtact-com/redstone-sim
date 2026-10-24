@@ -15,7 +15,7 @@ import type { BlockState, BlockType, ContainerSlots, Dir6 } from '@redstone/sim'
 import {
   emptySlots, stackSizeOf, containerSlotsOf, classifyPlainBlock, toNoteInstrument,
   isContainerBlockName, isContainerFullCube, doorLikeKindOf, buttonLikeKindOf, appearanceProps,
-  weightedPlatePressedPower,
+  weightedPlatePressedPower, slotsForSignal,
 } from '@redstone/sim'
 
 const FACING_OPPOSITE: Record<string, string> = {
@@ -48,9 +48,15 @@ function flipFacingForVanillaNbt(facing: string | undefined): string {
  * コンテナの中身を block entity NBT として書き出す (#194)。
  * 中身を落とすと**コンパレーター強度の微調整が失われる**ため往復で保持する。
  * Items が空なら undefined (不要な nbt を付けない)。
+ *
+ * slots を持たない container (エディタで置いた樽や、取り込んだコンテナをバーで
+ * 書き換えたもの) は signal しか持たない。**同じ強度になる中身 (代表アイテム) に直して
+ * 書く** (#393。以前は何も書かず、読み直すと 0 になっていた)。読み直すと slots つきに
+ * なるが、コンパレーターが読む値は変わらない (slotsForSignal は fillSignal の逆。#236)
  */
 function containerNbt(block: BlockState, name: string): NbtCompound | undefined {
   const slots = containerSlotsOf(block)
+    ?? (block.type === 'container' ? slotsForSignal('container', block.signal) : undefined)
   if (!slots) return undefined
   const entries: NbtCompound[] = []
   slots.forEach((s, i) => {
@@ -660,7 +666,7 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
     case 'container': {
       // 取り込んだ名前があればそれに戻す (#324。無ければ #291 までの規則)。
       // 樽とチェストは**導通が違う**ので取り違えない。
-      // signal は NBT に現れないため破棄する
+      // 中身と signal は blockstate に出ないので containerNbt が block entity として書く (#393)
       const name = (block as any).name as string | undefined
       if (name) return [`minecraft:${name.replace(/^minecraft:/, '')}`, {}]
       return [(block as any).fullCube ? 'minecraft:barrel' : 'minecraft:chest', {}]
@@ -899,7 +905,7 @@ function minecraftToBlockState(
   }
 
   // コンテナ系 (barrel / chest / trapped_chest / shulker_box 等) → container。
-  // NBT には内容 (充填率) が現れないため signal=0 で取り込む。
+  // 中身は block entity の Items から slots として取り込む (#194。signal は使わないので 0)。
   // **樽とシュルカーボックスはフルキューブ (導体)、チェストは違う (非導体)** (#291)
   if (isContainerBlockName(name)) {
     // **導通はシュルカーボックスも実機で測ってある** (#324 fixture shulker-box-conductor)。
