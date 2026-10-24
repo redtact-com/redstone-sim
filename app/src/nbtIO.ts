@@ -86,9 +86,10 @@ const MAX_WRITABLE_BOOK_PAGES = 100
  *
  * - 本の無い書見台・本の中身が無い書見台 (pages=0) には付けない。読み直しても同じ状態に戻る
  * - 100 ページで頭打ちにする。vanilla から読んだ本が上限を超えることは無い
- * - 書き出すファイルには DataVersion が無いので、vanilla は全部の data fixer を通す。
+ * - 書き出すファイルには DataVersion が無いので、vanilla は 500 とみなして全部の data fixer を通す。
  *   1.20.5 のアイテム変換は `Count` (大文字) の無いアイテムをそのまま通すので、
  *   コンテナの Items と同じ 1.20.5 以降の形 (`count` / `components`) で書けば崩れない
+ *   [確定: 26.2 の構造ファイルの読み込みと ItemStackComponentizationFix。vanilla で読ませてはいない]
  */
 function lecternNbt(block: BlockState): NbtCompound | undefined {
   if (block.type !== 'lectern' || !block.hasBook || block.pages < 1) return undefined
