@@ -9,11 +9,10 @@
  * `snapshotFixtureRegion` は CI の fixture テストと同じ関数なので、
  * ここで合っていれば CI でも同じ系列になる。
  *
- * **真上から (topDown) で描く**。`IsometricView` は 3D のときクリックをカメラ回転に
- * 使うので `onBlockClick` が発火せず、クリック操作が成立しない
- * (`IsometricView.tsx:186` の `if (!topDown) { onMouseDown(...); return }`)。
+ * **真上から (topDown) で描く**。層を指定して、どのブロックにも左クリックで use・
+ * 右クリックで inspect をするため。`IsometricView` の 3D のピック (#397) は
+ * 押せる素子 (isTriggerableType) にしか当たらず、左クリックしか返さないので、この用途には足りない。
  * 真上からなら格子が 3 枚でそろうので、見比べにも向く。
- * 3D でのピッキングは別 issue。
  *
  * **パネルは 1 枚ずつ順に出す**。`IsometricView` はインスタンスごとに
  * テクスチャを取り直す (共有キャッシュが無い) ので、3 枚を同時に mount すると
