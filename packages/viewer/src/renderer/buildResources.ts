@@ -46,7 +46,6 @@ async function overlayPackData(
     if (!packState) return
     statesJson[name] = packState
     collectModelRefsFromState(packState).forEach(ref => allModelRefs.add(ref))
-    console.log(`[buildResources] pack blockstate overlay: ${name}`)
   }))
 
   // パックモデルを親チェーンを辿りながら順次ロード
@@ -80,13 +79,9 @@ async function overlayPackData(
       }
     }))
   }
-
-  console.log(`[buildResources] pack models loaded: ${loaded.size}`)
 }
 
 export async function buildResources(blockNames: string[]): Promise<Resources> {
-  console.log('[buildResources] Fetching block states & models...')
-
   const [statesJsonBase, modelsJsonBase] = await Promise.all([
     getBlockStates(),
     getBlockModels(),
@@ -159,8 +154,8 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
   // 構造体のブロックが実際に使うテクスチャのみ収集
   // statesJson・modelsJson にパックデータが含まれているため、
   // パックブロックのカスタムテクスチャパスも自動的に収集される
-  const uniqueBlockNames = [...new Set(blockNames.map(n => n.replace('minecraft:', '')))]
-  console.log('[buildResources] Unique blocks in structure:', uniqueBlockNames.sort())
+  // 並べ替えておく。以前はログ出力の中の sort() がこの配列を並べ替えていた (#395 でログを消した)
+  const uniqueBlockNames = [...new Set(blockNames.map(n => n.replace('minecraft:', '')))].sort()
 
   const texturePaths = collectTexturePaths(
     uniqueBlockNames.map(n => `minecraft:${n}`),
@@ -168,8 +163,6 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
     modelsJson,
   )
   addSpecialRendererTextures(texturePaths, uniqueBlockNames)
-
-  console.log(`[buildResources] Fetching ${texturePaths.size} textures...`)
 
   // テクスチャを並列フェッチ（パック → mcmeta → PrismarineJS の順で試行）
   const textureBlobs: Record<string, Blob> = {}
@@ -200,16 +193,9 @@ export async function buildResources(blockNames: string[]): Promise<Resources> {
     })
   )
 
-  // deepslate の upperPowerOfTwo バグ対策 (詳細は atlasUtils.ts を参照)
-  // padTextureBlobs は呼ばない (#276)。テクスチャを 286 → 1023 に水増しするが、
-  // buildAtlas32 は自前で幅を計算するので**アトラス幅は両方 32 で不変**だった
-  // (実測: 1023 版 283ms / 286 版 88ms。完全な無駄)
-
-  const actualN = Object.keys(validBlobs).length
-  console.log(
-    `[buildResources] Ready: ${blockDefs.size} blockstates, ` +
-    `${blockModels.size} models, ${actualN}/${texturePaths.size} textures`
-  )
+  // deepslate の upperPowerOfTwo バグ (sqrt(N+1) が整数でないとアトラスが小さくなる) は、
+  // buildAtlas32 が幅を自前で計算するので影響を受けない (詳細は atlasUtils.ts の nextPow2)。
+  // 以前ここで呼んでいた水増しの padTextureBlobs は #276 で外し、#395 で関数ごと消した
 
   // 32×32 スロットのカスタムアトラスを構築
   // deepslate の fromBlobs は drawImage のソース rect を固定 16×16 にするため
