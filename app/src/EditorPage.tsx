@@ -6,7 +6,8 @@
  *   - 既存ブロックをクリック → 選択（向き・遅延バーに現在値を反映）
  *   - 選択後バーを操作 → 選択ブロックに即時反映
  *   - 消しゴム選択 → 左クリック（ドラッグ含む）で削除
- * - シミュレーションモード: topDown=false の3Dビュー / tick実行 / レバークリック
+ * - シミュレーションモード: topDown=false の3Dビュー / tick実行 /
+ *   レバー等の手動トリガ素子は 3D 盤面のクリック・タップかトリガ欄で操作 (#397)
  *
  * ── グリッド表示の仕組み ──
  * IsometricView の cameraStateRef でカメラ状態を取得し、
@@ -36,7 +37,7 @@ import type { WorldSnapshot, BlockState } from '@redstone/sim'
 import type { Dir6, HDir, Pos3D, StackSize } from '@redstone/sim'
 import { totalItems, effectiveContainerSignal } from '@redstone/sim'
 import { IsometricView } from '@redstone/viewer'
-import type { CameraState } from '@redstone/viewer'
+import type { CameraState, IsometricViewHandle } from '@redstone/viewer'
 import { MCMETA_BASE } from './mcAssets'
 import {
   BLOCK_PALETTE, TRIGGER_META, TRIGGER_TYPES, isTriggerOn, containerTriggerValue,
@@ -65,6 +66,11 @@ export interface EditorTestApi {
   getBoard: () => BoardSize
   /** プレビュー中なら候補の盤面外ブロック数、プレビューでなければ null (#226) */
   getPendingOutside: () => number | null
+  /**
+   * sim の 3D 盤面で、ブロックの中心が描かれている画面座標 (clientX/Y) (#397)。
+   * e2e はこの座標を実際にクリック・タップする。sim でない・描画の準備前は null
+   */
+  blockToClient: (x: number, y: number, z: number) => { x: number; y: number } | null
 }
 
 declare global {
@@ -415,57 +421,25 @@ export function EditorPage({ onBack }: EditorPageProps) {
     gridBlock?.type === 'dropper'
   )
 
-  // ── ブロッククリック（edit + sim 共通） ─────────────────────────────────
+  // ── ブロッククリック（編集モードの真上表示） ──────────────────────────────
 
   // useCallback の deps を最小化して IsometricView への参照を安定させる
-  const stateRef = useRef({ mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending })
-  stateRef.current = { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending }
+  const stateRef = useRef({ mode, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending })
+  stateRef.current = { mode, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending }
 
   const handleBlockClick = useCallback((pos: Pos3D, button: 'left' | 'right') => {
-    const { mode, simWorld, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending } = stateRef.current
+    const { mode, selectedType, facing, delay, comparatorMode, pressedPower, signal, count, pending } = stateRef.current
     const [x, , z] = pos
+
+    // **編集専用** (#397)。sim の 3D 盤面のクリック・タップは handleTrigger に渡す
+    // (トリガ欄のボタンと同じ処理)。以前はここに sim の分岐があったが、3D は
+    // onBlockClick を呼ばなかったので一度も通らず、押せる素子もトリガ欄より狭かった
+    if (mode !== 'edit') return
 
     // プレビュー中の編集は受けない (#226)。候補と実体が混ざると
     // 「確定したら何が残るのか」が説明できなくなる
     if (pending) {
       addLog('プレビュー中です。確定または取消してから編集してください')
-      return
-    }
-
-    // ── シミュレーションモード: レバーのみ操作 ──────────────────────────
-    if (mode === 'sim') {
-      if (simWorld) {
-        const b = simWorld.getBlockAt(pos)
-        if (b?.type === 'lever') {
-          simWorld.activateBlock(x, pos[1], z)
-          addLog(`レバートグル (${x}, ${pos[1]}, ${z})`)
-          rerender()
-        } else if (b?.type === 'button_stone' || b?.type === 'button_wood') {
-          // ボタンは手動トリガ (押下 ON → 20/30gt 後に自動 OFF。作動中は no-op)
-          simWorld.activateBlock(x, pos[1], z)
-          addLog(`ボタンを押す (${x}, ${pos[1]}, ${z})`)
-          rerender()
-        } else if (b?.type === 'target') {
-          // ターゲットは手動トリガ (中心命中相当の 15、20gt 持続)
-          simWorld.activateBlock(x, pos[1], z)
-          addLog(`ターゲット発火 (${x}, ${pos[1]}, ${z})`)
-          rerender()
-        } else if (
-          b?.type === 'pressure_plate_wood' || b?.type === 'pressure_plate_stone' ||
-          b?.type === 'weighted_pressure_plate_light' || b?.type === 'weighted_pressure_plate_heavy'
-        ) {
-          // 感圧板は手動トリガ (踏まれ ON → 持続 gt で自動 OFF)
-          simWorld.activateBlock(x, pos[1], z)
-          addLog(`感圧板を踏む (${x}, ${pos[1]}, ${z})`)
-          rerender()
-        } else if (b?.type === 'container') {
-          // コンテナは中身を 1 段増やす (#236)。15 の次は 0
-          simWorld.activateBlock(x, pos[1], z)
-          const v = effectiveContainerSignal(simWorld.getBlockAt(pos))
-          addLog(`コンテナの中身 (${x}, ${pos[1]}, ${z}): ${v}`)
-          rerender()
-        }
-      }
       return
     }
 
@@ -911,8 +885,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
   }, [board])
 
   // ── 手動トリガ一覧スキャン ────────────────────────────────────────────
-  // sim の 3D ビューはカメラ回転優先でブロッククリックが届かないため、
-  // 手動トリガ素子 (レバー/感圧板/ターゲット) はパネルのボタンから操作する
+  // 手動トリガ素子は 3D 盤面のクリック・タップ (#397) でもトリガ欄のボタンでも操作できる。
+  // どちらも handleTrigger に渡す。トリガ欄は、奥に隠れた素子・遠くて小さい素子を
+  // 押すときや、キーボードで操作するときのために残す
 
   const scanTriggers = useCallback((): TriggerEntry[] => {
     const found: TriggerEntry[] = []
@@ -1011,6 +986,15 @@ export function EditorPage({ onBack }: EditorPageProps) {
     rerender()
   }, [simWorld, addLog, rerender])
 
+  /**
+   * 3D 盤面のクリック・タップ (#397)。**トリガ欄のボタンと同じ処理**に渡す。
+   * IsometricView は押せる素子 (isTriggerableType) に当たったときだけ、
+   * snapshot の座標で呼ぶ (sim の座標と同じ)
+   */
+  const handleBoardTrigger = useCallback((pos: Pos3D) => {
+    handleTrigger(pos[0], pos[1], pos[2])
+  }, [handleTrigger])
+
   /** コンテナの中身を直接指定する (#236)。階数指定のように値が離れているとき用 */
   const handleContainerSignal = useCallback((x: number, y: number, z: number, v: number) => {
     if (!simWorld) return
@@ -1091,6 +1075,8 @@ export function EditorPage({ onBack }: EditorPageProps) {
   simWorldRef.current = simWorld
   const modeRef = useRef(mode)
   modeRef.current = mode
+  /** sim の 3D 盤面の命令的な口 (#397)。e2e の blockToClient が読む */
+  const simViewRef = useRef<IsometricViewHandle | null>(null)
 
   useEffect(() => {
     window.__editorTest = {
@@ -1117,6 +1103,7 @@ export function EditorPage({ onBack }: EditorPageProps) {
         const p = pendingRef.current
         return p ? countOutside(p.blocks, p.board) : null
       },
+      blockToClient: (x, y, z) => simViewRef.current?.blockToClient([x, y, z]) ?? null,
     }
     return () => { delete window.__editorTest }
   }, [handleClear, handleBlockClick, handleSelectType, rerender])
@@ -1297,8 +1284,9 @@ export function EditorPage({ onBack }: EditorPageProps) {
             snapshot={snapshot}
             topDown={false}
             placementY={activeLayer}
-            onBlockClick={handleBlockClick}
+            onBlockClick={handleBoardTrigger}
             onReady={rerender}
+            viewRef={simViewRef}
           />
           {running && (
             <div className="rs-border-pulse" style={{
@@ -1307,9 +1295,10 @@ export function EditorPage({ onBack }: EditorPageProps) {
           )}
         </div>
 
-        {/* ログパネル */}
+        {/* ログパネル。**高さは固定** (#397)。ログが増えるたびに 3D が縮むと、
+            押した直後に盤面がずれて (約 11px) 続けて押すと外れる */}
         <div className="shrink-0 px-3 py-1.5 overflow-y-auto"
-             style={{ background: '#0d0d0d', borderTop: '2px solid #2a2a2a', maxHeight: 72, scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
+             style={{ background: '#0d0d0d', borderTop: '2px solid #2a2a2a', height: 72, scrollbarWidth: 'thin', scrollbarColor: '#2a2a2a transparent' }}>
           {log.slice(-6).map((l, i) => (
             <div key={i} className="font-mono" style={{ fontSize: 11, color: '#4a4a4a', lineHeight: '18px' }}>{l}</div>
           ))}

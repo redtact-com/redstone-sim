@@ -16,6 +16,12 @@ export const VIEWER_FOV_DEG = 70
 /** deepslate の far クリップ面。これを超えると描画が切れる */
 export const VIEWER_FAR = 500
 
+/**
+ * deepslate の near クリップ面。ライブラリ側の固定値 (Renderer.getPerspective)。
+ * 3D のピッキング (#397) は描画と同じ射影で光線を作るので、ここで値を揃える
+ */
+export const VIEWER_NEAR = 0.1
+
 export interface FitOptions {
   /** 画面の横 / 縦。1 未満なら縦長 (スマホ) */
   aspect?: number

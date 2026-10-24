@@ -330,8 +330,9 @@ docker compose exec mc rcon-cli -- op <自分の名前>   # 必要なら
 
 ### ライブ観測の制約
 
-- **真上から (topDown) で描く**。`IsometricView` は 3D のときクリックをカメラ回転に使うので
-  `onBlockClick` が発火せず、クリック操作が成立しない。3D でのピッキングは別 issue
+- **真上から (topDown) で描く**。層を指定して、どのブロックにも左クリックで use・右クリックで
+  inspect をするため。3D のピック (#397) は押せる素子 (isTriggerableType) にしか当たらず、
+  左クリックしか返さないので、この用途には足りない
 - **パネルは 1 枚ずつ順に mount する**。`IsometricView` はインスタンスごとにテクスチャを
   取り直す (共有キャッシュが無い) ので、3 枚を同時に出すとブラウザが
   `ERR_INSUFFICIENT_RESOURCES` を返して 2 枚目以降が真っ白になる。差分ビューは既定 OFF

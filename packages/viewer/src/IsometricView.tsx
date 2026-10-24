@@ -5,7 +5,6 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { mat4 } from 'gl-matrix'
 import { Structure, StructureRenderer } from 'deepslate/render'
 import type { WorldSnapshot } from '@redstone/sim'
 import type { Pos3D } from '@redstone/sim'
@@ -18,6 +17,18 @@ import { buildResources, type AssetState } from './renderer/buildResources.js'
 import { fitDistance, maxZoomOut } from './camera.js'
 import { useCamera } from './renderer/useCamera.js'
 import { canvasPixelToBlock, FOV_F } from './renderer/coordUtils.js'
+import {
+  viewMatrixOf, projMatrixOf, canvasRay, pointToCanvas, pickCell, pickRoleOf, pickNearest,
+  TOUCH_PICK_RADII,
+} from './renderer/picking.js'
+
+// ─── 3D のクリック・タップの見分け (#397) ────────────────────────────────────
+
+/** クリック・タップとみなす動きの上限 (CSS px)。越えたらドラッグ (カメラ回転) */
+const CLICK_SLOP_MOUSE = 5
+const CLICK_SLOP_TOUCH = 10
+/** タッチでこれより長く押したらタップにしない (長押し)。マウスは時間を見ない */
+const TAP_MAX_MS_TOUCH = 500
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -55,14 +66,30 @@ export interface CameraInput {
   rotY?: number
 }
 
+/** IsometricView を外から命令的に使う口 (#397)。`viewRef` に入る */
+export interface IsometricViewHandle {
+  /**
+   * ブロックの中心が画面のどこに描かれているか (clientX/Y)。座標は snapshot の座標。
+   * 描画の準備ができていない・カメラの後ろなら null。
+   * e2e が実際の座標をクリック・タップして確かめるために使う
+   */
+  blockToClient: (pos: Pos3D) => { x: number; y: number } | null
+}
+
 export interface IsometricViewProps {
   /** 表示対象のスナップショット */
   snapshot: WorldSnapshot
   /** true にすると真上からの 2D ビュー */
   topDown?: boolean
   /**
-   * クリックされたブロック座標を通知するコールバック。
-   * topDown=true のとき、左右クリックを区別して返す。
+   * クリック・タップされたブロック座標を通知するコールバック。
+   *
+   * - topDown=true: 左右クリックを区別して返す。座標の x/z は**構造ローカル**
+   *   (snapshot の bounds の min が原点)、y は placementY
+   * - topDown=false (3D, #397): 押せる素子 (isTriggerableType) に当たったときだけ 'left' で返す。
+   *   座標は **snapshot の座標** (bounds の min を足してある) なので、そのまま sim に渡せる。
+   *   ドラッグ (カメラ回転)・ピンチ・タッチの長押しでは呼ばない。
+   *   渡さなければ、3D ではピックもカーソルの変更もしない
    */
   onBlockClick?: (pos: Pos3D, button: 'left' | 'right') => void
   /** 2D モード時にクリック判定に使う Y レイヤー */
@@ -81,6 +108,8 @@ export interface IsometricViewProps {
   cameraInputRef?: React.MutableRefObject<CameraInput | null>
   /** テクスチャ読込 + 初回 Structure 構築が完了して描画可能になった時に一度呼ぶ。 */
   onReady?: () => void
+  /** 命令的な口 (#397)。ref を渡すと、マウント中は中身が入る (cameraInputRef と同じ形) */
+  viewRef?: React.MutableRefObject<IsometricViewHandle | null>
 }
 
 // ─── コンポーネント ────────────────────────────────────────────────────────────
@@ -94,6 +123,7 @@ export function IsometricView({
   panMode = false,
   cameraInputRef,
   onReady,
+  viewRef,
 }: IsometricViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // init effect は deps=[] で一度だけ張るため、最新の onReady を ref 経由で読む
@@ -141,6 +171,29 @@ export function IsometricView({
   const lastPinchDist = useRef<number | null>(null)
   const lastPinchMid  = useRef<{x: number; y: number} | null>(null)
 
+  // ─── 3D の 1 回の操作 (#397) ───────────────────────────────────────────────
+  /**
+   * 押してから離すまで。**押した時点ではまだ何もしない**。
+   * 動いた量がしきい値を越えたらドラッグ (カメラ回転)、越えずに離したらクリック・タップ。
+   *  - press: 押したまま、しきい値の内側
+   *  - drag:  しきい値を越えた。カメラを回している
+   *  - pinch: 2 本目の指が触れた。指を全部離すまで何もしない
+   */
+  const gestureRef = useRef<{
+    id: number
+    x: number
+    y: number
+    /** 押した時刻 (event.timeStamp) */
+    t: number
+    touch: boolean
+    /** クリックになりうるボタンか (左ボタン / 1 本目の指) */
+    canTap: boolean
+    phase: 'press' | 'drag' | 'pinch'
+  } | null>(null)
+  /** マウスが押せる素子の上にあるか (カーソルを pointer にする)。変わったときだけ state を変える */
+  const hoverTargetRef = useRef(false)
+  const [hoverTarget, setHoverTarget] = useState(false)
+
   // ─── ヒットテスト (2D モード) ──────────────────────────────────────────────
 
   const hitBlock = useCallback(
@@ -165,6 +218,93 @@ export function IsometricView({
     [cameraRef, placementY],
   )
 
+  // ─── ピック (3D モード, #397) ──────────────────────────────────────────────
+
+  /**
+   * 今描いている絵の行列と盤面。ピックと blockToClient が使う。描画の準備前は null。
+   *
+   * ブロックは**今描いている構造を作った snapshot** (prevSnapshotRef) から引く。
+   * props の snapshot は 1 レンダ先に進んでいることがある。
+   */
+  const currentView = useCallback(() => {
+    const canvas = canvasRef.current
+    const structure = structureRef.current
+    const snap = prevSnapshotRef.current
+    if (!canvas || !structure || !snap || !rendererRef.current) return null
+    const rect = canvas.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0 || canvas.clientHeight <= 0) return null
+    const size = structure.getSize()
+    return {
+      left: rect.left,
+      top: rect.top,
+      // 画面の点 ↔ NDC は表示された大きさで、画面比は deepslate と同じ clientWidth/Height で
+      w: rect.width,
+      h: rect.height,
+      size,
+      snap,
+      vm: viewMatrixOf(cameraRef.current, size),
+      pm: projMatrixOf(canvas.clientWidth / canvas.clientHeight),
+    }
+  }, [cameraRef])
+
+  /** 画面の点 (clientX/Y) の光線で、最初に当たる押せる素子。座標は snapshot の座標 */
+  const pick3D = useCallback(
+    (clientX: number, clientY: number): Pos3D | null => {
+      const view = currentView()
+      if (!view) return null
+      const ray = canvasRay(clientX - view.left, clientY - view.top, view.w, view.h, view.vm, view.pm)
+      if (!ray) return null
+      const { snap } = view
+      const [minX] = snap.bounds.x, [minY] = snap.bounds.y, [minZ] = snap.bounds.z
+      const hit = pickCell(ray, view.size, (x, y, z) =>
+        pickRoleOf(snap.blocks.get(`${x + minX},${y + minY},${z + minZ}`)))
+      return hit ? [hit[0] + minX, hit[1] + minY, hit[2] + minZ] : null
+    },
+    [currentView],
+  )
+
+  const blockToClient = useCallback(
+    (pos: Pos3D): { x: number; y: number } | null => {
+      const view = currentView()
+      if (!view) return null
+      const { snap } = view
+      const p = [
+        pos[0] - snap.bounds.x[0] + 0.5,
+        pos[1] - snap.bounds.y[0] + 0.5,
+        pos[2] - snap.bounds.z[0] + 0.5,
+      ]
+      const c = pointToCanvas(p, view.w, view.h, view.vm, view.pm)
+      return c ? { x: view.left + c.x, y: view.top + c.y } : null
+    },
+    [currentView],
+  )
+
+  /** クリック・タップした点のピック。タッチは外れても周り (半径 6px と 12px) を探す */
+  const pickForTap = useCallback(
+    (clientX: number, clientY: number, touch: boolean): Pos3D | null =>
+      pickNearest(clientX, clientY, pick3D, blockToClient, touch ? TOUCH_PICK_RADII : []),
+    [pick3D, blockToClient],
+  )
+
+  const updateHover = useCallback(
+    (clientX: number, clientY: number) => {
+      const over = !!onBlockClick && pick3D(clientX, clientY) !== null
+      if (over === hoverTargetRef.current) return
+      hoverTargetRef.current = over
+      setHoverTarget(over)
+    },
+    [onBlockClick, pick3D],
+  )
+
+  useEffect(() => {
+    if (!viewRef) return
+    const handle: IsometricViewHandle = { blockToClient }
+    viewRef.current = handle
+    return () => {
+      if (viewRef.current === handle) viewRef.current = null
+    }
+  }, [viewRef, blockToClient])
+
   // ─── ポインターイベント ────────────────────────────────────────────────────
 
   const isPanButton = (button: number) => button === 2 || button === 1
@@ -178,15 +318,26 @@ export function IsometricView({
       // 2本指: ピンチ開始
       if (activePointers.current.size >= 2) {
         isPainting.current = false
+        // 3D: ピンチになった操作はクリックにもドラッグにもしない (指を全部離すまで)
+        if (gestureRef.current) gestureRef.current.phase = 'pinch'
         const pts = [...activePointers.current.values()]
         lastPinchDist.current = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)
         lastPinchMid.current  = {x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2}
         return
       }
 
-      // 1本指: 既存ロジック
+      // 1本指
       if (!topDown) {
-        onMouseDown(e as unknown as React.MouseEvent)
+        // 3D: 押した時点ではまだ回さない。動いた量で、ドラッグかクリックかを決める (#397)
+        gestureRef.current = {
+          id: e.pointerId,
+          x: e.clientX,
+          y: e.clientY,
+          t: e.timeStamp,
+          touch: e.pointerType === 'touch',
+          canTap: e.button === 0 && e.isPrimary,
+          phase: 'press',
+        }
         return
       }
       if (isPanButton(e.button) || (panMode && e.button === 0)) {
@@ -199,7 +350,7 @@ export function IsometricView({
       const pos = hitBlock(e.clientX, e.clientY)
       if (pos) onBlockClick(pos, e.button === 2 ? 'right' : 'left')
     },
-    [topDown, panMode, onBlockClick, hitBlock, onMouseDown, onRightMouseDown],
+    [topDown, panMode, onBlockClick, hitBlock, onRightMouseDown],
   )
 
   const handlePointerMove = useCallback(
@@ -253,8 +404,24 @@ export function IsometricView({
         return
       }
 
-      // 1本指: 既存ロジック
+      // 1本指
       if (!topDown) {
+        const g = gestureRef.current
+        if (!g) {
+          // 押していないマウス: 押せる素子の上ならカーソルを変える
+          if (e.pointerType === 'mouse') updateHover(e.clientX, e.clientY)
+          return
+        }
+        if (g.id !== e.pointerId || g.phase === 'pinch') return
+        if (g.phase === 'press') {
+          const slop = g.touch ? CLICK_SLOP_TOUCH : CLICK_SLOP_MOUSE
+          if (Math.hypot(e.clientX - g.x, e.clientY - g.y) <= slop) return
+          // しきい値を越えた: ここから回し始める。越えた位置を起点にするので絵は跳ばない
+          g.phase = 'drag'
+          setIsPanning(true)
+          onMouseDown(e as unknown as React.MouseEvent)
+          return
+        }
         onMouseMove(e as unknown as React.MouseEvent)
         return
       }
@@ -266,11 +433,24 @@ export function IsometricView({
       const pos = hitBlock(e.clientX, e.clientY)
       if (pos) onBlockClick(pos, 'left')
     },
-    [topDown, panMode, onBlockClick, hitBlock, onMouseMove, onRightMouseMove, placementY, cameraRef, getPanScale],
+    [topDown, panMode, onBlockClick, hitBlock, onMouseDown, onMouseMove, onRightMouseMove, placementY, cameraRef, getPanScale, updateHover],
   )
 
+  /** pointerup に加えて pointerleave と pointercancel でも呼ぶ */
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
+      // 3D: しきい値の内側で離したらクリック・タップ (#397)
+      const g = gestureRef.current
+      if (!topDown && g && g.id === e.pointerId) {
+        gestureRef.current = null
+        // pointerleave / pointercancel では押さない。押す位置は押した時の座標
+        // (クリックではカメラが回らないので、押した時と離した時でカメラは同じ)
+        if (e.type === 'pointerup' && g.phase === 'press' && g.canTap && onBlockClick
+          && (!g.touch || e.timeStamp - g.t <= TAP_MAX_MS_TOUCH)) {
+          const pos = pickForTap(g.x, g.y, g.touch)
+          if (pos) onBlockClick(pos, 'left')
+        }
+      }
       activePointers.current.delete(e.pointerId)
       if (activePointers.current.size < 2) {
         lastPinchDist.current = null
@@ -280,9 +460,10 @@ export function IsometricView({
       setIsPanning(false)
       onRightMouseUp()
       if (!topDown) onMouseUp()
-      else e.currentTarget.releasePointerCapture(e.pointerId)
+      // pointercancel の後や、タッチの pointerup 後の pointerleave では捕捉が外れている
+      else if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
     },
-    [topDown, onMouseUp, onRightMouseUp],
+    [topDown, onBlockClick, pickForTap, onMouseUp, onRightMouseUp],
   )
 
   const handleContextMenu = useCallback(
@@ -450,12 +631,8 @@ export function IsometricView({
             renderer.setViewport(0, 0, w, h)
           }
 
-          const s = structureRef.current.getSize()
-          const vm = mat4.create()
-          mat4.translate(vm, vm, [0, 0, -cam.distance])
-          mat4.rotateX(vm, vm, (cam.rotX * Math.PI) / 180)
-          mat4.rotateY(vm, vm, (cam.rotY * Math.PI) / 180)
-          mat4.translate(vm, vm, [-s[0] / 2 - cam.panX, -s[1] / 2, -s[2] / 2 - cam.panZ])
+          // ピック (#397) と同じ関数で作る。片方だけ変えると押した所と違うマスが切り替わる
+          const vm = viewMatrixOf(cam, structureRef.current.getSize())
 
           // カメラ状態を外部に公開（グリッドオーバーレイ等に使用）
           if (cameraStateRef) {
@@ -553,13 +730,16 @@ export function IsometricView({
           width: '100%',
           height: '100%',
           display: 'block',
-          cursor: isPanning ? 'grabbing' : topDown ? (panMode ? 'grab' : editable ? 'crosshair' : 'grab') : 'grab',
+          // 3D: 押せる素子の上で pointer、回している間は grabbing (#397)
+          cursor: isPanning ? 'grabbing' : topDown ? (panMode ? 'grab' : editable ? 'crosshair' : 'grab')
+            : (hoverTarget && onBlockClick ? 'pointer' : 'grab'),
           touchAction: 'none',
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={topDown ? undefined : onWheel3D}
         onContextMenu={handleContextMenu}
       />
