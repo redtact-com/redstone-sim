@@ -10,7 +10,7 @@
 // 注意 (docs/research/04 §2.4):
 //   MCHPRS はワイヤ更新順の典拠には使わない。ここでは「素子の ON/OFF タイミングと
 //   到達距離」の挙動照合のみに使う。sim と期待値が食い違うケースは it.skip +
-//   理由コメントで報告する (勝手に sim を変えない)。
+//   理由コメントで報告する (勝手に sim を変えない)。今は 12 件すべて通る。
 //
 // ── 移植上の対応付け ──
 //   * TestWorld の tick() = 1 redstone tick = **2 game tick**。sim は game tick 駆動
@@ -19,21 +19,24 @@
 //      すべて「1 MCHPRS tick = 2 gt」で vanilla と一致する。)
 //   * use_block(pos) = activateBlock(pos) (即時反映)。
 //   * check_block_powered(pos) = 対象素子の powered/lit を読む。
-//     trapdoor 検出器 (sim 未対応) は「空マス + 受電あり (= isBlockPowered)」で
-//     代替する (trapdoor.powered は vanilla hasNeighborSignal と同値)。
+//     検出器は MCHPRS と同じく鉄のトラップドアを置き、その powered を読む。
+//     素子でないマスを読むとテストを落とす (MCHPRS も同じ)。
 //   * make_wire = 全方向 side の cross ダスト (MCHPRS make_cross(0) と同じ)。
 //   * make_lever/make_repeater/make_comparator = place_on_block 相当 (下に stone)。
 //   * repeater/comparator の MC facing は入力側なので sim へは mcToSim が OPPOSITE 変換する。
 // ============================================================
 
 import { describe, it, expect } from 'vitest'
-import { SimWorld, mcToSim, isBlockPowered } from '@redstone/sim'
+import { SimWorld, mcToSim } from '@redstone/sim'
 import type { Pos3D, BlockState } from '@redstone/sim'
 
 // ── 移植ハーネス ─────────────────────────────────────────
 
 /** MCHPRS BlockDirection (= MC facing 文字列) */
 type Dir = 'north' | 'south' | 'east' | 'west'
+
+/** MCHPRS trapdoor(): 検出器に使う鉄のトラップドア (閉じている・受電なし) */
+const TRAPDOOR = 'iron_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]'
 
 class Harness {
   readonly world = new SimWorld()
@@ -87,7 +90,11 @@ class Harness {
     this.world.tick()
   }
 
-  /** 対象マスが powered か。素子は自身のプロパティ、検出器 (空マス) は hasNeighborSignal */
+  /**
+   * 対象マスが powered か。素子は自身のプロパティを読む。
+   * 素子でないマスは例外にする (MCHPRS is_block_powered の None と同じ)。
+   * 検出器の置き忘れを、黙って通さないため
+   */
   powered(pos: Pos3D): boolean {
     const b: BlockState | null = this.world.getBlockAt(pos)
     if (b) {
@@ -98,6 +105,7 @@ class Harness {
         case 'repeater':
         case 'comparator':
         case 'solid':
+        case 'trapdoor_iron':
           return b.powered
         case 'torch':
         case 'wall_torch':
@@ -105,8 +113,7 @@ class Harness {
           return b.lit
       }
     }
-    // trapdoor 検出器の代替: hasNeighborSignal
-    return isBlockPowered(this.world, pos)
+    throw new Error(`${pos} は検出できる素子ではない: ${JSON.stringify(b)}`)
   }
 
   check(pos: Pos3D, powered: boolean): void {
@@ -139,11 +146,12 @@ describe('MCHPRS components.rs (移植)', () => {
     h.check(lever, false)
   })
 
-  it('trapdoor_on_off (trapdoor→空マス+hasNeighborSignal 代替)', () => {
+  it('trapdoor_on_off', () => {
     const h = new Harness()
     const lever = pos(0, 1, 0)
     const detector = pos(1, 0, 0)
     h.makeLever(lever)
+    h.setBlock(detector, TRAPDOOR)
     h.settle()
     h.check(detector, false)
     h.useBlock(lever)
@@ -207,6 +215,7 @@ describe('MCHPRS components.rs (移植)', () => {
       const h = new Harness()
       h.makeLever(lever)
       h.makeRepeater(pos(1, 1, 0), delay, 'west')
+      h.setBlock(detector, TRAPDOOR)
       h.settle()
       h.check(detector, false)
 
@@ -233,6 +242,7 @@ describe('MCHPRS components.rs (移植)', () => {
     const detector = pos(16, 1, 0)
     h.makeLever(lever)
     for (let x = 1; x <= 15; x++) h.makeWire(pos(x, 1, 0))
+    h.setBlock(detector, TRAPDOOR)
     h.settle()
     h.check(detector, false)
     h.useBlock(lever)
@@ -247,6 +257,7 @@ describe('MCHPRS components.rs (移植)', () => {
     const detector = pos(17, 1, 0)
     h.makeLever(lever)
     for (let x = 1; x <= 16; x++) h.makeWire(pos(x, 1, 0))
+    h.setBlock(detector, TRAPDOOR)
     h.settle()
     h.check(detector, false)
     h.useBlock(lever)
@@ -315,7 +326,7 @@ describe('MCHPRS timings.rs (移植)', () => {
     h.makeWire(pos(1, 1, 1))
     h.makeWire(pos(2, 1, 1))
     h.makeComparator(pos(3, 1, 1), 'subtract', 'west')
-    h.placeOn(output, 'air')  // trapdoor 検出器 → 空マス
+    h.placeOn(output, TRAPDOOR)
     h.settle()
 
     h.useBlock(lever)
@@ -324,13 +335,7 @@ describe('MCHPRS timings.rs (移植)', () => {
     h.checkPoweredFor(output, false, 10)
   })
 
-  // skip 理由 (sim は変更しない。docs/research/04 §2.4: MCHPRS はワイヤ更新/接続の典拠にしない):
-  //   コンパレーター出力自体は正しく 1t パルス (comparator.powered は t1 のみ ON、t2 で OFF を確認済み) だが、
-  //   trapdoor 検出器を「空マス + hasNeighborSignal」で代替しているため、遅延経路の cross ダスト wire(4,1,0)
-  //   が出力側の固体 (4,1,1) を弱充電し続けるのを検出器が拾い、パルス終了後 (t2 以降) も ON のままになる。
-  //   これは trapdoor 代替 + cross ワイヤ (make_cross 強制接続) の弱充電モデル差であって、パルス生成タイミングの
-  //   相違ではない。pulse_gen_2t は並走ダストが出力側固体に触れないため代替検出器でも一致する。
-  it.skip('pulse_gen_1t [skip: trapdoor 代替 + 並走 cross ダストの弱充電で検出器が消えない]', () => {
+  it('pulse_gen_1t', () => {
     const h = new Harness()
     const output = pos(5, 1, 1)
     const lever = pos(0, 1, 1)
@@ -345,7 +350,7 @@ describe('MCHPRS timings.rs (移植)', () => {
     h.makeWire(pos(2, 1, 1))
     h.makeComparator(pos(3, 1, 1), 'subtract', 'west')
     h.placeOn(pos(4, 1, 1), 'stone')          // コンパレーター出力を通す固体
-    h.placeOn(output, 'air')                    // trapdoor 検出器 → 空マス
+    h.placeOn(output, TRAPDOOR)
     h.settle()
 
     h.useBlock(lever)
