@@ -374,8 +374,8 @@
 
 ### 3.5 redstone-sim の文書・コメントの誤り
 
-- **ip-policy 違反**: tools/mc-harness/runner/scheduled-ticks.ts:18-19 に、デコンパイル由来の record 宣言と式の断片がそのまま入っている。
-  tools/ip-hygiene.test.ts の正規表現は、アクセス修飾子も波括弧も無いこの形を検出できない。
+- **ip-policy 違反 (#386 / PR#387 で修正済み)**: tools/mc-harness/runner/scheduled-ticks.ts に、デコンパイル由来の record 宣言と式の断片がそのまま入っていた。
+  当時の tools/ip-hygiene.test.ts の正規表現は、アクセス修飾子も波括弧も無いこの形を検出できなかった。PR#387 で典拠を自分の言葉に直し、record 宣言と型付き引数リストの検出パターンを足した。
 - **02_behavior-spec.md**:
   - §6 のピストンのタイムラインは「moving_piston は ST 相で確定」と書くが、#80 以降は BlockEntity 相
   - 02:187 (と 12:98) は「PP の再帰カスケードは無い」と書くが、実際には塀が形状更新のたびに下と横の塀へ再帰する (world.ts:2359-2363)。
@@ -414,7 +414,7 @@
 | 押し反応の表を 26.2 の Blocks に合わせる。判定は PistonBaseBlock#isPushable の順にする: 硬さ -1 は不動、次に押し反応 (BLOCK は不動、DESTROY は壊す、PUSH_ONLY は向きしだい) で決め、NORMAL のものに限って BE 持ちを不動にする (シュルカー・ベル・飾り壺・頭は BE を持つが壊れる) | R-9, R-10 | M |
 | 伸長の末尾処理を moveBlocks の順にする。ヘッド位置から NC を出し、空いたセルに形状更新を出し、本体の更新を最後にする | R-11, R-12, R-14 | S〜M |
 | addBranchingBlocks を Direction.values() の順にする (updates.ts にある既存の定数を使う) | R-13 | S |
-| ip-policy 違反を直し、ip-hygiene に record 宣言のパターンを足す | §3.5 | S |
+| ip-policy 違反を直し、ip-hygiene に record 宣言のパターンを足す (#386 / PR#387 で済み) | §3.5 | S |
 
 実機で確定した 4 件 (R-1・R-3・R-9・R-11) は、先に fixture にしてから直す。
 それ以外の件も、直すときに実機で 1 回測ってから fixture にする (実機と照合していない指摘だけで挙動を変えない)。
@@ -490,7 +490,7 @@
   実機が E → N → S なら、ダストの逐次評価 (§4.4) の優先度が上がる。
 - **R-13 (枝の方向順) と R-15 (予約順の逆転)**: 競争になる回路を実機で測り、fixture にする。
 - **1.21.1 のデコンパイル**: 1.21.1 の server jar を公式 mappings でデコンパイルし、26.2 との差 (§3.4) を体系的に洗う。今回は反証チェックで 9 クラスだけ行った。
-- **起票**: §3.1 の各件を Project #1 に起票するか (ユーザ判断)。
+- **起票 (済み)**: §3.1 の R-1〜R-22 は Project #1 に draft として起票した (タイトル末尾が (R-n))。着手するときに issue にする。
 - **上流への報告**: Nucleation に §3.2 を報告するか (ユーザ判断)。
 
 ---
