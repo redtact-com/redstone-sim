@@ -6,12 +6,11 @@
 // が起きる (ドライバを 2 本にしないのと同じ理由)。
 // ============================================================
 
-import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseMcState } from '@redstone/sim'
-import { rcon, rconBatch, scarpet, reloadDumpApp, sleep } from './rcon.js'
+import { rcon, rconBatch, scarpet, reloadDumpApp, sleep, readCarpetVersion } from './rcon.js'
 import { pressBlock, readState, standCandidates, type Pos3 } from './aim.js'
 import {
   emitAttachedSupportUpdate, placeCircuit, splitDrift, scanLiveRegion,
@@ -67,19 +66,6 @@ interface LiveDef {
   region: { from: number[]; to: number[] }
   blocks: { pos: number[]; block: string; items?: unknown }[]
   player?: { spawn: number[]; facing: number[]; lookAt: number[] }
-}
-
-function readCarpetVersion(): string {
-  try {
-    const out = execFileSync(
-      'docker', ['compose', 'exec', '-T', 'mc', 'ls', '/data/mods'],
-      { cwd: harnessDir, env: { ...process.env, DOCKER_API_VERSION: '1.44' }, encoding: 'utf-8' },
-    )
-    const jar = out.split('\n').find(l => /carpet.*\.jar/i.test(l))
-    return jar?.replace(/\.jar$/, '').replace(/^fabric-carpet-|^carpet-/, '') ?? 'unknown'
-  } catch {
-    return 'unknown'
-  }
 }
 
 /** いまの region を実機から読む (実装は capture.ts と共有する) */

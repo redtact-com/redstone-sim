@@ -39,7 +39,7 @@ services:
       # ローカル専用 (ポート非公開) のため固定値で問題ない
       RCON_PASSWORD: mc-harness-local
       SNOOPER_ENABLED: "false"
-      # 初期セットアップ (gamerule 等) は runner/generate.ts が rcon で冪等に実行する
+      # 初期セットアップ (gamerule 等) は runner/world-setup.ts の列を、generate.ts と live / MCP が rcon で冪等に流す
     volumes:
       - ./data:/data
       # scarpet アプリと shared JSON の受け渡し場所

@@ -1,8 +1,8 @@
 // ============================================================
 // rcon 基盤モジュール (実機 Minecraft への口)
 //
-// generate.ts / 今後のキャプチャスクリプトが共有する rcon の低レベル層。
-// 前提は generate.ts と同じ (tools/mc-harness で `docker compose up -d` 済み)。
+// ハーネスのスクリプト (generate / capture / minimize / live / MCP) が共有する rcon の低レベル層。
+// 前提: tools/mc-harness で `docker compose up -d` 済み。
 //
 // ここに集めてあるのは「知らないと必ず踏む」3 つの落とし穴:
 //
@@ -133,13 +133,34 @@ export function rconBatch(
   return lines
 }
 
-/** scarpet 関数呼び出し。error/failed/exception を含む応答はエラー扱い (generate.ts と同判定) */
+/** scarpet 関数呼び出し。error/failed/exception を含む応答はエラー扱い */
 export function scarpet(expr: string): string {
   const out = rcon('script', 'in', 'dump', 'run', expr)
   if (/error|failed|exception/i.test(out)) {
     throw new Error(`scarpet 実行エラー: ${expr}\n${out}`)
   }
   return out
+}
+
+/**
+ * コンテナに入っている carpet の版 (fixture の `generated.carpet` に書く)。
+ * 読めなければ 'unknown'。
+ *
+ * **コンテナの中の /data/mods を見る**。ホスト側の data/ はコンテナを起動した
+ * チェックアウトにしか無いので、別の worktree から回すと読めない。
+ * generate.ts と live-session.ts が同じ実装を別々に持っていたのをここへ寄せた (#242)。
+ */
+export function readCarpetVersion(): string {
+  try {
+    const out = execFileSync(
+      'docker', ['compose', 'exec', '-T', 'mc', 'ls', '/data/mods'],
+      { cwd: harnessDir, env, encoding: 'utf-8', timeout: EXEC_TIMEOUT_MS },
+    )
+    const jar = out.split('\n').find(l => /carpet.*\.jar/i.test(l))
+    return jar?.replace(/\.jar$/, '').replace(/^fabric-carpet-|^carpet-/, '') ?? 'unknown'
+  } catch {
+    return 'unknown'
+  }
 }
 
 /**

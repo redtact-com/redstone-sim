@@ -1,7 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { parseClientMsg } from './live.js'
 import { diffBlockMaps, lookTarget } from './live-session.js'
 import { WORLD_SETUP_COMMANDS } from './world-setup.js'
@@ -10,8 +7,6 @@ import { WORLD_SETUP_COMMANDS } from './world-setup.js'
  * ライブ観測の純粋な部分 (#366)。**実機は要らない**。
  * compare.test.ts と同じく合成データで検査する。
  */
-
-const runnerDir = dirname(fileURLToPath(import.meta.url))
 
 describe('diffBlockMaps', () => {
   it('変わった座標だけを返す', () => {
@@ -85,21 +80,6 @@ describe('parseClientMsg', () => {
 })
 
 describe('ワールド初期化の列', () => {
-  /**
-   * `generate.ts` は**自前の同じ列**を持っている。片方だけ直すと
-   * 「generate では動くのに live では動かない」が起きるので、
-   * generate.ts のソースに同じコマンドが並んでいることを見る。
-   * (将来 generate.ts を world-setup.ts へ寄せたらこのテストは消せる)
-   */
-  it('generate.ts の列と一致している', () => {
-    const src = readFileSync(join(runnerDir, 'generate.ts'), 'utf-8')
-    const body = src.slice(src.indexOf('function ensureWorldSetup'))
-    for (const cmd of WORLD_SETUP_COMMANDS) {
-      const line = cmd.map(a => `'${a}'`).join(', ')
-      expect(body.includes(`[${line}]`), `generate.ts に無い: ${cmd.join(' ')}`).toBe(true)
-    }
-  })
-
   it('観測範囲を forceload して freeze で終わる', () => {
     const flat = WORLD_SETUP_COMMANDS.map(c => c.join(' '))
     expect(flat).toContain('forceload add -16 -16 47 31')
