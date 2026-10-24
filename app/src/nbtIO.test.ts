@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { isConductor } from '@redstone/sim'
 import {
-  NbtFile, NbtCompound, NbtList, NbtInt, NbtString, NbtLongArray,
+  NbtFile, NbtCompound, NbtList, NbtInt, NbtString, NbtLongArray, NbtByte,
 } from 'deepslate/nbt'
 import type { BlockState } from '@redstone/sim'
-import { mcToSim, slotsFromCount, SimWorld } from '@redstone/sim'
+import { mcToSim, slotsFromCount, SimWorld, effectiveContainerSignal } from '@redstone/sim'
 import { blockStateToMinecraftStr } from '@redstone/viewer'
 import { exportToNbtBytes, importFromNbtBytes } from './nbtIO'
 
@@ -541,26 +541,58 @@ function lecternNbt(book: NbtCompound | undefined, page: number): NbtCompound {
   return c
 }
 
+/** 構造 NBT に置く 1 ブロック。`be` は block entity (コンテナの Items・書見台の本) */
+interface PlacedSpec { name: string; props?: Record<string, string>; be?: NbtCompound }
+
+/** ブロックを x 方向に 1 列 (x = 0, 1, 2 …) に並べた構造 NBT (.nbt) を組む */
+function structureWithBlockEntities(specs: PlacedSpec[]): Uint8Array {
+  const palette = [new NbtCompound().set('Name', new NbtString('minecraft:air'))]
+  const blocks = specs.map(({ name, props = {}, be }, i) => {
+    const state = new NbtCompound().set('Name', new NbtString(name))
+    if (Object.keys(props).length > 0) {
+      const p = new NbtCompound()
+      for (const [k, v] of Object.entries(props)) p.set(k, new NbtString(v))
+      state.set('Properties', p)
+    }
+    palette.push(state)
+    const entry = new NbtCompound()
+      .set('state', new NbtInt(i + 1))
+      .set('pos', new NbtList<NbtInt>([new NbtInt(i), new NbtInt(0), new NbtInt(0)]))
+    if (be) entry.set('nbt', be)
+    return entry
+  })
+  const root = new NbtCompound()
+    .set('size', new NbtList<NbtInt>([new NbtInt(specs.length), new NbtInt(1), new NbtInt(1)]))
+    .set('palette', new NbtList<NbtCompound>(palette))
+    .set('blocks', new NbtList<NbtCompound>(blocks))
+    .set('entities', new NbtList<NbtCompound>([]))
+  return new NbtFile('', root, 'gzip', false, undefined).write()
+}
+
 /** block entity NBT つきの単一ブロックを構造 NBT (.nbt) に組んで取り込む */
 async function importWithBlockEntity(
   name: string, props: Record<string, string>, be: NbtCompound | undefined,
 ): Promise<BlockState | undefined> {
-  const air = new NbtCompound().set('Name', new NbtString('minecraft:air'))
-  const target = new NbtCompound().set('Name', new NbtString(name))
-  const p = new NbtCompound()
-  for (const [k, v] of Object.entries(props)) p.set(k, new NbtString(v))
-  target.set('Properties', p)
-  const blockEntry = new NbtCompound()
-    .set('state', new NbtInt(1))
-    .set('pos', new NbtList<NbtInt>([new NbtInt(0), new NbtInt(0), new NbtInt(0)]))
-  if (be) blockEntry.set('nbt', be)
-  const root = new NbtCompound()
-    .set('size', new NbtList<NbtInt>([new NbtInt(1), new NbtInt(1), new NbtInt(1)]))
-    .set('palette', new NbtList<NbtCompound>([air, target]))
-    .set('blocks', new NbtList<NbtCompound>([blockEntry]))
-    .set('entities', new NbtList<NbtCompound>([]))
-  const bytes = new NbtFile('', root, 'gzip', false, undefined).write()
+  const bytes = structureWithBlockEntities([{ name, props, be }])
   return (await importFromNbtBytes(bytes, { maxLayers: 8 })).blocks.get('0,0,0')
+}
+
+/**
+ * (0,0,0) のブロックを、東隣のコンパレーターに読ませたときの出力。
+ * sim の facing は出力方向なので、西隣を読むには east 向きにする
+ */
+function comparatorReads(b: BlockState): number {
+  const w = new SimWorld()
+  w.setBlockAt([0, -1, 0], { type: 'solid', powered: false })
+  w.setBlockAt([1, -1, 0], { type: 'solid', powered: false })
+  w.setBlockAt([0, 0, 0], b)
+  w.setBlockAt([1, 0, 0], {
+    type: 'comparator', facing: 'east', mode: 'compare', powered: false, outputPower: 0,
+  } as BlockState)
+  w.initialize()
+  w.settle(8)
+  const c = w.getBlockAt([1, 0, 0])
+  return c?.type === 'comparator' ? c.outputPower : -1
 }
 
 const LECTERN_PROPS = { facing: 'west', has_book: 'true', powered: 'false' }
@@ -613,23 +645,9 @@ describe('書見台の本の取り込み: 構造 NBT (#240)', () => {
   it('取り込んだ本で階数指定が効く (コンパレーター出力 = ページ + 1)', async () => {
     // 15 ページ本なら進捗 = page/14 なので **出力はページ + 1**。
     // 本を落とすと pages=0 → 常に 14 で、どの階も選べなくなる
-    const read = (b: BlockState): number => {
-      const w = new SimWorld()
-      w.setBlockAt([0, -1, 0], { type: 'solid', powered: false })
-      w.setBlockAt([1, -1, 0], { type: 'solid', powered: false })
-      w.setBlockAt([0, 0, 0], b)
-      // sim の facing は出力方向なので、西隣の書見台を読むには east 向き
-      w.setBlockAt([1, 0, 0], {
-        type: 'comparator', facing: 'east', mode: 'compare', powered: false, outputPower: 0,
-      } as BlockState)
-      w.initialize()
-      w.settle(8)
-      const c = w.getBlockAt([1, 0, 0])
-      return c?.type === 'comparator' ? c.outputPower : -1
-    }
     for (const page of [0, 4, 14]) {
       const b = await importLectern(bookItem('minecraft:writable_book_content', 15), page)
-      expect(read(b as BlockState), `Page=${page}`).toBe(page + 1)
+      expect(comparatorReads(b as BlockState), `Page=${page}`).toBe(page + 1)
     }
   })
 })
@@ -698,5 +716,140 @@ describe('ガラス板の往復 (#303)', () => {
     const back = await importFromNbtBytes(bytes)
     const got = back.blocks.get('0,0,0')
     expect(got).toEqual(sim)
+  })
+})
+
+// ============================================================
+// 取り込み → 書き出し → 取り込み で情報を落とさない (#393)
+//
+// NBT に置き場所がある情報は、往復しても変わらないはず。ところが片側だけの漏れが
+// 何度も起きている (#245 の air 化・#274 の音色・#303 のガラス板)。1 種ずつの往復
+// テストでは「どの値を書き忘れたか」に気づけないので、vanilla の構造 NBT を 1 つ組み、
+// 1 回目と 2 回目の取り込み結果を**座標ごと・キーごとに全部**比べる。
+// #393 の時点では、書見台の本・リピーターの locked・素の名前 5 つが落ちていた。
+// ============================================================
+
+/** block entity の Items (1.20.5 以降の形)。`slots` は [スロット, アイテム ID, 個数] */
+function itemsNbt(id: string, slots: [number, string, number][]): NbtCompound {
+  return new NbtCompound()
+    .set('id', new NbtString(id))
+    .set('Items', new NbtList<NbtCompound>(slots.map(([slot, item, count]) => new NbtCompound()
+      .set('Slot', new NbtByte(slot))
+      .set('id', new NbtString(`minecraft:${item}`))
+      .set('count', new NbtInt(count)))))
+}
+
+/** 書見台 4 種 (本の形式 2 つ・本の中身なし・本なし)。コンパレーター出力は 10 / 15 / 14 / 0 */
+const LECTERN_SPECS: PlacedSpec[] = [
+  { name: 'minecraft:lectern', props: { facing: 'west', has_book: 'true', powered: 'false' },
+    be: lecternNbt(bookItem('minecraft:writable_book_content', 15), 9) },
+  { name: 'minecraft:lectern', props: { facing: 'north', has_book: 'true', powered: 'false' },
+    be: lecternNbt(bookItem('minecraft:written_book_content', 5), 4) },
+  { name: 'minecraft:lectern', props: { facing: 'east', has_book: 'true', powered: 'false' } },
+  { name: 'minecraft:lectern', props: { facing: 'south', has_book: 'false', powered: 'false' } },
+]
+
+const ROUND_TRIP_SPECS: PlacedSpec[] = [
+  ...LECTERN_SPECS,
+  // 中身の入ったコンテナ (スタック上限の違うアイテムを混ぜる)
+  { name: 'minecraft:barrel', props: { facing: 'up', open: 'false' },
+    be: itemsNbt('minecraft:barrel', [[0, 'cobblestone', 64], [3, 'snowball', 7]]) },
+  { name: 'minecraft:trapped_chest', props: { facing: 'west', type: 'single', waterlogged: 'false' },
+    be: itemsNbt('minecraft:trapped_chest', [[0, 'iron_axe', 1]]) },
+  { name: 'minecraft:hopper', props: { enabled: 'false', facing: 'east' },
+    be: itemsNbt('minecraft:hopper', [[1, 'snowball', 14]]) },
+  { name: 'minecraft:dropper', props: { facing: 'down', triggered: 'false' },
+    be: itemsNbt('minecraft:dropper', [[8, 'cobblestone', 2]]) },
+  // blockstate だけで持つもの
+  { name: 'minecraft:repeater', props: { delay: '3', facing: 'east', locked: 'true', powered: 'true' } },
+  { name: 'minecraft:comparator', props: { facing: 'south', mode: 'subtract', powered: 'false' } },
+  { name: 'minecraft:heavy_weighted_pressure_plate', props: { power: '7' } },
+  { name: 'minecraft:redstone_wire',
+    props: { east: 'side', north: 'up', power: '9', south: 'none', west: 'side' } },
+  { name: 'minecraft:note_block', props: { instrument: 'bell', note: '13', powered: 'false' } },
+  { name: 'minecraft:oak_log', props: { axis: 'z' } },
+  // 接尾辞の判定に当たらない素の名前 ('bricks' は '_bricks' で終わらない)
+  ...['bricks', 'terracotta', 'waxed_copper_block', 'deepslate_tiles', 'cracked_deepslate_tiles']
+    .map(id => ({ name: `minecraft:${id}` })),
+]
+
+/**
+ * NBT に置き場所が無く、往復で既定値に戻るもの (既知の制約)。
+ *
+ * 重量感圧板の pressedPower: 取り込みでは踏まれていない状態にするので、書き出すと
+ * POWER=0 になり、読み直すと既定の 15 に戻る。vanilla の重量板は block entity を持たず、
+ * POWER は「今乗っているものの数で決まる出力」なので、設定値を置く場所が無い
+ * (ブラウザ保存の JSON なら保たれる)。
+ */
+const KNOWN_LOSS: Partial<Record<BlockState['type'], readonly string[]>> = {
+  weighted_pressure_plate_light: ['pressedPower'],
+  weighted_pressure_plate_heavy: ['pressedPower'],
+}
+
+describe('取り込み → 書き出し → 取り込み で落ちない (#393)', () => {
+  it('1 回目と 2 回目の取り込み結果が座標ごと・キーごとに一致する', async () => {
+    const first = await importFromNbtBytes(structureWithBlockEntities(ROUND_TRIP_SPECS))
+    const second = await importFromNbtBytes(
+      exportToNbtBytes(first.blocks, ROUND_TRIP_SPECS.length, 1))
+    const problems: string[] = [
+      ...first.warnings.map(w => `1 回目の警告: ${w}`),
+      ...second.warnings.map(w => `2 回目の警告: ${w}`),
+    ]
+    ROUND_TRIP_SPECS.forEach((spec, i) => {
+      const where = `${i},0,0 ${spec.name.replace('minecraft:', '')}`
+      const a = first.blocks.get(`${i},0,0`)
+      const b = second.blocks.get(`${i},0,0`)
+      if (!a) { problems.push(`${where}: 取り込めない`); return }
+      if (!b) { problems.push(`${where}: 書き出すと消える`); return }
+      const skip = KNOWN_LOSS[a.type] ?? []
+      const ra = a as unknown as Record<string, unknown>
+      const rb = b as unknown as Record<string, unknown>
+      for (const k of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+        if (skip.includes(k)) continue
+        const x = JSON.stringify(ra[k]), y = JSON.stringify(rb[k])
+        if (x !== y) problems.push(`${where} の ${k}: ${x} → ${y}`)
+      }
+    })
+    expect(problems).toEqual([])
+  })
+
+  it('書見台のコンパレーター出力が往復で変わらない (10 / 15 / 14 / 0)', async () => {
+    const first = await importFromNbtBytes(structureWithBlockEntities(LECTERN_SPECS))
+    const second = await importFromNbtBytes(exportToNbtBytes(first.blocks, LECTERN_SPECS.length, 1))
+    const outputs = (blocks: Map<string, BlockState>) =>
+      LECTERN_SPECS.map((_, i) => comparatorReads(blocks.get(`${i},0,0`)!))
+    expect(outputs(first.blocks), '1 回目').toEqual([10, 15, 14, 0])
+    expect(outputs(second.blocks), '2 回目').toEqual([10, 15, 14, 0])
+  })
+})
+
+describe('エディタで置いた値の往復 (#393)', () => {
+  it('樽の signal 0〜15 が、コンパレーターの読む値として保たれる', async () => {
+    const got: number[] = []
+    for (let signal = 0; signal <= 15; signal++) {
+      got.push(effectiveContainerSignal(
+        await roundTrip({ type: 'container', fullCube: true, signal })))
+    }
+    expect(got).toEqual([...Array(16).keys()])
+  })
+
+  it('踏まれている重量感圧板の pressedPower が保たれる', async () => {
+    expect(await roundTrip({ type: 'weighted_pressure_plate_heavy', pressedPower: 6, powered: true }))
+      .toMatchObject({ type: 'weighted_pressure_plate_heavy', pressedPower: 6, powered: false })
+  })
+
+  it('踏まれていない重量感圧板の pressedPower は 15 に戻る (既知の制約。KNOWN_LOSS と同じ理由)', async () => {
+    expect(await roundTrip({ type: 'weighted_pressure_plate_light', pressedPower: 6, powered: false }))
+      .toMatchObject({ type: 'weighted_pressure_plate_light', pressedPower: 15, powered: false })
+  })
+
+  it('書見台のページ数と開いているページが保たれる', async () => {
+    expect(await roundTrip({ type: 'lectern', facing: 'north', hasBook: true, page: 3, pages: 7 }))
+      .toEqual({ type: 'lectern', facing: 'north', hasBook: true, page: 3, pages: 7 })
+  })
+
+  it('リピーターの locked が保たれる', async () => {
+    expect(await roundTrip({ type: 'repeater', facing: 'east', delay: 2, powered: false, locked: true }))
+      .toMatchObject({ type: 'repeater', facing: 'east', delay: 2, locked: true })
   })
 })
