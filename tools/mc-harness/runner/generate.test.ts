@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { settleMismatches, buildExpect, fixtureBlocks, stateMapDiff } from './generate.js'
+import type { Fixture } from '../../../packages/sim/test/fixture-runner.js'
 
 /**
  * generate.ts の照合と書き出し (#242)。**実機は要らない**。
@@ -8,6 +12,10 @@ import { settleMismatches, buildExpect, fixtureBlocks, stateMapDiff } from './ge
  * 材質は生のまま返ってくる。照合は両側を canonicalize してから行い、
  * fixture には畳まない形を書く。
  */
+
+const runnerDir = dirname(fileURLToPath(import.meta.url))
+const defDir = join(runnerDir, '..', 'fixtures')
+const outDir = join(runnerDir, '..', '..', '..', 'packages', 'sim', 'test', 'fixtures')
 
 const b = (pos: [number, number, number], block: string) => ({ pos, block })
 
@@ -132,4 +140,76 @@ describe('fixtureBlocks', () => {
       { pos: [3, 1, 0], block: 'barrel[facing=up,open=false]', items: [{ slot: 0, id: 'stone', count: 64 }] },
     ])
   })
+})
+
+// ─── コミット済みの fixture との突き合わせ ─────────────────────────────
+
+/** 定義と生成物の両方がある fixture (generate.ts で作り直せるもの) */
+const defs = readdirSync(defDir).filter(f => f.endsWith('.json')).sort()
+  .filter(f => existsSync(join(outDir, f)))
+
+/**
+ * 既知のずれ。ファイル名 → 比べないキー。
+ *
+ * door-2wide-open-to-close の skipUntil / skipReason は定義にだけ残っている。
+ * 定義から外すのは #388 (PR#389) の担当なので、この PR では触らない。
+ * TODO(#388): PR#389 がマージされたらこの項目を消す。消し忘れても、ずれが解消した時点で
+ * 下のテストが「KNOWN_DRIFT から消すこと」と言って落ちる
+ */
+const KNOWN_DRIFT: Readonly<Record<string, readonly string[]>> = {
+  'door-2wide-open-to-close.json': ['skipUntil', 'skipReason'],
+}
+
+describe('定義と生成物がずれていない', () => {
+  /**
+   * 再生成すると、生成物は expect と generated 以外を定義から作り直す。
+   * 生成物の側だけを直したところは**再生成で黙って元に戻る**
+   * (description 5 本と door-2wide の skipUntil で実際に起きていた。#242)
+   */
+  it('定義と生成物の両方がある fixture を見ている', () => {
+    expect(defs.length).toBeGreaterThan(100)
+  })
+
+  for (const f of defs) {
+    it(f, () => {
+      const def = JSON.parse(readFileSync(join(defDir, f), 'utf-8')) as Record<string, unknown>
+      const fx = JSON.parse(readFileSync(join(outDir, f), 'utf-8')) as Record<string, unknown>
+      for (const k of KNOWN_DRIFT[f] ?? []) {
+        expect(def[k], `${f} の ${k} は定義と生成物で一致した。KNOWN_DRIFT から消すこと`).not.toEqual(fx[k])
+        delete def[k]
+        delete fx[k]
+      }
+      // player は定義だけが持つ。定義の expect は比べない (空配列を書いている定義があり、生成で上書きされる)
+      const { player: _player, expect: _defExpect, blocks: defBlocks, ...defRest } = def
+      const { expect: _expect, generated: _generated, blocks: fxBlocks, ...fxRest } = fx
+      expect(fxRest).toEqual(defRest)
+      expect(fxBlocks).toEqual(fixtureBlocks(defBlocks as Fixture['blocks']))
+    })
+  }
+})
+
+describe('既存の expect を今の差分の取り方で作り直しても変わらない', () => {
+  /**
+   * expect から実機の生の系列を復元して buildExpect に通す。
+   * canonicalize が新しく何かを畳むようになり、それがちょうど記録済みの変化だった場合、
+   * 再生成するとその変化が expect から消える。ここで先に気付ける
+   */
+  for (const f of defs) {
+    it(f, () => {
+      const fx = JSON.parse(readFileSync(join(outDir, f), 'utf-8')) as Fixture
+      let cur: Record<string, string> = {}
+      for (const blk of fx.blocks) cur[blk.pos.join(',')] = blk.block
+      const byTick = new Map(fx.expect.map(e => [e.tick, e.changes]))
+      const ticks: { tick: number; blocks: Record<string, string> }[] = []
+      for (let t = 0; t <= fx.ticks; t++) {
+        cur = { ...cur }
+        for (const c of byTick.get(t) ?? []) {
+          if (c.block === 'air') delete cur[c.pos.join(',')]
+          else cur[c.pos.join(',')] = c.block
+        }
+        ticks.push({ tick: t, blocks: cur })
+      }
+      expect(buildExpect(fx.blocks, ticks, fx.ticks)).toEqual(fx.expect)
+    })
+  }
 })
