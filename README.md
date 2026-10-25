@@ -65,8 +65,6 @@ npm run typecheck    # packages の型チェック
 - 流れ: feature ブランチ → PR → develop にマージ → リリース時に develop → main
 - 自動化: push は `.github/workflows/deploy.yml`、PR プレビュー（クローズで自動削除）は
   `.github/workflows/pr-preview.yml`。手動デプロイは `app` で `npm run deploy`
-- issue を閉じて 30 分たっても「## やること」に未チェックが残っていると、
-  `.github/workflows/checkbox-guard.yml` が `needs-checklist` ラベルとコメントを付ける (決まりは CONTRIBUTING.md のタスク運用)
 - 必要な secrets（未設定の間はスキップされる）: `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`
   （権限「アカウント / Cloudflare Pages / 編集」。発行手順は issue #4 参照）
 
