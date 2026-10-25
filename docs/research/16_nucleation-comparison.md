@@ -183,7 +183,7 @@
 | 段差の伝播 | 規則の形は 26.2 と同じ (横のブロックが導体のときだけ 1 段上のダストを読む)。ただし導体表の誤りで、グロウストーンの段では下りにも流れ、soul_sand / packed_ice の段では下りに流れない | 非導体の段でも下りに流れる **[実機]** | Nucleation (ガラス・上付きハーフの段は Nucleation だけが正しい。グロウストーンの段はどちらも誤り) |
 | 上り接続を切るブロック | 導体表と同じ表を引く。ただし表の誤りをそのまま受け、グロウストーンと銅の電球で切り、soul_sand / packed_ice / blue_ice では切らない | 別のリストを持ち、slime_block / lodestone / soul_sand が抜けている | 同等 (表を共有する作りは Nucleation が正しいが、切るブロックの誤りはどちらにもある) |
 | 導体表の正確さ | packed_ice / blue_ice / soul_sand を非導体、グロウストーン・銅の電球・ケーキを導体と取り違える | 実機で 1 個ずつ測った表 | redstone-sim |
-| 接続対象 (shouldConnectTo) | 検知レール・トラップチェスト・避雷針にも接続する。書見台は信号源に入っておらず、接続しない | detector_rail と lectern に接続する **[実機]** (R-8。#406 / PR#407 で直した。fixture wire-connect-detector-rail-lectern。以前はどちらにも接続しなかった)。トラップチェスト (container に潰す) と避雷針 (decor) はまだ信号源として扱わない | 同等 (検知レールは両方が正しい。書見台は redstone-sim、トラップチェストと避雷針は Nucleation だけが正しい) |
+| 接続対象 (shouldConnectTo) | 検知レール・トラップチェスト・避雷針にも接続する。書見台は信号源に入っておらず、接続しない | detector_rail と lectern に接続する **[実機]** (R-8。#406 / PR#407 で直した。fixture wire-connect-detector-rail-lectern。以前はどちらにも接続しなかった)。トラップチェスト (container に潰す) と避雷針 (decor) はまだ信号源として扱わない | Nucleation (トラップチェストと避雷針。書見台は redstone-sim) |
 | 接続形状の UP / SIDE | 横のブロックがフルブロックかで区別する (26.2 RedStoneWireBlock#getConnectingSide は、横のブロックのダスト側の面が頑丈かを見る) | 常に up (見た目だけの差) | Nucleation |
 | 除去時の追加更新 | 近傍更新だけで、再計算が欠ける | フックが無い | Nucleation |
 | 支え (canSurvive) | 無し (下からの形状更新を意図的に無視) | 無し | 同等 |
