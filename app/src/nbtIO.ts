@@ -926,7 +926,8 @@ function minecraftToBlockState(
   // **樽とシュルカーボックスはフルキューブ (導体)、チェストは違う (非導体)** (#291)
   if (isContainerBlockName(name)) {
     // **導通はシュルカーボックスも実機で測ってある** (#324 fixture shulker-box-conductor)。
-    // name を持たせるのは書き出しで元に戻すため (無いとシュルカーが樽になる)
+    // name は書き出しで元に戻すため (無いとシュルカーが樽になる) と、押し反応のため
+    // (シュルカーボックスはピストンで壊れる。blocks/pushReaction.ts。R-10) に持たせる
     return {
       type: 'container',
       name: name.replace(/^minecraft:/, ''),

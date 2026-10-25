@@ -242,7 +242,8 @@ export interface ContainerState {
    * 無ければ `fullCube` から樽 / チェストを選ぶ (#291 までの挙動)。
    * これが無いと**シュルカーボックスを保存すると樽になる** — 取り込めるのに
    * 保存で別物になる事故は過去 5 回起きている ([[reference_redstone_sim_two_converters]])。
-   * レッドストーン挙動には影響しない (効くのは `fullCube` と `signal` だけ)
+   * 信号の計算には影響しない (効くのは `fullCube` と `signal` だけ)。
+   * 押し反応は name で決まる (シュルカーボックスは BlockEntity を持つが壊れる。blocks/pushReaction.ts。R-10)
    */
   name?: string
   /** 手動計測モードでコンパレーター背面から読まれる実効出力 (0-15) */
