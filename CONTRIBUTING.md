@@ -62,3 +62,6 @@ JAVA_HOME=~/bluemap/jdk25 tools/decompile/fetch-and-decompile.sh 26.2
 
 - ブランチは issue 単位 (`<issue番号>-<slug>`)。main / develop への直接 push は禁止。
 - コミットメッセージは日本語で、意味単位に分割する。
+- issue の「## やること」は、済んだ項目を `- [x]` にする。やめた項目と別の issue に移した項目は、文を `~~` で囲んで取り消し線にする。
+  閉じてから 30 分たっても未チェックが残っていると、checkbox-guard が `needs-checklist` ラベルとコメントを付ける。
+  閉じたあとに消し込めば自動で外れる (.github/workflows/checkbox-guard.yml)。
