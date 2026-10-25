@@ -8,6 +8,7 @@ import type { WireState, BlockState } from '../src/types.js'
  * これらは vanilla では `isRedstoneConductor` が false で、
  *   - 強充電を受けても隣の dust へ渡さない
  *   - dust の上下斜め接続を切らない
+ *   - dust の段にすると上りにしか流さない (R-1。下の「非導体の段は上り専用」)
  *   - ピストンには押される
  * という「solid とは違うがフルブロックではある」立ち位置にある。
  *
@@ -16,8 +17,9 @@ import type { WireState, BlockState } from '../src/types.js'
  * 15 / glass と単体スラブは 0)。ここではその実機結果を単体テストの粒度に分解し、
  * 併せて実機 fixture に載せていない斜め接続とピストンを固定する。
  *
- * 実装上の注意: `isConductor` (power.ts) と `isWireCutBlock` (blocks/wire.ts) は
- * どちらも「導体である型」を列挙する形なので、**型を足しただけで自動的に非導体になる**。
+ * 実装上の注意: `isConductor` (power.ts) は「導体である型」を列挙する形で、
+ * `isWireCutBlock` (blocks/wire.ts) はそれに委ねている (R-2)。なので
+ * **型を足しただけで自動的に非導体になる**。
  * つまりこのテストは「実装したこと」ではなく「実装しなかったこと」を守っている。
  *
  * **dust への導通は 2 箇所でゲートされている** (変異テストで判明):
@@ -102,6 +104,69 @@ describe('非導体フルブロック: dust の斜め接続を切らない (#184
 
   it('直上が単体スラブでも切れない', () => {
     expect(upStepPower(SLAB)).toBe(14)
+  })
+})
+
+describe('非導体の段は上り専用 (R-1)', () => {
+  /**
+   * 段 B を挟んだ上下 2 段: 下段 L (0,1,0) ─ B (1,1,0) ─ 上段 U (1,2,0)。
+   * 上から給電 = U の東 (2,2,0) に redstone_block / 下から給電 = L の西 (-1,1,0) に redstone_block。
+   * 1 段上のダストを読めるのは横のブロックが導体のときだけなので、非導体の段では
+   * U は L を読む (下り) が L は U を読まない。石の段は両方向
+   * [確定: 1.21.1 RedStoneWireBlock#calculateTargetStrength]
+   * [実機 fixture wire-step-nonconductor-down: 上から給電でガラス・グロウストーン・
+   *  上付きハーフの段は中段・下段とも 0、石の段は 14 / 13]。
+   */
+  const stepPowers = (step: BlockState, from: 'top' | 'bottom'): [number, number] => {
+    const world = new SimWorld()
+    world.setBlock(0, 0, 0, SOLID)
+    world.setBlock(1, 0, 0, SOLID)
+    world.setBlock(0, 1, 0, crossWire())   // L
+    world.setBlock(1, 1, 0, step)          // 段
+    world.setBlock(1, 2, 0, crossWire())   // U
+    if (from === 'top') world.setBlock(2, 2, 0, { type: 'redstone_block' })
+    else world.setBlock(-1, 1, 0, { type: 'redstone_block' })
+    world.initialize()
+    return [(world.getBlock(0, 1, 0) as WireState).power, (world.getBlock(1, 2, 0) as WireState).power]
+  }
+
+  it('石の段は上りも下りも流れる (対照)', () => {
+    expect(stepPowers(SOLID, 'bottom')).toEqual([15, 14])
+    expect(stepPowers(SOLID, 'top')).toEqual([14, 15])
+  })
+
+  it('ガラスの段は上りだけ (上から給電すると下段は 0)', () => {
+    expect(stepPowers(GLASS, 'bottom')).toEqual([15, 14])
+    expect(stepPowers(GLASS, 'top')).toEqual([0, 15])
+  })
+
+  it('上付きハーフの段は上りだけ', () => {
+    const top: BlockState = { type: 'slab', half: 'top' }
+    expect(stepPowers(top, 'bottom')).toEqual([15, 14])
+    expect(stepPowers(top, 'top')).toEqual([0, 15])
+  })
+
+  it('グロウストーン (glass 型) の段は上りだけ', () => {
+    const glowstone: BlockState = { type: 'glass', name: 'glowstone' }
+    expect(stepPowers(glowstone, 'bottom')).toEqual([15, 14])
+    expect(stepPowers(glowstone, 'top')).toEqual([0, 15])
+  })
+
+  it('上から給電した後に段を石に替えると下段へ流れ、ガラスに戻すと止まる (増分更新)', () => {
+    const world = new SimWorld()
+    world.setBlock(0, 0, 0, SOLID)
+    world.setBlock(1, 0, 0, SOLID)
+    world.setBlock(0, 1, 0, crossWire())
+    world.setBlock(1, 1, 0, GLASS)
+    world.setBlock(1, 2, 0, crossWire())
+    world.setBlock(2, 2, 0, { type: 'redstone_block' })
+    world.initialize()
+    expect((world.getBlock(0, 1, 0) as WireState).power).toBe(0)
+    world.setBlockCommand([1, 1, 0], SOLID)
+    expect((world.getBlock(0, 1, 0) as WireState).power).toBe(14)
+    world.setBlockCommand([1, 1, 0], GLASS)
+    expect((world.getBlock(0, 1, 0) as WireState).power).toBe(0)
+    expect((world.getBlock(1, 2, 0) as WireState).power).toBe(15)
   })
 })
 
