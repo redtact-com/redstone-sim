@@ -20,8 +20,8 @@ v3 更新 (2026-08-15, #148): レール 4 種 (rail / powered_rail / activator_r
 detector_rail の出力 (weak 全方向 / strong は真下のみ) を [確定] 化。典拠 26.2 RailState /
 BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixture 28 本。
 
-v4 更新 (2026-10-25, #365): **26.3** を手元でデコンパイルし、監視 68 クラス (tools/decompile/watched-classes.txt)
-を 26.2 と突き合わせた (DRIFT 49 本 = 改名で見つからない 1 + 変化 48。読んだ記録は #365)。sim の挙動に効く変化は
+v4 更新 (2026-10-25, #365): **26.3** を手元でデコンパイルし、監視クラス (tools/decompile/watched-classes.txt。このときは 68。
+あとで典拠の取りこぼし FenceGateBlock・HoneyBlock を足して 70) を 26.2 と突き合わせた (DRIFT 49 本 = 改名で見つからない 1 + 変化 48。読んだ記録は #365)。sim の挙動に効く変化は
 見つからず、本文の典拠バージョン (1.21.1 と 26.2) は据え置く。
 26.3 で変わった主なもの (本文は 26.2 の名前のまま引く):
 - `RedStoneWireBlock` は `RedstoneWireBlock` に改名 (置き場所は同じ。ダストの強度計算は引き続き DefaultRedstoneWireEvaluator で、中身は同じ)。
@@ -32,6 +32,9 @@ v4 更新 (2026-10-25, #365): **26.3** を手元でデコンパイルし、監�
   IGNORE→IGNORE_ENTITY。黒曜石・泣く黒曜石・リスポーンアンカー・強化深層岩は、26.2 では
   PistonBaseBlock.isPushable に名指しで書かれていたが、26.3 では Blocks の登録で IMMOVEABLE になった (結果は同じ)。
 - 全ブロッククラス (26.2 で 295 個) から MapCodec の定義が消え、flag 3 の setBlock 呼びが setBlockAndUpdate に置き換わった (flag は同じ 3)。
+- 監視に入れない大物のうち、典拠に引く部分 (Direction.values と Plane.HORIZONTAL の順、
+  AbstractContainerMenu.getRedstoneSignalFromContainer の式) は 26.2 と同じ。あとで足した FenceGateBlock・HoneyBlock の
+  変化は、全ブロッククラス共通の MapCodec の削除だけ。
 - FeatureFlags と experimental 評価器の選び方は 26.2 と同一で、REDSTONE_EXPERIMENTS は引き続き実験フラグ (§6 wire の前提は維持)。
 - ServerLevel.tick の相順 (tile tick → 流体 tick → ブロックイベント → エンティティ → ブロックエンティティ、§1) と
   Block の UPDATE_ 系 flag 定数は 26.2 と同じ (監視外だが本体を見比べた)。

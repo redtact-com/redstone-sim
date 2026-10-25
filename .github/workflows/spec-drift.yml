@@ -70,7 +70,7 @@ jobs:
           BASE=$(python3 -c "import json; print(json.load(open('tools/decompile/fingerprints.json'))['version'])")
           {
             echo "## 検知内容"
-            echo "ベースライン **${BASE}** → 対象 **${TARGET}** で、sim の典拠クラス (tools/decompile/watched-classes.txt) に変化を検知しました。"
+            echo "ベースライン **${BASE}** → 対象 **${TARGET}** で、docs/research/02 と sim の典拠クラス (tools/decompile/watched-classes.txt) に変化を検知しました。"
             echo
             echo '```'
             echo "${DRIFT_LINES}"

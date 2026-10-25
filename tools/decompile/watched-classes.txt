@@ -7,6 +7,10 @@
 #   毎版変わるので、変化しても読む意味が薄い:
 #     Blocks (登録表。音色は tools/gen-note-instruments.mjs が別に引く)
 #     Level / ServerLevel / LevelChunk / BlockBehaviour / DispenseItemBehavior
+#   大物で、典拠に引く部分は 26.3 で変わっていないことを確かめたもの:
+#     Direction (Direction.values と Plane.HORIZONTAL の順。26.3 の変化は Axis の書き換えで、順は同じ)
+#     AbstractContainerMenu (getRedstoneSignalFromContainer の式。26.3 の変化はメニュー操作の部分)
+#   02 にだけ名前が出るエンティティ: ItemFrame / AbstractArrow
 #   典拠に名前が出るだけの周辺 (fixture の置き方・ブロックイベントの使い手):
 #     ItemCommands / SetBlockCommand / BlockEntity / BaseContainerBlockEntity /
 #     チェスト・鐘・スポナーなどの BlockEntity
@@ -91,9 +95,10 @@ net/minecraft/world/level/block/SoulSandBlock.java
 net/minecraft/world/level/material/WaterFluid.java
 net/minecraft/world/level/material/FlowingFluid.java
 
-# 開閉するもの・コンパレーターが読む器 (ドア・トラップドア・書見台・大釜・コンポスター) — sim types.ts / world.ts
+# 開閉するもの・コンパレーターが読む器 (ドア・トラップドア・フェンスゲート・書見台・大釜・コンポスター) — sim types.ts / world.ts
 net/minecraft/world/level/block/DoorBlock.java
 net/minecraft/world/level/block/TrapDoorBlock.java
+net/minecraft/world/level/block/FenceGateBlock.java
 net/minecraft/world/level/block/LecternBlock.java
 net/minecraft/world/level/block/entity/LecternBlockEntity.java
 net/minecraft/world/level/block/LayeredCauldronBlock.java
@@ -105,6 +110,9 @@ net/minecraft/world/level/block/state/properties/WallSide.java
 net/minecraft/world/level/block/IronBarsBlock.java
 net/minecraft/world/level/block/CrossCollisionBlock.java
 net/minecraft/world/level/block/SkullBlock.java
+
+# 非導体の根拠 (ハチミツブロック) — sim types.ts / power.ts
+net/minecraft/world/level/block/HoneyBlock.java
 
 # tile tick キュー (priority 昇順・collect-then-execute・保存形式) — 02 §2
 net/minecraft/world/ticks/LevelTicks.java

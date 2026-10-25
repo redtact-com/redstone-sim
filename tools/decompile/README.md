@@ -46,7 +46,7 @@ piston-meta version_manifest_v2.json
 | 各素子 | `net.minecraft.world.level.block.{RedStoneWireBlock,DiodeBlock,RepeaterBlock,ComparatorBlock,RedstoneTorchBlock,ObserverBlock,ButtonBlock,LeverBlock,piston/*}` (26.3 からワイヤーは `RedstoneWireBlock`) |
 | ワイヤーの強度計算・実験版 | `net.minecraft.world.level.redstone.{RedstoneWireEvaluator,DefaultRedstoneWireEvaluator,ExperimentalRedstoneWireEvaluator}`, `net.minecraft.world.flag.FeatureFlags` |
 
-監視している全クラスは `watched-classes.txt` にある (26.3 時点で 68 クラス)。
+監視している全クラスは `watched-classes.txt` にある (26.3 時点で 70 クラス)。
 
 ## ★ 絶対にコミットしないもの
 
@@ -83,6 +83,11 @@ git 管理外・artifact 化禁止 (03 §6)。
 1. `watched-classes.txt` に足し、**今のベースライン版**で `--update` する
 2. 最新 release で `--check` し、足したクラスの DRIFT 行を issue に記録して読む
 3. 読み終えたら最新 release で `--update` してベースラインを進める
+
+- 最新 release がベースラインより新しいとき、手順 3 の `--update` は既存のクラスの変化もまとめて基準に取り込む。
+  先に全部の DRIFT 行を読んでおく。
+- 足すクラスがベースラインの版に無い (新しい版で増えた) ときは、手順 1 が MISSING で止まる。
+  その場合は、先にベースラインを進めてから足す。
 
 手元の別の場所にあるデコンパイル結果は `out/<version>` に symlink で置いてよい
 (smoke のクラス数は symlink の先まで数える)。
