@@ -28,7 +28,7 @@ circuit {
 
 ticks 24
 
-# トリガ無しでは全 tick 静止 (self-start しない)。長い地平で発振が始まらないことを固定。
+# 更新なしで置いただけでは全 tick 静止する。長い地平で発振が始まらないことを固定。
 state {
   t0 (0,1,0) observer[facing=east,powered=false]
   t0 (1,1,0) observer[facing=west,powered=false]
