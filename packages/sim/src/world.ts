@@ -1234,6 +1234,13 @@ export class SimWorld {
       const action: TraceAction = next.powered ? 'n' : 'f'
       this.traceProcess('PI', 'Le', action, 0)
       this.traceOpenUpdate(pos)
+      // flag 3 の書き込みが出す自分の周り 6 方向への NC。**形状更新より前** (R-7)
+      // [確定: 26.2 LeverBlock#pull — flag 3 で書く (NC → 形状更新) → updateNeighbours で
+      //  自分と取り付け先の周りへもう一度配る。1.21.1 も同じ]。
+      // これが無いと、レバーを直接読むコンパレーターより、レバーを見るオブザーバーが
+      // 先に予約され、同じ gt・同じ優先度の競争で勝つ側が入れ替わる
+      // [実機 fixture lever-nc-before-shape-race]
+      this.submitMultiNC(pos)
       this.emitShapeUpdate(pos)
       this.propagateChange(pos)
       this.traceCloseUpdate('Le', action, 0, 'PI')
@@ -1243,6 +1250,10 @@ export class SimWorld {
       this.setBlockAt(pos, next)
       this.traceProcess('PI', 'Bu', 'n', 0)
       this.traceOpenUpdate(pos)
+      // レバーと同じ: flag 3 の書き込みの NC を形状更新より前に出す (R-7)
+      // [確定: 26.2 ButtonBlock#press — LeverBlock#pull と同じ順]
+      // [実機 fixture button-nc-before-shape-race]
+      this.submitMultiNC(pos)
       this.emitShapeUpdate(pos)
       this.propagateChange(pos)
       this.traceCloseUpdate('Bu', 'n', 0, 'PI')
@@ -1495,12 +1506,17 @@ export class SimWorld {
     if (!block || block.type !== tick.blockType) return []
 
     const changed: string[] = []
-    const apply = (next: BlockState, action: TraceAction) => {
+    // flag3: flag 3 で書く素子は、形状更新より前に自分の周り 6 方向へ NC を 1 回出す
+    // (Level#setBlock の NC → 形状更新の順)。今はボタンの解除だけが渡す (R-7)。
+    // トーチ・ターゲット・検知レールも flag 3 で書くが、順を揃えるのは R-15 で、
+    // 実機で測ってから行う
+    const apply = (next: BlockState, action: TraceAction, flag3 = false) => {
       this.setBlockAt(pos, next)
       changed.push(posKey(pos))
       // トレース: ST 実行 (08 §1 の "{}")。abbr は確定先 (moving_piston は into)。
       this.traceProcess('ST', abbrOf(next), action, elemDelay(block))
       this.traceOpenUpdate(pos)
+      if (flag3) this.submitMultiNC(pos)
       // vanilla の setBlock 相当: 観測可能な blockstate 変化があれば PP を発行し
       // (オブザーバー起動)、続いて NC を伝播する
       if (observableChanged(block, next)) this.emitShapeUpdate(pos)
@@ -1576,7 +1592,14 @@ export class SimWorld {
         } else if (!block.powered) {
           apply({ ...block, powered: true }, 'n')
           if (!input) {
-            this.schedule(pos, block.delay * 2, this.diodeTickPriority(pos, block, true))
+            // 自分の OFF の予約は**常に -2** (R-6)
+            // [確定: 26.2 DiodeBlock#tick — tick の中で予約する OFF は VERY_HIGH 固定。
+            //  前方のダイオードで -3 に上げるのは近隣更新から予約するとき
+            //  (checkTickOnNeighbor = diodeTickPriority) だけ。1.21.1 も同じ]。
+            // 以前は diodeTickPriority(…, true) を流用していて、前方がこちらを向かない
+            // ダイオード (直列の次段・側面ロックの相手) のとき -3 になっていた
+            // [実機 fixture repeater-self-off-priority]
+            this.schedule(pos, block.delay * 2, -2)
           }
         }
       }
@@ -1588,7 +1611,11 @@ export class SimWorld {
         apply({ ...block, powered: newPowered, outputPower: newOutputPower }, 'c')
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
-      if (block.powered) apply({ ...block, powered: false }, 'f')
+      // 解除も flag 3 の書き込み → updateNeighbours の順 (押すときと同じ。R-7)
+      // [確定: 26.2 ButtonBlock#tick → checkPressed — flag 3 で POWERED を落とし、
+      //  updateNeighbours で自分と取り付け先の周りへ配る]
+      // [実機 fixture button-nc-before-shape-race]
+      if (block.powered) apply({ ...block, powered: false }, 'f', true)
     } else if (block.type === 'detector_rail') {
       // vanilla DetectorRailBlock.tick → checkPressed: powered のときカートを数え直す。
       // 折衷モデルは entity を持たないので常に 0 = OFF (再予約もしない)。#146
@@ -1707,6 +1734,10 @@ export class SimWorld {
    * ダイオード系の TickPriority (02 §2.2 [確定])。
    * 前方ブロックが別のダイオードで、その出力面がこちらを向いていない
    * (= 側面/背面に給電する) とき優先度が上がる。
+   *
+   * **近隣更新から予約するときの規則** [確定: 26.2 DiodeBlock#checkTickOnNeighbor /
+   * ComparatorBlock#checkTickOnNeighbor]。リピーターが tick の中で自分の OFF を
+   * 予約するときは使わない (常に -2。executeScheduledTick の repeater 分岐、R-6)
    */
   private diodeTickPriority(
     pos: Pos3D,
