@@ -4,7 +4,7 @@
 #
 # 仕様クロスチェック (02 §4.2 [確定: 1.21.1/26.2 デコンパイル]):
 #   - lever: flag 3 の書き込みで自身の隣接6 (形状更新より前) → updateNeighbours =
-#     自身の隣接6 + 取り付けブロックの隣接6 (LeverBlock#pull、R-7)。
+#     自身の隣接6 + 取り付けブロックの隣接6 (LeverBlock.pull、R-7)。
 #     → bu(o) (flag 3 の分)、bu(o) (updateNeighbours の自身)、bu(-y) (床=取り付けブロック) の順。
 #     [実機 fixture lever-nc-before-shape-race: 1 本目の bu(o) で予約されるコンパレーターが、
 #      形状更新で予約されるオブザーバーより先に走る]
