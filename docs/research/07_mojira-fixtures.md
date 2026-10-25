@@ -23,20 +23,21 @@ skipUntil の値は 04 §3 の実装 issue ID (I1〜I10)。fixture ランナー�
 
 ## カタログ表
 
-| MC 番号 | 表題 (原題要旨) | 現象 (1 行) | 影響版 (原票) | 修正状況 | 1.21.1 再現 | fixture 化 | skipUntil 想定 |
+| MC 番号 | 表題 (原題要旨) | 現象 (1 行) | 影響版 (原票) | 修正状況 | 1.21.1 再現 | fixture 化 | skipUntil (想定 → 結果) |
 |---|---|---|---|---|---|---|---|
-| MC-2340 | Redstone torches schedule updates when they don't need to | 更新と(非)給電が同 tick に来ると RS トーチの 2gt パルスが 1gt に縮む | 1.4.2〜(〜17w50a) | **Fixed** (1.13 開発中, Resolved 2018-06-30) | **✕** | 可 (修正後の正挙動の回帰ガード) | I3 |
-| MC-3703 | Redstone changing orientation doesn't update previously powered blocks correctly | ダストが向きを変え対象を指さなくなると、その対象ブロックが更新されないことがある (shape 変化 BUD) | 1.4.4〜(計 ~89 版) | **Open** (Confirmed) | **○** | 可 (PP/shape update 前提) | I6 |
+| MC-2340 | Redstone torches schedule updates when they don't need to | 更新と(非)給電が同 tick に来ると RS トーチの 2gt パルスが 1gt に縮む | 1.4.2〜(〜17w50a) | **Fixed** (1.13 開発中, Resolved 2018-06-30) | **✕** | 済: torch-nc-own-tick (1.13 で修正済みなので回帰ガード) | I3 → なし (実機と一致) |
+| MC-3703 | Redstone changing orientation doesn't update previously powered blocks correctly | ダストが向きを変え対象を指さなくなると、その対象ブロックが更新されないことがある (shape 変化 BUD) | 1.4.4〜(計 ~89 版) | **Open** (Confirmed) | **○** | 済: dust-reshape-stale-target | I6 → なし (実機と一致) |
 | MC-11193 | 沿線の被給電ブロックの給電/消電順が未定義で非決定的 (locational) | ダスト沿いの給電順が HashSet=座標依存で、同一回路が場所で挙動を変える | 13w10b/1.5〜(計 ~123 版) | **Open** (Priority Low)。**label `experimental_redstone_fixed`** = 1.21.2 experimental で修正 | **○** (既定) / ✕ (experimental) | 可 (座標固定必須・価値は locational スコープ次第) | I6 |
-| MC-54711 | Quick pulses get lost in some repeater/comparator setups | 連続短パルス (1rt の 101) がリピーター列末段で 1 本の 3rt パルス (111) に化ける | 14w17a/1.8〜(計 ~102 版) | **Open** | **○** | 可 | I3 |
+| MC-54711 | Quick pulses get lost in some repeater/comparator setups | 連続短パルス (1rt の 101) がリピーター列末段で 1 本の 3rt パルス (111) に化ける | 14w17a/1.8〜(計 ~102 版) | **Open** | **○** | 済: repeater-pulse-train-101 | I3 → なし (実機と一致) |
 | MC-81098 | Redstone dust causes immense amounts of lag | ダスト 15 段消電が段ごとに 23+ BU を出し 15 連で ~2500 BU → ラグ | 1.8.7〜1.21 (Reopened, Important) | **Open / Reopened** | **○** | △ (状態 diff 不可・**性能/BU 数**バグ。BU 計数トレースなら可) | I6 / I10 |
-| MC-189954 | Observers react to updates if they already have a scheduled tick... | 未 tick だが同 world time に予約済みの observer が更新で追加 tick を予約 (hasScheduledTick 使用) | 原票詳細未取得 (番号から ~2020/1.16 系以降と推定) [要検証] | **Open** (「修正すると 4tick observer clock が壊れる」と留保 → 仕様寄り) | **○** | 可 (observer 実装前提) | I8 |
+| MC-189954 | Observers react to updates if they already have a scheduled tick... | 未 tick だが同 world time に予約済みの observer が更新で追加 tick を予約 (hasScheduledTick 使用) | 原票詳細未取得 (番号から ~2020/1.16 系以降と推定) [要検証] | **Open** (「修正すると 4tick observer clock が壊れる」と留保 → 仕様寄り) | **○** | 済: observer-4tick-clock・observer-mutual-clock-setblock | I8 → なし (実機と一致) |
 | MC-231071 | Some redstone components send duplicated block updates | rail/RS トーチ/コンパレーター/レバー/ボタンが onRemove 起因で重複 BU を送る | 1.17.1 RC1 / 1.19.1 RC2 / 1.19.2 | **Resolved 2024-08-21 / Resolution=Awaiting Response** (最終確認 1.19.2、最新版再現待ちの行政的クローズ) | **○** (現象は 02 §4.2 の 2 段送信として 26.2 デコンパイル確認済) | △ (状態 diff 不可・BU 重複=順序/計数。トレースなら可) | I6 / I10 |
 
 **まとめ**: 純粋な状態系列 fixture (レイヤ A) に向くのは **MC-3703 / MC-54711 / MC-189954**、および
 「修正後の正挙動ガード」としての **MC-2340**。**MC-11193** は locational なので座標固定 fixture が必要
 (スコープ判断は 04 §4-3)。**MC-81098 / MC-231071** は状態 diff に現れない **BU 数/更新順** のバグで、
 レイヤ C (microTiming / トレース, I10) が要る。1.21.1 で再現しないのは **MC-2340 のみ** (修正済)。
+MC-2340 / MC-3703 / MC-54711 / MC-189954 の 4 件は #402 で実機 fixture にした (2026-10-25、sim と一致)。
 
 ---
 
@@ -53,9 +54,11 @@ skipUntil の値は 04 §3 の実装 issue ID (I1〜I10)。fixture ランナー�
 - **影響版 / 修正状況** [確定]: Affected に 1.4.2/1.4.3/1.4.7, 13w01b, 13w02b ほか (〜17w50a)。**Resolution=Fixed**、
   Resolved=2018-06-30 (1.13 開発サイクル)。コミュニティ検証では **18w01a で修正** とされる [要検証: Fix version
   フィールドは空欄、動画タイトル引用]。→ **1.21.1 では再現しない (修正済)**。
-- **fixture 化 / skipUntil**: 可。ただし「バグ再現」ではなく **修正後の正挙動 (2gt 保持) の回帰ガード**。
-  現 sim は G1 (schedule 時 action 固定) で短パルスがラッチするため失敗する → **skipUntil=I3** (tile tick 意味論の
-  vanilla 準拠化で解消)。
+- **fixture 化 / skipUntil**: fixture: torch-nc-own-tick (#402)。1.13 で修正済みなので、修正後の正しい挙動を守る回帰ガードとして
+  撮った。原票の 2gt パルスでは、トーチが予約を積み増しても結果が変わらない (sim で確かめた)。そこで 3gt の入力で同じ
+  意味論を見る: 壁トーチの予約が走る gt に、優先度 -1 のリピーターの近隣更新が先に届いても、トーチは予約を積み増さない
+  (02 §6 torch の willTickThisTick)。実機は T が t4 に消えて t7 に点く。積み増す sim は t6 に点く。旧記述の
+  「現 sim は G1 で失敗する → skipUntil=I3」は #264 で解消した。
 - **出典**: 原票 https://bugs.mojang.com/browse/MC/issues/MC-2340 (リーダ https://r.jina.ai/https://bugs.mojang.com/browse/MC/issues/MC-2340)。
   補助: https://www.youtube.com/watch?v=CW0wWkJihVI (「MC-2340 fixed in 18w01a」)、minecraft.wiki/w/Redstone_Torch。
 
@@ -69,8 +72,10 @@ skipUntil の値は 04 §3 の実装 issue ID (I1〜I10)。fixture ランナー�
 - **影響版 / 修正状況** [確定]: Affected に 1.4.4/1.4.6/1.4.7, 13w01b, 13w09a ほか (計 ~89 版)。**Resolution=None
   (Open/Unresolved)**、Confirmed。Labels=blockupdate, redstone (**experimental_redstone_fixed ラベルは無し** →
   1.21.2 experimental でも未修正)。→ **1.21.1 で再現する**。
-- **fixture 化 / skipUntil**: 可。ただし PP / shape update (updateShape) と NC の分離が前提 (現 sim は更新 1 種のみ,
-  G10)。**skipUntil=I6** (更新 3 種の分離と方向順)。
+- **fixture 化 / skipUntil**: fixture: dust-reshape-stale-target (#402)。レーン A は /setblock で接続相手を置き、標的はランプ。
+  レーン B はピストンで接続相手を押し込み、標的は伸びたピストン。どちらの標的も、t8 に隣へ石を置いて近隣更新が届くまで
+  古い状態のまま残る (ランプは t12 に消え、ピストンは t9 に縮み始める)。原票の手順 (c) は 16 §3.1 の R-1/R-2 に当たるので
+  入れていない。sim は形だけ変わったダストから近隣更新を出さないので一致する。
 - **出典**: https://bugs.mojang.com/browse/MC/issues/MC-3703 (リーダ経由取得)。関連: MC-211392 が本件の重複として
   リンク。
 
@@ -103,8 +108,9 @@ skipUntil の値は 04 §3 の実装 issue ID (I1〜I10)。fixture ランナー�
   1rt 間隔の 101 パルス列を与え、末段出力が 111 (3rt) になることを確認。ピストン伸長器でも顕在化。
 - **影響版 / 修正状況** [確定]: Affected に 14w17a/14w18b/14w28b/1.8-pre2/1.8-pre3 ほか (計 ~102 版)。**Open/Unresolved**、
   Priority=Normal。重複 27 件。→ **1.21.1 で再現する**。
-- **fixture 化 / skipUntil**: 可。リピーターの **文脈依存優先度 (-3/-2/-1, 02 §2.2)** と collect-then-execute が前提。
-  現 sim は priority 固定 (G6) + schedule 時 action 固定 (G1) で再現不能。**skipUntil=I3**。
+- **fixture 化 / skipUntil**: fixture: repeater-pulse-train-101 (#402)。delay=1 のリピーター 2 段と 3 段に、レバーで 1rt 刻みの
+  101 を入れる。2 段は 2 段目が t6〜t11、3 段は 3 段目が t8〜t13 点きっぱなし (111) になり、3 段の 2 段目は 101 のまま。
+  最後の 1 段だけが引き伸ばす。delay 2 以上とコンパレーター入りは入れていない (理由は #402)。
 - **出典**: https://bugs.mojang.com/browse/MC/issues/MC-54711 (リーダ経由)。関連: MC-69483 (同種)、
   minecraftforum thread 2361348、PaperMC/Paper#3419。
 
@@ -133,8 +139,11 @@ skipUntil の値は 04 §3 の実装 issue ID (I1〜I10)。fixture ランナー�
 - **影響版 / 修正状況** [要検証]: **Open**。Affected versions はリーダで取得できず (詳細サイドバー欠落)。チケット番号
   189954 から作成は概ね 2020 年 (1.16 系) と推定。→ **1.21.1 で再現する** (observer の hasScheduledTick ベースの
   予約は現行仕様、02 §4.1 の observer 記述と整合)。
-- **fixture 化 / skipUntil**: 可。observer 実装が前提。二重予約の有無は状態系列 (observer 出力パルス回数) に現れる
-  ため、レイヤ A で検証可能。**skipUntil=I8** (オブザーバー実装)。「修正されない可能性が高い=仕様として実装対象」。
+- **fixture 化 / skipUntil**: fixture: observer-4tick-clock と observer-mutual-clock-setblock (#402)。前者は、相手が点いたのと
+  同じ tick にもう片方を置くと、二重予約が毎周期起きて 4gt で回り続ける (1 tick 遅く、点灯の 2 tick 目に置くと 6gt)。
+  後者は、向かい合う 2 個を /setblock で始動させたときの位相 (先に置いてあった側が 2gt 先行) で、t4 の 1 回の二重予約が
+  決める。sim のオブザーバーに取り出し済みの予約も数えさせると、前者は 2 周目から 6gt、後者は先行する側が逆になる。
+  原票の「直すと 4tick observer clock が壊れる」と同じ向きの結果になる (原票の回路そのものかは未確認)。
 - **出典**: https://bugs.mojang.com/browse/MC/issues/MC-189954 (リーダ経由)。関連: note 記事 (01 #5, 「タイルティック・
   プレスケジュール」)。**Affected versions が原票未確認**。
 
@@ -169,7 +178,7 @@ skipUntil の値は 04 §3 の実装 issue ID (I1〜I10)。fixture ランナー�
    26.2 現在は experimental flag 付き・既定は 1.21.1 と同一 (01 #15, 02 §6 wire)。**experimental が既定化された版が
    出たら対象バージョン方針の再判断トリガー**。locational fixture は必ず `mcVersion:"1.21.1"` + 座標固定で撮る。
 2. **MC-2340 (torch)** — 既に **Fixed (1.13+)**。1.21.1 の正挙動 (2gt 保持) を fixture 化するので、旧版の 1gt 挙動を
-   期待値にしないこと。「バグ再現」ではなく回帰ガードと明示する。
+   期待値にしないこと。「バグ再現」ではなく回帰ガードと明示する (fixture torch-nc-own-tick)。
 3. **MC-231071 (重複 BU)** — 「Awaiting Response」で閉鎖。**性能最適化で将来 Mojang が重複送信を廃止しうる**。
    02 §4.2 の 2 段送信仕様に依存する更新順トレース fixture はドリフトに注意し、26.x で再確認 (P5)。
 
@@ -184,4 +193,4 @@ experimental ラベルも無し) で、対象 1.21.1 で安定して再現する
   詳細サイドバー欠落分 (MC-189954 の Affected versions 等) は [要検証] と明示。
 - 01_sources.md に Mojira を情報源 #17 (P1/P5) として追加済み。
 - 本 issue はドキュメントのみの変更 (packages/ 配下のコード・fixture JSON は未変更)。skipUntil の割当は
-  04 §3 の I1〜I10 に対応させただけの提案であり、実 fixture 生成は I9 ハーネス構築後 (別 issue)。
+  04 §3 の I1〜I10 に対応させただけの提案であり、MC-2340 / 3703 / 54711 / 189954 は #402 で fixture にした。

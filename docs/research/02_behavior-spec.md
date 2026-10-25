@@ -84,7 +84,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - ブロックティックは **priority 昇順 → 同 priority 内は予約順 (subTickOrder)** で実行 (ScheduledTick.DRAIN_ORDER)。液体ティックは priority なし・予約順のみ。
 - **collect-then-execute**: 期限が来た tick を先に収集してから実行する。実行中に新規スケジュールされた tick は (delay 0 でも) **同 tick では走らず次 tick 送り**。
   - 出典: 1.21.11 デコンパイル LevelTicks.tick (collectTicks→runCollectedTicks)、SubTick WorldTickSchedulerMixin、https://minecraft.wiki/w/Tick
-- **重複予約の扱い** [確定]: LevelChunkTicks.schedule は (位置, ブロック種) キーで既存予約があると新規予約を**無視**。さらに willTickThisTick が当該 tick 実行バッチ中の再予約を防ぐ。→ **同 pos+block に予約は常に 1 件、キャンセル API はなし、action は実行時に世界状態から決定**。
+- **重複予約の扱い** [確定]: LevelChunkTicks.schedule は (位置, ブロック種) キーで既存予約があると新規予約を**無視**。さらに willTickThisTick が当該 tick 実行バッチ中の再予約を防ぐ (トーチ・リピーター・コンパレーターだけ。オブザーバーは使わない。§6 observer)。→ **同 pos+block に予約は常に 1 件、キャンセル API はなし、action は実行時に世界状態から決定**。
 - 実行時検証 [確定]: tile tick 実行時にその座標のブロックがスケジュール時の型と一致しなければ no-op (SubTick verifyBlock/verifyFluid で確認)。
 
 ### 2.2 TickPriority [確定] (1.21.11 デコンパイル全ブロック grep で確認、1.21.1/26.2 でも同一を確認済み)
@@ -481,12 +481,29 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 ### observer (実装済み: I8 / issue #16)
 - PP/SU 更新で起動、NC では起動しない [確定: 4.1、ObserverBlock は neighborChanged 非 override]。
   起動条件: `updateShape` で **観測面 (FACING) 方向からの shape 更新** かつ非 POWERED のとき
-  `startSignal` → `hasScheduledTick` (キュー全体) を確認して 2 gt の tile tick (priority 0) を予約 [確定]。
+  `startSignal` → `hasScheduledTick` (この tick に取り出し済みの予約は数えない。下記) を確認して 2 gt の tile tick (priority 0) を予約 [確定]。
 - tick [確定: ObserverBlock.tick]: OFF なら ON 化 + **自身の OFF tick (2 gt) を先に予約**してから前方更新
   (`updateNeighborsInFront`)。ON なら OFF 化して前方更新 → パルス幅 2 gt。
 - 給電: 出力は観測面の反対側 (背面) の 1 ブロックのみ。`getSignal`/`getDirectSignal` とも query 方向 == FACING
   (= 背面側の隣接ブロックからの問い合わせ) で 15 → 背面ブロックを強充電できる [確定]。
 - 設置時に POWERED だった場合は無更新で消灯 (onPlace, flag 18)、除去時は前方へ消灯通知 (onRemove) [確定]。
+- /setblock で置いたオブザーバーは 2gt 後に 1 回点く (#301)。正面に何も無くても点く
+  [実機 fixture wire-cut-conductor (正面は空気)・observer-mutual-clock-setblock]。sim は setBlockCommand で
+  2gt の予約を積む。ピストンで運ばれて着地したときも同じ (#119、fixture observer-pushed)。
+- 予約の重複を見るとき、この tick に取り出し済みの予約は数えない (MC-189954)。トーチ・リピーター・
+  コンパレーターは、取り出し済みで、まだ走っていない予約も数える (走り終えた分は数えない。数えるとトーチクロックが
+  止まる。willTickThisTick、§2.1) が、オブザーバーは数えない。
+  そのため、形状更新が「消灯中で、この tick の予約がもう取り出された相手」に届くと、相手はもう 1 本積む
+  [実機 fixture observer-4tick-clock・observer-mutual-clock-setblock]。
+- 向かい合う 2 個 (相互クロック):
+  - 更新なしで置いただけでは静止する (fixture observer-mutual-clock-setblock のレーン 2、
+    rstest mutual-clock-quiescent)。
+  - 片方 (A) だけ置いておき、もう片方 (B) を /setblock すると、B 自身の予約と、B が現れた形状更新に
+    よる A の予約が 2gt 後に並び、2 個が同時に点く。このとき A はもう 1 本積み、その 1 本が
+    さらに 2gt 後に B の消灯より先に走って A を消す。以後は 6gt 周期で A が 2gt 先行する。
+  - A が点いた tick に B を置くと、A の消灯と B の初回の点灯が同じ tick に並び、二重予約が
+    毎周期起きて 4gt 周期で回り続ける。1 tick 遅く (A の点灯の 2 tick 目に) 置くと並ばず 6gt になる
+    (fixture observer-4tick-clock)。
 - **facing 意味論の確定 (I8)**: blockstate `facing` = **観測方向 (顔のある面が向く先)**、出力は `OPPOSITE[facing]` の背面
   1 マス。sim の `ObserverState.facing` は vanilla FACING と同一で **反転しない** (mcstate/viewer/nbtIO とも piston と
   同じ非反転規則。repeater/comparator/wall_torch の flip とは異なる)。ObserverBlock.updateShape の
