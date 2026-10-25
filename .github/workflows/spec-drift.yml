@@ -78,7 +78,7 @@ jobs:
             echo
             echo "## 対応手順"
             echo "1. \`tools/decompile/fetch-and-decompile.sh ${TARGET}\` をローカル実行し、変化したクラスを読解"
-            echo "2. docs/research/02_behavior-spec.md の該当項目を再確認（挙動が変わっていれば更新 + sim への影響を評価）"
+            echo "2. docs/research/02_behavior-spec.md と packages/sim の典拠コメントの該当項目を再確認（挙動が変わっていれば更新 + sim への影響を評価。指紋に出ない変化の見方は tools/decompile/README.md）"
             echo "3. \`tools/decompile/spec-drift.sh --update ${TARGET}\` で fingerprints.json を更新してコミット"
             echo
             echo "（自動起票: .github/workflows/spec-drift.yml）"
