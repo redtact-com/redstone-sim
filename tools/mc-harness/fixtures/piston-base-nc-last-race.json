@@ -1,0 +1,23 @@
+{
+  "name": "piston-base-nc-last-race",
+  "description": "R-14 (docs/research/16 §3.1): 伸長で本体の近隣更新が最後に出るか。ピストン A (0,1,0) (facing=east) が石 (1,1,0) を押す。BUD のピストンを 2 本置く。P1 (1,2,0) (facing=west) はヘッド位置 (1,1,0) の真上で、A の本体には接しない。P2 (-1,1,0) (facing=up) は A の本体の真後ろで、ヘッド位置には接しない。P1 は石 K (0,2,0) を西の X (-1,2,0) へ押し、P2 はヘッドを X へ伸ばすので、先にブロックイベントが走った方が X を取る。t1 に P1 の 2 段上 (1,4,0) と X の西 (-2,2,0) へ redstone_block を setblock して QC で受電させ、t2 に床レバー (0,1,-1) を倒す。26.2 PistonBaseBlock.moveBlocks と triggerEvent を読んだ予想: 出発セルとヘッド位置の近隣更新が先で、本体を伸びた状態に書く近隣更新は最後なので、P1 が先に予約されて t3 に K が X へ入り、P2 は失敗する (K が着地した t5 の更新で P2 が予約し直し、t6 に K を (-1,3,0) へ押し上げる)。修正前の sim は本体の近隣更新が先なので P2 が先に X へヘッドを伸ばし、P1 は失敗して K は動かない",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": { "from": [-4, 0, -4], "to": [3, 4, 3] },
+  "player": { "spawn": [0.5, 1.0, -3.5], "facing": [0, 40], "lookAt": [0.5, 1.35, -0.5] },
+  "blocks": [
+    { "pos": [0, 0, -4], "block": "stone" },
+    { "pos": [0, 0, -1], "block": "stone" },
+    { "pos": [0, 1, -1], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [0, 1, 0], "block": "piston[extended=false,facing=east]" },
+    { "pos": [1, 1, 0], "block": "stone" },
+    { "pos": [1, 2, 0], "block": "piston[extended=false,facing=west]" },
+    { "pos": [0, 2, 0], "block": "stone" },
+    { "pos": [-1, 1, 0], "block": "piston[extended=false,facing=up]" }
+  ],
+  "inputs": [
+    { "tick": 1, "pos": [1, 4, 0], "action": "setblock", "block": "redstone_block" },
+    { "tick": 1, "pos": [-2, 2, 0], "action": "setblock", "block": "redstone_block" },
+    { "tick": 2, "pos": [0, 1, -1], "action": "use" }
+  ]
+}
