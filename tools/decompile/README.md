@@ -11,10 +11,10 @@ Minecraft Java Edition server.jar をローカルでデコンパイルし、レ�
 JAVA_HOME=~/bluemap/jdk25 ./fetch-and-decompile.sh 1.21.1
 
 # 非難読化版 (26.x〜, 2025-10 の難読化廃止以降): そのままデコンパイル
-JAVA_HOME=~/bluemap/jdk25 ./fetch-and-decompile.sh 26.2
+JAVA_HOME=~/bluemap/jdk25 ./fetch-and-decompile.sh 26.3
 ```
 
-結果は `out/<version>/net/minecraft/**/*.java` に展開される (参考: 1.21.1 で約 4,000 ファイル)。
+結果は `out/<version>/net/minecraft/**/*.java` に展開される (参考: 1.21.1 で約 4,000 ファイル、26.2 で 4849、26.3 で 5037)。
 
 ## 処理フロー
 
