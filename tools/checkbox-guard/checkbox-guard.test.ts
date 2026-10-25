@@ -91,6 +91,19 @@ describe('findUnchecked: 項目の形', () => {
     expect(findUnchecked(b)).toEqual(['- [ ] 外'])
   })
 
+  it('言語名の付いた行ではコードブロックを閉じない。行の中で閉じる ``` は囲みにしない', () => {
+    const b = body(
+      '## やること',
+      '```ts',
+      '```md',
+      '- [ ] まだコードの中',
+      '```',
+      '```inline``` の説明',
+      '- [ ] 外',
+    )
+    expect(findUnchecked(b)).toEqual(['- [ ] 外'])
+  })
+
   it('HTML コメントの中は数えない', () => {
     const b = body('## やること', '<!--', '- [ ] テンプレの例', '-->', '- [ ] 本物 <!-- 注 -->')
     expect(findUnchecked(b)).toEqual(['- [ ] 本物'])

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// issue を閉じたときに「## やること」の未チェック項目を知らせる (#25 の残り)
+// issue を閉じたときに「## やること」の未チェック項目を知らせる (#25 の残り・#425)
 //
 // .github/workflows/checkbox-guard.yml から呼ぶ。npm ci なしで動くように
 // 依存パッケージは使わない (Node 22 の fetch だけで GitHub API を叩く)。
@@ -48,10 +48,12 @@ export function findUnchecked(body) {
   for (const line of text.split('\n')) {
     const f = line.match(FENCE)
     if (fence) {
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null
+      // 閉じる囲みは同じ文字で同じ長さ以上。後ろに言語名などが付いた行では閉じない
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && line.trim() === f[1]) fence = null
       continue
     }
-    if (f) { fence = f[1]; continue }
+    // ```a``` のように、同じ行の後ろにバッククォートがあるものはインラインのコードで、囲みではない
+    if (f && !(f[1][0] === '`' && line.trimStart().slice(f[1].length).includes('`'))) { fence = f[1]; continue }
 
     const h = line.match(HEADING)
     if (h && h[1].length <= 2) {
