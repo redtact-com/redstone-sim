@@ -193,7 +193,7 @@
 | 論点 | Nucleation | redstone-sim | 近い方 |
 |---|---|---|---|
 | shouldPrioritize (-3) の判定 | 入力側を見て、しかも条件が逆 | 出力側のダイオードがこちらを向いていないとき (26.2 DiodeBlock#shouldPrioritize と同じ) | redstone-sim |
-| tick 中の自己 OFF 予約の優先度 | -2 固定 (26.2 DiodeBlock#tick と同じ) | -3 になりうる | Nucleation |
+| tick 中の自己 OFF 予約の優先度 | -2 固定 (26.2 DiodeBlock#tick と同じ) | -3 になりうる → **[実機]** fixture repeater-self-off-priority で確定し、#408 / PR#409 で -2 固定にした | Nucleation → 同等 |
 | コンパレーターの側面入力 | 通常の信号で読むので、横のトーチで出力が 0 になる | 26.2 DiodeBlock#getAlternateSignal (SignalGetter#getControlInputSignal) 相当 | redstone-sim |
 | 背面の導体越し読み | 置き換え (26.2 と同じ) | max で合成 | Nucleation |
 | compare モードで出力が変わらない tick | 前方へ更新を出す (26.2 と同じ) | 出さない | Nucleation |
@@ -229,7 +229,7 @@
 
 | 論点 | Nucleation | redstone-sim | 近い方 |
 |---|---|---|---|
-| レバー/ボタンの NC | 3 回 (flag 3 の書き込みで 1 回 + updateNeighbours で 2 回) | 2 回。形状更新より前の 1 回が欠ける | Nucleation |
+| レバー/ボタンの NC | 3 回 (flag 3 の書き込みで 1 回 + updateNeighbours で 2 回) | 2 回。形状更新より前の 1 回が欠ける → **[実機]** fixture lever-nc-before-shape-race / button-nc-before-shape-race で確定し、#408 / PR#409 で 3 回にした (ボタンの解除も同じ順) | Nucleation → 同等 |
 | エンティティで動く部品 (感圧板・検知レール) | 実エンティティで判定する | 手動トリガと一定 gt 後の自動 OFF | 方針 |
 | 扉・トラップドアを素手で操作 | 無し | 有り | redstone-sim |
 | 音符ブロックの音色 | harp と basedrum の 2 種だけ | 26.2 の Blocks から生成した表 | redstone-sim |
@@ -285,8 +285,8 @@
 | R-3 | 普通のトロッコが乗ったディテクターレールを、コンパレーターが 15 と読む (world.ts:100-117) | DetectorRailBlock#getAnalogOutputSignal: コンテナ付きかコマンドブロック付きのトロッコ以外は 0。コンパレーターは通常の信号をこの値で置き換える | **[実機]** 実機 0 / sim 15 (トロッコが無ければ一致) | トロッコの通過をコンパレーターで検出する回路 |
 | R-4 | コンパレーターの導体越し読みを max で合成する (world.ts:3204-3207) | ComparatorBlock#getInputSignal: 置き換え | [逆コンパイル+実行] 空の樽を読むと sim 13 / vanilla 0 | ブロック越しの空検知・残量表示 |
 | R-5 | compare モードで出力が変わらない tick に、前方へ更新を出さない (world.ts:1583-1590) | ComparatorBlock#refreshOutputState: compare モードなら値が同じでも前方を更新する | [逆コンパイル+実行] 2 gt パルスを飲み込んだとき、前方の BUD ピストンが sim では伸びない | コンパレーターを BUD のトリガやパルス検出に使う回路 |
-| R-6 | リピーターが tick 中に自分の OFF を予約するとき、優先度が -3 になりうる (world.ts:1579) | DiodeBlock#tick: 常に -2。-3 を選ぶのは近隣更新から予約するときだけ | [逆コンパイル+実行] 側面ロックと重なると 2 gt 遅れる例を再現 | 直列のリピーターと側面ロックの組み合わせ |
-| R-7 | レバー/ボタンの近隣更新が 1 回少なく、しかも形状更新が先に出る (world.ts:1231-1239) | LeverBlock#pull: flag 3 の書き込みで自分の周り → 形状更新 → updateNeighbours | [逆コンパイル+実行] 同じ gt・同じ優先度のオブザーバーとコンパレーターの予約順が逆になる | 予約の順で勝敗が決まる競争 |
+| R-6 | リピーターが tick 中に自分の OFF を予約するとき、優先度が -3 になりうる (world.ts:1579) | DiodeBlock#tick: 常に -2。-3 を選ぶのは近隣更新から予約するときだけ | **[実機]** fixture repeater-self-off-priority: 側面ロックの相手 (遅延 2) の自己 OFF と被ロック側 (遅延 3) の自己 OFF が同じ gt に重なると、実機は被ロック側が先に走って何もせず、ロックが外れてから OFF を積み直す (OFF は t24)。sim は -3 の相手が先に走って t18 に OFF。#408 / PR#409 で -2 固定にして直した | 直列のリピーターと側面ロックの組み合わせ |
+| R-7 | レバー/ボタンの近隣更新が 1 回少なく、しかも形状更新が先に出る (world.ts:1231-1239) | LeverBlock#pull: flag 3 の書き込みで自分の周り → 形状更新 → updateNeighbours。ButtonBlock#press と解除の ButtonBlock#tick → checkPressed も同じ順 | **[実機]** fixture lever-nc-before-shape-race / button-nc-before-shape-race: レバーを直接読むコンパレーターとレバーを見るオブザーバーが同じ gt・優先度 0 で予約されるとき、実機はコンパレーター側のピストンが先に動く (t6 に取り合うマスへ石。sim はガラス)。ボタンの解除でも同じ順 (t26 に石が戻る)。#408 / PR#409 で押下・解除とも直した | 予約の順で勝敗が決まる競争 |
 | R-8 | ダストが detector_rail と lectern に接続しない (wire-shape.ts:42-71) | RedStoneWireBlock#shouldConnectTo: 信号源なら接続する | [逆コンパイル+実行] 接続が十字になり、横のランプまで点く | トロッコ検出の信号をダストで横へ引き出す配置 |
 | R-9 | 押し反応の分類が 8 種で違う (world.ts:1763-1819) | PistonBaseBlock#isPushable と Blocks の登録。検知レール・銅の電球・トラップドア・塀・ガラス板は押せる。クラフターは BE を持つので不動。budding_amethyst と扉は壊れる | **[実機]** 8 種すべて実機と違う。sim は検知レールとクラフターを壊し、残りは押せない。budding_amethyst は取り込めない | 検知レールや塀・板を押す扉、クラフターや扉の前のピストン |
 | R-10 | 水・泡柱・シュルカーボックス・カボチャ類・苔・植木鉢・はしご・頭の押し反応。看板・旗・彫刻された本棚を押してしまう | 水・泡柱・シュルカー・カボチャ類・苔・植木鉢・はしご・頭は DESTROY。看板・旗・彫刻された本棚は BE を持つので不動 | [逆コンパイル+実行] (実機では未測定) | 水路のゲート、カボチャ・スイカの収穫ピストン |
@@ -410,7 +410,7 @@
 | ダストの上り判定を「横が導体のときだけ上段を読む」にし、isWireCutBlock を isConductor に一本化する | R-1, R-2 | S |
 | トーチの 2 段送信の起点を Direction.values() の順にする。塀の形状更新の連鎖に、呼び直しでも引き継ぐ深さを持たせる | R-21, R-22 | S |
 | コンパレーターの 3 点を直す: 導体越しは置き換え、compare モードでは空振りでも前方更新、detector_rail をアナログ出力と接続対象に加える (lectern も接続対象に) | R-3, R-4, R-5, R-8 | S |
-| リピーターの自己 OFF を -2 固定にする。レバー/ボタンは、形状更新より前に自分の周りへ NC を 1 回出し (flag 3 の書き込みの分)、形状更新 → updateNeighbours の NC の順にする (activateBlock は apply とは別の経路なので、R-15 の修正では直らない) | R-6, R-7 | S |
+| リピーターの自己 OFF を -2 固定にする。レバー/ボタンは、形状更新より前に自分の周りへ NC を 1 回出し (flag 3 の書き込みの分)、形状更新 → updateNeighbours の NC の順にする (activateBlock は apply とは別の経路なので、R-15 の修正では直らない) (#408 / PR#409 で済み。ボタンの解除も同じ順にした) | R-6, R-7 | S |
 | 押し反応の表を 26.2 の Blocks に合わせる。判定は PistonBaseBlock#isPushable の順にする: 硬さ -1 は不動、次に押し反応 (BLOCK は不動、DESTROY は壊す、PUSH_ONLY は向きしだい) で決め、NORMAL のものに限って BE 持ちを不動にする (シュルカー・ベル・飾り壺・頭は BE を持つが壊れる) | R-9, R-10 | M |
 | 伸長の末尾処理を moveBlocks の順にする。ヘッド位置から NC を出し、空いたセルに形状更新を出し、本体の更新を最後にする | R-11, R-12, R-14 | S〜M |
 | addBranchingBlocks を Direction.values() の順にする (updates.ts にある既存の定数を使う) | R-13 | S |
