@@ -1,0 +1,32 @@
+// e2e/ の spec を型検査するための設定 (#205)。npm run typecheck が参照する。
+// Playwright は型を見ずに実行するので、spec の型の誤りはここでしか見つからない。
+// Playwright も実行時に spec に一番近いこの tsconfig を読むが、使うのは paths・baseUrl・allowJs だけ。
+// どれも書いていないので、実行時の import の解決は root の tsconfig のときと変わらない。
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [
+    // window.__editorTest / __demo / __embed の型の正は、この 3 ページの declare global。
+    // spec で宣言し直すと型が食い違い (TS2717)、エラーは後に読まれる側に出る。
+    // 3 ページを先に置いて、エラーが spec 側に出るようにしている。
+    // spec で宣言してよいのは spec が自分で作る値だけ (例: embed-smoke の __rx)
+    "../app/src/EditorPage.tsx",
+    "../app/src/DemoPage.tsx",
+    "../app/src/EmbedPage.tsx",
+    "./**/*.ts",
+    "../playwright.config.ts"
+  ]
+}

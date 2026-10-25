@@ -10,16 +10,6 @@ import { NbtFile, NbtCompound, NbtList, NbtInt, NbtString } from 'deepslate/nbt'
 //
 // 読ませるファイルはテストの中で作る (#358 と同じく、手元にしか無いファイルは使わない)。
 
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      clearAll: () => void
-      getEditorBlockAt: (x: number, y: number, z: number) => { type: string } | null
-    }
-  }
-}
-
 const STORAGE_KEY = 'rdsim:editor:circuit'
 
 type Pos = [number, number, number]

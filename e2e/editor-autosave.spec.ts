@@ -1,18 +1,7 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 
 // ⑥ 編集中の回路がリロードで消えないこと (#109)。
 // 保存は localStorage への debounce 書き込みなので、リロード前に保存完了を待つ。
-
-interface EditorTestApi {
-  placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-  getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
-  clearAll: () => void
-}
-
-declare global {
-  interface Window { __editorTest?: EditorTestApi }
-}
 
 const STORAGE_KEY = 'rdsim:editor:circuit'
 

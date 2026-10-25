@@ -1,19 +1,8 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 import { readFileSync } from 'node:fs'
 
 // ③ NBT エクスポート → インポートの往復。⋯ メニューの NBT 保存で download を捕捉し、
 // クリア後にその .nbt を隠し file input へ流し込み、ブロックが復元されることを検証する。
-
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      clearAll: () => void
-      getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
-    }
-  }
-}
 
 test('editor: NBT エクスポート/インポートの往復でブロックが復元される', async ({ page }) => {
   await page.goto('/')

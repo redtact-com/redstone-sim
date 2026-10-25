@@ -1,13 +1,8 @@
 import { test, expect } from '@playwright/test'
-import type { DemoApi } from '../app/src/DemoPage'
 
 // ② fixture デモページのロードと step。?demo=<name> が回路を自動構築し、
 // window.__demo.step() が fixture-runner と同じ系列 (state[t]=ST完了後+inputs[t]) を
 // たどることを、実機検証済み dynamic-connect-push の期待変化で検証する。
-
-declare global {
-  interface Window { __demo?: DemoApi }
-}
 
 test('demo: dynamic-connect-push のロードと tick 送り', async ({ page }) => {
   await page.goto('/?demo=dynamic-connect-push')

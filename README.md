@@ -51,7 +51,7 @@ npm run dev          # 開発サーバ（app）
 npm run build        # 本番ビルド（tsc -b && vite build）
 npm run lint         # ESLint（app）
 npm test             # sim / editor のユニットテスト（vitest）
-npm run typecheck    # packages の型チェック
+npm run typecheck    # packages・app・tools・e2e の型チェック
 ```
 
 ## ブランチ運用とデプロイ

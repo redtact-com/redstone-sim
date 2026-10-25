@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import type { EmbedApi } from '../app/src/EmbedPage'
 
 // ④ 埋め込みプレイヤー (?embed=1) の postMessage 経路 (#97 / docs/research/14 §5)。
 // エディタでレバー+ワイヤー+ランプを組んで NBT を書き出し、そのバイト列を embed ページへ
@@ -10,15 +9,10 @@ import type { EmbedApi } from '../app/src/EmbedPage'
 // トップレベルでは window.parent === window なので、テストの window.postMessage は
 // 「親からの受信」として扱われ、EmbedPage の親向け送信もこの window で受け取れる。
 
-interface EditorTestApi {
-  placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-  getEditorBlockAt: (x: number, y: number, z: number) => { type: string } | null
-}
-
+// __rx はこの spec が自分で作る受信記録で、app 側には無い。
+// app が持つ __editorTest / __embed の型は app の宣言を使う (#205)。
 declare global {
   interface Window {
-    __editorTest?: EditorTestApi
-    __embed?: EmbedApi
     __rx?: Array<{ type: string; tick?: number }>
   }
 }

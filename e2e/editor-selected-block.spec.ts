@@ -11,17 +11,6 @@ import type { BlockState } from '@redstone/sim'
 // 素材の .nbt は**テストの中で作る** (#358)。最初はローカルのファイルを絶対パスで
 // 参照していて CI だけ ENOENT で落ちた。ファイルを置かず buffer で渡せば手元と CI で同じになる。
 
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      tapCell: (x: number, z: number) => void
-      selectTool: (type: string) => void
-      getEditorBlockAt: (x: number, y: number, z: number) => { type: string } | null
-    }
-  }
-}
-
 /** 取り込み由来の状態 (name を持つ) を作るための .nbt */
 function buildNbt(): Buffer {
   const blocks = new Map<string, BlockState>([
