@@ -10,10 +10,11 @@
 #   spread(BlockPos.hashCode) & 15 は座標依存 → 送信起点順は locational。
 #   sim は javaHashSetOrder() でこれを忠実化 (dustUpdateOrigins)。
 #
-# 観測: レバー ON → 直付けダスト 1 個の power 0→15。propagateChange(レバー) の
-#   verbose updateFormula "Le{n.0}; {...}" に、レバー自身 (bu(o)) + 取付面 (bu(-y))
-#   の後、ダスト 7 origin の bu トークンが HashSet 順で並ぶ (トークンはレバーからの
-#   相対座標。うち bu(o) はダストの西隣 origin = レバー座標に一致するため 2 度出る)。
+# 観測: レバー ON → 直付けダスト 1 個の power 0→15。レバー操作 (activateBlock) の
+#   verbose updateFormula "Le{n.0}; {...}" に、flag 3 の書き込みの分 (bu(o)) +
+#   updateNeighbours のレバー自身 (bu(o)) + 取付面 (bu(-y)) の後、ダスト 7 origin の
+#   bu トークンが HashSet 順で並ぶ (トークンはレバーからの相対座標。うち bu(o) は
+#   ダストの西隣 origin = レバー座標に一致するため、合わせて 3 度出る。先頭の 1 つは R-7)。
 #   アーム A (x=1) と +10x のアーム B は**同じ 7 トークン集合を別順**で出す。
 #   sim=仕様(locational を持つ) が一致 (PASS)。**検証対象はトークンの並び順**。
 #
@@ -48,9 +49,9 @@ ticks 14
 # {+x, +x-z, +x-y, +x+z, +2x, +x+y, o(=西隣ダスト origin)} が A と B で入れ替わる。
 trace {
   2gt[PI]: Le{n.0}
-  Le{n.0}; {bu(o), bu(-y), bu(+x), bu(+x-z), bu(+x-y), bu(+x+z), bu(+2x), bu(+x+y), bu(o)}
+  Le{n.0}; {bu(o), bu(o), bu(-y), bu(+x), bu(+x-z), bu(+x-y), bu(+x+z), bu(+2x), bu(+x+y), bu(o)}
   8gt[PI]: Le{n.0}
-  Le{n.0}; {bu(o), bu(-y), bu(+x-z), bu(+x+y), bu(o), bu(+x), bu(+x-y), bu(+x+z), bu(+2x)}
+  Le{n.0}; {bu(o), bu(o), bu(-y), bu(+x-z), bu(+x+y), bu(o), bu(+x), bu(+x-y), bu(+x+z), bu(+2x)}
 }
 
 state {

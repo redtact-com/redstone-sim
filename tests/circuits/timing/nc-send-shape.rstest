@@ -3,8 +3,11 @@
 # 素子固有の送信形状そのものになるようにした。
 #
 # 仕様クロスチェック (02 §4.2 [確定: 1.21.1/26.2 デコンパイル]):
-#   - lever: updateNeighbours = 自身の隣接6 + 取り付けブロックの隣接6。
-#     → bu(o) (自身) の直後に bu(-y) (床=取り付けブロック) が並ぶ。
+#   - lever: flag 3 の書き込みで自身の隣接6 (形状更新より前) → updateNeighbours =
+#     自身の隣接6 + 取り付けブロックの隣接6 (LeverBlock.pull、R-7)。
+#     → bu(o) (flag 3 の分)、bu(o) (updateNeighbours の自身)、bu(-y) (床=取り付けブロック) の順。
+#     [実機 fixture lever-nc-before-shape-race: 1 本目の bu(o) で予約されるコンパレーターが、
+#      形状更新で予約されるオブザーバーより先に走る]
 #   - repeater: flag2 + updateNeighborsInFront = 出力先1マスに NC → 出力先の隣接5マス
 #     (自身方向 west を除く UPDATE_ORDER 順)。
 #     → bu(+x) (front 単発) の直後に bu(+x\west) (front の隣接、skip=west)。
@@ -32,7 +35,7 @@ ticks 8
 trace {
   2gt[PI]: Le{n.0}
   2gt[ST]: Re(n.2) p-1
-  Le{n.0}; {bu(o), bu(-y)}
+  Le{n.0}; {bu(o), bu(o), bu(-y)}
   4gt[ST]: Re{n.2}
   Re{n.2}; {bu(+x), bu(+x\west)}
 }

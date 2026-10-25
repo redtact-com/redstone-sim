@@ -99,6 +99,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 | その他全ブロック (トーチ・オブザーバー含む) | — | 0 (NORMAL) |
 
 - 出典: DiodeBlock.checkTickOnNeighbor / ComparatorBlock (1.21.11 デコンパイル)、https://ja.minecraft.wiki/w/ティック
+- 表の -3 / -1 (出力先が別のダイオード) は**近隣更新から予約するとき** (`checkTickOnNeighbor`) の規則。
+  リピーターが tick の中で自分の OFF を予約するとき (§6 repeater の 3.) は**出力先に関係なく常に -2** [確定: 26.2 DiodeBlock.tick]。
+  sim は以前この場合にも -3 を使っていた (R-6、#408) [実機 fixture repeater-self-off-priority]。
 
 ### 2.3 件数上限 [確定] (1.21.1/26.2 デコンパイルで確定)
 - 1 tick あたり最大 65,536 件 (`ServerLevel.MAX_SCHEDULED_TICKS_PER_TICK`)。`blockTicks.tick(gt, 65536, ...)` と
@@ -166,6 +169,12 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 素子別例外 [確定: 各ブロッククラスのデコンパイル]:
 - **レバー/ボタン**: `updateNeighbours` = 自身の隣接 6 (UPDATE_ORDER 順) + **取り付けブロックの隣接 6**。状態変化は flag 3 (NC+PP 両方)。
+  順は **flag 3 の書き込みが出す自身の隣接 6 への NC → PP (形状更新) → `updateNeighbours`** で、自身の隣接 6 へは合わせて 2 回届く
+  (`LeverBlock.pull` / `ButtonBlock.press` / ボタンの解除 `ButtonBlock.tick` → `checkPressed` が同じ順)。
+  同じ gt・同じ優先度 0 で予約されるコンパレーター (NC で予約) とオブザーバー (PP で予約) は、この順のためコンパレーターが先に走る
+  [実機 fixture lever-nc-before-shape-race / button-nc-before-shape-race]。sim も同じ順にした (R-7、#408)。
+  ただし隣のダストは、実機では最初の NC の中で強度を変えるが、sim は propagateChange でまとめて変えるので、形状更新より後のまま
+  (ダストの逐次評価は 16 §4.4)。
 - **リピーター/コンパレーター/オブザーバー**: 状態変化は flag 2 (NC なし) + onPlace/tick からの `updateNeighborsInFront` =
   **出力先 1 マスに NC → 出力先の隣接 5 マス (自身方向を除く UPDATE_ORDER 順) に NC**。
 - **トーチ**: 点滅は flag 3 → 自身の隣接 6 に NC。さらに `onRemove`/`onPlace` (LIT 変化ごとに両方呼ばれる) で
@@ -335,7 +344,8 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - 即時 (tick 境界のプレイヤー入力 §1.4 で状態変化。ボタンの戻りのみ tile tick)。
 - 給電 [確定: LeverBlock/ButtonBlock]: ON 中は全 query 方向に弱 15 (`getSignal`)、
   **取り付けブロックのみ強充電** (`getDirectSignal` は取り付け方向のみ 15)。
-- 更新先 [確定]: 自身の隣接 6 + 取り付けブロックの隣接 6 (4.2 素子別例外)。
+- 更新先 [確定]: 自身の隣接 6 + 取り付けブロックの隣接 6 (4.2 素子別例外)。順は flag 3 の書き込みの NC (自身の隣接 6) → 形状更新 →
+  `updateNeighbours` で、自身の隣接 6 へは 2 回届く (4.2、R-7 #408)。
 - ボタン持続 [確定: Blocks.java 登録値 `ticksToStayPressed`、未解明 #4 解消]: **石系 20 gt / 木系 30 gt**
   (現実装の 5/10 gt は誤り、04 G12)。矢が刺さっている間は tick 毎に再延長 (木のみ)。priority は NORMAL。
 
