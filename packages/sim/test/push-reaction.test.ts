@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { SimWorld } from '../src/world.js'
 import { mcToSim } from '../src/mcstate.js'
 import { pushReactionOf, hasBlockEntity } from '../src/blocks/pushReaction.js'
-import type { BlockState } from '../src/types.js'
+import type { BlockState, Pos3D } from '../src/types.js'
 
 // ============================================================
 // ピストンの押し反応の表 (R-9 / R-10)。
@@ -113,6 +113,43 @@ describe('押し構造の解決が表に従う', () => {
        [2, 0, 0, st('stone')]])
     expect(w.getBlock(2, 1, 0)).toMatchObject({ type: 'piston_head' })
     expect(w.getBlock(2, 2, 0)).toBeNull()
+  })
+
+  it('スライムの塊で扉の上下を同時に押しても、相方の座標から更新を 2 回出さない', () => {
+    // 上下とも toDestroy に入る。先に壊す半分の処理で相方も air にするが、相方の更新は
+    // toDestroy の側で出すので doorOtherHalves には入れない (近隣更新の列に同じ座標が 2 回並ばない)
+    const w = new SimWorld()
+    const seen: string[][] = []
+    const proto = Object.getPrototypeOf(w) as { afterPistonMove: (s: Pos3D[], n: Pos3D[]) => void }
+    const orig = proto.afterPistonMove
+    const spy = function (this: SimWorld, s: Pos3D[], n: Pos3D[]) {
+      seen.push(n.map(p => p.join(',')))
+      return orig.call(this, s, n)
+    }
+    try {
+      proto.afterPistonMove = spy
+      w.setBlock(0, 1, 0, { type: 'lever', facing: 'up', powered: false })
+      w.setBlock(1, 1, 0, { type: 'sticky_piston', facing: 'east', extended: false })
+      w.setBlock(2, 1, 0, st('slime_block'))
+      w.setBlock(2, 2, 0, st('stone'))
+      w.setBlock(3, 0, 0, st('stone'))
+      w.setBlock(3, 1, 0, st('oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]'))
+      w.setBlock(3, 2, 0, st('oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]'))
+      w.initialize()
+      w.activateBlock(0, 1, 0)
+      ticks(w, 6)
+    } finally {
+      proto.afterPistonMove = orig
+    }
+    expect(w.getBlock(3, 1, 0)).toMatchObject({ type: 'slime_block' })
+    expect(w.getBlock(3, 2, 0)).toMatchObject({ type: 'solid' })
+    expect(w.getBlock(4, 1, 0)).toBeNull()
+    expect(w.getBlock(4, 2, 0)).toBeNull()
+    // 伸長の 1 回分。近隣更新の列に重複が無い (修正前は 3,1,0 が 2 回)
+    expect(seen).toHaveLength(1)
+    expect(new Set(seen[0]).size).toBe(seen[0].length)
+    expect(seen[0]).toContain('3,1,0')
+    expect(seen[0]).toContain('3,2,0')
   })
 
   it('シュルカーボックスは BlockEntity を持つが壊れる。看板は動かない', () => {

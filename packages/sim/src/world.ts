@@ -2021,8 +2021,11 @@ export class SimWorld {
       // afterPistonMove が破壊座標込みで追随する
       // 扉は上下 2 マスで 1 つなので、片方を壊したら相方も消す (R-9)。
       // [確定: 26.2 — 壊したマスに置く moving_piston の形状更新を受けて、相方が
-      //  DoorBlock.updateShape で空気になる。sim の扉は独立した 2 ブロックなのでここで消す]
+      //  DoorBlock.updateShape で空気になる。sim の扉は独立した 2 ブロックなのでここで消す]。
+      // 上下とも toDestroy に入る形 (スライムの塊で横から両方を押す) では、相方は toDestroy の
+      // 側で更新を出すので doorOtherHalves には入れない (入れると同じ座標から 2 回出る)
       const doorOtherHalves: Pos3D[] = []
+      const inDestroy = (p: Pos3D): boolean => toDestroy.some(q => posKey(q) === posKey(p))
       for (let i = toDestroy.length - 1; i >= 0; i--) {
         const victim = this.getBlockAt(toDestroy[i])
         this.setBlockAt(toDestroy[i], { type: 'air' })
@@ -2034,7 +2037,7 @@ export class SimWorld {
           if (other?.type === victim.type && other.half !== victim.half) {
             this.setBlockAt(otherPos, { type: 'air' })
             changed.push(posKey(otherPos))
-            doorOtherHalves.push(otherPos)
+            if (!inDestroy(otherPos)) doorOtherHalves.push(otherPos)
           }
         }
       }
