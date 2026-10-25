@@ -1,0 +1,302 @@
+{
+  "name": "piston-push-normal",
+  "description": "R-9 (docs/research/16 §3.1): 押し反応が指定なし (NORMAL) で BlockEntity も持たないブロックは、ピストンで押せて粘着ピストンで引ける。レーンごとに z を 2 ずつ離し、x=2 の粘着ピストン (east) の前に対象を置く。t2 に x=1 へ /setblock redstone_block (ピストンへ近隣更新が届き t3 に伸びて t5 に着地)、t7 に air (t8 に縮み t10 に引き戻して着地)。レーン: z0 検知レール (床あり。着地で形状を決め直す) / z2 銅の電球 (下にレッドストーンブロック。x=4 に着地すると受電が切れて powered=false、x=3 へ引き戻されて着地すると受電して lit が反転する。引き戻しでは電球が本体より後に着地するので、着地した自分への neighborChanged でしか受電に気づけない) / z4 トラップドア / z6 フェンスゲート / z8 石 + 塀 / z10 石 + ガラス板 (塀と板はピストンに直接触れさせず、石を挟んで接続形状を固定する)。26.2 Blocks を読んだ予想: 6 レーンとも x=4 (塀と板は x=5) へ動き、引き戻しで元の位置へ戻る。修正前の sim は検知レールを壊し、残り 5 つは押せずピストンが伸びない。実機 1.21.1 では 2026-10 に 5 種とも押せることを rcon で確認済み (#384)。これはそれを fixture にしたもの",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      5,
+      2,
+      11
+    ]
+  },
+  "player": {
+    "spawn": [
+      -0.5,
+      1.0,
+      6.5
+    ],
+    "facing": [
+      -90,
+      20
+    ],
+    "lookAt": [
+      3.5,
+      1.35,
+      6.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "detector_rail[powered=false,shape=east_west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "block": "copper_bulb[lit=true,powered=true]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "oak_trapdoor[facing=north,half=bottom,open=false,powered=false,waterlogged=false]"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "oak_fence_gate[facing=north,in_wall=false,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        8
+      ],
+      "block": "stone_brick_wall[east=none,north=none,south=none,up=true,waterlogged=false,west=low]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        10
+      ],
+      "block": "sticky_piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        10
+      ],
+      "block": "glass_pane[east=false,north=false,south=false,waterlogged=false,west=true]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        10
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        10
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ]
+}

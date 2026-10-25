@@ -1,0 +1,290 @@
+{
+  "name": "piston-push-fluid-be",
+  "description": "R-9 / R-10 (docs/research/16 §3.1): 水と泡柱は DESTROY で壊れ、押し反応が指定なしでも BlockEntity を持つブロックは動かない (ピストンが伸びない)。配置と入力は piston-push-normal と同じ (t2 に x=1 へ redstone_block、t7 に air)。z0 水源と z2 泡柱 (ソウルサンドの上の水 1 マス) は南北と東を石で囲い、横へ流れないようにする (西はピストン本体が塞ぐ)。レーン: z0 水源 / z2 泡柱 / z4 クラフター / z6 看板 / z8 彫刻された本棚。26.2 を読んだ予想: 水と泡柱は t3 に壊れて moving_piston、t5 に piston_head、t10 に引き戻しても air のまま (囲いの中に戻る水源が無い)。クラフター・看板・本棚の 3 レーンはピストンが伸びず何も変わらない。泡柱を壊したあとに予約が残る処理は 26.2 に無い (SoulSandBlock は updateShape を持たず、泡柱の 20gt の予約は LiquidBlock が水の側で積む)。sim も積まないので、ほかの 2 本と同じ 12 tick で撮る。修正前の sim は水と泡柱を押せず (伸びない)、クラフターを壊し、看板と本棚を運ぶ",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      5,
+      2,
+      9
+    ]
+  },
+  "player": {
+    "spawn": [
+      -0.5,
+      1.0,
+      4.5
+    ],
+    "facing": [
+      -90,
+      20
+    ],
+    "lookAt": [
+      3.5,
+      1.35,
+      4.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        3,
+        1,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "water[level=0]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "soul_sand"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "crafter[crafting=false,orientation=north_up,triggered=false]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "oak_sign[rotation=0,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        8
+      ],
+      "block": "chiseled_bookshelf[facing=north,slot_0_occupied=false,slot_1_occupied=false,slot_2_occupied=false,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ]
+}
