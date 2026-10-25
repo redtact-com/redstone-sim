@@ -69,6 +69,42 @@ describe('泡柱', () => {
     expect(typeAt(w, 140), '最上段が遅れている').toBe('water')
   })
 
+  /**
+   * 近隣更新だけでは予約し直さない (#381 / R-18 の前半)。
+   * [確定: 26.2 BubbleColumnBlock は neighborChanged を持たず、updateShape で
+   *  「置けなくなった・真下が変わった・真上が水源になった」ときだけ 5gt を予約する]
+   * 穴の真下の段の横のブロックを差し替えると、近隣更新と横からの形状更新がその段に届くが、
+   * どちらでもブロック tick は入らない。柱が戻るのは水源を置き直した 5gt 後
+   * (修正前の sim は横の近隣更新から 5gt で戻り、水源を置いたときの予約を重複として捨てていた。
+   *  実機キャプチャ elev-floor3 で 4 tick 早かった原因)。
+   * [実機 fixture bubble-column-side-replace (1.21.1): 同じ入力の列で t22〜t24 は水のまま、t25 に戻る。
+   *  fixture 側は fixtures.test.ts で全セル照合する。ここは柱の系列を文字列で読める形にしたもの]
+   */
+  it('横の近隣更新では予約し直さず、水源を置き直した 5gt 後に戻る (#381)', () => {
+    const { w } = col(5)
+    w.setBlockAt([1, 6, 1], mcToSim('water[level=0]')!)   // 柱の上の水源
+    w.setBlockAt([1, 7, 1], mcToSim('glass')!)
+    w.setBlockAt([2, 3, 1], mcToSim('glass')!)             // 穴の真下の段 (1,3,1) の東の壁
+    w.flush(64)
+    const series: string[] = []
+    const colStr = (): string => [1, 2, 3, 4, 5, 6].map(y => {
+      const b = w.getBlock(1, y, 1)
+      return b?.type === 'bubble_column' ? 'B' : b?.type === 'water' ? (b.level === 0 ? 'w' : 'f') : '.'
+    }).join('')
+    for (let t = 0; t <= 27; t++) {
+      if (t > 0) w.tick()
+      if (t === 2) w.setBlockCommand([1, 4, 1], { type: 'air' })                       // (1,4,1) を抜いて穴にする
+      if (t === 17) w.setBlockCommand([2, 3, 1], { type: 'solid', powered: false } as BlockState) // 横を差し替える (近隣更新 + 横からの形状更新)
+      if (t === 20) w.setBlockCommand([1, 4, 1], mcToSim('water[level=0]')!)          // 水源を置き直す
+      series.push(`t${t}:${colStr()}`)
+    }
+    expect(series[7], '抜いた 5gt 後に上が水に戻り、穴に落下水が来る').toBe('t7:BBBfww')
+    expect(series[20], '水源を置き直した直後はまだ水').toBe('t20:BBBwww')
+    expect(series[22], '横の近隣更新 (t17) から 5gt では戻らない').toBe('t22:BBBwww')
+    expect(series[24], '水源を置いた 5gt 後より前には戻らない').toBe('t24:BBBwww')
+    expect(series[25], '水源を置いた 5gt 後に全段が戻る').toBe('t25:BBBBBB')
+  })
+
   it('隣のオブザーバーが柱の変化を検知する', () => {
     const { w } = col(8)
     w.setBlockAt([2, 6, 1], { type: 'observer', facing: 'west', powered: false } as BlockState)
