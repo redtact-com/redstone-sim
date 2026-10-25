@@ -14,7 +14,9 @@
 //   - observer → direction == FACING (= ワイヤーがオブザーバーの背面
 //     = 出力側にあるときのみ接続)
 //   - それ以外 → isSignalSource() (lever / button / torch / wall_torch /
-//     redstone_block / target / comparator / 感圧板 4 種)
+//     redstone_block / target / comparator / 感圧板 4 種 / detector_rail / lectern)。
+//     判定は power.ts の isSignalSourceType に一本化している (R-8)。
+//     トラップチェストと避雷針は sim に型が無いので、まだ接続しない (別 draft)
 // 形状の自動拡張 (0 本→cross / 1 本→直線) と dot 保持ガード
 // (元も再計算後も dot なら dot を維持) も 26.2 getConnectionState と同じ。
 //
@@ -25,6 +27,7 @@
 import type { HDir, WireConnections, WireConnectionValue, BlockState, Pos3D } from './types.js'
 import { H_DIRS, H_DIR_VEC } from './types.js'
 import { isWireCutBlock } from './blocks/wire.js'
+import { isSignalSourceType } from './power.js'
 
 /** 3D ブロック読み取りインターフェース (SimWorld / EditorGrid が実装) */
 export interface BlockGrid3D {
@@ -49,24 +52,14 @@ function shouldConnectTo(nb: BlockState, dir: HDir): boolean {
     case 'observer':
       // direction == FACING = ワイヤーがオブザーバーの背面 (出力側) にある
       return nb.facing === dir
-    // 以下 isSignalSource() 群。wall_torch は vanilla に壁面の除外規則が無い
-    // (isSignalSource で全 4 面接続。実機では壁面セルは支持ブロックで埋まる
-    //  ため観測不能だが、支持要件の無い sim でも vanilla の規則に従う)
-    case 'lever':
-    case 'button_stone':
-    case 'button_wood':
-    case 'torch':
-    case 'wall_torch':
-    case 'comparator':
-    case 'redstone_block':
-    case 'target':
-    case 'pressure_plate_wood':
-    case 'pressure_plate_stone':
-    case 'weighted_pressure_plate_light':
-    case 'weighted_pressure_plate_heavy':
-      return true
     default:
-      return false
+      // それ以外は信号源なら 4 面とも接続する。wall_torch は vanilla に壁面の除外規則が無い
+      // (isSignalSource で全 4 面接続。実機では壁面セルは支持ブロックで埋まる
+      //  ため観測不能だが、支持要件の無い sim でも vanilla の規則に従う)。
+      // 以前は信号源をここに列挙していて、detector_rail と lectern が漏れていた (R-8)。
+      // 列挙をやめて isSignalSourceType に任せ、信号源の定義を 1 か所にする
+      // [実機 fixture wire-connect-detector-rail-lectern]
+      return isSignalSourceType(nb.type)
   }
 }
 

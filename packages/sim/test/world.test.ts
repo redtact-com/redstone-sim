@@ -544,6 +544,58 @@ describe('SimWorld: コンパレーター背面コンテナ', () => {
     world.flush(64)
     expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0, powered: false })
   })
+
+  // R-4: 導体越しに読めたアナログ値は、通常の信号と**置き換える** (大きい方は取らない)
+  // [確定: 26.2 ComparatorBlock.getInputSignal / 実機 fixture comparator-through-conductor-replace]
+  // 固体 (-1,0) は北から差し込むダストで 13 に弱充電する
+  function buildThroughConductor(far: BlockState | null): SimWorld {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'compare'))
+    place(world, -1, 0, { type: 'solid', powered: false })
+    if (far) place(world, -2, 0, far)
+    place(world, -1, -1, wire(0))   // 13
+    place(world, -1, -2, wire(0))   // 14
+    place(world, -1, -3, wire(0))   // 15
+    place(world, -1, -4, lever(true))
+    world.initialize()
+    world.flush(64)
+    return world
+  }
+
+  it('弱充電 13 の固体の奥に空のコンテナがあると 0 (置き換え。R-4)', () => {
+    const world = buildThroughConductor(container(0))
+    expect(world.getBlock(-1, Y, -1)).toMatchObject({ type: 'wire', power: 13 })
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0, powered: false })
+  })
+
+  it('弱充電 13 の固体の奥のコンテナが 3 なら 3 (置き換え。R-4)', () => {
+    const world = buildThroughConductor(container(3))
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 3, powered: true })
+  })
+
+  it('奥に何も無ければ固体の充電 13 をそのまま読む (対照)', () => {
+    const world = buildThroughConductor(null)
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 13, powered: true })
+  })
+
+  // R-3: 検知レールはアナログ出力を持ち、常に 0 を返す (sim はトロッコを持たない)
+  // [確定: 26.2 DetectorRailBlock.getAnalogOutputSignal / 実機 fixture detector-rail-comparator]
+  it('点いた検知レールを直接読んでも 0 (R-3)', () => {
+    const world = new SimWorld()
+    place(world, 0, 0, comparator('east', 'compare'))
+    place(world, -1, 0, { type: 'detector_rail', shape: 'north_south', powered: false })
+    world.initialize()
+    world.flush(64)
+    world.activateBlock(-1, Y, 0)   // トロッコが乗った扱い (20gt で消える)
+    for (let i = 0; i < 4; i++) world.tick()
+    expect(world.getBlock(-1, Y, 0)).toMatchObject({ type: 'detector_rail', powered: true })
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0, powered: false })
+  })
+
+  it('弱充電 13 の固体の奥の検知レールも 0 (R-3 と R-4)', () => {
+    const world = buildThroughConductor({ type: 'detector_rail', shape: 'north_south', powered: false })
+    expect(world.getBlock(0, Y, 0)).toMatchObject({ outputPower: 0, powered: false })
+  })
 })
 
 // ─────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SimWorld } from '../src/world.js'
+import { deriveWireConnections } from '../src/wire-shape.js'
 import type { BlockState, WireConnections } from '../src/types.js'
 
 // ============================================================
@@ -158,5 +159,50 @@ describe('動的接続再計算: dot ガード (#51)', () => {
       type: 'wire', power: 15,
       connections: { north: false, south: false, east: true, west: true },
     })
+  })
+})
+
+describe('接続対象: 検知レールと書見台 (R-8)', () => {
+  // [確定: 26.2 RedStoneWireBlock.shouldConnectTo — 信号源なら接続する。
+  //  DetectorRailBlock と LecternBlock はどちらも常に信号源]
+  // [実機 fixture wire-connect-detector-rail-lectern]
+  const rail = (powered = false): BlockState =>
+    ({ type: 'detector_rail', shape: 'north_south', powered })
+  const lectern = (): BlockState =>
+    ({ type: 'lectern', facing: 'north', hasBook: false, page: 0, pages: 0 })
+
+  it('隣に検知レールか書見台があると、そちらへ繋がる直線になる', () => {
+    for (const nb of [rail(), lectern()]) {
+      const w = new SimWorld()
+      w.setBlock(0, 0, 0, nb)
+      expect(deriveWireConnections(1, 0, 0, w), nb.type).toEqual(
+        { north: false, south: false, east: true, west: true })
+    }
+  })
+
+  it('トラップチェストにはまだ接続しない (container に入るので区別できない。R-8 の残り)', () => {
+    const w = new SimWorld()
+    w.setBlock(0, 0, 0, { type: 'container', name: 'trapped_chest', fullCube: false, signal: 0 })
+    expect(deriveWireConnections(1, 0, 0, w)).toEqual(
+      { north: true, south: true, east: true, west: true })
+  })
+
+  it('検知レールが点いても、直線のダストは十字に張り替わらない', () => {
+    const w = new SimWorld()
+    w.setBlock(0, 0, 0, rail())
+    w.setBlock(1, 0, 0, wire({ east: true, west: true }))
+    w.setBlock(1, 0, -1, { type: 'lamp', lit: false })
+    w.setBlock(1, 0, 1, { type: 'lamp', lit: false })
+    w.setBlock(2, 0, 0, { type: 'lamp', lit: false })
+    w.initialize()
+    w.activateBlock(0, 0, 0)   // トロッコが乗った扱い
+    ticks(w, 1)
+    expect(w.getBlock(1, 0, 0)).toMatchObject({
+      type: 'wire', power: 15,
+      connections: { north: false, south: false, east: true, west: true },
+    })
+    expect(w.getBlock(2, 0, 0)).toMatchObject({ lit: true })
+    expect(w.getBlock(1, 0, -1)).toMatchObject({ lit: false })
+    expect(w.getBlock(1, 0, 1)).toMatchObject({ lit: false })
   })
 })
