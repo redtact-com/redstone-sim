@@ -20,7 +20,7 @@ redstone-sim/
     │   └── App.tsx / main.tsx / index.css
     ├── public/
     │   └── resourcepack/   Mk.2 カスタムテクスチャ（無い場合は mcmeta CDN にフォールバック）
-    └── scripts/genLocalModels.js  resourcepack → bundle.json 生成
+    └── scripts/genLocalModels.js  resourcepack → bundle.json 生成（dev / build のたびに作る。git 管理外）
 ```
 
 `app` は `packages/*` を Vite alias / tsconfig paths でソース直参照する（ビルド不要・HMR 有効）。

@@ -18,6 +18,10 @@ zz-*
 /blob-report/
 /playwright/.cache/
 
+# パック JSON をまとめた bundle.json は npm run dev / build のたびに
+# app/scripts/genLocalModels.js が作り直す生成物。配信も build で作ったものを使う
+app/public/resourcepack/bundle.json
+
 # 実機キャプチャに食わせる回路ファイル (.litematic/.nbt/.schem)。
 # 配布物ではなく手元にしかない。定義ファイルの source はファイル名だけを書き、
 # 実体はここに置く (#322。置き場所は MC_CIRCUITS_DIR で差し替え可)

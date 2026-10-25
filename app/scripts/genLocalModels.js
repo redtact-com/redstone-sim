@@ -1,6 +1,8 @@
 // ローカルリソースパックのモデル・ブロックステートを bundle JSON に変換するスクリプト
 // 実行: node scripts/genLocalModels.js
 // 出力: public/resourcepack/bundle.json
+// npm run dev / build の前に毎回走る (app/package.json の gen-bundle)。
+// 出力は生成物なので git では追跡しない (.gitignore)
 
 import fs from 'fs'
 import path from 'path'
