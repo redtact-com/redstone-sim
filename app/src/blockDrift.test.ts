@@ -1,3 +1,5 @@
+/// <reference types="node" />
+// node:fs の型のため。vitest 2 は vite 5 の型を通して @types/node を読み込んでいたが、vitest 5 は読み込まない
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { ALL_BLOCK_TYPES, TRIGGERABLE_TYPES } from '@redstone/sim'

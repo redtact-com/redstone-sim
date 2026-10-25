@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
 
 /**
  * 取得先のミラー (#395)。fetch を差し替え、モジュールの状態 (覚えたミラー) は毎回作り直す。
@@ -34,7 +34,7 @@ const networkError = () => { throw new TypeError('Failed to fetch') }
 const readJson = (res: Response) => res.json() as Promise<unknown>
 
 let src: Sources
-let warn: ReturnType<typeof vi.spyOn>
+let warn: MockInstance<typeof console.warn>
 
 beforeEach(async () => {
   vi.resetModules()

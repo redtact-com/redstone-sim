@@ -1,0 +1,58 @@
+# 依存の自動更新 (Dependabot)
+#
+# 毎週月曜 09:00 (JST) に、既定ブランチの develop へ PR を出す。
+# - npm: minor と patch は 1 本にまとめる。major は 1 本ずつ出るので、個別に確かめてから入れる
+#   ただし vitest と @vitest/* は major も含めて 1 本にまとめる (@vitest/coverage-v8 の peer が vitest と同じ版に固定されていて、別々に上げると npm install が ERESOLVE で通らない)
+# - 公開から 7 日たった版だけを候補にする (cooldown)。出たばかりの版の取り下げや乗っ取りを避ける
+# - 上の週次の更新が上げるのは package.json に書いた依存だけ。間接依存の脆弱性は security updates
+#   (リポの設定で有効にする) が直す。その PR も 1 本にまとめる (npm-security。cooldown は効かない)
+# - 止めているもの (外すときはこの一覧も直す)
+#   - typescript の major: typescript-eslint の peer が typescript <6.1.0 なので、7 を入れると lint が動かない
+#   - @types/node の major: 今の 24 で止める。CI の node は 22 で、型はすでに先にある。これ以上離さない
+#   - deepslate の minor 以上 (0.x なので minor でも壊れうる): @taku128/java-schematic が deepslate ^0.25 に
+#     依存している。先に java-schematic を上げないと 2 本同居になる (0.27 を試すと app のバンドルが 212 kB 増えた)
+# - github-actions: 全部を 1 本にまとめる
+# ラベルは付けない。このリポの PR はラベルを使っておらず、既定のままだと dependencies などのラベルが新しく作られる。
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    labels: []
+    groups:
+      vitest:
+        patterns: ['vitest', '@vitest/*']
+      npm-minor-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        patterns: ['*']
+    ignore:
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      - dependency-name: deepslate
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    labels: []
+    groups:
+      github-actions:
+        patterns: ['*']
