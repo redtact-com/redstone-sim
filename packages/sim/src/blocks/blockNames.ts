@@ -27,13 +27,18 @@ import type { BlockState, BlockType, HDir } from '../types.js'
  *   - 非導体: glass 系 / glowstone / sea_lantern / **ice**
  *   - 導体:   **packed_ice** / **blue_ice** / soul_sand / mud / magma_block / shroomlight
  * ice と packed_ice で結果が割れるので、名前の似ているものを勝手に仲間にしないこと。
+ *
+ * 銅の格子 8 種 (酸化 4 段階 × 蝋引きの有無) もここに入れる (C-15)。フルブロックだが
+ * 導体判定が常に false [確定: 26.2 Blocks.COPPER_GRATE — 8 種とも同じ指定]
+ * [実機 fixture conductor-names-extra で測る]。
  */
 const GLASS_EXACT = new Set([
   'glass', 'tinted_glass',
   'glowstone', 'sea_lantern', 'ice',
+  'copper_grate',
 ])
 /** 無色ガラスに集約するもの (色は sim で保持しない) */
-const GLASS_SUFFIXES = ['_stained_glass']
+const GLASS_SUFFIXES = ['_stained_glass', '_copper_grate']
 
 export function toNonConductiveBlockState(
   name: string, props: Record<string, string>,
@@ -120,6 +125,21 @@ const SOLID_EXACT = new Set([
   // [確定: 26.2 — 5 つとも導体判定の既定 (当たり判定がフルブロックなら導体) を
   //  上書きしていない。実機では測っていない]
   'bricks', 'terracotta', 'waxed_copper_block', 'deepslate_tiles', 'cracked_deepslate_tiles',
+  // #170 で残っていた、導体かどうか名前からは決めにくいフルブロック (C-15)。
+  // [確定: 26.2 Blocks — 31 名とも導体判定を指定せず、形状を上書きするクラスでもない
+  //  = 既定の「当たり判定がフルブロックなら導体」。押し反応も既定 (NORMAL)]
+  // [実機 fixture conductor-names-extra で測る]。
+  // ブロックエンティティを持つもの (かまど・スポナー・コマンドブロックなど。押せない) や、
+  // コンパレーターが読むもの (ジュークボックス・リスポーンアンカー・巣箱) は、solid に潰すと
+  // 挙動が欠けるので入れない
+  'ochre_froglight', 'verdant_froglight', 'pearlescent_froglight', 'sculk',
+  'tube_coral_block', 'brain_coral_block', 'bubble_coral_block', 'fire_coral_block',
+  'horn_coral_block', 'dead_tube_coral_block', 'dead_brain_coral_block',
+  'dead_bubble_coral_block', 'dead_fire_coral_block', 'dead_horn_coral_block',
+  'crimson_nylium', 'warped_nylium', 'mangrove_roots', 'muddy_mangrove_roots',
+  'bamboo_block', 'stripped_bamboo_block', 'bamboo_mosaic', 'honeycomb_block', 'ancient_debris',
+  'infested_stone', 'infested_cobblestone', 'infested_deepslate',
+  'crafting_table', 'cartography_table', 'fletching_table', 'smithing_table', 'loom',
 ])
 
 /** 接尾辞で一致する導体フルブロック */
@@ -130,9 +150,17 @@ const SOLID_SUFFIXES = [
   '_copper', 'cut_copper',   // 酸化・蝋引きの各段階
 ]
 
-/** 接尾辞に引っかかるが**フルブロックではない**ので除外するもの */
+/**
+ * 接尾辞に引っかかるが**フルブロックではない**ので除外するもの。
+ *
+ * big_dripleaf_stem (大きなドリップリーフの茎) も `_stem` で拾われ、導体の solid になっていた
+ * (C-15)。当たり判定が無いので導体判定の既定は false で、押されると壊れる
+ * [確定: 26.2 Blocks.BIG_DRIPLEAF_STEM — noCollision・pushReaction(DESTROY)]。
+ * 葉の big_dripleaf も読めないので、茎だけ装飾にはせず作物と同じく未対応に戻す
+ */
 const NOT_SOLID_EXACT = new Set([
   'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
+  'big_dripleaf_stem',
 ])
 
 /**

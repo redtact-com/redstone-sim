@@ -426,7 +426,7 @@ export interface SolidState {
 /**
  * **非導体フルブロック** (#184)。代表がガラスなので型名は glass だが、
  * ガラス系 (glass / tinted_glass / *_stained_glass) のほか
- * **glowstone / sea_lantern / ice** もここに落ちる。
+ * **glowstone / sea_lantern / ice** と銅の格子 8 種 (C-15) もここに落ちる。
  *
  * [確定: 実機ハーネスで 1 つずつ測定。repeater で強充電して隣の dust を見る]。したがって
  *   - 充電されない・信号を通さない (isConductor=false)
