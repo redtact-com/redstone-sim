@@ -1,0 +1,54 @@
+# issue を閉じたときの未チェック項目の警告 (issue #25 の残り)
+#
+# 閉じた issue の「## やること」節に `- [ ]` が残っていたら、needs-checklist ラベルを
+# 付けてコメントを 1 件書く。not_planned / duplicate で閉じたものと、節の外の
+# チェックボックスは見ない。数え方は tools/checkbox-guard/checkbox-guard.mjs。
+# 開き直しはしない (マージ後の作業が残っているだけのことが多いため)。
+#
+# 閉じてから 30 分待ってから調べる。PR のマージで閉じた直後に、マージ後の項目を
+# まとめて消し込むことが多いため (10-24〜25 の 18 件では、閉じた時点で 8 件に
+# 未チェックがあり、うち 6 件は 16 分以内に消し込まれた)。
+# 閉じたあとに本文を直して片付くと、ラベルを外してコメントを書き換える。
+# issues イベントは既定ブランチ (develop) の workflow が動く。
+
+name: Checkbox Guard
+
+on:
+  issues:
+    types: [closed, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  guard:
+    # 開いている issue の編集と、警告していない issue の編集では runner を立てない
+    if: >-
+      github.event.action == 'closed' ||
+      (github.event.issue.state == 'closed' &&
+       contains(github.event.issue.labels.*.name, 'needs-checklist'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # 閉じる・直すが続いたときに、同じ issue を並べて処理しない
+    concurrency:
+      group: checkbox-guard-${{ github.event.issue.number }}
+    steps:
+      - name: 消し込みを待つ
+        if: github.event.action == 'closed'
+        run: sleep 1800
+
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/checkbox-guard
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # issue は待ったあとに取り直して調べる (開き直されていれば何もしない)
+      - name: 未チェック項目の検査
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/checkbox-guard/checkbox-guard.mjs
