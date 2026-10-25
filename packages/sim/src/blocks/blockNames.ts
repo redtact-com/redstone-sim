@@ -159,7 +159,9 @@ const SOLID_PUSH_BLOCK = new Set([
 
 /**
  * 押されると壊れるもの [確定: 26.2 Blocks — いずれも pushReaction(DESTROY)]。
- * budding_amethyst は実機 1.21.1 で確認 (#384)。残りは fixture piston-push-destroy で確かめる
+ * [実機 fixture piston-push-destroy (1.21.1): budding_amethyst とカボチャは t3 に壊れて moving_piston、
+ *  t5 に piston_head。引き戻しても戻らない]。スイカ・くり抜かれたカボチャ・ジャック・オ・ランタン・
+ * 苔ブロックは 26.2 の読みだけ
  */
 const SOLID_PUSH_DESTROY = new Set([
   'pumpkin', 'melon', 'carved_pumpkin', 'jack_o_lantern', 'moss_block', 'budding_amethyst',

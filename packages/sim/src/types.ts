@@ -417,12 +417,15 @@ export interface SolidState {
    *     [実機実測 2026-08-20: 正面から押す → 動く / 粘着で引く → 引けず置き去り /
    *      スライムの横に置く → 引き連れられずその場に残る]
    *   - destroy: カボチャ・スイカ・苔ブロック・budding_amethyst など
-   *     [確定: 26.2 Blocks — pushReaction(DESTROY)。budding_amethyst は実機 1.21.1 で確認 (#384)]
+   *     [確定: 26.2 Blocks — pushReaction(DESTROY)]
+   *     [実機 fixture piston-push-destroy (1.21.1): budding_amethyst とカボチャは t3 に壊れて
+   *      t5 に piston_head。引き戻しても戻らない]
    */
   pushReaction?: Exclude<PushReaction, 'normal'>
   /**
    * BlockEntity を持つ導体フルブロックか (彫刻された本棚)。押し反応は normal だが
    * 26.2 PistonBaseBlock.isPushable の最後の判定で動かない (R-10)
+   * [実機 fixture piston-push-fluid-be (1.21.1): 本棚の前ではピストンが伸びない]
    */
   hasBlockEntity?: boolean
   /**

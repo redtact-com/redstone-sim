@@ -750,7 +750,8 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         type: (block as any).sticky ? 'sticky' : 'normal',
       }]
     // 取り込み元の名前があればそれに戻す (#343)。無ければ従来の代表名。
-    // **保存で材質が石に化けると `immovable` (黒曜石) や音符ブロックの音色まで失われる**
+    // **保存で材質が石に化けると押し反応 (黒曜石の `pushReaction: 'block'`。読み込みでは名前から引き直す。R-9)
+    // や音符ブロックの音色まで失われる**
     case 'solid':
       return [`minecraft:${(block as any).name ?? 'stone'}`, { ...(block as any).renderProps }]
     case 'glass':

@@ -40,11 +40,15 @@ const isDecorWithBlockEntity = (id: string): boolean =>
 /**
  * ブロックの押し反応。
  *
- * [確定: 26.2 Blocks の登録と PistonBaseBlock.isPushable]。実機 1.21.1 で確かめたもの:
- *   - 押せる: 検知レール・銅の電球・トラップドア・塀・ガラス板 (#384)
- *   - 壊れる: 扉・budding_amethyst (#384)
- *   - 動かない: クラフター (#384)
- * それ以外は 26.2 の読みだけ (fixture piston-push-* で確かめる)。
+ * [確定: 26.2 Blocks の登録と PistonBaseBlock.isPushable]。実機 1.21.1 で確かめたもの (2026-10-25):
+ *   - 押せる: 検知レール・銅の電球・トラップドア・フェンスゲート・塀・ガラス板
+ *     [実機 fixture piston-push-normal: t5 に 1 マス先へ着地、t10 に引き戻される]
+ *   - 壊れる: 扉 (相方の半分も)・budding_amethyst・カボチャ・シュルカーボックス・頭・植木鉢・はしご・
+ *     水・泡柱 [実機 fixture piston-push-destroy / piston-push-fluid-be: t3 に moving_piston、
+ *     t5 に piston_head。引き戻しても戻らない]
+ *   - 動かない: クラフター・看板・彫刻された本棚 [実機 fixture piston-push-fluid-be: ピストンが伸びない]
+ * 苔ブロック・旗・苔のカーペット・スイカ・くり抜かれたカボチャ・ジャック・オ・ランタンは 26.2 の読みだけ
+ * (fixture で測った仲間と同じ登録)。
  */
 export function pushReactionOf(block: BlockState): PushReaction {
   switch (block.type) {
