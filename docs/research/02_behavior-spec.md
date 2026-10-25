@@ -234,6 +234,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   他のダストの強度計算には寄与しない** (= 弱充電)。`getDirectSignal` は通常時 `getSignal` と同値。
 - **強度計算** (`calculateTargetStrength`): 「非ワイヤ隣接の最大信号 (`getBestNeighborSignal`)」と「隣接ワイヤ最大値 − 1」の大きい方。
   斜め読み: 水平隣接が導体かつ自分の直上が非導体 → 斜め上のワイヤを読む / 水平隣接が非導体 → 斜め下のワイヤを読む。
+  sim ではこの規則を `getWireInputNeighbors` (packages/sim/src/blocks/wire.ts) が持ち、連結成分の収集に使う
+  `getConnectedWireNeighbors` とは分けている (#404。それまでは後者を入力にも使っていたので、非導体の段を下りにも流れていた。
+  実機 fixture wire-step-nonconductor-down)。
   → ArcFrout の切断規則 (上の遮蔽が導体なら斜め上からの受信が切断) はこのコードと一致 [確定]。
 
 ---
