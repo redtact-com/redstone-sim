@@ -180,12 +180,12 @@
 | 論点 | Nucleation | redstone-sim | 近い方 |
 |---|---|---|---|
 | 評価アルゴリズム | 26.2 DefaultRedstoneWireEvaluator の書き写し。1 本ずつ計算し直して flag 2 で書き、途中の値まで出る | 2 段 BFS で最終値を先に確定させ、HashSet 順で NC を出す。途中の値は出ない | Nucleation |
-| 段差の伝播 | 規則の形は 26.2 と同じ (横のブロックが導体のときだけ 1 段上のダストを読む)。ただし導体表の誤りで、グロウストーンの段では下りにも流れ、soul_sand / packed_ice の段では下りに流れない | 非導体の段でも下りに流れる **[実機]** | Nucleation (ガラス・上付きハーフの段は Nucleation だけが正しい。グロウストーンの段はどちらも誤り) |
-| 上り接続を切るブロック | 導体表と同じ表を引く。ただし表の誤りをそのまま受け、グロウストーンと銅の電球で切り、soul_sand / packed_ice / blue_ice では切らない | 別のリストを持ち、slime_block / lodestone / soul_sand が抜けている | 同等 (表を共有する作りは Nucleation が正しいが、切るブロックの誤りはどちらにもある) |
+| 段差の伝播 | 規則の形は 26.2 と同じ (横のブロックが導体のときだけ 1 段上のダストを読む)。ただし導体表の誤りで、グロウストーンの段では下りにも流れ、soul_sand / packed_ice の段では下りに流れない | 横のブロックが導体のときだけ 1 段上のダストを読む (電力の入力用の近傍 getWireInputNeighbors を、連結成分用の近傍と分けた。#404 / PR#405 で修正。それまでは非導体の段でも下りに流れていた) **[実機 fixture wire-step-nonconductor-down: 上から給電するとガラス・グロウストーン・上付きハーフの段は中段・下段とも 0、石の段は 14 / 13]** | redstone-sim (#404 以降。グロウストーンの段は Nucleation だけが誤り) |
+| 上り接続を切るブロック | 導体表と同じ表を引く。ただし表の誤りをそのまま受け、グロウストーンと銅の電球で切り、soul_sand / packed_ice / blue_ice では切らない | 導体表 (isConductor) に委ねる (#404 / PR#405 で修正。それまでは別のリストで slime_block / lodestone / soul_sand が抜けていた) **[実機 fixture wire-cut-conductor-power: 3 型で蓋をすると上段は 0 で十字になり、石と同じ]** | redstone-sim (#404 以降。Nucleation は表の誤りが残る) |
 | 導体表の正確さ | packed_ice / blue_ice / soul_sand を非導体、グロウストーン・銅の電球・ケーキを導体と取り違える | 実機で 1 個ずつ測った表 | redstone-sim |
 | 接続対象 (shouldConnectTo) | 検知レール・トラップチェスト・避雷針にも接続する。書見台は信号源に入っておらず、接続しない | detector_rail と lectern に接続する **[実機]** (R-8。#406 / PR#407 で直した。fixture wire-connect-detector-rail-lectern。以前はどちらにも接続しなかった)。トラップチェスト (container に潰す) と避雷針 (decor) はまだ信号源として扱わない | Nucleation (トラップチェストと避雷針。書見台は redstone-sim) |
 | 接続形状の UP / SIDE | 横のブロックがフルブロックかで区別する (26.2 RedStoneWireBlock#getConnectingSide は、横のブロックのダスト側の面が頑丈かを見る) | 常に up (見た目だけの差) | Nucleation |
-| 除去時の追加更新 | 近傍更新だけで、再計算が欠ける | フックが無い | Nucleation |
+| 除去時の追加更新 | 近傍更新だけで、再計算が欠ける | フックは無い。ダストの電力の再計算の起点に、段越しに読むダスト (隣の隣) と置いたダスト自身を含める (#404 / PR#405。それまでは非導体の段の下段を消しても中段・上段が古い値のまま残り、ガラスの上に dot で置いたダストが 0 のままだった) **[実機 fixture wire-step-nonconductor-down: 下段を消すと中段・上段は 0、置いた dot は真上の redstone_block で 15]**。ダスト以外の素子へ届く近隣更新は出ない | 同等 (redstone-sim はダストの再計算だけ、Nucleation は近傍更新だけ) |
 | 支え (canSurvive) | 無し (下からの形状更新を意図的に無視) | 無し | 同等 |
 
 ### 2.4 ダイオード・オブザーバー
@@ -280,8 +280,8 @@
 
 | # | 食い違い | vanilla (26.2 / 1.21.1) | 確かさ・結果 | 効く回路 |
 |---|---|---|---|---|
-| R-1 | ガラス・上付きハーフ・グロウストーンの段で、ダストが下へ流れる | RedstoneWireEvaluator#getIncomingWireSignal: 1 段上のダストを読むのは、横のブロックが導体のときだけ。非導体の段は上り専用 | **[実機]** 上から給電すると、実機は中段・下段とも 0、sim は 14 / 13。下から給電と石の段は一致 | ガラス段やハーフ段をダイオードとして使う縦配線 |
-| R-2 | 上り接続を切る判定に slime_block / lodestone / soul_sand が無い (blocks/wire.ts:11-22) | RedStoneWireBlock#getConnectingSide: 真上が導体なら切る。3 種はどれも導体 | [逆コンパイル+実行] 3 種で蓋をしても、sim では上段と下段が 14 のまま | スライムやソウルサンドの脇にダストを這わせる機構 (ガラスエレベーター等) |
+| R-1 | ガラス・上付きハーフ・グロウストーンの段で、ダストが下へ流れる | RedstoneWireEvaluator#getIncomingWireSignal: 1 段上のダストを読むのは、横のブロックが導体のときだけ。非導体の段は上り専用 | **[実機]** 上から給電すると、実機は中段・下段とも 0、sim は 14 / 13。下から給電と石の段は一致。**#404 / PR#405 で修正** (fixture wire-step-nonconductor-down: ガラス・グロウストーン・上付きハーフの段で全 tick 一致) | ガラス段やハーフ段をダイオードとして使う縦配線 |
+| R-2 | 上り接続を切る判定に slime_block / lodestone / soul_sand が無い (blocks/wire.ts:11-22) | RedStoneWireBlock#getConnectingSide: 真上が導体なら切る。3 種はどれも導体 | **[実機]** 3 種で蓋をすると、実機は上段が 0 で十字になり stone と同じ。sim は 14 のまま形も変わらない。**#404 / PR#405 で修正** (fixture wire-cut-conductor-power。isWireCutBlock を isConductor に委ねた) | スライムやソウルサンドの脇にダストを這わせる機構 (ガラスエレベーター等) |
 | R-3 | 普通のトロッコが乗ったディテクターレールを、コンパレーターが 15 と読む (world.ts:100-117) | DetectorRailBlock#getAnalogOutputSignal: コンテナ付きかコマンドブロック付きのトロッコ以外は 0。コンパレーターは通常の信号をこの値で置き換える | **[実機]** 実機 0 / sim 15 (トロッコが無ければ一致)。fixture detector-rail-comparator: レールが点いたあとも (t3〜t8) コンパレーターは点かない。修正前の sim と 12 セル食い違う。**#406 / PR#407 で修正済み** | トロッコの通過をコンパレーターで検出する回路 |
 | R-4 | コンパレーターの導体越し読みを max で合成する (world.ts:3204-3207) | ComparatorBlock#getInputSignal: 置き換え | **[実機]** 弱充電 13 の石の奥が空の樽なら 0、中身 3 の樽なら 3、無しなら 13、カートの無い検知レールなら 0 (修正前の sim は 4 本とも 13)。fixture comparator-through-conductor-replace: 修正前の sim と 15 セル食い違う。**#406 / PR#407 で修正済み** | ブロック越しの空検知・残量表示 |
 | R-5 | compare モードで出力が変わらない tick に、前方へ更新を出さない (world.ts:1583-1590) | ComparatorBlock#refreshOutputState: compare モードなら値が同じでも前方を更新する | **[実機]** 2 gt パルスを飲み込んだ tick (t6) に、compare の前方の BUD ピストンだけが伸びる。subtract のピストンは t8 の近隣更新 (対照) まで伸びず、コンパレーターは 2 本とも一度も点かない。fixture comparator-compare-front-nc: 修正前の sim と 12 セル食い違う。**#406 / PR#407 で修正済み** | コンパレーターを BUD のトリガやパルス検出に使う回路 |
@@ -408,7 +408,7 @@
 
 | 内容 | 対象 | コスト |
 |---|---|---|
-| ダストの上り判定を「横が導体のときだけ上段を読む」にし、isWireCutBlock を isConductor に一本化する | R-1, R-2 | S |
+| ダストの上り判定を「横が導体のときだけ上段を読む」にし、isWireCutBlock を isConductor に一本化する。再計算の起点に段越しの読み手と置いたダスト自身を足す (#404 / PR#405 で済み。実機 fixture wire-step-nonconductor-down・wire-cut-conductor-power) | R-1, R-2 | S |
 | トーチの 2 段送信の起点を Direction.values() の順にする。塀の形状更新の連鎖に、呼び直しでも引き継ぐ深さを持たせる | R-21, R-22 | S |
 | コンパレーターの 3 点を直す: 導体越しは置き換え、compare モードでは空振りでも前方更新、detector_rail をアナログ出力と接続対象に加える (lectern も接続対象に) (#406 / PR#407 で済み。fixture 4 本を実機で撮ってから直した) | R-3, R-4, R-5, R-8 | S |
 | リピーターの自己 OFF を -2 固定にする。レバー/ボタンは、形状更新より前に自分の周りへ NC を 1 回出し (flag 3 の書き込みの分)、形状更新 → updateNeighbours の NC の順にする (activateBlock は apply とは別の経路なので、R-15 の修正では直らない) | R-6, R-7 | S |

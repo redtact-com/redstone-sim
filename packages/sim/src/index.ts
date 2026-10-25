@@ -65,7 +65,9 @@ export {
 } from './power.js'
 
 // ブロックユーティリティ
-export { computeWirePower, getConnectedWireNeighbors, isWireCutBlock } from './blocks/wire.js'
+export {
+  computeWirePower, getConnectedWireNeighbors, getWireInputNeighbors, isWireCutBlock,
+} from './blocks/wire.js'
 export {
   computeRawWireConnections, deriveWireConnections, isDotConnections,
   wireShapeCandidates, sameConnections,

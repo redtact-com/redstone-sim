@@ -1,0 +1,871 @@
+{
+  "name": "rs-torch-latch",
+  "description": "RS トーチラッチ (トーチ 2 個の NOR を交差結合)。tests/circuits/composite/rs-torch-latch.rstest の回路を実機で撮る。初期は Q=1 (T1 点灯・T2 消灯、QA=15/14)。t4 に Reset (B1 の上の床レバー) を倒して t6 に戻し、t14 に Set (B2 の上の床レバー) を倒して t16 に戻す。入力の直後は、強充電された土台を帰還レーンのダストが逆読みする (t4〜t5 の QB、t14〜t15 の QA)。t6 に Reset を戻すと T1 は再点灯を予約するが、先に予約された T2 の点灯が t8 に B1 を給電し直すので、T1 は点かずに状態を保つ。プレイヤーは北の足場 (2,1,-2) の上から押す。",
+  "mcVersion": "1.21.1",
+  "ticks": 20,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -3
+    ],
+    "to": [
+      7,
+      3,
+      3
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        -2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        -2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=true]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        0
+      ],
+      "block": "redstone_wall_torch[facing=east,lit=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=none,north=none,power=0,south=side,west=side]"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 6,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 14,
+      "pos": [
+        4,
+        2,
+        0
+      ],
+      "action": "use"
+    },
+    {
+      "tick": 16,
+      "pos": [
+        4,
+        2,
+        0
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=14,south=none,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=13,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=12,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=11,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=10,south=none,west=side]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=9,south=none,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=6,south=side,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=7,south=side,west=none]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=side,power=8,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=6,south=side,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=7,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=8,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=9,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=10,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=11,south=none,west=side]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=12,south=none,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=side,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=side,power=13,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 16,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            4,
+            2,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=false]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=false]"
+        },
+        {
+          "pos": [
+            5,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+        },
+        {
+          "pos": [
+            6,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=side,power=0,south=none,west=side]"
+        }
+      ]
+    },
+    {
+      "tick": 18,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wall_torch[facing=east,lit=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T01:45:17.265Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

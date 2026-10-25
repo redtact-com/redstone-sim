@@ -43,6 +43,9 @@ describe('SimWorld: 垂直ステップ伝播', () => {
   it('下りステップ: 1段下のワイヤーへ減衰して伝わる', () => {
     const world = new SimWorld()
     world.setBlock(0, 1, 0, { type: 'lever', facing: 'up', powered: true })
+    // 上段ダストの支え。下段 (2,0,0) から見た横のセルで、これが導体でないと下段は
+    // 上段を読まない (R-1。vanilla では支えが無いと上段ダストを置けない)
+    world.setBlock(1, 0, 0, { type: 'solid', powered: false })
     world.setBlock(1, 1, 0, crossWire())
     world.setBlock(2, 0, 0, crossWire())
     world.initialize()

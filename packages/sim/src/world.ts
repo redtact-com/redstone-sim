@@ -2439,7 +2439,7 @@ export class SimWorld {
     // **1 手早く電源断を見てしまい**、引き戻しの積まれる順が変わる
     this.emitOutputShape(pos)
     const changedWires = this.propagateWireBFS(
-      [...this.collectWireStarts(pos), ...reshaped])
+      [...this.collectWireStarts(pos), ...reshaped], this.collectLateWireStarts(pos))
     // ワイヤーの power 変化は blockstate 変化 = PP を発行 (観測面の隣接オブザーバー起動)。
     // vanilla のダスト setBlock (flag2 → updateNeighbourShapes) に相当し、多段 NC より先。
     for (const w of changedWires) this.emitShapeUpdate(w)
@@ -2485,7 +2485,8 @@ export class SimWorld {
   /**
    * BFS の起点: 自身の隣接ワイヤー + 強充電され得る隣接導体 (solid / target) の
    * 隣接ワイヤー (dust→導体→dust は無いが、strong 源→導体→dust の 2 ホップは
-   * 電源になる)
+   * 電源になる)。探索順 (= changedWires の順) を決めるので、ここに足すものは順序に効く。
+   * 順序に効かせずに足す起点は collectLateWireStarts
    */
   private collectWireStarts(pos: Pos3D): Pos3D[] {
     // 導体経由の 2 ホップ起点も NC_UPDATE_ORDER で集める (collectAdjacentWires と同規則)
@@ -2496,6 +2497,42 @@ export class SimWorld {
         starts.push(...this.collectAdjacentWires(nPos))
       }
     }
+    return starts
+  }
+
+  /**
+   * **後から足す起点**: pos を段越しに読むワイヤー (水平隣の 1 段上・下) と pos 自身のワイヤー
+   * (R-1 の検証で見つけた取りこぼし。#404)。
+   * pos のダストを段越しに読むダストは pos の水平隣の 1 段上・下にいて、pos に隣接しない。
+   * 段が導体なら 2 ホップで拾えるが、ガラスなど非導体の段では拾えず、pos のダストを
+   * 消しても古い値のまま残っていた (wire-power-fixpoint.test.ts がランダムな盤面で検出。
+   * 実機 fixture wire-step-nonconductor-down の z=16: 下段を消すと中段・上段は 0)。
+   * vanilla は消えたダストの onRemove が隣の隣まで NC を配るので、この範囲は必ず再計算される
+   * [確定: 1.21.1 RedStoneWireBlock.onRemove — 6 方向の隣それぞれから updateNeighborsAt]。
+   * ここで足すのはダストの電力の再計算だけで、隣の隣にあるダスト以外の素子へ届く NC は
+   * 今までどおり出ない (docs/research/16 §2.3 の「除去時の追加更新」)。
+   * 置かれたダスト自身も、隣にダストも導体も無く形も変わらなければ (ガラスの上に dot で置く等)
+   * 起点に入らないので足す [確定: 1.21.1 RedStoneWireBlock.onPlace — 置かれたダストは自分の強さを
+   * 計算し直す] [実機 fixture wire-step-nonconductor-down の z=20: 真上の redstone_block で 15]。
+   *
+   * propagateWireBFS はこれを collectWireStarts の起点とは別に受け取り、通常の起点から
+   * 辿り終えたあとに、まだ網に入っていないものだけを積む。通常の起点と同じ網にいれば
+   * 先に BFS で拾われるので探索順 (= changedWires の順 = 形状更新とダスト多段 NC の順) は
+   * 変わらず、連結していないときだけ別の成分として後ろに付く (wire-start-order.test.ts)。
+   * 斜めの読み手はダストが置かれたり消えたりしたときだけ要るが、前のブロックを知らないので
+   * 毎回足す (起点が増えるだけで値は変わらない)
+   */
+  private collectLateWireStarts(pos: Pos3D): Pos3D[] {
+    const starts: Pos3D[] = []
+    for (const dir of NC_UPDATE_ORDER) {
+      if (dir === 'up' || dir === 'down') continue
+      const side = neighbor(pos, dir)
+      for (const dy of [1, -1]) {
+        const p: Pos3D = [side[0], side[1] + dy, side[2]]
+        if (this.getBlockAt(p)?.type === 'wire') starts.push(p)
+      }
+    }
+    if (this.getBlockAt(pos)?.type === 'wire') starts.push(pos)
     return starts
   }
 
@@ -2712,47 +2749,70 @@ export class SimWorld {
    *
    * ─ アルゴリズム（O(n)、n = 連結ワイヤー数）─
    *   Phase 1: 起点ワイヤーから BFS でトポロジー上の連結成分を収集し全部 power=0 にリセット。
+   *            lateStartWires (collectLateWireStarts) は、startWires から辿り終えたあとに
+   *            まだ成分に入っていないものだけを積んで続ける。探索順 (= changedWires の順) は
+   *            startWires だけで決まり、lateStartWires は連結していない成分を後ろに付けるだけ。
    *   Phase 2: 連結成分の中で動力源（レバー等）に直接隣接するワイヤーを起点に
    *            増加 BFS を実行し正しい電力値を書き込む。
    *            増加 BFS は単純 BFS で正しく収束する（各ワイヤーは最大値を受け取るため）。
+   *
+   * ─ 2 つの近傍 ─
+   *   成分の収集と増加 BFS の広がりには getConnectedWireNeighbors (対称) を使い、
+   *   値の計算 (computeWirePower) には getWireInputNeighbors (非対称。非導体の段は
+   *   上りしか読まない) を使う。入力の関係は対称な関係の部分集合なので、
+   *   起点から入力の関係で辿れるワイヤーは必ず起点と同じ成分に入り (起点の集め方は
+   *   collectWireStarts)、あるワイヤーの値が増えたとき
+   *   それを入力に持つワイヤーは必ずその近傍にあって再計算される。値は 0 から単調に
+   *   増えるだけなので振動も過大な値も出ない (wire-power-fixpoint.test.ts がランダムな
+   *   盤面で一から計算した値と突き合わせている)
    */
-  private propagateWireBFS(startWires: Pos3D[]): Pos3D[] {
+  private propagateWireBFS(startWires: Pos3D[], lateStartWires: Pos3D[] = []): Pos3D[] {
     // ── Phase 1: 連結成分を収集 & ゼロ化 ──────────────────────
     const connected = new Set<string>()
     const exploreOrder: string[] = []
     const initialPower = new Map<string, number>()
     const exploreQueue: Pos3D[] = []
 
-    for (const p of startWires) {
-      const key = posKey(p)
-      if (!connected.has(key) && this.getBlockAt(p)?.type === 'wire') {
-        connected.add(key)
-        exploreQueue.push(p)
-      }
-    }
-
-    while (exploreQueue.length > 0) {
-      const pos = exploreQueue.shift()!
-      const block = this.getBlockAt(pos)
-      if (!block || block.type !== 'wire') continue
-
-      exploreOrder.push(posKey(pos))
-      initialPower.set(posKey(pos), (block as WireState).power)
-
-      // ゼロ化（接続情報はそのまま）
-      if ((block as WireState).power !== 0) {
-        this.setBlockAt(pos, { ...block, power: 0 })
-      }
-
-      // 物理接続しているワイヤーを収集（同レイヤー + 上り/下りステップ + 直上直下）
-      for (const nPos of getConnectedWireNeighbors(pos, this)) {
-        const nKey = posKey(nPos)
-        if (!connected.has(nKey)) {
-          connected.add(nKey)
-          exploreQueue.push(nPos)
+    const seed = (wires: Pos3D[]) => {
+      for (const p of wires) {
+        const key = posKey(p)
+        if (!connected.has(key) && this.getBlockAt(p)?.type === 'wire') {
+          connected.add(key)
+          exploreQueue.push(p)
         }
       }
     }
+
+    const explore = () => {
+      while (exploreQueue.length > 0) {
+        const pos = exploreQueue.shift()!
+        const block = this.getBlockAt(pos)
+        if (!block || block.type !== 'wire') continue
+
+        exploreOrder.push(posKey(pos))
+        initialPower.set(posKey(pos), (block as WireState).power)
+
+        // ゼロ化（接続情報はそのまま）
+        if ((block as WireState).power !== 0) {
+          this.setBlockAt(pos, { ...block, power: 0 })
+        }
+
+        // 物理接続しているワイヤーを収集（同レイヤー + 上り/下りステップ。対称な関係）
+        for (const nPos of getConnectedWireNeighbors(pos, this)) {
+          const nKey = posKey(nPos)
+          if (!connected.has(nKey)) {
+            connected.add(nKey)
+            exploreQueue.push(nPos)
+          }
+        }
+      }
+    }
+
+    seed(startWires)
+    explore()
+    // 後から足す起点は、通常の起点の網に入っていないものだけを別の成分として続ける
+    seed(lateStartWires)
+    explore()
 
     // ── Phase 2: 動力源に隣接するワイヤーから増加 BFS ──────────
     // 動力源に隣接して power > 0 になるワイヤーを起点にする。
@@ -2782,6 +2842,8 @@ export class SimWorld {
       const block = this.getBlockAt(pos)
       if (!block || block.type !== 'wire') continue
 
+      // 広がりは対称な近傍で辿る。pos を入力に持つワイヤーは必ずこの中にある
+      // (入力の関係は対称な関係の部分集合) ので、再計算の取りこぼしは無い
       for (const nPos of getConnectedWireNeighbors(pos, this)) {
         const nKey = posKey(nPos)
         if (!connected.has(nKey)) continue
