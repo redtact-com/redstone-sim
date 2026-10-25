@@ -2288,12 +2288,14 @@ export class SimWorld {
     if (below === null || below.type === 'air') {
       this.setBlockAt(belowPos, { type: 'water', level: 8 })
       changed.push(posKey(belowPos))
-      // **落下水が来ても泡柱は予約し直さない**。形状更新だけ出す (泡柱と同じ flag 2 扱い)。
+      // **落下水が来ても泡柱は予約し直さない**。真上が落下水 (水源でない) になる形状更新では
+      // ブロック tick が入らないため (scheduleBubbleColumnOnShape)
       // [実機 fixture bubble-column-refill-fast: 穴に落下水が来た t7 ではなく、
       //  水源を置き直した t8 の 5gt 後 = t13 に柱が戻る]。
-      // 近隣更新まで出すと柱が t12 に戻ってしまい、実機と 1 tick ずれる
-      // (ガラスエレベーターはディスペンサーが落下水の 1 tick 後に水源を置くので、
-      //  ここがちょうど効く)。**消えるときも同じ扱いにしてある** (こちらは未測定)
+      // vanilla の FlowingFluid.spreadTo は flag 3 で置くので周りへ近隣更新も出るが、ここでは形状更新だけ出す。
+      // #381 より前は泡柱が近隣更新で予約していたので、近隣更新を出すと柱が t12 に戻って実機と 1 tick ずれた。
+      // 今は泡柱には効かないが、ほかの素子 (BUD など) への影響を確かめていないので変えていない。
+      // **消えるときも同じ扱いにしてある** (こちらは未測定)
       this.emitShapeUpdate(belowPos)
       // さらに下へ続く分は、この形状更新を受けた水自身が予約する
       this.neighborChanged(belowPos)
@@ -2326,8 +2328,9 @@ export class SimWorld {
       if (!isSource) return null
       this.setBlockAt(destPos, { type: 'air' })
     }
-    // vanilla は setBlock flag 3 相当。泡柱は近隣更新で 5gt の予約が入り、
-    // 面しているオブザーバーは形状更新で気づく
+    // vanilla は setBlock flag 11 相当。真下の泡柱は**形状更新**で 5gt の予約を入れ
+    // (水源を置き直したとき。scheduleBubbleColumnOnShape)、面しているオブザーバーも形状更新で気づく。
+    // 近隣更新は泡柱には効かない (#381)
     this.neighborChanged(destPos)
     this.emitShapeUpdate(destPos)
     this.submitMultiNC(destPos)
@@ -2680,6 +2683,12 @@ export class SimWorld {
     // 隣のガラス板 / 鉄格子も計算し直す (#303)。自分自身も (置き換わった直後のため)
     for (const d of ALL_DIRS) this.refreshPane(neighbor(pos, d))
     this.refreshPane(pos)
+    // 隣の泡柱は形状更新で予約する (#381 / R-18 の前半)。受け手から見た向きは OPPOSITE[dir]
+    for (const dir of PP_UPDATE_ORDER) {
+      const nPos = neighbor(pos, dir)
+      if (this.getBlockAt(nPos)?.type !== 'bubble_column') continue
+      this.scheduleBubbleColumnOnShape(nPos, OPPOSITE[dir], this.getBlockAt(pos))
+    }
     for (const dir of PP_UPDATE_ORDER) {
       const nPos = neighbor(pos, dir)
       const nb = this.getBlockAt(nPos)
@@ -2690,6 +2699,35 @@ export class SimWorld {
       if (nb.powered) continue                       // powered 中は updateShape 無反応
       if (this.hasScheduledTick(nPos, 'observer')) continue
       this.schedule(nPos, 2, 0)                      // startSignal: 2gt / priority 0
+    }
+  }
+
+  /**
+   * 泡柱が形状更新を受けたときの予約 (#381 / R-18 の前半)。
+   * `pos` の泡柱から見て `dir` の隣が `src` に変わった。
+   *
+   * [確定: 26.2 BubbleColumnBlock.updateShape — 形状更新のたびに流体 tick (5gt) を予約し、
+   *  次のどれかのときだけブロック tick (5gt) も予約する。1.21.1 も同じ条件と読んでいる
+   *  (実機 fixture bubble-column-nc-refill / bubble-column-side-replace で確かめる)]
+   *   - 置けなくなった (真下が泡柱・ソウルサンド・マグマのどれでもない)
+   *   - 真下が変わった
+   *   - 真上が「泡柱ではない、柱が占有できるもの (= 水源)」に変わった ← 水源を置き直したときの経路
+   * 横の隣が変わっただけでは流体 tick しか入らない。流体 tick は縦の流動しか見ないので
+   * (#252)、真下がふさがっている柱には何も起きない。
+   *
+   * 流体 tick とブロック tick の予約キーは今は 1 本 ('bubble_column') にまとめてある。
+   * 縦だけの流動が要るのは「真下が空いた」ときで、それは「置けなくなった」にも当たるので、
+   * ここでブロック tick の条件だけ見ても流動は取りこぼさない。キーの分離は R-16 と一緒に行う
+   * (R-18 の後半)。
+   *
+   * マグマブロックは sim では 'solid' なので下向きの柱 (drag=true) は扱わない (updateBubbleColumn と同じ)。
+   */
+  private scheduleBubbleColumnOnShape(pos: Pos3D, dir: Dir6, src: BlockState | null): void {
+    const below = this.getBlockAt([pos[0], pos[1] - 1, pos[2]])
+    const canSurvive = below?.type === 'bubble_column' || below?.type === 'soul_sand'
+    const srcCanOccupy = src?.type === 'bubble_column' || (src?.type === 'water' && src.level === 0)
+    if (!canSurvive || dir === 'down' || (dir === 'up' && src?.type !== 'bubble_column' && srcCanOccupy)) {
+      if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
     }
   }
 
@@ -2935,15 +2973,14 @@ export class SimWorld {
         break
       }
       case 'bubble_column': {
-        // [確定: 26.2 BubbleColumnBlock.updateShape —
-        //  下から来た更新 / 上が塞がった等で 5gt の tile tick を予約する]
-        // 5gt 後に柱を評価し直す。**即時に書き換えないのが要点**で、
-        // 実機でも柱を断ち切ってから 5gt 後に崩れる
-        if (!this.hasScheduledTick(pos, 'bubble_column')) this.schedule(pos, 5, 0)
-        // 泡柱も水なので、下が空いたら落ちる (柱を汲み上げた直後の穴を埋めるのはこれ)
-        if (this.waterNeedsFlowTick(pos) && !this.hasScheduledTick(pos, 'bubble_column')) {
-          this.schedule(pos, WATER_TICK_DELAY, 0)
-        }
+        // **近隣更新では何もしない** (#381 / R-18 の前半)。
+        // [確定: 26.2 BubbleColumnBlock は neighborChanged を持たない。予約の契機は
+        //  updateShape (= 形状更新) だけ。1.21.1 も同じ]
+        // 以前はどの向きの近隣更新でも 5gt を予約していたため、ダストの 2 段送信が
+        // ガラス越しに柱の根元へ届いただけで予約が入り、そのあと水源を置き直したときの
+        // 予約が重複として捨てられて、柱が実機より早く戻っていた
+        // (実機キャプチャ elev-floor3: 実機 t143 / 旧 sim t139)。
+        // 形状更新で予約する側は scheduleBubbleColumnOnShape を見ること
         break
       }
       case 'water': {
