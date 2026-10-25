@@ -2,8 +2,6 @@
   "name": "piston-push-destroy",
   "description": "R-9 / R-10 (docs/research/16 §3.1): 押し反応が DESTROY のブロックは、伸長の先端で壊れてピストンヘッドがその位置に入る。配置と入力は piston-push-normal と同じ (t2 に x=1 へ redstone_block、t7 に air)。レーン: z0 扉 (下半分を押す。上半分も消えるか) / z2 budding_amethyst / z4 カボチャ / z6 シュルカーボックス (BlockEntity を持つが DESTROY が先に効く) / z8 頭 (同じ) / z10 植木鉢 / z12 はしご (x=4 の石に掛ける。石は押されない)。26.2 Blocks を読んだ予想: 7 レーンとも x=3 が壊れて t3 に moving_piston、t5 に piston_head になり、t10 に引き戻しても戻らない (air のまま)。扉は t3 に上半分も air になる。扉と budding_amethyst は実機 1.21.1 で壊れることを確認済み (#384)。修正前の sim は扉・シュルカーを押せず、カボチャ・頭・植木鉢・はしごを運び、budding_amethyst は取り込めない",
   "mcVersion": "1.21.1",
-  "skipUntil": "R-9",
-  "skipReason": "budding_amethyst を取り込めない (R-9 の修正で外す)",
   "ticks": 12,
   "region": {
     "from": [

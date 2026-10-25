@@ -237,3 +237,38 @@ describe('取り込み由来フラグ (#317)', () => {
     expect(got?.imported).toBe(false)
   })
 })
+
+describe('導体フルブロックの押し反応の移行 (R-9 / R-10)', () => {
+  // 以前は immovable / pushOnly の真偽値で保存していた。読み直しで黒曜石が押せるようにならないこと
+  const restore = (block: unknown): BlockState | undefined => {
+    const s = fakeStorage()
+    s.setItem(STORAGE_KEY, JSON.stringify({
+      v: STORAGE_VERSION, savedAt: '2026-10-01T00:00:00.000Z', blocks: { '0,0,0': block },
+    }))
+    return loadCircuit(s)?.blocks.get('0,0,0')
+  }
+
+  it('古い immovable / pushOnly は pushReaction に移す', () => {
+    expect(restore({ type: 'solid', powered: false, name: 'obsidian', immovable: true }))
+      .toEqual({ type: 'solid', powered: false, name: 'obsidian', pushReaction: 'block' })
+    expect(restore({
+      type: 'solid', powered: false, name: 'gray_glazed_terracotta', pushOnly: true,
+      renderProps: { facing: 'north' },
+    })).toEqual({
+      type: 'solid', powered: false, name: 'gray_glazed_terracotta', pushReaction: 'push_only',
+      renderProps: { facing: 'north' },
+    })
+    // 名前の無い古いデータは真偽値から移す
+    expect(restore({ type: 'solid', powered: false, immovable: true }))
+      .toEqual({ type: 'solid', powered: false, pushReaction: 'block' })
+  })
+
+  it('名前から引き直す: 前に保存したカボチャは壊れる・彫刻された本棚は動かない扱いになる', () => {
+    expect(restore({ type: 'solid', powered: false, name: 'pumpkin' }))
+      .toEqual({ type: 'solid', powered: false, name: 'pumpkin', pushReaction: 'destroy' })
+    expect(restore({ type: 'solid', powered: false, name: 'chiseled_bookshelf' }))
+      .toEqual({ type: 'solid', powered: false, name: 'chiseled_bookshelf', hasBlockEntity: true })
+    expect(restore({ type: 'solid', powered: false, name: 'stone' }))
+      .toEqual({ type: 'solid', powered: false, name: 'stone' })
+  })
+})

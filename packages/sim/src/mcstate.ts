@@ -79,9 +79,12 @@ export function canonicalize(state: string): string {
     // **押せる導体と押せない導体は別の代表名へ寄せる** (#253)。
     // 同じ stone に潰すと「黒曜石をピストンで押した」ような食い違いが見えなくなる
     if (plain.type === 'solid') {
-      if (plain.immovable === true) return 'obsidian'
-      // 押せるが引けない (#255)。stone に潰すと「引けたかどうか」が比較で見えなくなる
-      if (plain.pushOnly === true) return formatMcState('gray_glazed_terracotta', { facing: 'north' })
+      // 押し反応ごとに代表名を分ける。stone に潰すと「押せたか・引けたか・壊れたか」が
+      // 比較で見えなくなる (#255)。壊れるものは pumpkin、BE 持ち (動かない) は chiseled_bookshelf
+      if (plain.pushReaction === 'block') return 'obsidian'
+      if (plain.pushReaction === 'push_only') return formatMcState('gray_glazed_terracotta', { facing: 'north' })
+      if (plain.pushReaction === 'destroy') return 'pumpkin'
+      if (plain.hasBlockEntity === true) return formatMcState('chiseled_bookshelf', { facing: 'north' })
       return 'stone'
     }
     if (plain.type === 'glass') return 'glass'
@@ -353,10 +356,11 @@ export function simToMc(sim: BlockState | null, authoredState?: string): string 
         // 押した先には authored が無いので合成する。
         // **取り込み元の名前があればそれを使う** (#343)。無ければ canonicalize と代表名を揃える
         if (sim.name !== undefined) return formatMcState(sim.name, { ...sim.renderProps })
-        if (sim.immovable === true) return 'obsidian'    // #253 (そもそも動かない)
-        if (sim.pushOnly === true) {                     // #255 (押されて動く先はある)
+        if (sim.pushReaction === 'block') return 'obsidian'    // #253 (そもそも動かない)
+        if (sim.pushReaction === 'push_only') {                // #255 (押されて動く先はある)
           return formatMcState('gray_glazed_terracotta', { facing: 'north' })
         }
+        if (sim.pushReaction === 'destroy') return 'pumpkin'   // R-10 (壊れるので動く先は無い)
         return 'stone'
       // 非導体フルブロックも可動 (#184)。名前が無ければ代表名で合成する
       case 'glass':

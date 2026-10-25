@@ -1,5 +1,5 @@
-import type { BlockState, BlockType } from '@redstone/sim'
-import { slotsFromCount, containerSlotsOf } from '@redstone/sim'
+import type { BlockState, BlockType, SolidState } from '@redstone/sim'
+import { slotsFromCount, containerSlotsOf, solidPushReactionOf, isSolidWithBlockEntity } from '@redstone/sim'
 import { normalizeBoardSize } from '@redstone/editor'
 import type { BoardSize } from '@redstone/editor'
 
@@ -120,6 +120,7 @@ export function parseCircuit(raw: string): RestoredCircuit | null {
  */
 function migrateBlock(block: BlockState): BlockState {
   const type = block.type as BlockType
+  if (type === 'solid') return migrateSolid(block as SolidState)
   if (type !== 'hopper' && type !== 'dropper' && type !== 'dispenser' && type !== 'container') {
     return block
   }
@@ -134,6 +135,32 @@ function migrateBlock(block: BlockState): BlockState {
   }
   const { count: _drop, ...rest } = block as unknown as Record<string, unknown>
   return { ...rest, slots: slotsFromCount(type, legacy.count) } as unknown as BlockState
+}
+
+/**
+ * 導体フルブロックの押し反応を今の形へ移す (R-9 / R-10)。
+ *
+ * 以前は `immovable` (黒曜石など) と `pushOnly` (釉薬テラコッタ) の真偽値で持っていた。
+ * そのまま読むと**保存しておいた黒曜石が押せるようになる**ので、取り込み元の名前があれば
+ * 今の表で引き直し、名前が無ければ古い真偽値から移す。名前から引き直すので、
+ * R-9 より前に保存したカボチャ (壊れる) や彫刻された本棚 (動かない) も、
+ * 取り込み直したときと同じ扱いになる。
+ */
+function migrateSolid(block: SolidState): BlockState {
+  const { immovable, pushOnly, pushReaction, hasBlockEntity, ...rest } =
+    block as SolidState & { immovable?: unknown; pushOnly?: unknown }
+  const reaction = rest.name !== undefined ? solidPushReactionOf(rest.name)
+    : immovable === true ? 'block'
+    : pushOnly === true ? 'push_only'
+    : pushReaction
+  const withBlockEntity = rest.name !== undefined
+    ? isSolidWithBlockEntity(rest.name)
+    : hasBlockEntity === true
+  return {
+    ...rest,
+    ...(reaction !== undefined ? { pushReaction: reaction } : {}),
+    ...(withBlockEntity ? { hasBlockEntity: true } : {}),
+  }
 }
 
 export type SaveResult = 'saved' | 'unavailable' | 'failed'

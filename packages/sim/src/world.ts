@@ -29,6 +29,7 @@ import {
   takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal, emptySlots,
 } from './blocks/container.js'
 import { stackSizeOf } from './blocks/itemStacks.js'
+import { pushReactionOf, hasBlockEntity } from './blocks/pushReaction.js'
 import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
 import type {
   BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState, ItemStack,
@@ -757,14 +758,17 @@ export class SimWorld {
       for (const p of this.applyRailPlacement(pos, into.shape)) changed.add(posKey(p))
       this.neighborChanged(pos)
     }
-    // 着地したピストンは**自分自身を再判定する** (#231)
-    // [確定: 26.2 PistonBaseBlock.onPlace — 置き換え前が別ブロック種で、かつその位置に
-    //  BlockEntity がまだ無いときだけ checkIfExtend を呼ぶ]。
-    // 着地は moving_piston → piston の差し替えなので条件を満たす。
+    // 着地したブロックは**自分自身を再判定する** (#231 / R-9)
+    // [確定: 26.2 PistonMovingBlockEntity.finalTick と tick — setBlock のあと、その位置の
+    //  ブロック自身に neighborChanged を呼ぶ]。
     // 隣接 6 マスへの NC (下の submitMultiNC) は**自分には飛ばない**ので、
     // これが無いと「運ばれて着地した直後に受電しているピストン」が伸びない
-    // (5×5 ドアの t=299 で実機だけが伸びていた原因)
-    if (into.type === 'piston' || into.type === 'sticky_piston') {
+    // (5×5 ドアの t=299 で実機だけが伸びていた原因)。
+    // R-9 で銅の電球・トラップドア・フェンスゲートが動くようになったので、ピストンに
+    // 限っていた呼び出しを全部の型へ広げた (着地した電球は CopperBulbBlock.checkAndFlip、
+    // トラップドアは TrapDoorBlock.neighborChanged で受電を見直す)。
+    // レールは上で applyRailPlacement のあとに呼んでいるので二重には呼ばない
+    if (!isRail(into)) {
       this.neighborChanged(pos)
     }
     // **facing 先がまだ確定していないオブザーバーの着地は近隣更新を配らない** (#292)。
@@ -1805,72 +1809,16 @@ export class SimWorld {
   }
 
   /**
-   * 押せるブロックか。v1 の簡略化 (PR#39 方針): ワイヤー・トーチ等の壊れ物は
-   * vanilla ではアイテム化するが、アイテムエンティティが無いため「移動不可」扱い。
-   * コンテナ (BE 持ち)・extended ピストン・head は vanilla どおり不動。
+   * 押されると壊れるブロックか (R-9 / R-10)。表は blocks/pushReaction.ts。
+   * sim ではアイテム化させず消滅させる (13 §2 エンティティ境界原則、#64)。
    *
-   * redstone_block / target / note_block は vanilla どおり可動 (PushReaction
-   * NORMAL) [確定: 26.2]。0-tick 系 (rblock 押し) と #51 の動的トポロジー
-   * 変化の前提。可動な動力源により 02 §6 の既知抽象化 (moving_piston 確定が
-   * sim=ST 相 / vanilla=BlockEntity 相) が「確定ブロックが下流ピストンを直接
-   * 起動する連鎖」で到達可能になる — 差が出る回路は 02 §6 参照。
-   */
-  private isMovable(block: BlockState): boolean {
-    // 黒曜石・岩盤などは押せない (#253)。[確定: 26.2 pushReaction(BLOCK)]
-    // sim は材質を潰しているので取り込み時に立てた immovable で割る
-    if (block.type === 'solid') return block.immovable !== true
-    if (block.type === 'lamp') return true
-    // 非導体でもフルブロック / スラブは PushReaction 既定 = NORMAL で可動 (#184)
-    if (block.type === 'glass' || block.type === 'slab') return true
-    if (block.type === 'redstone_block' || block.type === 'target' || block.type === 'note_block') return true
-    if ((block.type === 'piston' || block.type === 'sticky_piston') && !block.extended) return true
-    // オブザーバーは vanilla どおり可動 (PushReaction NORMAL) [確定: 26.2 + 実機 fixture
-    // observer-pushed]。着地時に自分で 1 回発火する — finalizeMovingPiston を参照 (#119)
-    if (block.type === 'observer') return true
-    // スライム/蜂蜜も可動 (PushReaction STICKY)。くっついた塊の収集は
-    // resolvePushStructure が担当する (#121)
-    if (isStickyBlock(block)) return true
-    // レールも可動 (PushReaction NORMAL)。26.2 の登録はどのレールも pushReaction を
-    // 指定していない = 既定の NORMAL [確定: 26.2 Blocks.java:689,692,2892]
-    // [実機 fixture rail-piston-push: 押されて 1 マス動き、形状は保持される]。
-    // 支持ブロック要件は sim 未実装なので「押した先に床が無い」ケースは実機と乖離する
-    // (実機はドロップ、sim は浮く)。fixture は移動先に床を敷いたものに限定している (#134)
-    if (isRail(block)) return true
-    // 装飾・大釜・コンポスターは PushReaction 既定 = NORMAL で可動 (#234)。
-    // **lodestone はここに入れない** — pushReaction(BLOCK) で押せない
-    // [確定: 26.2 Blocks.LODESTONE]
-    if (block.type === 'decor' || block.type === 'cauldron' || block.type === 'composter') return true
-    // ソウルサンドは PushReaction 既定 = NORMAL
-    if (block.type === 'soul_sand') return true
-    return false
-  }
-
-  /**
-   * PUSH_DESTROY (押されると壊れる) ブロックか。sim ではアイテム化させず
-   * 消滅させる (13 §2 エンティティ境界原則、#64)。
-   * [確定: 26.2 — 各 Block の PushReaction。dust/torch/lever/button/感圧板は
-   *  DESTROY。piston_head・moving_piston は isPushable=false (障害物) のまま]
+   * 可動な動力源 (redstone_block / target / note_block) は 0-tick 系と #51 の動的トポロジー
+   * 変化の前提。これにより 02 §6 の既知抽象化 (moving_piston 確定が sim=ST 相 /
+   * vanilla=BlockEntity 相) が「確定ブロックが下流ピストンを直接起動する連鎖」で
+   * 到達可能になる — 差が出る回路は 02 §6 参照。
    */
   private isPushDestroy(block: BlockState): boolean {
-    switch (block.type) {
-      case 'wire':
-      case 'torch':
-      case 'wall_torch':
-      case 'lever':
-      case 'button_stone':
-      case 'button_wood':
-      case 'pressure_plate_wood':
-      case 'pressure_plate_stone':
-      case 'weighted_pressure_plate_light':
-      case 'weighted_pressure_plate_heavy':
-      case 'detector_rail':
-      case 'crafter':
-      case 'repeater':
-      case 'comparator':
-        return true
-      default:
-        return false
-    }
+    return pushReactionOf(block) === 'destroy'
   }
 
   /**
@@ -1891,7 +1839,11 @@ export class SimWorld {
     const inPush = (p: Pos3D): number => toPush.findIndex(q => key(q) === key(p))
 
     /**
-     * 26.2 PistonBaseBlock.isPushable。allowDestroy=false の呼びで DESTROY は不可。
+     * 26.2 PistonBaseBlock.isPushable と同じ順で決める (R-9):
+     *   空気は押せる → ピストン本体は伸びていなければ押せる →
+     *   押し反応 (block は不可 / destroy は allowDestroy のときだけ / push_only は向きしだい) →
+     *   残り (normal) のうち BlockEntity を持つものは不可。
+     * 表は blocks/pushReaction.ts (名指しの 4 種と硬さ -1 は block に畳んである)。
      *
      * `face` は**どの向きから動かそうとしているか**。PUSH_ONLY (釉薬テラコッタ) は
      * 押し方向と一致するときだけ動く (#255)。
@@ -1902,9 +1854,13 @@ export class SimWorld {
       const b = this.getBlockAt(p)
       if (!b) return true                                   // 空気
       if (b.type === 'piston' || b.type === 'sticky_piston') return !b.extended
-      if (this.isPushDestroy(b)) return allowDestroy
-      if (b.type === 'solid' && b.pushOnly === true) return face === facing
-      return this.isMovable(b)                              // それ以外は BLOCK 扱い
+      switch (pushReactionOf(b)) {
+        case 'block': return false
+        case 'destroy': return allowDestroy
+        case 'push_only': return face === facing
+        case 'normal': break
+      }
+      return !hasBlockEntity(b)
     }
 
     /** 26.2 PistonStructureResolver.addBlockLine */
@@ -2063,9 +2019,24 @@ export class SimWorld {
       // [確定: 26.2 moveBlocks — toDestroy を遠い順に destroy してから移動]。
       // アイテム化 (ドロップ) はさせない (13 §2、#64)。NC/PP/接続張り替えは
       // afterPistonMove が破壊座標込みで追随する
+      // 扉は上下 2 マスで 1 つなので、片方を壊したら相方も消す (R-9)。
+      // [確定: 26.2 — 壊したマスに置く moving_piston の形状更新を受けて、相方が
+      //  DoorBlock.updateShape で空気になる。sim の扉は独立した 2 ブロックなのでここで消す]
+      const doorOtherHalves: Pos3D[] = []
       for (let i = toDestroy.length - 1; i >= 0; i--) {
+        const victim = this.getBlockAt(toDestroy[i])
         this.setBlockAt(toDestroy[i], { type: 'air' })
         changed.push(posKey(toDestroy[i]))
+        if (victim?.type === 'door_wood' || victim?.type === 'door_iron') {
+          const [x, y, z] = toDestroy[i]
+          const otherPos: Pos3D = [x, victim.half === 'lower' ? y + 1 : y - 1, z]
+          const other = this.getBlockAt(otherPos)
+          if (other?.type === victim.type && other.half !== victim.half) {
+            this.setBlockAt(otherPos, { type: 'air' })
+            changed.push(posKey(otherPos))
+            doorOtherHalves.push(otherPos)
+          }
+        }
       }
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
@@ -2090,10 +2061,11 @@ export class SimWorld {
       this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(
         // 形状更新 (オブザーバーが見る) は**行き先**も含める。ブロックが現れるので
-        [ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing)), ...toDestroy],
+        [ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing)), ...toDestroy, ...doorOtherHalves],
         // 近隣更新は**出発セル**だけ (#285)。行き先から出すと、そこに面した
-        // 受電していないピストンが誤って縮む
-        [ev.pos, ...pushList, ...toDestroy],
+        // 受電していないピストンが誤って縮む。
+        // 消した扉の相方は vanilla では destroyBlock (flag 3) なので近隣更新も出す
+        [ev.pos, ...pushList, ...toDestroy, ...doorOtherHalves],
       )
       this.traceCloseUpdate('Pi', 'p', 0, 'BE')
     } else {

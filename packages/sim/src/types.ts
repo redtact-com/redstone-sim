@@ -49,6 +49,17 @@ export interface WireConnections {
   west:  WireConnectionValue
 }
 
+/**
+ * ピストンの押し反応 (R-9 / R-10)。[確定: 26.2 PushReaction — NORMAL / DESTROY / BLOCK /
+ * IGNORE / PUSH_ONLY。IGNORE を持つブロックは sim に無い]。
+ *   - normal:    押せる・引ける (指定なしの既定)。BlockEntity を持つものだけは動かない
+ *   - destroy:   伸長の先端で壊れる (sim はアイテム化せず消す。13 §4.1)
+ *   - block:     動かない。黒曜石のような名指しの 4 種と硬さ -1 のものも sim ではここに畳む
+ *   - push_only: 押せるが引けない (釉薬テラコッタ)
+ * 判定の順は blocks/pushReaction.ts を参照
+ */
+export type PushReaction = 'normal' | 'destroy' | 'block' | 'push_only'
+
 export interface WireState {
   type: 'wire'
   /** 接続形状 — 配置時に確定し、シミュレーション中は変更しない */
@@ -358,8 +369,9 @@ export interface TargetState {
 
 /** 信号を充電・遮断する不透過ブロック（石・丸石など） */
 /**
- * スライムブロック / 蜂蜜ブロック (#121)。ピストンで動かすと**くっついている塊も一緒に動く**
- * (PushReaction STICKY)。互いにはくっつかない [確定: 26.2 PistonStructureResolver]。
+ * スライムブロック / 蜂蜜ブロック (#121)。ピストンで動かすと**くっついている塊も一緒に動く**。
+ * 押し反応は指定なし (NORMAL) で、くっつく性質は PistonStructureResolver 側の判定
+ * [確定: 26.2 — PushReaction に STICKY という値は無い]。互いにはくっつかない。
  *
  * **スライムは導体、蜂蜜は非導体** [確定: 26.2 — isRedstoneConductor の既定は
  * isCollisionShapeFullBlock。SLIME_BLOCK は noOcclusion() のみで当たり判定はフルブロック、
@@ -392,23 +404,27 @@ export interface SolidState {
    */
   name?: string
   /**
-   * ピストンで押せないか (#253)。[確定: 26.2 — 黒曜石・岩盤などは pushReaction(BLOCK)]
-   *
+   * ピストンの押し反応が既定 (normal) でないもの (#253 / #255 / R-9)。
    * sim は導体フルブロックを材質ごと 1 種に潰しているが、**押せるかどうかだけは
-   * 材質で割れる**ので、ここで持つ。
-   * [実機実測 2026-08-20: ピストンの正面が黒曜石 → 伸びない /
-   *  スライムの**横**が黒曜石 → 伸びる (押せない相手は引き連れずに素通りする)]
-   */
-  immovable?: boolean
-  /**
-   * **押せるが引けない**か (#255)。[確定: 26.2 — 釉薬テラコッタは pushReaction(PUSH_ONLY)]
+   * 材質で割れる**ので、取り込み時に名前から載せる (blocks/blockNames.ts の表)。
    *
-   * 押し方向と一致する向きからしか動かないので、
-   * 粘着ピストンで引くことも、スライムが横から引き連れることもできない。
-   * [実機実測 2026-08-20: 正面から押す → 動く / 粘着で引く → 引けず置き去り /
-   *  スライムの横に置く → 引き連れられずその場に残る]
+   *   - block: 黒曜石・泣く黒曜石・強化深層岩 (26.2 PistonBaseBlock.isPushable が名指しで
+   *     弾く) と岩盤 (硬さ -1)。
+   *     [実機実測 2026-08-20: ピストンの正面が黒曜石 → 伸びない /
+   *      スライムの**横**が黒曜石 → 伸びる (押せない相手は引き連れずに素通りする)]
+   *   - push_only: 釉薬テラコッタ。押し方向と一致する向きからしか動かないので、
+   *     粘着ピストンで引くことも、スライムが横から引き連れることもできない。
+   *     [実機実測 2026-08-20: 正面から押す → 動く / 粘着で引く → 引けず置き去り /
+   *      スライムの横に置く → 引き連れられずその場に残る]
+   *   - destroy: カボチャ・スイカ・苔ブロック・budding_amethyst など
+   *     [確定: 26.2 Blocks — pushReaction(DESTROY)。budding_amethyst は実機 1.21.1 で確認 (#384)]
    */
-  pushOnly?: boolean
+  pushReaction?: Exclude<PushReaction, 'normal'>
+  /**
+   * BlockEntity を持つ導体フルブロックか (彫刻された本棚)。押し反応は normal だが
+   * 26.2 PistonBaseBlock.isPushable の最後の判定で動かない (R-10)
+   */
+  hasBlockEntity?: boolean
   /**
    * 上の音符ブロックへ与える音色 (#231)。sim は材質を潰しているのでここで持つ。
    * 取り込み時に実ブロック名から載せる (羊毛=guitar / 木=bass など)。
@@ -858,7 +874,8 @@ export interface LodestoneState {
  * 置いてあるだけのもの (end_rod / 階段 / 壁掛け看板 など) をここへ集約する。
  *
  * 見た目だけは区別したいので**取り込み元のブロック名を持つ** (判断 E)。
- * ピストンでは押せる (どれも PushReaction NORMAL)。
+ * ピストンの押し反応は名前で割れる (blocks/pushReaction.ts): 植木鉢・はしご・頭・苔の
+ * カーペットは壊れ、看板・旗は BlockEntity を持つので動かず、残りは押せる (R-10)。
  */
 export interface DecorState {
   type: 'decor'
