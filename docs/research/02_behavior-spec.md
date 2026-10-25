@@ -100,7 +100,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 
 - 出典: DiodeBlock.checkTickOnNeighbor / ComparatorBlock (1.21.11 デコンパイル)、https://ja.minecraft.wiki/w/ティック
 - 表の -3 / -1 (出力先が別のダイオード) は**近隣更新から予約するとき** (`checkTickOnNeighbor`) の規則。
-  リピーターが tick の中で自分の OFF を予約するとき (§6 repeater の 3.) は**出力先に関係なく常に -2** [確定: DiodeBlock.tick]。
+  リピーターが tick の中で自分の OFF を予約するとき (§6 repeater の 3.) は**出力先に関係なく常に -2** [確定: 26.2 DiodeBlock.tick]。
   sim は以前この場合にも -3 を使っていた (R-6、#408) [実機 fixture repeater-self-off-priority]。
 
 ### 2.3 件数上限 [確定] (1.21.1/26.2 デコンパイルで確定)

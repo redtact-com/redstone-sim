@@ -167,7 +167,7 @@
 |---|---|---|---|
 | 近隣更新 (NC) の DFS | CollectingNeighborUpdater 相当 | 同じ | 同等 |
 | 形状更新 (PP) の経路 | NC と同じスタック | スタック外で同期的に呼ぶ。受け手はオブザーバー・塀・板・音符ブロックの 4 種 | Nucleation |
-| setBlock (flag 3) の中の順 | NC → 形状更新 (26.2 Level#setBlock と同じ) | 形状更新 → NC (逆) | Nucleation |
+| setBlock (flag 3) の中の順 | NC → 形状更新 (26.2 Level#setBlock と同じ) | 形状更新 → NC (逆) (レバー/ボタンの操作とボタンの解除は #408 で NC が先。ほかは R-15) | Nucleation |
 | トップレベルでの即時実行 | set_shape_only などはハンドラが戻るまで保留する | その場で回し切る | redstone-sim |
 | コンパレーター更新 (CU) の宛先 | 実行時の経路は、隣を種類を問わず全部起こす | コンパレーターだけ (26.2 Level#updateNeighbourForOutputSignal と同じ) | redstone-sim |
 | 送り元ブロックの受け渡し | 方向だけ | 送り元の型 (ドアの同種ガードなどに使う) | redstone-sim |
@@ -285,8 +285,8 @@
 | R-3 | 普通のトロッコが乗ったディテクターレールを、コンパレーターが 15 と読む (world.ts:100-117) | DetectorRailBlock#getAnalogOutputSignal: コンテナ付きかコマンドブロック付きのトロッコ以外は 0。コンパレーターは通常の信号をこの値で置き換える | **[実機]** 実機 0 / sim 15 (トロッコが無ければ一致) | トロッコの通過をコンパレーターで検出する回路 |
 | R-4 | コンパレーターの導体越し読みを max で合成する (world.ts:3204-3207) | ComparatorBlock#getInputSignal: 置き換え | [逆コンパイル+実行] 空の樽を読むと sim 13 / vanilla 0 | ブロック越しの空検知・残量表示 |
 | R-5 | compare モードで出力が変わらない tick に、前方へ更新を出さない (world.ts:1583-1590) | ComparatorBlock#refreshOutputState: compare モードなら値が同じでも前方を更新する | [逆コンパイル+実行] 2 gt パルスを飲み込んだとき、前方の BUD ピストンが sim では伸びない | コンパレーターを BUD のトリガやパルス検出に使う回路 |
-| R-6 | リピーターが tick 中に自分の OFF を予約するとき、優先度が -3 になりうる (world.ts:1579) | DiodeBlock#tick: 常に -2。-3 を選ぶのは近隣更新から予約するときだけ | **[実機]** fixture repeater-self-off-priority: 側面ロックの相手 (遅延 2) の自己 OFF と被ロック側 (遅延 3) の自己 OFF が同じ gt に重なると、実機は被ロック側が先に走って何もせず、ロックが外れてから OFF を積み直す (OFF は t24)。sim は -3 の相手が先に走って t18 に OFF。#408 / PR#409 で -2 固定にして直した | 直列のリピーターと側面ロックの組み合わせ |
-| R-7 | レバー/ボタンの近隣更新が 1 回少なく、しかも形状更新が先に出る (world.ts:1231-1239) | LeverBlock#pull: flag 3 の書き込みで自分の周り → 形状更新 → updateNeighbours。ButtonBlock#press と解除の ButtonBlock#tick → checkPressed も同じ順 | **[実機]** fixture lever-nc-before-shape-race / button-nc-before-shape-race: レバーを直接読むコンパレーターとレバーを見るオブザーバーが同じ gt・優先度 0 で予約されるとき、実機はコンパレーター側のピストンが先に動く (t6 に取り合うマスへ石。sim はガラス)。ボタンの解除でも同じ順 (t26 に石が戻る)。#408 / PR#409 で押下・解除とも直した | 予約の順で勝敗が決まる競争 |
+| R-6 | リピーターが tick 中に自分の OFF を予約するとき、優先度が -3 になりうる (world.ts:1579) | DiodeBlock#tick: 常に -2。-3 を選ぶのは近隣更新から予約するときだけ | **[実機]** fixture repeater-self-off-priority: 側面ロックの相手 (遅延 2) の自己 OFF と被ロック側 (遅延 3) の自己 OFF が同じ gt に重なると、実機は被ロック側が先に走って何もせず、ロックが外れてから OFF を積み直す (OFF は t24)。修正前の sim は -3 の相手が先に走って t18 に OFF。#408 / PR#409 で -2 固定にして直した | 直列のリピーターと側面ロックの組み合わせ |
+| R-7 | レバー/ボタンの近隣更新が 1 回少なく、しかも形状更新が先に出る (world.ts:1231-1239) | LeverBlock#pull: flag 3 の書き込みで自分の周り → 形状更新 → updateNeighbours。ButtonBlock#press と解除の ButtonBlock#tick → checkPressed も同じ順 | **[実機]** fixture lever-nc-before-shape-race / button-nc-before-shape-race: レバーを直接読むコンパレーターとレバーを見るオブザーバーが同じ gt・優先度 0 で予約されるとき、実機はコンパレーター側のピストンが先に動く (t6 に取り合うマスへ石。修正前の sim はガラス)。ボタンの解除でも同じ順 (t26 に石が戻る)。#408 / PR#409 で押下・解除とも直した | 予約の順で勝敗が決まる競争 |
 | R-8 | ダストが detector_rail と lectern に接続しない (wire-shape.ts:42-71) | RedStoneWireBlock#shouldConnectTo: 信号源なら接続する | [逆コンパイル+実行] 接続が十字になり、横のランプまで点く | トロッコ検出の信号をダストで横へ引き出す配置 |
 | R-9 | 押し反応の分類が 8 種で違う (world.ts:1763-1819) | PistonBaseBlock#isPushable と Blocks の登録。検知レール・銅の電球・トラップドア・塀・ガラス板は押せる。クラフターは BE を持つので不動。budding_amethyst と扉は壊れる | **[実機]** 8 種すべて実機と違う。sim は検知レールとクラフターを壊し、残りは押せない。budding_amethyst は取り込めない | 検知レールや塀・板を押す扉、クラフターや扉の前のピストン |
 | R-10 | 水・泡柱・シュルカーボックス・カボチャ類・苔・植木鉢・はしご・頭の押し反応。看板・旗・彫刻された本棚を押してしまう | 水・泡柱・シュルカー・カボチャ類・苔・植木鉢・はしご・頭は DESTROY。看板・旗・彫刻された本棚は BE を持つので不動 | [逆コンパイル+実行] (実機では未測定) | 水路のゲート、カボチャ・スイカの収穫ピストン |
@@ -306,6 +306,7 @@
 補足:
 
 - R-1・R-3・R-9・R-11 は、実機ハーネスで同じ回路を走らせ、実機と sim の状態系列を比べて確定した。§4 の修正では、まず fixture にしてから直す。
+- R-6・R-7 は #408 / PR#409 で、fixture 3 本 (repeater-self-off-priority / lever-nc-before-shape-race / button-nc-before-shape-race) を実機 1.21.1 で撮ってから直した (2026-10-25)。3 本とも修正後の sim と全 tick で一致した。
 - 1.21.1 と 26.2 で規則が同じことは、R-1〜R-8 について確かめた。1.21.1 の server jar を公式 mappings でデコンパイルし、
   9 クラス (LevelChunk / Level / RedstoneTorchBlock / LeverBlock / ButtonBlock / DiodeBlock / ComparatorBlock / RedStoneWireBlock / DetectorRailBlock) に加えて、
   Blocks (R-2 の導体: ソウルサンドは常に導体、スライムとロードストーンは既定のフルブロック判定で導体) と LecternBlock (R-8: 常に信号源) を読んだ。
