@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  LABEL, MARKER, MAX_LISTED, findUnchecked, decide, renderWarning, renderResolved, run,
+  LABEL, MARKER, MAX_LISTED, findUnchecked, decide, renderWarning, renderResolved, run, createApi,
 } from './checkbox-guard.mjs'
 
 /**
@@ -243,5 +243,61 @@ describe('run: GitHub に対してすること', () => {
     const { api, calls } = fakeApi(issue)
     expect((await run({ action: 'closed', number: 1, api })).kind).toBe('clear')
     expect(calls).toEqual([])
+  })
+})
+
+describe('createApi: GitHub の REST API の呼び方', () => {
+  type Call = { method: string, url: string, body: unknown }
+  function stubFetch(reply: (c: Call) => { status: number, json?: unknown }) {
+    const calls: Call[] = []
+    vi.stubGlobal('fetch', async (url: string, init: { method: string, body?: string }) => {
+      const c = { method: init.method, url, body: init.body ? JSON.parse(init.body) : undefined }
+      calls.push(c)
+      const r = reply(c)
+      return {
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        json: async () => r.json,
+        text: async () => JSON.stringify(r.json ?? ''),
+      }
+    })
+    return calls
+  }
+  afterEach(() => { vi.unstubAllGlobals() })
+  const api = () => createApi({ token: 't', repo: 'o/r', apiUrl: 'https://api.test' })
+
+  it('コメントが 100 件を超えると次のページまで読む', async () => {
+    const page = (n: number, len: number) => Array.from({ length: len }, (_, i) => ({ id: n * 1000 + i }))
+    const calls = stubFetch(c => ({ status: 200, json: c.url.endsWith('page=1') ? page(1, 100) : page(2, 3) }))
+    const got = await api().listComments(5)
+    expect(got).toHaveLength(103)
+    expect(calls.map(c => c.url)).toEqual([
+      'https://api.test/repos/o/r/issues/5/comments?per_page=100&page=1',
+      'https://api.test/repos/o/r/issues/5/comments?per_page=100&page=2',
+    ])
+  })
+
+  it('ラベルが既にある (422)・付いていない (404) は成功として扱う', async () => {
+    const calls = stubFetch(c => ({ status: c.method === 'POST' ? 422 : 404, json: { message: 'x' } }))
+    await expect(api().ensureLabel()).resolves.toBeNull()
+    await expect(api().removeLabel(5)).resolves.toBeNull()
+    expect(calls[0]).toMatchObject({ method: 'POST', url: 'https://api.test/repos/o/r/labels', body: { name: LABEL } })
+    expect(calls[1]).toMatchObject({ method: 'DELETE', url: `https://api.test/repos/o/r/issues/5/labels/${LABEL}` })
+  })
+
+  it('それ以外の失敗は例外にする (job を赤くする)', async () => {
+    stubFetch(() => ({ status: 403, json: { message: 'Resource not accessible by integration' } }))
+    await expect(api().addLabel(5)).rejects.toThrow('POST /issues/5/labels が 403 で失敗')
+  })
+
+  it('コメントの作成と書き換えは issue 番号とコメント id で別の URL を叩く', async () => {
+    const calls = stubFetch(() => ({ status: 201, json: {} }))
+    await api().createComment(5, 'a')
+    await api().updateComment(77, 'b')
+    expect(calls.map(c => `${c.method} ${c.url}`)).toEqual([
+      'POST https://api.test/repos/o/r/issues/5/comments',
+      'PATCH https://api.test/repos/o/r/issues/comments/77',
+    ])
+    expect(calls.map(c => c.body)).toEqual([{ body: 'a' }, { body: 'b' }])
   })
 })
