@@ -1982,7 +1982,8 @@ export class SimWorld {
      * 旧実装の ALL_DIRS (北・南・東・西・上・下) では下/上の枝と北/南の枝、
      * 西の枝と東の枝の着地順が逆だった
      * [実機 fixture slime-branch-order-down-north / slime-branch-order-west-east:
-     *  同じマスを取り合う 2 本のピストンの勝者で見える]
+     *  同じマスを取り合う 2 本のピストンのうち、後に集めた枝 (北 / 東) の側が t6 に伸びる。
+     *  旧実装は下 / 西の側が伸び、どちらも 15 セル食い違う]
      */
     const addBranchingBlocks = (from: Pos3D): boolean => {
       const fromState = this.getBlockAt(from)
@@ -2194,7 +2195,8 @@ export class SimWorld {
           // 旧実装は前から置いていて、枝の順の食い違い (addBranchingBlocks) と打ち消し合っていた。
           // 枝の順だけを直すと引き戻しの着地順が 26.2 と逆になる
           // [実機 fixture slime-retract-landing-order: 引き戻した枝の着地で起動する
-          //  2 本のピストンが同じマスを取り合う。勝者で見える]
+          //  2 本のピストンが同じマスを取り合い、北の枝の側が t6 に伸びる。旧実装 (枝の順も
+          //  作る順も逆) は打ち消し合って一致し、枝の順だけを直した形は 15 セル食い違う]
           for (let i = pullList.length - 1; i >= 0; i--) {
             setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i], false)
           }
