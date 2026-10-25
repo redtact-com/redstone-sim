@@ -2708,7 +2708,10 @@ export class SimWorld {
    *
    * [確定: 26.2 BubbleColumnBlock.updateShape — 形状更新のたびに流体 tick (5gt) を予約し、
    *  次のどれかのときだけブロック tick (5gt) も予約する。1.21.1 も同じ条件と読んでいる
-   *  (実機 fixture bubble-column-nc-refill / bubble-column-side-replace で確かめる)]
+   *  (占有できる判定の書き方が違うだけで、水源に対しては同じ結果になる)]
+   * [実機 fixture bubble-column-nc-refill / bubble-column-side-replace (1.21.1):
+   *  横の近隣更新や横からの形状更新 (t17) では戻らず、水源を置き直した t20 の 5gt 後 = t25 に
+   *  柱が戻る。修正前の sim は t22 で、15 / 12 セル食い違っていた]
    *   - 置けなくなった (真下が泡柱・ソウルサンド・マグマのどれでもない)
    *   - 真下が変わった
    *   - 真上が「泡柱ではない、柱が占有できるもの (= 水源)」に変わった ← 水源を置き直したときの経路
@@ -2975,7 +2978,9 @@ export class SimWorld {
       case 'bubble_column': {
         // **近隣更新では何もしない** (#381 / R-18 の前半)。
         // [確定: 26.2 BubbleColumnBlock は neighborChanged を持たない。予約の契機は
-        //  updateShape (= 形状更新) だけ。1.21.1 も同じ]
+        //  updateShape (= 形状更新) だけ。1.21.1 も同じと読んでいる]
+        // [実機 fixture bubble-column-nc-refill: 根元の横のダストが t17 に点いても柱は戻らず、
+        //  水源を置いた t20 の 5gt 後 = t25 に戻る。修正前の sim は t22]
         // 以前はどの向きの近隣更新でも 5gt を予約していたため、ダストの 2 段送信が
         // ガラス越しに柱の根元へ届いただけで予約が入り、そのあと水源を置き直したときの
         // 予約が重複として捨てられて、柱が実機より早く戻っていた
