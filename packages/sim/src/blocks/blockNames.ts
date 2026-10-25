@@ -41,7 +41,7 @@ const GLASS_EXACT = new Set([
   'glowstone', 'sea_lantern', 'ice',
   'copper_grate',
 ])
-/** 無色ガラスに集約するもの (色は sim で保持しない) */
+/** glass 型に集約する接尾辞 (色付きガラス・銅の格子。色や酸化の段階は sim で保持しない) */
 const GLASS_SUFFIXES = ['_stained_glass', '_copper_grate']
 
 export function toNonConductiveBlockState(
@@ -147,6 +147,8 @@ const SOLID_EXACT = new Set([
   // コンパレーターが読むもの (ジュークボックス・リスポーンアンカー・巣箱) は、solid に潰すと
   // 挙動が欠けるので入れない
   'ochre_froglight', 'verdant_froglight', 'pearlescent_froglight', 'sculk',
+  // 既知の抽象化: 生きたサンゴブロック 5 名は、vanilla では水が無いと 60〜99gt 後に死んだサンゴへ
+  // 変わる (オブザーバーが拾う)。sim はこの変化を持たない
   'tube_coral_block', 'brain_coral_block', 'bubble_coral_block', 'fire_coral_block',
   'horn_coral_block', 'dead_tube_coral_block', 'dead_brain_coral_block',
   'dead_bubble_coral_block', 'dead_fire_coral_block', 'dead_horn_coral_block',
@@ -404,7 +406,8 @@ export function classifyPlainBlock(
  * `powered` や `open` は sim が状態として持っているので、ここで固定してはいけない。
  *
  * 対象は blockstate のスナップショットで実測して決めた (1.21.4):
- *   solid 69 名 (axis / facing / snowy) / トラップドア 20 名 (half) / ゲート 11 名 (in_wall)
+ *   solid 76 名 (axis / facing / snowy。C-15 でフロッグライト 3 種・muddy_mangrove_roots・
+ *   bamboo_block・stripped_bamboo_block・infested_deepslate・loom を足し、big_dripleaf_stem を外した) / トラップドア 20 名 (half) / ゲート 11 名 (in_wall)
  */
 const APPEARANCE_PROPS: Record<string, readonly string[]> = {
   solid: ['axis', 'facing', 'snowy'],
