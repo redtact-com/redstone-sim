@@ -1,0 +1,637 @@
+{
+  "name": "wire-step-nonconductor-down",
+  "description": "R-1: 非導体の段 (ガラス・グロウストーン・上付きハーフ) をダストは上りにしか流れない。レーンは z=0,4,8,12,16 の 5 本。各レーンは 下段 L (0,1,z) → 段 (1,1,z) → 中段 M (1,2,z) → 段 (2,2,z) → 上段 U (2,3,z) の 2 段。t2 に redstone_block を置いて給電する。上から = (3,3,z)、下から = (-1,1,z)。レーンの内訳: z=0 ガラス・上から / z=4 グロウストーン・上から / z=8 上付きハーフ・上から / z=12 石・上から (対照) / z=16 ガラス・下から (対照)。予想 (1.21.1 RedStoneWireBlock.calculateTargetStrength: 1 段上のダストを読むのは横のブロックが導体のときだけ): 非導体の段を上から給電すると U=15、M と L は 0。石の段は 15/14/13。下から給電は段の材質によらず L=15、M=14、U=13。z=16 では t4 に下段 L を消す。予想: M と U は 0 (消えたダストの onRemove が隣の隣まで NC を配る)。z=20 は別の確認: ガラス (0,0,20) の上に t2 で dot のダストを置く。真上 (0,2,20) の redstone_block から 15 を受けるはず (onPlace で自分の強さを計算し直す)。R-1 の挙動は docs/research/16 §3.1 で rcon を直接叩いて確かめてある (座標の構成は記録が無い)。それを fixture にする。",
+  "mcVersion": "1.21.1",
+  "ticks": 6,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -2
+    ],
+    "to": [
+      3,
+      3,
+      20
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        -1,
+        0,
+        -2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "block": "glowstone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        4
+      ],
+      "block": "glowstone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        4
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        4
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        4
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        8
+      ],
+      "block": "smooth_stone_slab[type=top,waterlogged=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        8
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        8
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        8
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        12
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        12
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        12
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        16
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        16
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        16
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        16
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        16
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        2,
+        2,
+        16
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        16
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        16
+      ],
+      "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        3,
+        16
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        20
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        20
+      ],
+      "block": "redstone_block"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        3,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        3,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        3,
+        3,
+        12
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        -1,
+        1,
+        16
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        20
+      ],
+      "action": "setblock",
+      "block": "redstone_wire"
+    },
+    {
+      "tick": 4,
+      "pos": [
+        0,
+        1,
+        16
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            -1,
+            1,
+            16
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            12
+          ],
+          "block": "redstone_wire[east=up,north=none,power=13,south=none,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            16
+          ],
+          "block": "redstone_wire[east=up,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            20
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            12
+          ],
+          "block": "redstone_wire[east=up,north=none,power=14,south=none,west=side]"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            16
+          ],
+          "block": "redstone_wire[east=up,north=none,power=14,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            12
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            16
+          ],
+          "block": "redstone_wire[east=side,north=none,power=13,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            4
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            8
+          ],
+          "block": "redstone_wire[east=side,north=none,power=15,south=none,west=side]"
+        },
+        {
+          "pos": [
+            3,
+            3,
+            0
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            3,
+            3,
+            12
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            3,
+            3,
+            4
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            3,
+            3,
+            8
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            16
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            16
+          ],
+          "block": "redstone_wire[east=up,north=none,power=0,south=none,west=side]"
+        },
+        {
+          "pos": [
+            2,
+            3,
+            16
+          ],
+          "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T01:45:39.681Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
