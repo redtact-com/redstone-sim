@@ -319,6 +319,17 @@ describe('固体ブロックの取り込み (#170)', () => {
     expect(await importVanilla(name)).toMatchObject(solid)
   })
 
+  it.each([
+    'minecraft:ochre_froglight', 'minecraft:sculk', 'minecraft:tube_coral_block',
+    'minecraft:dead_horn_coral_block', 'minecraft:warped_nylium', 'minecraft:mangrove_roots',
+    'minecraft:bamboo_mosaic', 'minecraft:infested_deepslate', 'minecraft:crafting_table',
+    'minecraft:loom',
+  ])('#170 で残っていたフルブロックも solid: %s (C-15)', async (name) => {
+    // 26.2 の登録では導体判定を上書きしておらず、当たり判定がフルブロック。
+    // 実機 fixture conductor-names-extra でも 31 名とも導体 (横のダストが 15)
+    expect(await importVanilla(name)).toMatchObject(solid)
+  })
+
   it('soul_sand は導体だが独立した型 (#234)', async () => {
     // 泡柱の源になるので solid に潰さない。導体であることは変わらない
     // (実機ハーネスで測定済み)
@@ -349,6 +360,14 @@ describe('固体ブロックの取り込み (#170)', () => {
     expect(await importVanilla(name)).toMatchObject({ type: 'glass' })
   })
 
+  it.each([
+    'minecraft:copper_grate', 'minecraft:oxidized_copper_grate', 'minecraft:waxed_exposed_copper_grate',
+  ])('銅の格子はフルブロックだが非導体: %s (C-15)', async (name) => {
+    // 銅の各段階 (exposed_copper など) は導体の solid。格子だけ導体判定が常に false。
+    // 実機 fixture conductor-names-extra でも 8 種とも非導体 (横のダストが 0)
+    expect(await importVanilla(name)).toMatchObject({ type: 'glass' })
+  })
+
   it('ice は非導体だが packed_ice / blue_ice は導体 (名前で仲間にしない)', async () => {
     expect(await importVanilla('minecraft:ice')).toMatchObject({ type: 'glass' })
     expect(await importVanilla('minecraft:packed_ice')).toMatchObject({ type: 'solid' })
@@ -357,7 +376,9 @@ describe('固体ブロックの取り込み (#170)', () => {
 
   it.each([
     'minecraft:melon_stem', 'minecraft:attached_pumpkin_stem',
-  ])('_stem の接尾辞に引っかかる作物は solid にしない: %s', async (name) => {
+    // 当たり判定の無い植物。以前は `_stem` で拾われて導体になっていた (C-15)
+    'minecraft:big_dripleaf_stem',
+  ])('_stem の接尾辞に引っかかる植物は solid にしない: %s', async (name) => {
     expect(await importVanilla(name)).toBeUndefined()
   })
 

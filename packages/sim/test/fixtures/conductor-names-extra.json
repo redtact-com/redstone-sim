@@ -1,0 +1,2142 @@
+{
+  "name": "conductor-names-extra",
+  "description": "C-15: sim がまだ取り込めないフルブロック 39 名 (#170 の残り) が導体かを実機で確かめる。予想 (26.2 Blocks の登録): 先頭の stone の後の 31 名 (フロッグライト・スカルク・サンゴブロック・ナイリウム・マングローブの根・竹ブロック・作業台類など) は導体判定を上書きせず当たり判定がフルブロック = ダスト 15。銅の格子 8 種は導体判定が常に false = 0。末尾の対照 glowstone と sea_lantern は 0。今の sim はこの 39 名を読めず例外になる (修正で SOLID_EXACT と GLASS 側に足す)。生きたサンゴブロックは水が無いと 60gt 以上あとに死んだサンゴへ変わるが、記録は 2gt で終わる。各プローブ (置くダストを入れて 5 マス): 床 (3c,0,2r) と (3c+1,0,2r) は石、被検ブロック B (3c,1,2r)、その上の床レバー (3c,2,2r) は最初から ON (B を強充電している)。t1 に B の東 (3c+1,1,2r) へ dot のダストを setblock で置く。置いたダストは onPlace で自分の電力を計算するので、B が導体なら t1 に 15、非導体なら 0 (wire-step-nonconductor-down の z=20 で、setblock した dot が同じ tick に真上の redstone_block から 15 を取り、dot のまま残ることを実機で確かめてある)。レバーを setblock で倒す形にしないのは、支えブロックへの update を 1 プローブあたり 6 回足すことになり、撮影が長くなるため。c=0..9 (x=0,3,…,27)、r=0.. (z=0,2,…)。並びは z=0 の列から x の昇順。どのプローブのダストも、ほかのプローブのブロックと隣り合わない。見るセル: 各ダストの power (t1・t2)。並び: stone, ochre_froglight, verdant_froglight, pearlescent_froglight, sculk, tube_coral_block, brain_coral_block, bubble_coral_block, fire_coral_block, horn_coral_block, dead_tube_coral_block, dead_brain_coral_block, dead_bubble_coral_block, dead_fire_coral_block, dead_horn_coral_block, crimson_nylium, warped_nylium, mangrove_roots, muddy_mangrove_roots, bamboo_block, stripped_bamboo_block, bamboo_mosaic, honeycomb_block, ancient_debris, infested_stone, infested_cobblestone, infested_deepslate, crafting_table, cartography_table, fletching_table, smithing_table, loom, copper_grate, exposed_copper_grate, weathered_copper_grate, oxidized_copper_grate, waxed_copper_grate, waxed_exposed_copper_grate, waxed_weathered_copper_grate, waxed_oxidized_copper_grate, glowstone, sea_lantern。",
+  "mcVersion": "1.21.1",
+  "ticks": 2,
+  "region": {
+    "from": [
+      -2,
+      0,
+      0
+    ],
+    "to": [
+      28,
+      2,
+      8
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        -2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "ochre_froglight[axis=y]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        0
+      ],
+      "block": "verdant_froglight[axis=y]"
+    },
+    {
+      "pos": [
+        6,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        0
+      ],
+      "block": "pearlescent_froglight[axis=y]"
+    },
+    {
+      "pos": [
+        9,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        0
+      ],
+      "block": "sculk"
+    },
+    {
+      "pos": [
+        12,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        15,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        15,
+        1,
+        0
+      ],
+      "block": "tube_coral_block"
+    },
+    {
+      "pos": [
+        15,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        18,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        19,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        18,
+        1,
+        0
+      ],
+      "block": "brain_coral_block"
+    },
+    {
+      "pos": [
+        18,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        21,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        22,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        21,
+        1,
+        0
+      ],
+      "block": "bubble_coral_block"
+    },
+    {
+      "pos": [
+        21,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        24,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        25,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        24,
+        1,
+        0
+      ],
+      "block": "fire_coral_block"
+    },
+    {
+      "pos": [
+        24,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        27,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        28,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        27,
+        1,
+        0
+      ],
+      "block": "horn_coral_block"
+    },
+    {
+      "pos": [
+        27,
+        2,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        2
+      ],
+      "block": "dead_tube_coral_block"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "block": "dead_brain_coral_block"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        2
+      ],
+      "block": "dead_bubble_coral_block"
+    },
+    {
+      "pos": [
+        6,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        2
+      ],
+      "block": "dead_fire_coral_block"
+    },
+    {
+      "pos": [
+        9,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        2
+      ],
+      "block": "dead_horn_coral_block"
+    },
+    {
+      "pos": [
+        12,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        15,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        15,
+        1,
+        2
+      ],
+      "block": "crimson_nylium"
+    },
+    {
+      "pos": [
+        15,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        18,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        19,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        18,
+        1,
+        2
+      ],
+      "block": "warped_nylium"
+    },
+    {
+      "pos": [
+        18,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        21,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        22,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        21,
+        1,
+        2
+      ],
+      "block": "mangrove_roots[waterlogged=false]"
+    },
+    {
+      "pos": [
+        21,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        24,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        25,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        24,
+        1,
+        2
+      ],
+      "block": "muddy_mangrove_roots[axis=y]"
+    },
+    {
+      "pos": [
+        24,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        27,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        28,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        27,
+        1,
+        2
+      ],
+      "block": "bamboo_block[axis=y]"
+    },
+    {
+      "pos": [
+        27,
+        2,
+        2
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        4
+      ],
+      "block": "stripped_bamboo_block[axis=y]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "bamboo_mosaic"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        4
+      ],
+      "block": "honeycomb_block"
+    },
+    {
+      "pos": [
+        6,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        4
+      ],
+      "block": "ancient_debris"
+    },
+    {
+      "pos": [
+        9,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        4
+      ],
+      "block": "infested_stone"
+    },
+    {
+      "pos": [
+        12,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        15,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        15,
+        1,
+        4
+      ],
+      "block": "infested_cobblestone"
+    },
+    {
+      "pos": [
+        15,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        18,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        19,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        18,
+        1,
+        4
+      ],
+      "block": "infested_deepslate[axis=y]"
+    },
+    {
+      "pos": [
+        18,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        21,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        22,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        21,
+        1,
+        4
+      ],
+      "block": "crafting_table"
+    },
+    {
+      "pos": [
+        21,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        24,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        25,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        24,
+        1,
+        4
+      ],
+      "block": "cartography_table"
+    },
+    {
+      "pos": [
+        24,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        27,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        28,
+        0,
+        4
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        27,
+        1,
+        4
+      ],
+      "block": "fletching_table"
+    },
+    {
+      "pos": [
+        27,
+        2,
+        4
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        6
+      ],
+      "block": "smithing_table"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "loom[facing=north]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        6,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        7,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        6,
+        1,
+        6
+      ],
+      "block": "copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        6,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        10,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        6
+      ],
+      "block": "exposed_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        9,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        6
+      ],
+      "block": "weathered_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        12,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        15,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        15,
+        1,
+        6
+      ],
+      "block": "oxidized_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        15,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        18,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        19,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        18,
+        1,
+        6
+      ],
+      "block": "waxed_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        18,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        21,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        22,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        21,
+        1,
+        6
+      ],
+      "block": "waxed_exposed_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        21,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        24,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        25,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        24,
+        1,
+        6
+      ],
+      "block": "waxed_weathered_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        24,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        27,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        28,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        27,
+        1,
+        6
+      ],
+      "block": "waxed_oxidized_copper_grate[waterlogged=false]"
+    },
+    {
+      "pos": [
+        27,
+        2,
+        6
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        8
+      ],
+      "block": "glowstone"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        8
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        8
+      ],
+      "block": "sea_lantern"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        8
+      ],
+      "block": "lever[face=floor,facing=north,powered=true]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 1,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        7,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        10,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        13,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        16,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        19,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        22,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        25,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        28,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        4,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        7,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        10,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        13,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        16,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        19,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        22,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        25,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        28,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        4,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        7,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        10,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        13,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        16,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        19,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        22,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        25,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        28,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        4,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        7,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        10,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        13,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        16,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        19,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        22,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        25,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        28,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    },
+    {
+      "tick": 1,
+      "pos": [
+        4,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 1,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            1,
+            1,
+            8
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            10,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            10,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            10,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            10,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            13,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            13,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            13,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            13,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            16,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            16,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            16,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            16,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            19,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            19,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            19,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            19,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            22,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            22,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            22,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            22,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            25,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            25,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            25,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            25,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            28,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            28,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            28,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            28,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            8
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            4
+          ],
+          "block": "redstone_wire[east=none,north=none,power=15,south=none,west=none]"
+        },
+        {
+          "pos": [
+            7,
+            1,
+            6
+          ],
+          "block": "redstone_wire[east=none,north=none,power=0,south=none,west=none]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T10:03:11.903Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
