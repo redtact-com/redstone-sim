@@ -1,6 +1,6 @@
 {
   "name": "wire-cut-conductor-power",
-  "description": "R-2: 下段ダストの真上に置いた導体が上り接続 (形状と電力) を切る。slime_block / lodestone / soul_sand は導体なので切るはず。レーンは x=0,4,8,12,16 の 5 本。各レーン: 下段 L (x,1,0) は北の redstone_block で 15、段の石 (x+1,1,0)、上段 U (x+1,2,0) は下りで L を読んで 14。t2 に (x,2,0) へ蓋を置く。蓋の内訳: x=0 slime_block / x=4 lodestone / x=8 soul_sand / x=12 stone (対照: 切る) / x=16 glass (対照: 切らない)。予想 (1.21.1 RedStoneWireBlock.getConnectingSide と #calculateTargetStrength: 真上と横の判定はどちらも isRedstoneConductor): 導体の蓋では U が 0 で十字、L は east=none の南北の直線。ガラスでは何も変わらない。既存の wire-cut-conductor は給電していないので形状しか見ていない。こちらは電力も見る。",
+  "description": "R-2: 下段ダストの真上に置いた導体が上り接続 (形状と電力) を切る。slime_block / lodestone / soul_sand は導体なので切るはず。レーンは x=0,4,8,12,16 の 5 本。各レーン: 下段 L (x,1,0) は北の redstone_block で 15、段の石 (x+1,1,0)、上段 U (x+1,2,0) は下りで L を読んで 14。t2 に (x,2,0) へ蓋を置く。蓋の内訳: x=0 slime_block / x=4 lodestone / x=8 soul_sand / x=12 stone (対照: 切る) / x=16 glass (対照: 切らない)。予想 (1.21.1 RedStoneWireBlock.getConnectingSide と RedStoneWireBlock.calculateTargetStrength: 真上と横の判定はどちらも isRedstoneConductor): 導体の蓋では U が 0 で十字、L は east=none の南北の直線。ガラスでは何も変わらない。既存の wire-cut-conductor は給電していないので形状しか見ていない。こちらは電力も見る。",
   "mcVersion": "1.21.1",
   "ticks": 4,
   "region": {
