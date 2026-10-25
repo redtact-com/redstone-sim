@@ -2,6 +2,12 @@
 # 各トーチの出力が相手の土台ブロックを充電する。Set/Reset で一方を消して状態を反転させ、
 # 入力を離しても相互フィードバックで状態が「保持」されることを state 系列で観測する。
 #
+# 回路と入力は実機 fixture rs-torch-latch を土台にする (tools/mc-harness/fixtures/rs-torch-latch.json)。
+#   B1=(0,1,0) と T1=(1,1,0) が Q、B2=(4,1,0) と T2=(5,1,0) が Q'。QA=(2,1,0)..(3,1,0) は T1 の出力で B2 を充電し、
+#   QB は T2 の出力を (6,1,0)→(6,1,2)→(0,1,2)→(0,1,1) と回して B1 を充電する帰還レーン。
+#   Reset は B1 の上の床レバー (0,2,0)、Set は B2 の上の床レバー (4,2,0)。
+#   入力は t4 Reset on / t6 Reset off / t14 Set on / t16 Set off。
+#
 # 仕様クロスチェック (02 §6 torch [確定] + NOR 交差結合トポロジー):
 #   §6 torch: 土台給電 → 2gt 後に消灯 / 無給電 → 2gt 後に点灯 (TOGGLE_DELAY=2, priority 0)。
 #   Q = T1(=NOT(QB OR Reset))、Q' = T2(=NOT(QA OR Set))。QA=Q 出力→B2 充電、QB=Q' 出力→B1 充電。
@@ -11,42 +17,15 @@
 #     Set パルス → 対称に Q=1 へ戻し保持。
 #   sim=仕様が一致 (PASS)。交差結合の 1 反転 = トーチ 2 段 = 入力から 4gt で settle。
 #   ※ sim は wall_torch の facing を反転取り込み: facing=east → sim 土台=西。
-#   ※ 入力 tick 直後の帰還レーン dust の過渡値 (充電された土台を逆読み) は本質でないため断言しない。
-#      検証対象は Q/Q' (トーチ lit) の反転と、入力を離した後の保持。
+#   ※ 入力の直後に帰還レーンのダストが強充電された土台を逆読みする値 (t4〜t5 の QB=15→6、
+#      t14〜t15 の QA=15/14) は、fixture rs-torch-latch が実機と全セルで照合している (#75 の要確認)。
+#      ここでは Q/Q' (トーチ lit) の反転と、入力を離した後の保持を見る。
 meta {
   name: RS トーチラッチ (相互ループ NOR・Set/Reset で状態保持)
-  ref: 02 §6 torch (TOGGLE_DELAY=2, priority 0) / NOR 交差結合 / メモリ (状態保持)
+  ref: 02 §6 torch (TOGGLE_DELAY=2, priority 0) / NOR 交差結合 / メモリ (状態保持) / fixture rs-torch-latch
 }
 
-circuit {
-  (0,0,0)..(6,0,2) stone
-  # gate 1: B1 → T1 (Q)
-  (0,1,0) stone                                                       # B1 (T1 土台)
-  (1,1,0) redstone_wall_torch[facing=east,lit=true]                   # T1: 土台=西=B1, 出力=東
-  # gate 2: B2 → T2 (Q')
-  (4,1,0) stone                                                       # B2 (T2 土台)
-  (5,1,0) redstone_wall_torch[facing=east,lit=false]                  # T2: 土台=西=B2, 出力=東
-  # QA (Q = T1 出力 → B2 を充電)
-  (2,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
-  (3,1,0) redstone_wire[east=side,north=none,power=0,south=none,west=side]
-  # QB (Q' = T2 出力 → 帰還レーン z=2 → B1 を充電)
-  (6,1,0) redstone_wire[east=none,north=side,power=0,south=none,west=side]
-  (6,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
-  (6,1,2) redstone_wire[east=none,north=none,power=0,south=side,west=side]
-  (1,1,2)..(5,1,2) redstone_wire[east=side,north=none,power=0,south=none,west=side]
-  (0,1,2) redstone_wire[east=side,north=none,power=0,south=side,west=none]
-  (0,1,1) redstone_wire[east=none,north=side,power=0,south=side,west=none]
-  # 入力: Reset = B1 上のレバー、Set = B2 上のレバー (土台を強充電)
-  (0,2,0) lever[face=floor,facing=north,powered=false]   # Reset
-  (4,2,0) lever[face=floor,facing=north,powered=false]   # Set
-}
-
-inputs {
-  t4  use (0,2,0)    # Reset on
-  t6  use (0,2,0)    # Reset off (パルス: 離しても保持されることを見る)
-  t14 use (4,2,0)    # Set on
-  t16 use (4,2,0)    # Set off (パルス)
-}
+fixture rs-torch-latch
 
 ticks 26
 
