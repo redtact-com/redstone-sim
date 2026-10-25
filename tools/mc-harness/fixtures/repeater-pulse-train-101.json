@@ -1,0 +1,43 @@
+{
+  "name": "repeater-pulse-train-101",
+  "description": "MC-54711 (1.21.1 で再現する)。背中合わせのリピーター (delay=1) に 1rt 刻みの 101 (t2 ON / t4 OFF / t6 ON / t8 OFF) を入れると、最後のリピーターが 111 に引き伸ばす。出力先 (後段) がダイオードのリピーターは予約の優先度が -3 で、その点灯が最後のリピーターの自己 OFF (-2) より先に走るため。レーン 1 (z=0) は 2 段で、2 段目が t6 から t11 まで点きっぱなしになる (t12 に消える)。レーン 2 (z=2) は 3 段で、2 段目は 101 のまま、3 段目が t8 から t13 まで点きっぱなしになる (t14 に消える)。",
+  "mcVersion": "1.21.1",
+  "ticks": 16,
+  "region": { "from": [-1, 0, -1], "to": [5, 2, 3] },
+  "player": { "spawn": [0.5, 1.0, 1.5], "facing": [180, 40], "lookAt": [0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [0, 0, 1], "block": "stone" },
+    { "pos": [0, 0, 2], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 1], "block": "stone" },
+    { "pos": [1, 0, 2], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 1], "block": "stone" },
+    { "pos": [2, 0, 2], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 1], "block": "stone" },
+    { "pos": [3, 0, 2], "block": "stone" },
+    { "pos": [4, 0, 1], "block": "stone" },
+    { "pos": [4, 0, 2], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [1, 1, 0], "block": "repeater[delay=1,facing=west,locked=false,powered=false]" },
+    { "pos": [2, 1, 0], "block": "repeater[delay=1,facing=west,locked=false,powered=false]" },
+    { "pos": [3, 1, 0], "block": "redstone_lamp[lit=false]" },
+    { "pos": [0, 1, 2], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [1, 1, 2], "block": "repeater[delay=1,facing=west,locked=false,powered=false]" },
+    { "pos": [2, 1, 2], "block": "repeater[delay=1,facing=west,locked=false,powered=false]" },
+    { "pos": [3, 1, 2], "block": "repeater[delay=1,facing=west,locked=false,powered=false]" },
+    { "pos": [4, 1, 2], "block": "redstone_lamp[lit=false]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 2, "pos": [0, 1, 2], "action": "use" },
+    { "tick": 4, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 4, "pos": [0, 1, 2], "action": "use" },
+    { "tick": 6, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 6, "pos": [0, 1, 2], "action": "use" },
+    { "tick": 8, "pos": [0, 1, 0], "action": "use" },
+    { "tick": 8, "pos": [0, 1, 2], "action": "use" }
+  ]
+}
