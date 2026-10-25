@@ -34,24 +34,71 @@ const FENCE = /^\s*(`{3,}|~{3,})/
 const CHECKBOX = /^(\s*)(?:[-*+]|\d{1,9}[.)])[ \t]+\[( |x|X)\](?:[ \t]+(.*))?$/
 
 /**
+ * 1 行から HTML コメントを除いた、表示される字を返す。インラインのコード (`<!--` など) の
+ * 中はコメントの始まりにしない。閉じていない `<!--` のあとは GitHub の表示では隠れるので、
+ * 本文の終わりまでコメントとして扱う。
+ * @param {string} line
+ * @param {{ inComment: boolean }} state 行をまたぐコメントの状態 (書き換える)
+ */
+function stripComments(line, state) {
+  let out = ''
+  let i = 0
+  while (i < line.length) {
+    if (state.inComment) {
+      const end = line.indexOf('-->', i)
+      if (end < 0) return out
+      state.inComment = false
+      i = end + 3
+      continue
+    }
+    if (line[i] === '`') {
+      const run = line.slice(i).match(/^`+/)[0]
+      // 同じ長さのバッククォートで閉じていればインラインのコード。中身はそのまま残す
+      const close = line.slice(i + run.length).search(new RegExp(`(?<!\`)${run}(?!\`)`))
+      if (close >= 0) {
+        const end = i + run.length + close + run.length
+        out += line.slice(i, end)
+        i = end
+        continue
+      }
+      out += run
+      i += run.length
+      continue
+    }
+    if (line.startsWith('<!--', i)) {
+      state.inComment = true
+      i += 4
+      continue
+    }
+    out += line[i]
+    i++
+  }
+  return out
+}
+
+/**
  * 本文から「## やること」節の未チェック項目を、本文の行のまま取り出す。
  * 見出しの階層は ## で区切る (節の中の ### は節の一部として読む)。
+ * HTML コメントはコードの囲みの外だけで除き、判断は表示される字で行う。
  * @param {string | null | undefined} body
  * @returns {string[]}
  */
 export function findUnchecked(body) {
-  const text = (body ?? '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?-->/g, '')
+  const lines = (body ?? '').replace(/\r\n?/g, '\n').split('\n')
   const found = []
+  const comment = { inComment: false }
   let fence = null
   let inTodo = false
   let dropIndent = -1
-  for (const line of text.split('\n')) {
-    const f = line.match(FENCE)
+  for (const raw of lines) {
     if (fence) {
+      const f = raw.match(FENCE)
       // 閉じる囲みは同じ文字で同じ長さ以上。後ろに言語名などが付いた行では閉じない
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && line.trim() === f[1]) fence = null
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length && raw.trim() === f[1]) fence = null
       continue
     }
+    const line = stripComments(raw, comment)
+    const f = line.match(FENCE)
     // ```a``` のように、同じ行の後ろにバッククォートがあるものはインラインのコードで、囲みではない
     if (f && !(f[1][0] === '`' && line.trimStart().slice(f[1].length).includes('`'))) { fence = f[1]; continue }
 
@@ -72,7 +119,7 @@ export function findUnchecked(body) {
     if (!c) continue
     const rest = (c[3] ?? '').trim()
     if (rest.startsWith('~~')) { dropIndent = c[1].length; continue }
-    if (c[2] === ' ') found.push(line.trimEnd())
+    if (c[2] === ' ') found.push(raw.trimEnd())
   }
   return found
 }
