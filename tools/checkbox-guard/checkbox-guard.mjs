@@ -25,6 +25,8 @@ export const LABEL = 'needs-checklist'
 export const LABEL_COLOR = 'e11d21'
 export const LABEL_DESCRIPTION = '閉じた時点で「やること」に未チェックの項目がある'
 export const MARKER = '<!-- checkbox-guard -->'
+/** GITHUB_TOKEN で書いたコメントの作者 */
+export const BOT_LOGIN = 'github-actions[bot]'
 /** コメントに並べる項目の上限。超えた分は件数だけ書く */
 export const MAX_LISTED = 30
 
@@ -239,9 +241,9 @@ export function createApi({ token, repo, apiUrl = 'https://api.github.com' }) {
   }
 }
 
-/** 前に書いたコメント (印のあるボットのコメント) を探す */
+/** 前に書いたコメント (印のある github-actions[bot] のコメント) を探す */
 export function findOwnComment(comments) {
-  return comments.find(c => c.user?.type === 'Bot' && (c.body ?? '').startsWith(MARKER)) ?? null
+  return comments.find(c => c.user?.login === BOT_LOGIN && (c.body ?? '').startsWith(MARKER)) ?? null
 }
 
 /**

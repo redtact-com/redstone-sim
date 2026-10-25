@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  LABEL, MARKER, MAX_LISTED, findUnchecked, decide, renderWarning, renderResolved, run, createApi,
+  LABEL, MARKER, MAX_LISTED, BOT_LOGIN, findUnchecked, decide, renderWarning, renderResolved, run, createApi,
 } from './checkbox-guard.mjs'
 
 /**
@@ -200,13 +200,13 @@ describe('コメントの本文', () => {
 })
 
 describe('run: GitHub に対してすること', () => {
-  type Comment = { id: number, body: string, user: { type: string } }
+  type Comment = { id: number, body: string, user: { login: string } }
   function fakeApi(issue: object, comments: Comment[] = []) {
     const calls: string[] = []
     const api = {
       getIssue: async () => issue,
       listComments: async () => comments,
-      createComment: async (_n: number, b: string) => { calls.push('createComment'); comments.push({ id: 99, body: b, user: { type: 'Bot' } }) },
+      createComment: async (_n: number, b: string) => { calls.push('createComment'); comments.push({ id: 99, body: b, user: { login: BOT_LOGIN } }) },
       updateComment: async (id: number, b: string) => { calls.push(`updateComment:${id}`); const c = comments.find(x => x.id === id); if (c) c.body = b },
       ensureLabel: async () => { calls.push('ensureLabel') },
       addLabel: async () => { calls.push('addLabel') },
@@ -223,15 +223,15 @@ describe('run: GitHub に対してすること', () => {
   })
 
   it('開き直して同じ内容で閉じ直しても、コメントは増やさない', async () => {
-    const { api, calls } = fakeApi(warnIssue, [{ id: 7, body: renderWarning(['- [ ] a']), user: { type: 'Bot' } }])
+    const { api, calls } = fakeApi(warnIssue, [{ id: 7, body: renderWarning(['- [ ] a']), user: { login: BOT_LOGIN } }])
     await run({ action: 'closed', number: 1, api })
     expect(calls).toEqual(['ensureLabel', 'addLabel'])
   })
 
   it('項目が変わっていれば前のコメントを書き換える。人のコメントは触らない', async () => {
     const { api, calls } = fakeApi(warnIssue, [
-      { id: 5, body: `${MARKER}\n人が貼った`, user: { type: 'User' } },
-      { id: 7, body: renderWarning(['- [ ] a', '- [ ] b']), user: { type: 'Bot' } },
+      { id: 5, body: `${MARKER}\n人が貼った`, user: { login: 'someone' } },
+      { id: 7, body: renderWarning(['- [ ] a', '- [ ] b']), user: { login: BOT_LOGIN } },
     ])
     await run({ action: 'closed', number: 1, api })
     expect(calls).toEqual(['ensureLabel', 'addLabel', 'updateComment:7'])
@@ -239,7 +239,7 @@ describe('run: GitHub に対してすること', () => {
 
   it('直して片付いたらラベルを外し、コメントを片付いたに書き換える', async () => {
     const issue = { state: 'closed', state_reason: 'completed', labels: [{ name: LABEL }], body: '## やること\n- [x] a' }
-    const { api, calls, comments } = fakeApi(issue, [{ id: 7, body: renderWarning(['- [ ] a']), user: { type: 'Bot' } }])
+    const { api, calls, comments } = fakeApi(issue, [{ id: 7, body: renderWarning(['- [ ] a']), user: { login: BOT_LOGIN } }])
     await run({ action: 'edited', number: 1, api })
     expect(calls).toEqual(['removeLabel', 'updateComment:7'])
     expect(comments[0].body).toBe(renderResolved())
@@ -247,7 +247,7 @@ describe('run: GitHub に対してすること', () => {
 
   it('警告のあと not_planned で閉じ直したら、ラベルを外して理由を書く', async () => {
     const issue = { state: 'closed', state_reason: 'not_planned', labels: [{ name: LABEL }], body: '## やること\n- [ ] a' }
-    const { api, calls, comments } = fakeApi(issue, [{ id: 7, body: renderWarning(['- [ ] a']), user: { type: 'Bot' } }])
+    const { api, calls, comments } = fakeApi(issue, [{ id: 7, body: renderWarning(['- [ ] a']), user: { login: BOT_LOGIN } }])
     await run({ action: 'closed', number: 1, api })
     expect(calls).toEqual(['removeLabel', 'updateComment:7'])
     expect(comments[0].body).toBe(renderResolved('not_planned'))
@@ -261,6 +261,12 @@ describe('run: GitHub に対してすること', () => {
     expect(calls).toEqual([])
     // 同じ close の run なら警告する
     expect((await run({ action: 'closed', number: 1, api, closedAt: '2026-10-25T10:40:00Z' })).kind).toBe('warn')
+  })
+
+  it('ほかのボットが印を付けたコメントは自分のものとして扱わない', async () => {
+    const { api, calls } = fakeApi(warnIssue, [{ id: 8, body: renderWarning(['- [ ] a']), user: { login: 'other-app[bot]' } }])
+    await run({ action: 'closed', number: 1, api })
+    expect(calls).toEqual(['ensureLabel', 'addLabel', 'createComment'])
   })
 
   it('警告した跡が無い issue で片付いていれば何もしない', async () => {
