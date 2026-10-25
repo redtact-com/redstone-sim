@@ -1,0 +1,436 @@
+{
+  "name": "wire-cut-conductor-power",
+  "description": "R-2: 下段ダストの真上に置いた導体が上り接続 (形状と電力) を切る。slime_block / lodestone / soul_sand は導体なので切るはず。レーンは x=0,4,8,12,16 の 5 本。各レーン: 下段 L (x,1,0) は北の redstone_block で 15、段の石 (x+1,1,0)、上段 U (x+1,2,0) は下りで L を読んで 14。t2 に (x,2,0) へ蓋を置く。蓋の内訳: x=0 slime_block / x=4 lodestone / x=8 soul_sand / x=12 stone (対照: 切る) / x=16 glass (対照: 切らない)。予想 (1.21.1 RedStoneWireBlock.getConnectingSide と RedStoneWireBlock.calculateTargetStrength: 真上と横の判定はどちらも isRedstoneConductor): 導体の蓋では U が 0 で十字、L は east=none の南北の直線。ガラスでは何も変わらない。既存の wire-cut-conductor は給電していないので形状しか見ていない。こちらは電力も見る。",
+  "mcVersion": "1.21.1",
+  "ticks": 4,
+  "region": {
+    "from": [
+      -2,
+      0,
+      -1
+    ],
+    "to": [
+      17,
+      3,
+      1
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        -2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        -1
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=side,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        -1
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=side,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        5,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        5,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        8,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        8,
+        1,
+        -1
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        8,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=side,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        9,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        9,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        12,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        -1
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        12,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=side,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        13,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        13,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    },
+    {
+      "pos": [
+        16,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        17,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        16,
+        1,
+        -1
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        16,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=up,north=side,power=15,south=none,west=none]"
+    },
+    {
+      "pos": [
+        17,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        17,
+        2,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=14,south=none,west=side]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "slime_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        4,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "lodestone"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        8,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "soul_sand"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        12,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        16,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "glass"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            1,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            12,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            12,
+            2,
+            0
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            13,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            16,
+            2,
+            0
+          ],
+          "block": "glass"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            4,
+            2,
+            0
+          ],
+          "block": "lodestone"
+        },
+        {
+          "pos": [
+            5,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        },
+        {
+          "pos": [
+            8,
+            1,
+            0
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            8,
+            2,
+            0
+          ],
+          "block": "soul_sand"
+        },
+        {
+          "pos": [
+            9,
+            2,
+            0
+          ],
+          "block": "redstone_wire[east=side,north=side,power=0,south=side,west=side]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T01:45:32.331Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

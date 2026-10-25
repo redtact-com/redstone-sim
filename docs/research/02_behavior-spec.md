@@ -84,7 +84,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - ブロックティックは **priority 昇順 → 同 priority 内は予約順 (subTickOrder)** で実行 (ScheduledTick.DRAIN_ORDER)。液体ティックは priority なし・予約順のみ。
 - **collect-then-execute**: 期限が来た tick を先に収集してから実行する。実行中に新規スケジュールされた tick は (delay 0 でも) **同 tick では走らず次 tick 送り**。
   - 出典: 1.21.11 デコンパイル LevelTicks.tick (collectTicks→runCollectedTicks)、SubTick WorldTickSchedulerMixin、https://minecraft.wiki/w/Tick
-- **重複予約の扱い** [確定]: LevelChunkTicks.schedule は (位置, ブロック種) キーで既存予約があると新規予約を**無視**。さらに willTickThisTick が当該 tick 実行バッチ中の再予約を防ぐ。→ **同 pos+block に予約は常に 1 件、キャンセル API はなし、action は実行時に世界状態から決定**。
+- **重複予約の扱い** [確定]: LevelChunkTicks.schedule は (位置, ブロック種) キーで既存予約があると新規予約を**無視**。さらに willTickThisTick が当該 tick 実行バッチ中の再予約を防ぐ (トーチ・リピーター・コンパレーターだけ。オブザーバーは使わない。§6 observer)。→ **同 pos+block に予約は常に 1 件、キャンセル API はなし、action は実行時に世界状態から決定**。
 - 実行時検証 [確定]: tile tick 実行時にその座標のブロックがスケジュール時の型と一致しなければ no-op (SubTick verifyBlock/verifyFluid で確認)。
 
 ### 2.2 TickPriority [確定] (1.21.11 デコンパイル全ブロック grep で確認、1.21.1/26.2 でも同一を確認済み)
@@ -114,6 +114,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - 例外: コンパレーターが別ダイオードに向く場合は priority -1 になりパルスが通る。
 - 出典: note II-07 (https://note.com/enokilovin/n/nc2952f9d228c。現 ArcFrout `II-ChGph`) + デコンパイル (ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER) + https://minecraft.wiki/w/Redstone_circuits/Pulse で三重裏付け。
 - **→ 回帰テストの最重要ケース。**
+- 実機でも確認済み [実機 fixture comparator-compare-front-nc (#406)]: オブザーバーを背面で読む compare / subtract のコンパレーターは、
+  2gt パルスを受けても一度も点かない。compare の方は、飲み込んだ tick に前方の BUD ピストンだけを起こす (§6 comparator の R-5)。
+  sim 側の回帰は tests/circuits/timing/comparator-swallow-p0.rstest (トレース `Co{c.2-}`)。
 
 ---
 
@@ -243,6 +246,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   他のダストの強度計算には寄与しない** (= 弱充電)。`getDirectSignal` は通常時 `getSignal` と同値。
 - **強度計算** (`calculateTargetStrength`): 「非ワイヤ隣接の最大信号 (`getBestNeighborSignal`)」と「隣接ワイヤ最大値 − 1」の大きい方。
   斜め読み: 水平隣接が導体かつ自分の直上が非導体 → 斜め上のワイヤを読む / 水平隣接が非導体 → 斜め下のワイヤを読む。
+  sim ではこの規則を `getWireInputNeighbors` (packages/sim/src/blocks/wire.ts) が持ち、連結成分の収集に使う
+  `getConnectedWireNeighbors` とは分けている (#404。それまでは後者を入力にも使っていたので、非導体の段を下りにも流れていた。
+  実機 fixture wire-step-nonconductor-down)。
   → ArcFrout の切断規則 (上の遮蔽が導体なら斜め上からの受信が切断) はこのコードと一致 [確定]。
 
 ---
@@ -310,6 +316,10 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   > 26.2 の実物とも実機 1.21.1 とも食い違う。実機 fixture `comparator-nc-own-tick` /
   > `repeater-nc-own-tick` が正で、ガードが無いと**遷移が 1gt 早まる**。
   tick で `refreshOutputState`: 出力値を ComparatorBlockEntity に保存し、POWERED を更新して前方更新。
+  前方更新を出すのは、保存した出力値が変わったときと、**compare モードのとき** (値が同じでも出す)。
+  subtract モードで値が変わらなければ何も出さない [確定: 26.2 ComparatorBlock.refreshOutputState]。
+  オブザーバーの 2gt パルスを飲み込んだ tick (§2.4) でも、compare なら前方の BUD を起こす
+  (R-5。実機 fixture comparator-compare-front-nc)。トレースではこの実行を `Co{c.2-}` と書く (08 §1 の失敗修飾)。
 - 側面入力 [確定: SignalGetter.getControlInputSignal(diodesOnly=false)]: ワイヤ (POWER 直読)・レッドストーンブロック (15)・
   その他は **direct signal (強出力) がその方向を向くもの** = リピーター/コンパレーター/**オブザーバー**。
   レバー/ボタン/トーチは水平方向へ direct signal を出さないため無効 (従来記述にオブザーバーを追加)。
@@ -322,6 +332,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
     → #35 実機バグ報告 1 の根拠。sim は readComparatorSide で実装済み。
 - 背面入力 (`getInputSignal` override) [確定]: 背面ブロックが `hasAnalogOutputSignal` なら**その値で上書き** (通常信号より優先)。
   そうでなく信号 <15 かつ背面が導体なら、さらに 1 マス先のコンテナ/額縁 (ItemFrame.getAnalogOutput) を読む (固体 1 個越し)。
+  読めたときも**その値で置き換える**。大きい方は取らないので、弱充電された固体の奥が空の容器なら 0 になる
+  (R-4。実機 fixture comparator-through-conductor-replace)。
+  検知レールも `hasAnalogOutputSignal` を持つので、レールが点いていても通常信号の 15 は読まれない (下の rail 節。R-3)。
 - **コンテナ充填率→強度の変換式** [確定: AbstractContainerMenu.getRedstoneSignalFromContainer、未解明 #5 解消]:
   `f = (Σ 各スロットの count / maxStackSize) / スロット数` として `lerpDiscrete(f, 0, 15)` =
   「f が 0 なら 0、それ以外は f × 14 の切り捨て + 1」— 通説の「floor(1+14*fill)」と同値 (空 = 0、非空は最低 1)。
@@ -488,12 +501,29 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 ### observer (実装済み: I8 / issue #16)
 - PP/SU 更新で起動、NC では起動しない [確定: 4.1、ObserverBlock は neighborChanged 非 override]。
   起動条件: `updateShape` で **観測面 (FACING) 方向からの shape 更新** かつ非 POWERED のとき
-  `startSignal` → `hasScheduledTick` (キュー全体) を確認して 2 gt の tile tick (priority 0) を予約 [確定]。
+  `startSignal` → `hasScheduledTick` (この tick に取り出し済みの予約は数えない。下記) を確認して 2 gt の tile tick (priority 0) を予約 [確定]。
 - tick [確定: ObserverBlock.tick]: OFF なら ON 化 + **自身の OFF tick (2 gt) を先に予約**してから前方更新
   (`updateNeighborsInFront`)。ON なら OFF 化して前方更新 → パルス幅 2 gt。
 - 給電: 出力は観測面の反対側 (背面) の 1 ブロックのみ。`getSignal`/`getDirectSignal` とも query 方向 == FACING
   (= 背面側の隣接ブロックからの問い合わせ) で 15 → 背面ブロックを強充電できる [確定]。
 - 設置時に POWERED だった場合は無更新で消灯 (onPlace, flag 18)、除去時は前方へ消灯通知 (onRemove) [確定]。
+- /setblock で置いたオブザーバーは 2gt 後に 1 回点く (#301)。正面に何も無くても点く
+  [実機 fixture wire-cut-conductor (正面は空気)・observer-mutual-clock-setblock]。sim は setBlockCommand で
+  2gt の予約を積む。ピストンで運ばれて着地したときも同じ (#119、fixture observer-pushed)。
+- 予約の重複を見るとき、この tick に取り出し済みの予約は数えない (MC-189954)。トーチ・リピーター・
+  コンパレーターは、取り出し済みで、まだ走っていない予約も数える (走り終えた分は数えない。数えるとトーチクロックが
+  止まる。willTickThisTick、§2.1) が、オブザーバーは数えない。
+  そのため、形状更新が「消灯中で、この tick の予約がもう取り出された相手」に届くと、相手はもう 1 本積む
+  [実機 fixture observer-4tick-clock・observer-mutual-clock-setblock]。
+- 向かい合う 2 個 (相互クロック):
+  - 更新なしで置いただけでは静止する (fixture observer-mutual-clock-setblock のレーン 2、
+    rstest mutual-clock-quiescent)。
+  - 片方 (A) だけ置いておき、もう片方 (B) を /setblock すると、B 自身の予約と、B が現れた形状更新に
+    よる A の予約が 2gt 後に並び、2 個が同時に点く。このとき A はもう 1 本積み、その 1 本が
+    さらに 2gt 後に B の消灯より先に走って A を消す。以後は 6gt 周期で A が 2gt 先行する。
+  - A が点いた tick に B を置くと、A の消灯と B の初回の点灯が同じ tick に並び、二重予約が
+    毎周期起きて 4gt 周期で回り続ける。1 tick 遅く (A の点灯の 2 tick 目に) 置くと並ばず 6gt になる
+    (fixture observer-4tick-clock)。
 - **facing 意味論の確定 (I8)**: blockstate `facing` = **観測方向 (顔のある面が向く先)**、出力は `OPPOSITE[facing]` の背面
   1 マス。sim の `ObserverState.facing` は vanilla FACING と同一で **反転しない** (mcstate/viewer/nbtIO とも piston と
   同じ非反転規則。repeater/comparator/wall_torch の flip とは異なる)。ObserverBlock.updateShape の
@@ -592,6 +622,12 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 - `powered` のトリガはカート検出のみ (`entityInside` / 20gt ごとの `tick` / `onPlace`)。
   持続は `PRESSED_CHECK_PERIOD = 20`
 - **OFF のタイミングはカートが去った時ではなく ON からの 20gt** で決まる [実機で確定]
+- コンパレーターに読ませる値 (`getAnalogOutputSignal`) は、powered のときに上のトロッコを調べ、
+  コマンドブロック付きならその成功回数、中身を持つトロッコならその充填率を返す。**普通のトロッコは 0**
+  [確定: 26.2 DetectorRailBlock / 実機 fixture detector-rail-comparator (R-3)]。
+  sim はトロッコを持たないので常に 0 を返す (下の「既知の抽象化」)
+- 信号源なので、**隣のダストは検知レールへ接続する** [確定: 26.2 RedStoneWireBlock.shouldConnectTo /
+  実機 fixture wire-connect-detector-rail-lectern (R-8)]
 
 **ピストンとの関係 [確定: 26.2 — レール 4 種とも pushReaction 未指定 = 既定 NORMAL]**
 
@@ -608,7 +644,7 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 | 支持ブロック要件 | 支持を失うとドロップして消える | **非実装** | sim 全体が支持要件を持たない。一部だけ入れると不整合。実機仕様は fixture `rail-support-break` / `rail-slope-support-break` / `lever-support-break` に `skipUntil` 付きで記録 |
 | 貼り付き素子の支え | **ホッパーの上・伸びたピストンの上に置いたレバーは壊れて落ちる** | 残って給電し続ける | 上と同じ横断的判断。実測 (#328 fixture `lever-support-break`): ホッパー上の床レバーを ON にすると**レバーが消え**、ホッパーは `enabled=true` のまま。sim はレバーが残るので `enabled=false` になる。石の上のレバー (対照) は残る |
 | detector_rail のカート常駐 | 20gt ごとに数え直して通電を維持 | 20gt で必ず OFF | 折衷モデル (手動トリガ + 持続 gt)。fixture `detector-rail-cart-stay` に記録 |
-| コンパレーター読み取り | カートの中身を読む | 常に 0 | エンティティ非実装 |
+| コンパレーター読み取り | カートの中身を読む (普通のトロッコは 0) | 常に 0 | エンティティ非実装。普通のトロッコの範囲では実機と一致する [実機 fixture detector-rail-comparator (R-3。#406)]。ed3baa9 までの sim はレールが ON なら 15 を読んでいた |
 
 ---
 

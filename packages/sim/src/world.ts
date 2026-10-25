@@ -95,7 +95,8 @@ type UpdateEntry =
 /**
  * コンパレーターが読む「アナログ出力」 (vanilla の hasAnalogOutputSignal / getAnalogOutputSignal)。
  * 持たないブロックは null。**直後と導体 1 個越しの両方で同じ判定を使う**
- * [確定: 26.2 ComparatorBlock.calculateOutputSignal]。
+ * [確定: 26.2 ComparatorBlock.getInputSignal]。
+ * 値を返したブロックは、通常の信号をその値で**置き換える** (readComparatorBack)。
  */
 function analogOutputOf(block: BlockState | null | undefined): number | null {
   if (!block) return null
@@ -113,6 +114,15 @@ function analogOutputOf(block: BlockState | null | undefined): number | null {
   // 書見台はページ番号を読む (#240)
   // [確定: 26.2 LecternBlock.getAnalogOutputSignal / LecternBlockEntity.getRedstoneSignal]
   if (block.type === 'lectern') return lecternSignal(block)
+  // 検知レールは**常に 0** (R-3)。アナログ出力を持つので、レールが点いていても
+  // 通常の信号 15 は 0 に置き換わる。
+  // [確定: 26.2 DetectorRailBlock.getAnalogOutputSignal — powered のときだけ上のトロッコを
+  //  調べ、コマンドブロック付きならその成功回数、中身を持つトロッコならその充填率を返す。
+  //  普通のトロッコを含め、それ以外は 0]
+  // sim はトロッコを持たない (13 §2 エンティティ境界) ので、数える相手が無く常に 0 になる。
+  // [実機: docs/research/16 §3.1 R-3 / fixture detector-rail-comparator —
+  //  普通のトロッコが乗ってもコンパレーターは点かない]
+  if (block.type === 'detector_rail') return 0
   return null
 }
 
@@ -366,11 +376,12 @@ export class SimWorld {
   /** 収集した bu トークンで updateFormula 行を発行し、収集を閉じる */
   private traceCloseUpdate(
     abbr: string, action: TraceAction, delay: number | 's', phase: TracePhase,
+    opts?: { failed?: boolean },
   ): void {
     if (this.tracer?.verbose && this.traceBuf) {
       this.tracer.push({
         kind: 'update', gt: this.currentTick, phase, abbr, action, delay,
-        reserve: false, updates: this.traceBuf,
+        reserve: false, failed: opts?.failed, updates: this.traceBuf,
       })
     }
     this.traceBuf = null
@@ -1609,6 +1620,19 @@ export class SimWorld {
       const newPowered = newOutputPower > 0
       if (block.powered !== newPowered || block.outputPower !== newOutputPower) {
         apply({ ...block, powered: newPowered, outputPower: newOutputPower }, 'c')
+      } else if (block.mode === 'compare') {
+        // **compare モードは出力が変わらなくても前方へ近隣更新を出す** (R-5)
+        // [確定: 26.2 ComparatorBlock.refreshOutputState — 保存した出力が変わったとき、
+        //  または compare モードのときに、前方の更新 (updateNeighborsInFront) を出す。
+        //  subtract モードで値が変わらなければ何も出さない]
+        // オブザーバーの 2gt パルスを飲み込んだ tick がこれに当たり、点かないまま
+        // 前方の BUD ピストンを起こす [実機 fixture comparator-compare-front-nc]。
+        // blockstate も出力も変わらないので、形状更新もダストの再計算も要らない。
+        // トレースは「実行したが変化しなかった」を 08 §1 の失敗修飾で Co{c.2-} と出す
+        this.traceProcess('ST', 'Co', 'c', elemDelay(block), { failed: true })
+        this.traceOpenUpdate(pos)
+        this.emitOutputShape(pos)
+        this.traceCloseUpdate('Co', 'c', elemDelay(block), 'ST', { failed: true })
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       // 解除も flag 3 の書き込み → updateNeighbours の順 (押すときと同じ。R-7)
@@ -2446,7 +2470,7 @@ export class SimWorld {
     // **1 手早く電源断を見てしまい**、引き戻しの積まれる順が変わる
     this.emitOutputShape(pos)
     const changedWires = this.propagateWireBFS(
-      [...this.collectWireStarts(pos), ...reshaped])
+      [...this.collectWireStarts(pos), ...reshaped], this.collectLateWireStarts(pos))
     // ワイヤーの power 変化は blockstate 変化 = PP を発行 (観測面の隣接オブザーバー起動)。
     // vanilla のダスト setBlock (flag2 → updateNeighbourShapes) に相当し、多段 NC より先。
     for (const w of changedWires) this.emitShapeUpdate(w)
@@ -2492,7 +2516,8 @@ export class SimWorld {
   /**
    * BFS の起点: 自身の隣接ワイヤー + 強充電され得る隣接導体 (solid / target) の
    * 隣接ワイヤー (dust→導体→dust は無いが、strong 源→導体→dust の 2 ホップは
-   * 電源になる)
+   * 電源になる)。探索順 (= changedWires の順) を決めるので、ここに足すものは順序に効く。
+   * 順序に効かせずに足す起点は collectLateWireStarts
    */
   private collectWireStarts(pos: Pos3D): Pos3D[] {
     // 導体経由の 2 ホップ起点も NC_UPDATE_ORDER で集める (collectAdjacentWires と同規則)
@@ -2503,6 +2528,42 @@ export class SimWorld {
         starts.push(...this.collectAdjacentWires(nPos))
       }
     }
+    return starts
+  }
+
+  /**
+   * **後から足す起点**: pos を段越しに読むワイヤー (水平隣の 1 段上・下) と pos 自身のワイヤー
+   * (R-1 の検証で見つけた取りこぼし。#404)。
+   * pos のダストを段越しに読むダストは pos の水平隣の 1 段上・下にいて、pos に隣接しない。
+   * 段が導体なら 2 ホップで拾えるが、ガラスなど非導体の段では拾えず、pos のダストを
+   * 消しても古い値のまま残っていた (wire-power-fixpoint.test.ts がランダムな盤面で検出。
+   * 実機 fixture wire-step-nonconductor-down の z=16: 下段を消すと中段・上段は 0)。
+   * vanilla は消えたダストの onRemove が隣の隣まで NC を配るので、この範囲は必ず再計算される
+   * [確定: 1.21.1 RedStoneWireBlock.onRemove — 6 方向の隣それぞれから updateNeighborsAt]。
+   * ここで足すのはダストの電力の再計算だけで、隣の隣にあるダスト以外の素子へ届く NC は
+   * 今までどおり出ない (docs/research/16 §2.3 の「除去時の追加更新」)。
+   * 置かれたダスト自身も、隣にダストも導体も無く形も変わらなければ (ガラスの上に dot で置く等)
+   * 起点に入らないので足す [確定: 1.21.1 RedStoneWireBlock.onPlace — 置かれたダストは自分の強さを
+   * 計算し直す] [実機 fixture wire-step-nonconductor-down の z=20: 真上の redstone_block で 15]。
+   *
+   * propagateWireBFS はこれを collectWireStarts の起点とは別に受け取り、通常の起点から
+   * 辿り終えたあとに、まだ網に入っていないものだけを積む。通常の起点と同じ網にいれば
+   * 先に BFS で拾われるので探索順 (= changedWires の順 = 形状更新とダスト多段 NC の順) は
+   * 変わらず、連結していないときだけ別の成分として後ろに付く (wire-start-order.test.ts)。
+   * 斜めの読み手はダストが置かれたり消えたりしたときだけ要るが、前のブロックを知らないので
+   * 毎回足す (起点が増えるだけで値は変わらない)
+   */
+  private collectLateWireStarts(pos: Pos3D): Pos3D[] {
+    const starts: Pos3D[] = []
+    for (const dir of NC_UPDATE_ORDER) {
+      if (dir === 'up' || dir === 'down') continue
+      const side = neighbor(pos, dir)
+      for (const dy of [1, -1]) {
+        const p: Pos3D = [side[0], side[1] + dy, side[2]]
+        if (this.getBlockAt(p)?.type === 'wire') starts.push(p)
+      }
+    }
+    if (this.getBlockAt(pos)?.type === 'wire') starts.push(pos)
     return starts
   }
 
@@ -2719,47 +2780,70 @@ export class SimWorld {
    *
    * ─ アルゴリズム（O(n)、n = 連結ワイヤー数）─
    *   Phase 1: 起点ワイヤーから BFS でトポロジー上の連結成分を収集し全部 power=0 にリセット。
+   *            lateStartWires (collectLateWireStarts) は、startWires から辿り終えたあとに
+   *            まだ成分に入っていないものだけを積んで続ける。探索順 (= changedWires の順) は
+   *            startWires だけで決まり、lateStartWires は連結していない成分を後ろに付けるだけ。
    *   Phase 2: 連結成分の中で動力源（レバー等）に直接隣接するワイヤーを起点に
    *            増加 BFS を実行し正しい電力値を書き込む。
    *            増加 BFS は単純 BFS で正しく収束する（各ワイヤーは最大値を受け取るため）。
+   *
+   * ─ 2 つの近傍 ─
+   *   成分の収集と増加 BFS の広がりには getConnectedWireNeighbors (対称) を使い、
+   *   値の計算 (computeWirePower) には getWireInputNeighbors (非対称。非導体の段は
+   *   上りしか読まない) を使う。入力の関係は対称な関係の部分集合なので、
+   *   起点から入力の関係で辿れるワイヤーは必ず起点と同じ成分に入り (起点の集め方は
+   *   collectWireStarts)、あるワイヤーの値が増えたとき
+   *   それを入力に持つワイヤーは必ずその近傍にあって再計算される。値は 0 から単調に
+   *   増えるだけなので振動も過大な値も出ない (wire-power-fixpoint.test.ts がランダムな
+   *   盤面で一から計算した値と突き合わせている)
    */
-  private propagateWireBFS(startWires: Pos3D[]): Pos3D[] {
+  private propagateWireBFS(startWires: Pos3D[], lateStartWires: Pos3D[] = []): Pos3D[] {
     // ── Phase 1: 連結成分を収集 & ゼロ化 ──────────────────────
     const connected = new Set<string>()
     const exploreOrder: string[] = []
     const initialPower = new Map<string, number>()
     const exploreQueue: Pos3D[] = []
 
-    for (const p of startWires) {
-      const key = posKey(p)
-      if (!connected.has(key) && this.getBlockAt(p)?.type === 'wire') {
-        connected.add(key)
-        exploreQueue.push(p)
-      }
-    }
-
-    while (exploreQueue.length > 0) {
-      const pos = exploreQueue.shift()!
-      const block = this.getBlockAt(pos)
-      if (!block || block.type !== 'wire') continue
-
-      exploreOrder.push(posKey(pos))
-      initialPower.set(posKey(pos), (block as WireState).power)
-
-      // ゼロ化（接続情報はそのまま）
-      if ((block as WireState).power !== 0) {
-        this.setBlockAt(pos, { ...block, power: 0 })
-      }
-
-      // 物理接続しているワイヤーを収集（同レイヤー + 上り/下りステップ + 直上直下）
-      for (const nPos of getConnectedWireNeighbors(pos, this)) {
-        const nKey = posKey(nPos)
-        if (!connected.has(nKey)) {
-          connected.add(nKey)
-          exploreQueue.push(nPos)
+    const seed = (wires: Pos3D[]) => {
+      for (const p of wires) {
+        const key = posKey(p)
+        if (!connected.has(key) && this.getBlockAt(p)?.type === 'wire') {
+          connected.add(key)
+          exploreQueue.push(p)
         }
       }
     }
+
+    const explore = () => {
+      while (exploreQueue.length > 0) {
+        const pos = exploreQueue.shift()!
+        const block = this.getBlockAt(pos)
+        if (!block || block.type !== 'wire') continue
+
+        exploreOrder.push(posKey(pos))
+        initialPower.set(posKey(pos), (block as WireState).power)
+
+        // ゼロ化（接続情報はそのまま）
+        if ((block as WireState).power !== 0) {
+          this.setBlockAt(pos, { ...block, power: 0 })
+        }
+
+        // 物理接続しているワイヤーを収集（同レイヤー + 上り/下りステップ。対称な関係）
+        for (const nPos of getConnectedWireNeighbors(pos, this)) {
+          const nKey = posKey(nPos)
+          if (!connected.has(nKey)) {
+            connected.add(nKey)
+            exploreQueue.push(nPos)
+          }
+        }
+      }
+    }
+
+    seed(startWires)
+    explore()
+    // 後から足す起点は、通常の起点の網に入っていないものだけを別の成分として続ける
+    seed(lateStartWires)
+    explore()
 
     // ── Phase 2: 動力源に隣接するワイヤーから増加 BFS ──────────
     // 動力源に隣接して power > 0 になるワイヤーを起点にする。
@@ -2789,6 +2873,8 @@ export class SimWorld {
       const block = this.getBlockAt(pos)
       if (!block || block.type !== 'wire') continue
 
+      // 広がりは対称な近傍で辿る。pos を入力に持つワイヤーは必ずこの中にある
+      // (入力の関係は対称な関係の部分集合) ので、再計算の取りこぼしは無い
       for (const nPos of getConnectedWireNeighbors(pos, this)) {
         const nKey = posKey(nPos)
         if (!connected.has(nKey)) continue
@@ -3092,6 +3178,8 @@ export class SimWorld {
         //   - 信号源でない更新 (石への差し替え) では再計算されず、通電時の向きが
         //     残ったまま固まる [fixture rail-junction-nonsignal]
         //   - 4 方向ジャンクションは給電しても動かない [fixture rail-junction-gate]
+        // 書見台は信号源 (isSignalSourceType。R-8) なので、固まっていた向きも setblock で隣に置くと
+        // 決め直される [fixture wire-connect-detector-rail-lectern: t5 に north_east → south_east]
         if (!isSignalSourceType(origin)) break
         if (countPotentialConnections(this, pos) !== 3) break
         this.applyRailPlacement(pos, block.shape, false)
@@ -3204,15 +3292,16 @@ export class SimWorld {
   /**
    * コンパレーター背面入力の信号強度 (0-15)。
    * [確定: 02 §6 comparator — ComparatorBlock.getInputSignal override]:
-   *   1. 背面ブロックが hasAnalogOutputSignal (= コンテナ) なら**その signal で上書き**
-   *      (通常信号より優先)。
+   *   1. 背面ブロックが hasAnalogOutputSignal (コンテナ・検知レールなど analogOutputOf が
+   *      値を返すもの) なら**その signal で上書き** (通常信号より優先)。
    *   2. そうでなければ通常信号 = DiodeBlock.getInputSignal:
    *      - 背面からの weak 信号 (getSignal。lever/torch/repeater/comparator を
    *        向き込みで評価)
    *      - 背面がワイヤなら接続形状に関係なく POWER を直読
    *      - 背面が導体 (solid / target) なら充電レベルを読む (Level.getSignal の
    *        conductor 分岐。target の自身出力は getSignal 側で max 済み)
-   *   3. 通常信号 < 15 かつ背面が導体なら、さらに 1 マス先のコンテナを読む
+   *   3. 通常信号 < 15 かつ背面が導体なら、さらに 1 マス先のアナログ出力を読み、
+   *      あれば通常信号を**その値で置き換える** (大きい方は取らない。R-4)
    *      (導体 1 個越し。target も isRedstoneConductor=true なので対象。
    *       額縁は sim 未対応)。
    */
@@ -3229,12 +3318,16 @@ export class SimWorld {
     if (back?.type === 'wire') i = Math.max(i, back.power)
     else if (isConductor(back)) i = Math.max(i, getSolidPower(this, backPos))
 
-    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読む
-    // [確定: 26.2 ComparatorBlock.calculateOutputSignal — hasAnalogOutputSignal を
-    //  直後と導体 1 個越しの両方で見る]
+    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読み、
+    //    あれば通常の信号を**その値で置き換える** (R-4)。奥の値が小さくても置き換わるので、
+    //    弱充電された石の奥に空の樽があると 0 になる
+    // [確定: 26.2 ComparatorBlock.getInputSignal — 通常の信号が 15 未満で背面が導体なら、
+    //  奥のアナログ値 (額縁を含む) を読み、あればそれを入力にする。大きい方は取らない]
+    // [実機 fixture comparator-through-conductor-replace — 奥が空の樽・中身 3 の樽・無し・
+    //  トロッコの無い検知レールの 4 レーン]
     if (i < 15 && isConductor(back)) {
       const far = analogOutputOf(this.getBlockAt(neighbor(backPos, backDir)))
-      if (far !== null) i = Math.max(i, far)
+      if (far !== null) i = far
     }
     return i
   }

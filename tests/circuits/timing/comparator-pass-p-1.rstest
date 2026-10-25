@@ -9,7 +9,8 @@
 #   オブザーバー OFF(0) より **先に** 実行される → コンパレーター評価時にオブザーバー
 #   はまだ ON(15) → コンパレーターが発火してパルスが通る。sim=仕様が一致 (PASS)。
 #
-# strict の要点: swallow 版に無かった Co{c.2} (実行) が priority -1 で現れる = 通過。
+# strict の要点: swallow 版では出力が変わらない Co{c.2-} だった実行が、priority -1 では
+#   出力の変わる Co{c.2} になる = 通過 (R-5 で swallow 版にも実行の行が出るようになった)。
 # #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
 meta {
   name: コンパレーター通過 (別ダイオード向き, priority -1)

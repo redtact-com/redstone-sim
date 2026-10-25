@@ -12,8 +12,12 @@
 #   NORMAL(0) で登録 → 同 tick・同 priority の subTickOrder でオブザーバー OFF が先。
 #   → コンパレーターはオブザーバー単体パルスを通せない。sim=仕様が一致 (PASS)。
 #
-# strict の要点: コンパレーターは tick を「予約」する (Co(c.2) p0) が、実行 (Co{c.2}) が
-# 一切現れない = 飲み込みの証拠。§2.4 のタイミング機序をトレースで直接固定する。
+# strict の要点: コンパレーターは tick を「予約」する (Co(c.2) p0) が、gt6 の実行は
+# オブザーバー OFF (Ob{f.2}) の後で、出力が変わらない Co{c.2-} になる = 飲み込みの証拠。
+# §2.4 のタイミング機序をトレースで直接固定する。
+# R-5: compare モードは出力が変わらない tick でも前方へ近隣更新を出す
+# (26.2 ComparatorBlock.refreshOutputState)。この空振りの実行を '-' (失敗) 付きで出す。
+# 以前は行を出さず、前方更新も出していなかった。
 # (注: 既存 comparator/observer-swallow は observer がコンパレーター出力側に来る配置で
 #  コンパレーターが observer を読まないため Co 予約自体が出ない — findings 参照)。
 # #75: observer の tile tick 実行トレース (Ob{n.2}/Ob{f.2}) を追加したため更新。
@@ -37,14 +41,15 @@ inputs {
 ticks 12
 
 trace strict {
-  # ↑ Co{c.2} (実行) が現れない = 飲み込み: gt6 でオブザーバー OFF が先に走り
-  #   コンパレーター tick 時には入力 0 → 出力不変で無反応 (トレース行なし)
+  # ↑ 飲み込み: gt6 でオブザーバー OFF が先に走り、コンパレーター tick 時には入力 0
+  #   → 出力は変わらない (Co{c.2-})。compare モードなので前方更新だけは出る (R-5)
   2gt[PI]: Le{n.0}
   2gt[ST]: Ob(n.2) p0
   4gt[ST]: Ob{n.2}
   4gt[ST]: Ob(f.2) p0
   4gt[ST]: Co(c.2) p0
   6gt[ST]: Ob{f.2}
+  6gt[ST]: Co{c.2-}
 }
 
 state {
