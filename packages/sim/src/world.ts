@@ -2059,7 +2059,8 @@ export class SimWorld {
 
       // トレース: BE 実行 (伸長)。afterPistonMove の bu を updateFormula に収集
       this.traceProcess('BE', 'Pi', 'p', 0)
-      // 書き込みと更新の順は 26.2 PistonBaseBlock.moveBlocks に揃える (R-11・R-12・R-14、#410)
+      // 書き込みと更新の順は 26.2 PistonBaseBlock.moveBlocks と、そのあとの PistonBaseBlock.triggerEvent に揃える
+      // (R-11・R-12・R-14、#410)
       // [実機 fixture piston-empty-extend-bud・piston-branch-vacate・piston-push-away-power・
       // piston-base-nc-last-race: 4 本とも全 tick 一致。修正前は 8 / 10 / 8 / 23 セル食い違った]:
       //   1. 壊すセルを空気に (更新なし)
