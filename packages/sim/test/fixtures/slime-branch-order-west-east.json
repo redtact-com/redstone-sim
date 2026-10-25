@@ -1,0 +1,279 @@
+{
+  "name": "slime-branch-order-west-east",
+  "description": "R-13 枝の方向の順 (西 vs 東)。上向きの押しで見る。レバー L (-1,1,0) で P0 (0,1,0, 上向き) が 石 (0,2,0) とスライム S (0,3,0) を押し上げる。S の西 (-1,3,0) と東 (1,3,0) にレッドストーンブロックが 1 個ずつくっついている (RB_w・RB_e)。着地すると RB_w は P_w (-1,4,1, 東向き) だけ、RB_e は P_e (1,4,1, 西向き) だけを受電させ、2 本は同じマス X (0,4,1) に頭を出そうとする。26.2 PistonStructureResolver.addBranchingBlocks は Direction.values() の順 (下・上・北・南・西・東) で枝を集め、moveBlocks は toPush の逆順に moving block を作り、着地は作った順なので、東の枝 (後に集めた方) が先に着地して P_e が勝つ見込み。d57d70b の sim は北・南・東・西・上・下の順なので P_w が勝つ。P0 と S の間の石は、S の隣のレッドストーンブロックが P0 の 1 個上のマスを受電させて (QC) 最初から伸びてしまうのを防ぐためのもの。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "region": {
+    "from": [
+      -2,
+      0,
+      -1
+    ],
+    "to": [
+      2,
+      6,
+      2
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        -1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        1,
+        0
+      ],
+      "block": "lever[face=floor,facing=north,powered=false]"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "piston[extended=false,facing=up]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "block": "slime_block"
+    },
+    {
+      "pos": [
+        -1,
+        3,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        0
+      ],
+      "block": "redstone_block"
+    },
+    {
+      "pos": [
+        -1,
+        4,
+        1
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        1
+      ],
+      "block": "piston[extended=false,facing=west]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        -1,
+        1,
+        0
+      ],
+      "action": "use"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            -1,
+            1,
+            0
+          ],
+          "block": "lever[face=floor,facing=north,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 3,
+      "changes": [
+        {
+          "pos": [
+            -1,
+            3,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            -1,
+            4,
+            0
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "piston[extended=true,facing=up]"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            0
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        },
+        {
+          "pos": [
+            1,
+            3,
+            0
+          ],
+          "block": "air"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            0
+          ],
+          "block": "moving_piston[facing=up,type=normal]"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            -1,
+            4,
+            0
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            0,
+            2,
+            0
+          ],
+          "block": "piston_head[facing=up,short=false,type=normal]"
+        },
+        {
+          "pos": [
+            0,
+            3,
+            0
+          ],
+          "block": "stone"
+        },
+        {
+          "pos": [
+            0,
+            4,
+            0
+          ],
+          "block": "slime_block"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            0
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "moving_piston[facing=west,type=normal]"
+        },
+        {
+          "pos": [
+            1,
+            4,
+            1
+          ],
+          "block": "piston[extended=true,facing=west]"
+        }
+      ]
+    },
+    {
+      "tick": 8,
+      "changes": [
+        {
+          "pos": [
+            0,
+            4,
+            1
+          ],
+          "block": "piston_head[facing=west,short=false,type=normal]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T10:01:14.943Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

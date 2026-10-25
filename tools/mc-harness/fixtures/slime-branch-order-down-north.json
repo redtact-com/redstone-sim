@@ -1,0 +1,22 @@
+{
+  "name": "slime-branch-order-down-north",
+  "description": "R-13 枝の方向の順 (下 vs 北)。レバー L (-1,1,0) で P0 (0,1,0, 東向き) が スライム S (1,1,0) を押す。S の下 (1,0,0) と北 (1,1,-1) にレッドストーンブロックが 1 個ずつくっついている (RB_d・RB_n)。着地すると RB_d は P_d (3,0,0, 北向き) だけ、RB_n は P_n (3,1,-1, 下向き) だけを受電させ、2 本は同じマス X (3,0,-1) に頭を出そうとする。先に着地したブロックの隣のピストンが先に block event を積むので、X を取れるのは先に着地した側。26.2 PistonStructureResolver.addBranchingBlocks は Direction.values() の順 (下・上・北・南・西・東) で枝を集め、moveBlocks は toPush の逆順に moving block を作り、着地は作った順なので、北の枝 (後に集めた方) が先に着地して P_n が勝つ見込み。d57d70b の sim は北・南・東・西・上・下の順で集めるので P_d が勝つ。負けた側は受電したまま伸びない (X に頭があって押せない)。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "region": { "from": [-1, 0, -2], "to": [4, 2, 2] },
+  "player": { "spawn": [-0.5, 1.0, 2.5], "facing": [180, 40], "lookAt": [-0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [-1, 0, 0], "block": "stone" },
+    { "pos": [-1, 0, 2], "block": "stone" },
+    { "pos": [-1, 1, 0], "block": "lever[face=floor,facing=north,powered=false]" },
+    { "pos": [0, 1, 0], "block": "piston[extended=false,facing=east]" },
+    { "pos": [1, 1, 0], "block": "slime_block" },
+    { "pos": [1, 0, 0], "block": "redstone_block" },
+    { "pos": [1, 1, -1], "block": "redstone_block" },
+    { "pos": [3, 0, 0], "block": "piston[extended=false,facing=north]" },
+    { "pos": [3, 1, -1], "block": "piston[extended=false,facing=down]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [-1, 1, 0], "action": "use" }
+  ]
+}
