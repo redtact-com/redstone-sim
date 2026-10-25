@@ -488,7 +488,8 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   [実機 fixture wire-cut-conductor (正面は空気)・observer-mutual-clock-setblock]。sim は setBlockCommand で
   2gt の予約を積む。ピストンで運ばれて着地したときも同じ (#119、fixture observer-pushed)。
 - 予約の重複を見るとき、この tick に取り出し済みの予約は数えない (MC-189954)。トーチ・リピーター・
-  コンパレーターは取り出し済みも数える (willTickThisTick、§2.1) が、オブザーバーは数えない。
+  コンパレーターは、取り出し済みで、まだ走っていない予約も数える (走り終えた分は数えない。数えるとトーチクロックが
+  止まる。willTickThisTick、§2.1) が、オブザーバーは数えない。
   そのため、形状更新が「消灯中で、この tick の予約がもう取り出された相手」に届くと、相手はもう 1 本積む
   [実機 fixture observer-4tick-clock・observer-mutual-clock-setblock]。
 - 向かい合う 2 個 (相互クロック):
