@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # spec-drift.sh — 仕様典拠クラスのドリフト検知 (issue #25)
 #
-# docs/research/02 の典拠クラス (watched-classes.txt) について、デコンパイル結果の
+# docs/research/02 と sim のコメントが典拠に引くクラス (watched-classes.txt) について、デコンパイル結果の
 # 正規化ハッシュを fingerprints.json のベースラインと比較し、新バージョンで
 # 仕様が変わった可能性を検知する。
 #
@@ -45,9 +45,9 @@ decompile() {
   else
     "$SCRIPT_DIR/fetch-and-decompile.sh" "$version" >&2
   fi
-  # smoke: クラス数の下限チェック
+  # smoke: クラス数の下限チェック (-L: out/<version> が symlink でも中を数える)
   local count
-  count=$(find "$SCRIPT_DIR/out/$version" -name '*.java' | wc -l)
+  count=$(find -L "$SCRIPT_DIR/out/$version" -name '*.java' | wc -l)
   echo "==> smoke: out/$version に $count .java" >&2
   if (( count < 3000 )); then
     echo "ERROR: デコンパイル結果が少なすぎる ($count < 3000)" >&2
