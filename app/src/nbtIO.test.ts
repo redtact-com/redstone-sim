@@ -326,7 +326,7 @@ describe('固体ブロックの取り込み (#170)', () => {
     'minecraft:loom',
   ])('#170 で残っていたフルブロックも solid: %s (C-15)', async (name) => {
     // 26.2 の登録では導体判定を上書きしておらず、当たり判定がフルブロック。
-    // 実機は fixture conductor-names-extra で測る
+    // 実機 fixture conductor-names-extra でも 31 名とも導体 (横のダストが 15)
     expect(await importVanilla(name)).toMatchObject(solid)
   })
 
@@ -363,7 +363,8 @@ describe('固体ブロックの取り込み (#170)', () => {
   it.each([
     'minecraft:copper_grate', 'minecraft:oxidized_copper_grate', 'minecraft:waxed_exposed_copper_grate',
   ])('銅の格子はフルブロックだが非導体: %s (C-15)', async (name) => {
-    // 銅の各段階 (exposed_copper など) は導体の solid。格子だけ導体判定が常に false
+    // 銅の各段階 (exposed_copper など) は導体の solid。格子だけ導体判定が常に false。
+    // 実機 fixture conductor-names-extra でも 8 種とも非導体 (横のダストが 0)
     expect(await importVanilla(name)).toMatchObject({ type: 'glass' })
   })
 

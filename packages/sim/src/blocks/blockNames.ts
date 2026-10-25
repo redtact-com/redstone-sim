@@ -29,8 +29,12 @@ import type { BlockState, BlockType, HDir } from '../types.js'
  * ice と packed_ice で結果が割れるので、名前の似ているものを勝手に仲間にしないこと。
  *
  * 銅の格子 8 種 (酸化 4 段階 × 蝋引きの有無) もここに入れる (C-15)。フルブロックだが
- * 導体判定が常に false [確定: 26.2 Blocks.COPPER_GRATE — 8 種とも同じ指定]
- * [実機 fixture conductor-names-extra で測る]。
+ * 導体判定が常に false [確定: 26.2 Blocks.COPPER_GRATE — 登録で導体判定を常に false に
+ * 指定している。酸化と蝋引きの 7 種も同じ指定]
+ * [実機 fixture conductor-names-extra: 8 種とも、強充電した格子の横に置いたダストが
+ *  t1・t2 で 0。対照の glowstone・sea_lantern も 0]。
+ * 銅の各段階 (exposed_copper など) は `_copper` の接尾辞で導体の solid のまま。
+ * 名前の終わり (`_copper` と `_copper_grate`) で分かれる。
  */
 const GLASS_EXACT = new Set([
   'glass', 'tinted_glass',
@@ -85,7 +89,14 @@ export function toNonConductiveBlockState(
 // ここには来ない (#184)。鉄格子のようにフルブロックですらないものは対象外で、
 // 従来どおり未対応ブロックとして警告に出る。
 
-/** 名前がそのまま一致する導体フルブロック */
+/**
+ * 名前がそのまま一致する導体フルブロック。
+ *
+ * [実機 fixture conductor-names-exact-1・conductor-names-exact-2: C-15 の前からある 96 名を
+ *  全数測った。強充電した被検ブロックの横に置いたダストが、96 名とも t1・t2 で 15。
+ *  対照の glass・tinted_glass は 0]。
+ * 接尾辞 (SOLID_SUFFIXES) は fixture conductor-names-suffix で代表 52 名を測った (下を参照)。
+ */
 const SOLID_EXACT = new Set([
   // 石・岩系
   'stone', 'cobblestone', 'mossy_cobblestone', 'smooth_stone',
@@ -123,12 +134,15 @@ const SOLID_EXACT = new Set([
   // 'bricks' は '_bricks' で終わらない。PR#171 で旧リストから消して接尾辞に任せたとき、
   // 素の bricks だけが漏れた。
   // [確定: 26.2 — 5 つとも導体判定の既定 (当たり判定がフルブロックなら導体) を
-  //  上書きしていない。実機では測っていない]
+  //  上書きしていない]
+  // [実機 fixture conductor-names-exact-2: 5 つとも横のダストが 15 (C-15)]
   'bricks', 'terracotta', 'waxed_copper_block', 'deepslate_tiles', 'cracked_deepslate_tiles',
   // #170 で残っていた、導体かどうか名前からは決めにくいフルブロック (C-15)。
-  // [確定: 26.2 Blocks — 31 名とも導体判定を指定せず、形状を上書きするクラスでもない
-  //  = 既定の「当たり判定がフルブロックなら導体」。押し反応も既定 (NORMAL)]
-  // [実機 fixture conductor-names-extra で測る]。
+  // [確定: 26.2 Blocks — 31 名とも登録で導体判定を指定しておらず、ブロックのクラスも
+  //  形や当たり判定を変えていない。なので既定の「当たり判定がフルブロックなら導体」になる。
+  //  押し反応も既定 (NORMAL)]
+  // [実機 fixture conductor-names-extra: 31 名とも横のダストが t1・t2 で 15。
+  //  対照の stone も 15]。
   // ブロックエンティティを持つもの (かまど・スポナー・コマンドブロックなど。押せない) や、
   // コンパレーターが読むもの (ジュークボックス・リスポーンアンカー・巣箱) は、solid に潰すと
   // 挙動が欠けるので入れない
@@ -142,7 +156,13 @@ const SOLID_EXACT = new Set([
   'crafting_table', 'cartography_table', 'fletching_table', 'smithing_table', 'loom',
 ])
 
-/** 接尾辞で一致する導体フルブロック */
+/**
+ * 接尾辞で一致する導体フルブロック。
+ *
+ * [実機 fixture conductor-names-suffix: 14 系統から、1.21.1 のブロック型が違うものを全部含む
+ *  代表 52 名を測り、52 名とも横のダストが t1・t2 で 15。対照の white_stained_glass・ice は 0]。
+ * 例外は big_dripleaf_stem だけで、NOT_SOLID_EXACT で外す (C-15)。
+ */
 const SOLID_SUFFIXES = [
   '_planks', '_log', '_wood', '_stem', '_hyphae',
   '_wool', '_concrete', '_concrete_powder', '_terracotta',
@@ -155,8 +175,12 @@ const SOLID_SUFFIXES = [
  *
  * big_dripleaf_stem (大きなドリップリーフの茎) も `_stem` で拾われ、導体の solid になっていた
  * (C-15)。当たり判定が無いので導体判定の既定は false で、押されると壊れる
- * [確定: 26.2 Blocks.BIG_DRIPLEAF_STEM — noCollision・pushReaction(DESTROY)]。
- * 葉の big_dripleaf も読めないので、茎だけ装飾にはせず作物と同じく未対応に戻す
+ * [確定: 26.2 Blocks.BIG_DRIPLEAF_STEM — 当たり判定を持たない設定で、押されると壊れる
+ *  設定 (DESTROY)。1.21.1 のデータ生成でもフルブロックの型でなく専用の型]。
+ * 実機では測っていない。茎が残るには上に葉、下に土が要り、葉の big_dripleaf を sim が
+ * 読めないので fixture にできない。当たり判定の無いブロックが導体にならないのは既定の規則
+ * そのものなので、名前ごとの推測ではない。
+ * 葉が読めないので、茎だけ装飾にはせず作物と同じく未対応に戻す
  */
 const NOT_SOLID_EXACT = new Set([
   'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
