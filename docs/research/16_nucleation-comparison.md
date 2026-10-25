@@ -63,6 +63,8 @@
    - 2026-10-25 追記: R-1〜R-8 は B2 で、実機 1.21.1 の fixture を撮ってから直した
      (回帰ガード 6 本は #402 / PR#403、R-1・R-2 は #404 / PR#405、R-3・R-4・R-5・R-8 は #406 / PR#407、R-6・R-7 は #408 / PR#409)。
      上の 3 の数と「近い点」は 2026-09-28 の調査時点のもので、コンパレーターの 3 点は今は直っている。
+   - 2026-10-25 追記 (B3): R-13 (枝の方向順) は #427 / PR#428 で、実機 1.21.1 の fixture 3 本を撮ってから直した。
+     枝の順に加えて、引き戻しで moving block を作る順も toPush の後ろからにした (§2.5・§3.1)。
 6. **コードは移植しない**。Nucleation 自身が 26.2 から書き写したと言うコードを TS に移すと、03 が避けている「Java→TS の翻訳」と同じことになる。
    挙動の事実・テストケース・キャプチャ手法だけを借りる (§5)。
 
@@ -214,7 +216,7 @@
 |---|---|---|---|
 | 起動 (checkIfExtend と同じく予約前に押し構造を解決) | 有り | 有り | 同等 |
 | 押し構造の探索 (addBlockLine・12 個上限) | 26.2 PistonStructureResolver の移植 | 同じ | 同等 |
-| 枝の方向順 | Direction.values() の順 | 北・南・東・西・上・下 | Nucleation |
+| 枝の方向順 | Direction.values() の順 | 北・南・東・西・上・下 → **[実機]** fixture slime-branch-order-down-north / slime-branch-order-west-east で Direction.values() の順 (下・上・北・南・西・東) と確定し、#427 / PR#428 で合わせた (R-13)。引き戻しで moving block を作る順も toPush の後ろから (26.2 PistonBaseBlock#moveBlocks と同じ) にし、対照 slime-retract-landing-order で確かめた | Nucleation → 同等 |
 | PUSH_ONLY (釉薬テラコッタ) | 後ろ向きの粘着連鎖と、引きの開始で見落とす | 全経路で判定する **[実機で redstone-sim の正しさを確認]** | redstone-sim |
 | 押し反応の分類 | 手書きのリスト。シュルカーボックスを二重登録、水を運ぶ、BE 持ちの看板などを押す、ベル・飾り壺・頭を壊さずに運ぶ | 手書きのリスト。検知レールとクラフターを壊し、ドア・銅の電球・トラップドア・塀・板を押せない **[実機]**。水も押せない ([逆コンパイル+実行]、実機は未測定) | Nucleation (ただし水は両方とも誤り) |
 | 一般則 (硬さ -1・BE 持ちは不動) | 無し | 無し | 同等 |
@@ -295,7 +297,7 @@
 | R-10 | 水・泡柱・シュルカーボックス・カボチャ類・苔・植木鉢・はしご・頭の押し反応。看板・旗・彫刻された本棚を押してしまう | 水・泡柱・シュルカー・カボチャ類・苔・植木鉢・はしご・頭は DESTROY。看板・旗・彫刻された本棚は BE を持つので不動 | [逆コンパイル+実行] (実機では未測定) | 水路のゲート、カボチャ・スイカの収穫ピストン |
 | R-11 | 何も押さない伸長で、ヘッド位置から近隣更新が出ない (world.ts:2036-2042) | PistonBaseBlock#moveBlocks: 伸長の最後に、必ずヘッド位置から出す | **[実機]** ヘッド位置の隣の BUD ピストンが、実機は t5、sim は t8 (3 gt 遅れ)。石を押す対照は一致 | 空打ちのヘッドで BUD を叩く回路 |
 | R-12 | 枝の空いた出発セルから形状更新が出ない。ダストの再計算も漏れる (world.ts:2020-2042) | moveBlocks: 空いたセルにも形状更新を出す | [逆コンパイル+実行] オブザーバーが発火しない。引き離したレッドストーンブロックの横のダストが 15 のまま残る | スライムで引き離したブロックの元位置を見るオブザーバー |
-| R-13 | addBranchingBlocks の方向順が vanilla と違う (world.ts:1918-1929) | Direction.values() の順 (下・上・北・南・西・東) | [逆コンパイル+実行] 上と北に枝があり、2 本のピストンが同じセルを取り合う形で勝者が逆になる (実機では未測定) | 多方向に枝がある粘着塊 |
+| R-13 | addBranchingBlocks の方向順が vanilla と違う (world.ts の resolvePushStructure 内の addBranchingBlocks)。引き戻しで moving block を作る順 (executeBlockEvent の引き戻しの setMoving) は前からで、枝の順の食い違いと打ち消し合っていた | PistonStructureResolver#addBranchingBlocks: Direction.values() の順 (下・上・北・南・西・東)。PistonBaseBlock#moveBlocks: 押しでも引きでも toPush の後ろから moving block を作る | **[実機]** fixture slime-branch-order-down-north / slime-branch-order-west-east: 同じマスを取り合う 2 本のピストンのうち、実機は後に集めた枝 (北 / 東) の側が t6 に伸びる (修正前の sim は下 / 西の側。どちらも 15 セル食い違う)。対照 slime-retract-landing-order (引き戻し) は修正前の sim とも修正後の sim とも一致し、枝の順だけを直した形とは 15 セル食い違う。#427 / PR#428 で枝の順と引き戻しの作る順を直した | 多方向に枝がある粘着塊 |
 | R-14 | 伸長で本体を先に extended=true にしてから更新を出す (world.ts:2033) | moveBlocks → 最後に本体を更新する | [逆コンパイル] 途中で再判定される隣のピストンから、本体が「伸びていて押せない」と見える | 隣り合うピストンの連鎖 |
 | R-15 | setBlock の中の順が「形状更新 → NC」(vanilla は逆)。形状更新とコンパレーター更新がスタックの外 (world.ts:1498-1509, 2573-2602, 803-813) | Level#setBlock は NC → CU → 形状更新。形状更新も CollectingNeighborUpdater を通る | [逆コンパイル+実行] トーチが消えたとき、オブザーバーと壁トーチの予約順が逆になる | 同じ gt・同じ優先度の予約の競争 |
 | R-16 | 流体 tick をブロック予約の列に混ぜる (world.ts:2820-2839) | ServerLevel#tick はブロック予約をすべて回してから流体予約を回す | [逆コンパイル+実行] ディスペンサーの汲み上げと重なると、5 tick のあいだ穴が開いたまま | 条件がそろった泡柱エレベーター |
@@ -311,6 +313,7 @@
 - R-1・R-3・R-9・R-11 は、実機ハーネスで同じ回路を走らせ、実機と sim の状態系列を比べて確定した。§4 の修正では、まず fixture にしてから直す。
 - R-3・R-4・R-5・R-8 は #406 / PR#407 で、fixture 4 本 (detector-rail-comparator / comparator-through-conductor-replace / comparator-compare-front-nc / wire-connect-detector-rail-lectern) を実機 1.21.1 で撮ってから直した (2026-10-25)。4 本とも修正後の sim と全 tick で一致した。
 - R-6・R-7 は #408 / PR#409 で、fixture 3 本 (repeater-self-off-priority / lever-nc-before-shape-race / button-nc-before-shape-race) を実機 1.21.1 で撮ってから直した (2026-10-25)。3 本とも修正後の sim と全 tick で一致した。
+- R-13 は #427 / PR#428 で、fixture 3 本 (slime-branch-order-down-north / slime-branch-order-west-east / slime-retract-landing-order) を実機 1.21.1 で撮ってから直した (2026-10-25)。3 本とも修正後の sim と全 tick で一致した。対照の slime-retract-landing-order は修正前の sim とも一致する (枝の順と引き戻しの作る順の食い違いが打ち消し合う形) ので、伸長の 2 本で枝の順を決めてから引き戻しの作る順を読んだ。
 - 1.21.1 と 26.2 で規則が同じことは、R-1〜R-8 について確かめた。1.21.1 の server jar を公式 mappings でデコンパイルし、
   9 クラス (LevelChunk / Level / RedstoneTorchBlock / LeverBlock / ButtonBlock / DiodeBlock / ComparatorBlock / RedStoneWireBlock / DetectorRailBlock) に加えて、
   Blocks (R-2 の導体: ソウルサンドは常に導体、スライムとロードストーンは既定のフルブロック判定で導体) と LecternBlock (R-8: 常に信号源) を読んだ。
@@ -418,7 +421,7 @@
 | リピーターの自己 OFF を -2 固定にする。レバー/ボタンは、形状更新より前に自分の周りへ NC を 1 回出し (flag 3 の書き込みの分)、形状更新 → updateNeighbours の NC の順にする (activateBlock は apply とは別の経路なので、R-15 の修正では直らない) (#408 / PR#409 で済み。ボタンの解除も同じ順にした) | R-6, R-7 | S |
 | 押し反応の表を 26.2 の Blocks に合わせる。判定は PistonBaseBlock#isPushable の順にする: 硬さ -1 は不動、次に押し反応 (BLOCK は不動、DESTROY は壊す、PUSH_ONLY は向きしだい) で決め、NORMAL のものに限って BE 持ちを不動にする (シュルカー・ベル・飾り壺・頭は BE を持つが壊れる) | R-9, R-10 | M |
 | 伸長の末尾処理を moveBlocks の順にする。ヘッド位置から NC を出し、空いたセルに形状更新を出し、本体の更新を最後にする | R-11, R-12, R-14 | S〜M |
-| addBranchingBlocks を Direction.values() の順にする (updates.ts にある既存の定数を使う) | R-13 | S |
+| addBranchingBlocks を Direction.values() の順にする (updates.ts にある既存の定数を使う)。引き戻しで moving block を作る順も toPush の後ろからにする (#427 / PR#428 で済み。実機 fixture slime-branch-order-down-north・slime-branch-order-west-east と対照 slime-retract-landing-order) | R-13 | S |
 | ip-policy 違反を直し、ip-hygiene に record 宣言のパターンを足す (#386 / PR#387 で済み) | §3.5 | S |
 
 実機で確定した 4 件 (R-1・R-3・R-9・R-11) は、先に fixture にしてから直す。
@@ -493,7 +496,7 @@
 
 - **R-20 (ダスト網の中の更新順)**: 原点配置で 1.21.1 実機の microTiming を取り、world.test.ts:713-724 の固定と 26.2 のコード読みのどちらが正しいか決める。
   実機が E → N → S なら、ダストの逐次評価 (§4.4) の優先度が上がる。
-- **R-13 (枝の方向順) と R-15 (予約順の逆転)**: 競争になる回路を実機で測り、fixture にする。
+- **R-15 (予約順の逆転)**: 競争になる回路を実機で測り、fixture にする (R-13 の枝の方向順は #427 / PR#428 で測って直した)。
 - **1.21.1 のデコンパイル**: 1.21.1 の server jar を公式 mappings でデコンパイルし、26.2 との差 (§3.4) を体系的に洗う。今回は反証チェックで 9 クラスだけ行った。
 - **起票 (済み)**: §3.1 の R-1〜R-22 は Project #1 に draft として起票した (タイトル末尾が (R-n))。着手するときに issue にする。
 - **上流への報告**: Nucleation に §3.2 を報告するか (ユーザ判断)。

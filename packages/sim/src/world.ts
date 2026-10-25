@@ -29,7 +29,9 @@ import {
   takeOne, putOne, totalItems, containerSlotsOf, slotsForSignal, emptySlots,
 } from './blocks/container.js'
 import { stackSizeOf } from './blocks/itemStacks.js'
-import { NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, dustUpdateOrigins } from './updates.js'
+import {
+  NC_UPDATE_ORDER, PP_UPDATE_ORDER, CU_UPDATE_ORDER, JAVA_DIRECTION_VALUES, dustUpdateOrigins,
+} from './updates.js'
 import type {
   BlockEvent, PistonState, NoteBlockState, HopperState, DropperState, ContainerState, ItemStack,
 } from './types.js'
@@ -1969,11 +1971,24 @@ export class SimWorld {
       toPush.push(...head, ...lastLine, ...collisionToLine)
     }
 
-    /** 26.2 addBranchingBlocks — 押し方向と直交する 4 方向の「くっついている」塊を足す */
+    /**
+     * 26.2 addBranchingBlocks — 押し方向と直交する 4 方向の「くっついている」塊を足す。
+     *
+     * **方向は Java の Direction.values() の順 (下・上・北・南・西・東) で回る** (R-13)
+     * [確定: 26.2 PistonStructureResolver.addBranchingBlocks — Direction.values() を
+     *  回し、押し軸と同じ軸を飛ばす]。この順が toPush の並びになり、moveBlocks は
+     * toPush の逆順に moving block を作るので、**後に集めた枝が先に着地する**。
+     * 着地の近隣更新で起動するピストンの block event もその順に積まれる。
+     * 旧実装の ALL_DIRS (北・南・東・西・上・下) では下/上の枝と北/南の枝、
+     * 西の枝と東の枝の着地順が逆だった
+     * [実機 fixture slime-branch-order-down-north / slime-branch-order-west-east:
+     *  同じマスを取り合う 2 本のピストンのうち、後に集めた枝 (北 / 東) の側が t6 に伸びる。
+     *  旧実装は下 / 西の側が伸び、どちらも 15 セル食い違う]
+     */
     const addBranchingBlocks = (from: Pos3D): boolean => {
       const fromState = this.getBlockAt(from)
       if (!fromState) return true
-      for (const dir of ALL_DIRS) {
+      for (const dir of JAVA_DIRECTION_VALUES) {
         if (dir === facing || dir === OPPOSITE[facing]) continue   // 押し軸は対象外
         const nPos = neighbor(from, dir)
         const nb = this.getBlockAt(nPos)
@@ -2174,8 +2189,15 @@ export class SimWorld {
         const pullList = pulled ? pulled.toPush : []
         if (pullList.length > 0) {
           const payloads = pullList.map(q => this.getBlockAt(q)!)
-          // 近い順に行き先 (piston 側) へ moving を置く
-          for (let i = 0; i < pullList.length; i++) {
+          // toPush の後ろから行き先 (piston 側) へ moving を置く (R-13)
+          // [確定: 26.2 PistonBaseBlock.moveBlocks — 押しでも引きでも toPush の後ろから
+          //  moving block を作る。着地は作った順なので、枝のある塊では後に集めた枝が先に着地する]。
+          // 旧実装は前から置いていて、枝の順の食い違い (addBranchingBlocks) と打ち消し合っていた。
+          // 枝の順だけを直すと引き戻しの着地順が 26.2 と逆になる
+          // [実機 fixture slime-retract-landing-order: 引き戻した枝の着地で起動する
+          //  2 本のピストンが同じマスを取り合い、北の枝の側が t6 に伸びる。旧実装 (枝の順も
+          //  作る順も逆) は打ち消し合って一致し、枝の順だけを直した形は 15 セル食い違う]
+          for (let i = pullList.length - 1; i >= 0; i--) {
             setMoving(neighbor(pullList[i], pullDir), 'normal', payloads[i], false)
           }
           const destKeys = new Set(pullList.map(q => posKey(neighbor(q, pullDir))))

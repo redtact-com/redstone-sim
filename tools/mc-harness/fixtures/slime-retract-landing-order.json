@@ -1,0 +1,22 @@
+{
+  "name": "slime-retract-landing-order",
+  "description": "R-13 の対照: 粘着ピストンの引き戻しで、枝の moving block が着地する順。東向きの粘着ピストン P0 (0,1,0) は伸びていて、ヘッド (1,1,0) の先のスライム S (2,1,0) の下 (2,0,0) と北 (2,1,-1) にレッドストーンブロックが 1 個ずつくっついている (RB_d・RB_n)。P0 は 1 個上のマス (0,2,0) の隣のレッドストーンブロック RB_top (1,2,0) で QC 受電している。t2 に RB_top を setblock で消すと、ヘッドが近隣更新を本体へ転送して t3 に引き戻す。RB_d は (1,0,0) に着地して P_d (0,0,0, 北向き) だけを、RB_n は (1,1,-1) に着地して P_n (0,1,-1, 下向き) だけを受電させ、2 本は同じマス X (0,0,-1) に頭を出そうとする。先に着地した側が勝つ。26.2 PistonBaseBlock.moveBlocks は引き戻しでも toPush の後ろから moving block を作るので、枝の順が Direction.values() (下・上・北・南・西・東) でも、toPush [S, RB_d, RB_n] の後ろの RB_n が先に着地して P_n が勝つ見込み。d57d70b の sim は枝の順が逆 (北が先) で引き戻しは前から作るので、打ち消し合って同じく P_n が勝つ。枝の順だけを直して引き戻しの作る順を前からのままにすると RB_d が先に着地して P_d が勝つ。P_d は P0 の真下なので、P0 の電源を P0 に隣接させると P_d が QC で受電してしまう。それを避けるために RB_top で QC 受電させている。",
+  "mcVersion": "1.21.1",
+  "ticks": 10,
+  "region": { "from": [-1, 0, -2], "to": [3, 3, 2] },
+  "player": { "spawn": [-0.5, 1.0, 2.5], "facing": [180, 40], "lookAt": [-0.5, 1.35, 0.5] },
+  "blocks": [
+    { "pos": [-1, 0, 2], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "sticky_piston[extended=true,facing=east]" },
+    { "pos": [1, 1, 0], "block": "piston_head[facing=east,short=false,type=sticky]" },
+    { "pos": [1, 2, 0], "block": "redstone_block" },
+    { "pos": [2, 1, 0], "block": "slime_block" },
+    { "pos": [2, 0, 0], "block": "redstone_block" },
+    { "pos": [2, 1, -1], "block": "redstone_block" },
+    { "pos": [0, 0, 0], "block": "piston[extended=false,facing=north]" },
+    { "pos": [0, 1, -1], "block": "piston[extended=false,facing=down]" }
+  ],
+  "inputs": [
+    { "tick": 2, "pos": [1, 2, 0], "action": "setblock", "block": "air" }
+  ]
+}
