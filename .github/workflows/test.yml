@@ -1,5 +1,5 @@
 # 基本 CI (issue #25)
-# PR と main/develop への push で vitest (実機 fixture 回帰含む)・typecheck・build を回す。
+# PR と main/develop への push で vitest (実機 fixture 回帰含む)・typecheck・build・lint・カバレッジを回す。
 # 実機 Minecraft は不要 (fixture はコミット済みの期待値で検証する。tools/mc-harness 参照)。
 
 name: Test
@@ -39,6 +39,66 @@ jobs:
 
       - name: build
         run: npm run build
+
+  # lint (#420)。今ある違反は eslint-suppressions.json に凍結してあり、新しい違反で落ちる。
+  # 凍結した違反を直したのに凍結の件数を減らしていないときも落ちる (npm run lint:prune で直る)
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存インストール
+        run: npm ci
+
+      - name: ESLint (全体)
+        run: npm run lint
+
+      # 凍結の件数は減る一方にする。推移を job summary で見る
+      - name: 凍結している違反の件数
+        if: always()
+        run: |
+          node -e '
+            const s = require("./eslint-suppressions.json")
+            let n = 0
+            for (const f in s) for (const r in s[f]) n += s[f][r].count
+            console.log(`凍結している lint の違反: ${n} 件 (${Object.keys(s).length} ファイル)`)
+          ' >> "$GITHUB_STEP_SUMMARY"
+
+  # カバレッジ (#420)。しきい値は付けず、表を job summary に、HTML を成果物に出す。
+  # 計測で重いテストが 1.2〜2.0 倍遅くなり (手元の実測)、CI で 3.6〜3.9 秒かかるテストが既定の 5 秒を
+  # 超える見込みなので、npm run test:coverage は testTimeout を 20 秒にしてある (test ジョブは 5 秒のまま)
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 依存インストール
+        run: npm ci
+
+      - name: vitest (カバレッジ)
+        run: npm run test:coverage
+
+      - name: カバレッジの表
+        run: node tools/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: カバレッジの保存
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
 
   # E2E スモーク (issue #70)。本番ビルド (vite preview) に対して Playwright を回す。
   # GIF 生成 (npm run demo-gif) はローカル専用で CI には入れない。

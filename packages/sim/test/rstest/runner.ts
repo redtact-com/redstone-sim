@@ -36,7 +36,7 @@ export function buildFixture(parsed: ParsedRstest): Fixture {
     try {
       base = JSON.parse(readFileSync(path, 'utf-8')) as Fixture
     } catch (e) {
-      throw new Error(`fixture "${parsed.fixture}" を読めません (${path}): ${(e as Error).message}`)
+      throw new Error(`fixture "${parsed.fixture}" を読めません (${path}): ${(e as Error).message}`, { cause: e })
     }
   }
 

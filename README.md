@@ -46,12 +46,14 @@ redstone-sim/
 ## コマンド
 
 ```bash
-npm install          # ルートで一度（全 workspace を解決）
-npm run dev          # 開発サーバ（app）
-npm run build        # 本番ビルド（tsc -b && vite build）
-npm run lint         # ESLint（app）
-npm test             # sim / editor のユニットテスト（vitest）
-npm run typecheck    # packages の型チェック
+npm install           # ルートで一度（全 workspace を解決）
+npm run dev           # 開発サーバ（app）
+npm run build         # 本番ビルド（tsc -b && vite build）
+npm run lint          # ESLint（全体。今ある違反は eslint-suppressions.json に凍結）
+npm run lint:prune    # 違反を直したあと、凍結の件数を減らす
+npm test              # sim / editor のユニットテスト（vitest）
+npm run test:coverage # カバレッジ付き（coverage/index.html）
+npm run typecheck     # packages の型チェック
 ```
 
 ## ブランチ運用とデプロイ

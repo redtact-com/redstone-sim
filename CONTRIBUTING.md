@@ -62,3 +62,8 @@ JAVA_HOME=~/bluemap/jdk25 tools/decompile/fetch-and-decompile.sh 26.2
 
 - ブランチは issue 単位 (`<issue番号>-<slug>`)。main / develop への直接 push は禁止。
 - コミットメッセージは日本語で、意味単位に分割する。
+- `npm run lint` を通してから PR を出す (#420)。今ある違反は `eslint-suppressions.json` に凍結してあり、件数は減らす一方にする。
+  - 新しい違反は凍結せずに直す。ルールの追加 (ESLint やプラグインの更新など) でやむを得ず凍結するときは `npx eslint . --suppress-rule <ルール>` を流し、PR に理由を書く。
+  - 凍結した違反を直したら `npm run lint:prune` で凍結を減らす。減らさないと `npm run lint` が exit 2 で落ちる。
+  - 凍結の件数を超えると、そのファイルのそのルールの違反が全部表示される。新しい 1 件は `git diff` で探す。
+  - `app/src/nbtIO.ts` の `no-explicit-any` は、変換器を sim の simToMc に寄せる作業でまとめて消す。React Compiler 系 (`react-hooks/*`) と `react-refresh/*` は、そのページを触る PR で触った範囲から減らす。
