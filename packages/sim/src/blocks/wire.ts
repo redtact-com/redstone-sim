@@ -11,7 +11,8 @@ import { getSignal, getStrongPower, relative, isConductor } from '../power.js'
  * **isConductor (power.ts) そのもの**。vanilla は真上の判定も横の判定も
  * isRedstoneConductor で決めるので、別の一覧は持たない
  * [確定: 1.21.1 RedStoneWireBlock.getConnectingSide / RedStoneWireBlock.calculateTargetStrength]。
- * 以前は別の一覧を持っていて slime_block / lodestone / soul_sand が抜けていた (R-2)。
+ * 以前は別の一覧を持っていて slime_block / lodestone / soul_sand が抜けていた (R-2)
+ * [実機 fixture wire-cut-conductor-power: 3 型で蓋をすると上段は 0 で十字になり、stone と同じ]。
  * stone / target / note_block / dropper / dispenser / crafter / lamp が切り、
  * glass / chest / observer / hopper / 銅の電球が切らないのは実機で測ってある
  * [実機 fixture wire-cut-conductor]。樽は導体なので切る [実機 fixture barrel-chest-conductor:
