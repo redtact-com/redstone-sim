@@ -2189,7 +2189,7 @@ export class SimWorld {
         const pullList = pulled ? pulled.toPush : []
         if (pullList.length > 0) {
           const payloads = pullList.map(q => this.getBlockAt(q)!)
-          // **遠い順** (toPush の後ろから) に行き先 (piston 側) へ moving を置く (R-13)
+          // toPush の後ろから行き先 (piston 側) へ moving を置く (R-13)
           // [確定: 26.2 PistonBaseBlock.moveBlocks — 押しでも引きでも toPush の後ろから
           //  moving block を作る。着地は作った順なので、枝のある塊では後に集めた枝が先に着地する]。
           // 旧実装は前から置いていて、枝の順の食い違い (addBranchingBlocks) と打ち消し合っていた。
