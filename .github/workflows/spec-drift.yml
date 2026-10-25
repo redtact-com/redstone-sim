@@ -1,6 +1,6 @@
 # 仕様ドリフト検知 (issue #25)
 #
-# 週次 + 手動で最新 release をデコンパイルし、docs/research/02 の典拠クラス
+# 週次 + 手動で最新 release をデコンパイルし、docs/research/02 と sim のコメントが典拠に引くクラス
 # (tools/decompile/watched-classes.txt) の正規化ハッシュを fingerprints.json の
 # ベースラインと比較する。変化があれば issue を自動起票する (同一バージョンの
 # 重複起票はスキップ)。新 release が無い週はベースラインの自己照合 (smoke +
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -70,7 +70,7 @@ jobs:
           BASE=$(python3 -c "import json; print(json.load(open('tools/decompile/fingerprints.json'))['version'])")
           {
             echo "## 検知内容"
-            echo "ベースライン **${BASE}** → 対象 **${TARGET}** で、docs/research/02 の典拠クラスに変化を検知しました。"
+            echo "ベースライン **${BASE}** → 対象 **${TARGET}** で、sim の典拠クラス (tools/decompile/watched-classes.txt) に変化を検知しました。"
             echo
             echo '```'
             echo "${DRIFT_LINES}"

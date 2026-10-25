@@ -20,6 +20,26 @@ v3 更新 (2026-08-15, #148): レール 4 種 (rail / powered_rail / activator_r
 detector_rail の出力 (weak 全方向 / strong は真下のみ) を [確定] 化。典拠 26.2 RailState /
 BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixture 28 本。
 
+v4 更新 (2026-10-25, #365): **26.3** を手元でデコンパイルし、監視 68 クラス (tools/decompile/watched-classes.txt)
+を 26.2 と突き合わせた。sim の挙動に効く変化は見つからず、本文の典拠バージョン (1.21.1 と 26.2) は据え置く。
+26.3 で変わった主なもの (本文は 26.2 の名前のまま引く):
+- `RedStoneWireBlock` は `RedstoneWireBlock` に改名 (置き場所は同じ。ダストの強度計算は引き続き DefaultRedstoneWireEvaluator で、中身は同じ)。
+- ダストが「どの隣へ接続するか」の判定は、ワイヤー側の静的メソッドから各ブロックの仮想メソッド
+  `BlockBehaviour.shouldRedstoneWireConnectTo` に移った。既定は「信号源かつ方向あり」、上書きは
+  ワイヤー (常に接続)・リピーター (向きの軸だけ)・オブザーバー (正面だけ) の 3 つで、26.2 の判定と同じ。
+- `PushReaction` の列挙子が改名: NORMAL→PUSH_PULL / DESTROY→POPPED / BLOCK→IMMOVEABLE / PUSH_ONLY→PUSH /
+  IGNORE→IGNORE_ENTITY。黒曜石・泣く黒曜石・リスポーンアンカー・強化深層岩は、26.2 では
+  PistonBaseBlock.isPushable に名指しで書かれていたが、26.3 では Blocks の登録で IMMOVEABLE になった (結果は同じ)。
+- 全ブロッククラス (26.2 で 295 個) から MapCodec の定義が消え、flag 3 の setBlock 呼びが setBlockAndUpdate に置き換わった (flag は同じ 3)。
+- FeatureFlags と experimental 評価器の選び方は 26.2 と同一で、REDSTONE_EXPERIMENTS は引き続き実験フラグ (§6 wire の前提は維持)。
+- 感知レールの再評価 (DetectorRailBlock.checkPressed) に「その座標がまだ感知レールであること」の確認が足された。
+  tick の途中でレールが消えた場合の保護で、sim にトロッコは無いので影響しない。
+- 水が流れ込める (押し流す) ブロックの判定 (FlowingFluid.canHoldAnyFluid) と、流れの向きを遮るブロックの判定
+  (FlowingFluid.getFlow) が、クラスに書かれた条件からブロックタグに移った。sim の水は真下の空気へ落ちるだけなので
+  影響しない。タグの中身は jar のデータなので、クラスの指紋には出ない。
+- 26.3 の Blocks ではスラブの登録が元ブロックの設定を写す形に変わり、音色の行が無くなった (音色は引き継がれる)。
+  tools/gen-note-instruments.mjs は行を直接拾うので、26.3 で回すとスラブが抜ける (26.2 で生成した表のまま使う)。
+
 ---
 
 ## 1. ゲームティック構造
@@ -269,6 +289,7 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
     **back→front→左→右→下→上** 順で、電力を受けうるブロックだけに NC を送る。文脈が無い起点では
     `Orientation.random` (24w34a で left-first 化され、残る random は上下からの給電等の文脈不足時のみ)。
     詳細アルゴリズムの完全読解は experimental 対応を判断する時点で行う (01 §15-16 参照)。
+  - 26.3 でも同じ (FeatureFlags と評価器の選び方に変化なし)。クラス名は `RedstoneWireBlock` に変わった (v4 更新)。
 
 ### torch (レッドストーントーチ)
 - NOT ゲート。状態変化は 2 gt 遅延の tile tick (`TOGGLE_DELAY = 2`)、priority 0 [確定: RedstoneTorchBlock]。

@@ -1,29 +1,114 @@
-# 仕様ドリフト検知の監視対象クラス (docs/research/02_behavior-spec.md の典拠)
+# 仕様ドリフト検知の監視対象クラス (docs/research/02 と packages/sim のコメントが典拠に引くクラス)
 # 形式: out/<version>/ からの相対パス。# 始まりはコメント。
-# クラスを追加したら spec-drift.sh --update で fingerprints.json を再生成すること。
+# クラスを追加したら、今のベースライン版で spec-drift.sh --update を回して fingerprints.json を
+# 再生成すること (最新版との比較はそのあと。手順は README.md)。
+#
+# 入れないもの:
+#   毎版変わるので、変化しても読む意味が薄い:
+#     Blocks (登録表。音色は tools/gen-note-instruments.mjs が別に引く)
+#     Level / ServerLevel / LevelChunk / BlockBehaviour / DispenseItemBehavior
+#   典拠に名前が出るだけの周辺 (fixture の置き方・ブロックイベントの使い手):
+#     ItemCommands / SetBlockCommand / BlockEntity / BaseContainerBlockEntity /
+#     チェスト・鐘・スポナーなどの BlockEntity
+# 26.3 で RedStoneWireBlock は RedstoneWireBlock に改名された (#365)。
+# docs と sim のコメントは 26.2 の名前のまま引いている。
 
 # 隣接更新 (NC/PP/CU) の方向順・伝播 — 02 §4
 net/minecraft/world/level/redstone/NeighborUpdater.java
 net/minecraft/world/level/redstone/CollectingNeighborUpdater.java
+net/minecraft/world/level/redstone/InstantNeighborUpdater.java
+net/minecraft/world/level/redstone/Orientation.java
+net/minecraft/world/level/redstone/Redstone.java
 
-# ワイヤー (伝播・多段送信・Orientation) — 02 §4.2, §6
-net/minecraft/world/level/block/RedStoneWireBlock.java
+# ワイヤー (伝播・多段送信・強度計算) — 02 §4.2, §5.4, §6 wire
+net/minecraft/world/level/block/RedstoneWireBlock.java
+net/minecraft/world/level/redstone/RedstoneWireEvaluator.java
+net/minecraft/world/level/redstone/DefaultRedstoneWireEvaluator.java
+
+# 実験版レッドストーン (既定化されたら sim の前提が崩れる) — 02 §6 wire
+net/minecraft/world/level/redstone/ExperimentalRedstoneWireEvaluator.java
+net/minecraft/world/level/redstone/ExperimentalRedstoneUtils.java
+net/minecraft/world/flag/FeatureFlags.java
+
+# 信号の読み取り (strong/weak・導体越し・側面入力) — 02 §5.2, §6 comparator
+net/minecraft/world/level/SignalGetter.java
 
 # ダイオード系 (tile tick 再評価・priority) — 02 §2, §6
 net/minecraft/world/level/block/DiodeBlock.java
 net/minecraft/world/level/block/RepeaterBlock.java
 net/minecraft/world/level/block/ComparatorBlock.java
+net/minecraft/world/level/block/entity/ComparatorBlockEntity.java
 
-# トーチ (burnout・給電) — 02 §6
+# トーチ (burnout・給電・壁付けの weak) — 02 §6 torch
 net/minecraft/world/level/block/RedstoneTorchBlock.java
+net/minecraft/world/level/block/RedstoneWallTorchBlock.java
 
-# 入力デバイス (持続時間・取り付け面) — 02 §6
+# 入力デバイス (持続時間・取り付け面・重量) — 02 §6 lever / button
 net/minecraft/world/level/block/ButtonBlock.java
 net/minecraft/world/level/block/LeverBlock.java
+net/minecraft/world/level/block/BasePressurePlateBlock.java
+net/minecraft/world/level/block/PressurePlateBlock.java
+net/minecraft/world/level/block/WeightedPressurePlateBlock.java
 
 # オブザーバー (PP 起動・パルス) — 02 §4.1, §6
 net/minecraft/world/level/block/ObserverBlock.java
 
-# tile tick キュー (priority 昇順・collect-then-execute) — 02 §2
+# 出力側の素子 (レッドストーンブロック・ターゲット・ランプ・銅電球・音符) — 02 §6
+net/minecraft/world/level/block/PoweredBlock.java
+net/minecraft/world/level/block/TargetBlock.java
+net/minecraft/world/level/block/RedstoneLampBlock.java
+net/minecraft/world/level/block/CopperBulbBlock.java
+net/minecraft/world/level/block/NoteBlock.java
+net/minecraft/world/level/block/state/properties/NoteBlockInstrument.java
+
+# ピストン (伸長タイムライン・押し反応・構造解決) — 02 §3, §6 piston / 13 §4.1
+net/minecraft/world/level/block/piston/PistonBaseBlock.java
+net/minecraft/world/level/block/piston/PistonStructureResolver.java
+net/minecraft/world/level/block/piston/PistonMovingBlockEntity.java
+net/minecraft/world/level/block/piston/PistonHeadBlock.java
+net/minecraft/world/level/material/PushReaction.java
+
+# アイテム物流 (ホッパー・ドロッパー・ディスペンサー・クラフター) — 02 §6 hopper / 13 §4.2
+net/minecraft/world/level/block/HopperBlock.java
+net/minecraft/world/level/block/entity/HopperBlockEntity.java
+net/minecraft/world/level/block/DispenserBlock.java
+net/minecraft/world/level/block/DropperBlock.java
+net/minecraft/world/level/block/entity/DispenserBlockEntity.java
+net/minecraft/world/level/block/CrafterBlock.java
+net/minecraft/world/level/block/entity/CrafterBlockEntity.java
+
+# レール (形状の自動接続・動力の連鎖・感知) — 02 §6 rail
+net/minecraft/world/level/block/BaseRailBlock.java
+net/minecraft/world/level/block/RailBlock.java
+net/minecraft/world/level/block/RailState.java
+net/minecraft/world/level/block/PoweredRailBlock.java
+net/minecraft/world/level/block/DetectorRailBlock.java
+net/minecraft/world/level/block/state/properties/RailShape.java
+
+# 泡柱・水 (流体 tick・柱の形状更新・水を置く flag) — sim world.ts
+net/minecraft/world/level/block/BubbleColumnBlock.java
+net/minecraft/world/level/block/SoulSandBlock.java
+net/minecraft/world/level/material/WaterFluid.java
+net/minecraft/world/level/material/FlowingFluid.java
+
+# 開閉するもの・コンパレーターが読む器 (ドア・トラップドア・書見台・大釜・コンポスター) — sim types.ts / world.ts
+net/minecraft/world/level/block/DoorBlock.java
+net/minecraft/world/level/block/TrapDoorBlock.java
+net/minecraft/world/level/block/LecternBlock.java
+net/minecraft/world/level/block/entity/LecternBlockEntity.java
+net/minecraft/world/level/block/LayeredCauldronBlock.java
+net/minecraft/world/level/block/ComposterBlock.java
+
+# 形状が近傍で決まる非導体 (塀・鉄格子・頭) — sim types.ts / blockNames.ts
+net/minecraft/world/level/block/WallBlock.java
+net/minecraft/world/level/block/state/properties/WallSide.java
+net/minecraft/world/level/block/IronBarsBlock.java
+net/minecraft/world/level/block/CrossCollisionBlock.java
+net/minecraft/world/level/block/SkullBlock.java
+
+# tile tick キュー (priority 昇順・collect-then-execute・保存形式) — 02 §2
 net/minecraft/world/ticks/LevelTicks.java
 net/minecraft/world/ticks/LevelChunkTicks.java
+net/minecraft/world/ticks/ScheduledTick.java
+net/minecraft/world/ticks/SavedTick.java
+net/minecraft/world/ticks/TickPriority.java
