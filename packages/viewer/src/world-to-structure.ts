@@ -5,7 +5,7 @@
 import { Structure, BlockState as DSBlockState } from 'deepslate/render'
 import type { WorldSnapshot, BlockState } from '@redstone/sim'
 
-// ── deepslate Structure の内部型（structureMutator.ts と同じハック） ──
+// ── deepslate Structure の内部型（公開されていないフィールドを直接触るハック） ──
 interface StructureInternal {
   size: [number, number, number]
   blocks: Array<{ pos: [number, number, number]; state: number }>

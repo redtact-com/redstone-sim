@@ -25,7 +25,7 @@
 
 import { chromium } from 'playwright'
 import { execSync, execFileSync, spawn } from 'node:child_process'
-import { writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs'
+import { writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
