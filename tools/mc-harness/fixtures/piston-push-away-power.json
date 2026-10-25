@@ -1,0 +1,17 @@
+{
+  "name": "piston-push-away-power",
+  "description": "R-14 (docs/research/16 §3.1): 自分の電源を押し出したピストンが、伸びた直後に縮むか。ピストン P (0,1,0) (facing=east) の前にスライム (1,1,0) を置く。t1 にスライムの上 (1,2,0) へ redstone_block を setblock する。P の 1 段上 (0,2,0) の隣なので P は QC で受電するが、setblock の近隣更新は P に届かない。t2 に P の北 (0,1,-1) へ stone を setblock し、その近隣更新で P を起動する (stone は受電していないので電源にはならない)。t3 に P がスライムと redstone_block を東へ押すと、redstone_block が (2,2,0) へ移って P の電源が切れる。26.2 PistonBaseBlock.moveBlocks と triggerEvent を読んだ予想: 出発セル (1,1,0) の近隣更新で P が再判定されるとき、本体はまだ縮んだ状態なので何もしない。そのあと本体を伸びた状態に書くが、本体自身は再判定されない。P は伸びたまま残り、t5 のヘッドの着地の近隣更新で収縮を予約し、t6 に縮み始めて t8 に着地する。修正前の sim は本体を先に伸びた状態にするので、同じ近隣更新で収縮を予約し、t3 のうちに伸長を確定させて縮み始める (0-tick)",
+  "mcVersion": "1.21.1",
+  "ticks": 8,
+  "region": { "from": [-3, 0, -4], "to": [3, 3, 3] },
+  "player": { "spawn": [0.5, 1.0, -2.5], "facing": [0, 40], "lookAt": [0.5, 1.35, -0.5] },
+  "blocks": [
+    { "pos": [0, 0, -3], "block": "stone" },
+    { "pos": [0, 1, 0], "block": "piston[extended=false,facing=east]" },
+    { "pos": [1, 1, 0], "block": "slime_block" }
+  ],
+  "inputs": [
+    { "tick": 1, "pos": [1, 2, 0], "action": "setblock", "block": "redstone_block" },
+    { "tick": 2, "pos": [0, 1, -1], "action": "setblock", "block": "stone" }
+  ]
+}
