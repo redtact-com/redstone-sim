@@ -329,7 +329,7 @@ async function run(args: MinimizeArgs): Promise<number> {
         // **連続で失敗し続けるならサーバ側の異常**。予算を使い切るまで
         // タイムアウトを踏み続けると何時間も占有するので打ち切る
         if (++failStreak >= 5) {
-          throw new Error('試行が 5 回連続で失敗した。サーバが落ちているか固まっている可能性がある')
+          throw new Error('試行が 5 回連続で失敗した。サーバが落ちているか固まっている可能性がある', { cause: e })
         }
         return false
       }

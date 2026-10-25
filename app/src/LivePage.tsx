@@ -287,7 +287,7 @@ export function LivePage() {
     if (!s || !region) return null
     const blocks = new Map<Key, BlockState>()
     for (const [k, v] of simState) {
-      let b: BlockState | null = null
+      let b: BlockState | null
       try { b = mcToSim(v) } catch { b = null }
       if (b !== null) blocks.set(k as Key, b)
     }
