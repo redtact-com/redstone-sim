@@ -1,0 +1,503 @@
+{
+  "name": "repeater-self-off-priority",
+  "description": "R-6 (docs/research/16 §3.1): リピーターが tick の中で自分の OFF を予約するときの優先度。A (1,1,0) d2 → B (2,1,0) d3 → ランプ (3,1,0)。L (2,1,1) d2 が B を側面ロックする。A に 3gt、L に 1gt のパルスを setblock で入れると、t18 に B の OFF (t12 に予約) と L の自己 OFF (t14 に予約) が重なる。26.2 DiodeBlock.tick を読んだ予想: 自己 OFF は常に -2 なので B が先に走り、ロック中で何もせず、L が切れてから B が t24 に OFF、ランプは t28 に消える。修正前の sim は L の自己 OFF を -3 (前方のダイオードがこちらを向かないときの近隣更新用の優先度) で予約するので L が先に走り、B は t18 に OFF、ランプは t22 に消える。実機が t24 なら 26.2 の読みどおり、t18 なら 修正前の sim どおり",
+  "mcVersion": "1.21.1",
+  "ticks": 30,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      4,
+      1,
+      3
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        -1,
+        0,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        0,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        -1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "repeater[delay=2,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "repeater[delay=3,facing=west,locked=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "redstone_lamp[lit=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "repeater[delay=2,facing=south,locked=false,powered=false]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 5,
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 10,
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 11,
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 5,
+      "changes": [
+        {
+          "pos": [
+            0,
+            1,
+            0
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 6,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "repeater[delay=2,facing=west,locked=false,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 10,
+      "changes": [
+        {
+          "pos": [
+            1,
+            1,
+            0
+          ],
+          "block": "repeater[delay=2,facing=west,locked=false,powered=false]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "redstone_block"
+        }
+      ]
+    },
+    {
+      "tick": 11,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "air"
+        }
+      ]
+    },
+    {
+      "tick": 12,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "repeater[delay=3,facing=west,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=true]"
+        }
+      ]
+    },
+    {
+      "tick": 14,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "repeater[delay=3,facing=west,locked=true,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "repeater[delay=2,facing=south,locked=false,powered=true]"
+        }
+      ]
+    },
+    {
+      "tick": 18,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "repeater[delay=3,facing=west,locked=false,powered=true]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "repeater[delay=2,facing=south,locked=false,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 24,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            0
+          ],
+          "block": "repeater[delay=3,facing=west,locked=false,powered=false]"
+        }
+      ]
+    },
+    {
+      "tick": 28,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            0
+          ],
+          "block": "redstone_lamp[lit=false]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T01:45:53.311Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}
