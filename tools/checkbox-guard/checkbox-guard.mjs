@@ -200,10 +200,17 @@ export function findOwnComment(comments) {
 /**
  * 1 回分の処理。issue は event の写しを使わず取り直す (閉じる・直すが続いたときに
  * 古い本文で判断しないため)。
- * @param {{ action: string, number: number, api: ReturnType<typeof createApi> }} input
+ * closed の run では、event の closed_at と取り直した issue の closed_at を比べる。
+ * 待っているあいだに開き直されて閉じ直されていれば、閉じ直した方の run (まだ 30 分
+ * 待っている) に任せる。
+ * @param {{ action: string, number: number, api: ReturnType<typeof createApi>,
+ *   closedAt?: string | null }} input
  */
-export async function run({ action, number, api }) {
+export async function run({ action, number, api, closedAt }) {
   const issue = await api.getIssue(number)
+  if (action === 'closed' && closedAt && issue.state === 'closed' && issue.closed_at !== closedAt) {
+    return { kind: 'skip', reason: '閉じ直されたので後の run に任せる' }
+  }
   const decision = decide({ action, issue })
   if (decision.kind === 'skip') return decision
 
@@ -232,7 +239,7 @@ async function main() {
     repo: process.env.GITHUB_REPOSITORY,
     apiUrl: process.env.GITHUB_API_URL,
   })
-  const result = await run({ action: event.action, number, api })
+  const result = await run({ action: event.action, number, api, closedAt: event.issue.closed_at })
   const summary = result.kind === 'warn'
     ? `#${number}: 未チェック ${result.items.length} 件。${LABEL} を付けた`
     : `#${number}: ${result.kind} (${result.reason})`

@@ -238,6 +238,16 @@ describe('run: GitHub に対してすること', () => {
     expect(comments[0].body).toBe(renderResolved('not_planned'))
   })
 
+  it('待っているあいだに閉じ直されていたら、閉じ直した方の run に任せて何もしない', async () => {
+    const issue = { ...warnIssue, closed_at: '2026-10-25T10:40:00Z' }
+    const { api, calls } = fakeApi(issue)
+    const r = await run({ action: 'closed', number: 1, api, closedAt: '2026-10-25T10:00:00Z' })
+    expect(r).toEqual({ kind: 'skip', reason: '閉じ直されたので後の run に任せる' })
+    expect(calls).toEqual([])
+    // 同じ close の run なら警告する
+    expect((await run({ action: 'closed', number: 1, api, closedAt: '2026-10-25T10:40:00Z' })).kind).toBe('warn')
+  })
+
   it('警告した跡が無い issue で片付いていれば何もしない', async () => {
     const issue = { state: 'closed', state_reason: 'completed', labels: [], body: '## やること\n- [x] a' }
     const { api, calls } = fakeApi(issue)
