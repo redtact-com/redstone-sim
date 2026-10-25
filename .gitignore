@@ -12,6 +12,9 @@ zz-*
 *.tmp.mjs
 .verify-tmp*
 
+# vitest のカバレッジ (npm run test:coverage)
+/coverage/
+
 # Playwright E2E (issue #70)
 /playwright-report/
 /test-results/

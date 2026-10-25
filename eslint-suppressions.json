@@ -1,0 +1,47 @@
+{
+  "app/src/DemoPage.tsx": {
+    "react-hooks/refs": {
+      "count": 5
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "app/src/EditorPage.tsx": {
+    "react-hooks/refs": {
+      "count": 17
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    },
+    "react-refresh/only-export-components": {
+      "count": 1
+    }
+  },
+  "app/src/LivePage.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/preserve-manual-memoization": {
+      "count": 1
+    },
+    "react-hooks/refs": {
+      "count": 4
+    }
+  },
+  "app/src/nbtIO.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 87
+    }
+  },
+  "packages/viewer/src/IsometricView.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "tools/demo/demo-mp4.mjs": {
+    "no-unused-vars": {
+      "count": 1
+    }
+  }
+}

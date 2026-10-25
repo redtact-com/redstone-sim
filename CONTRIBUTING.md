@@ -62,3 +62,5 @@ JAVA_HOME=~/bluemap/jdk25 tools/decompile/fetch-and-decompile.sh 26.2
 
 - ブランチは issue 単位 (`<issue番号>-<slug>`)。main / develop への直接 push は禁止。
 - コミットメッセージは日本語で、意味単位に分割する。
+- `npm run lint` を通してから PR を出す。今ある違反は `eslint-suppressions.json` に凍結してあり、件数は減らす一方にする。
+  違反を直したら `npm run lint:prune` で凍結を減らす。新しい違反は凍結せずに直す (ルールの追加などでやむを得ず凍結するときは、PR に理由を書く)。
