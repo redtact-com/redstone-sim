@@ -1,4 +1,4 @@
-// リポ全体の ESLint 設定 (#<issue>)。npm run lint はルートで eslint . を流す。
+// リポ全体の ESLint 設定 (#420)。npm run lint はルートで eslint . を流す。
 // 今ある違反は eslint-suppressions.json に凍結してあり、CI は新しい違反だけで落ちる。
 // 違反を直したら npm run lint:prune で凍結の件数を減らす (減らさないと CI が落ちる)。
 import js from '@eslint/js'

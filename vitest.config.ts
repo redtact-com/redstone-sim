@@ -12,7 +12,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**', '**/e2e/**'],
     // npm run test:coverage (--coverage 付き) のときだけ集計する。
     // include を書くと、どのテストからも読まれないファイルも 0% として表に出る。
-    // しきい値はまだ付けない (#<issue>)
+    // しきい値はまだ付けない (#420)
     coverage: {
       provider: 'v8',
       include: [
