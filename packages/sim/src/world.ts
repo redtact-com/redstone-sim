@@ -2059,7 +2059,9 @@ export class SimWorld {
 
       // トレース: BE 実行 (伸長)。afterPistonMove の bu を updateFormula に収集
       this.traceProcess('BE', 'Pi', 'p', 0)
-      // 書き込みと更新の順は 26.2 PistonBaseBlock.moveBlocks に揃える (R-11・R-12・R-14):
+      // 書き込みと更新の順は 26.2 PistonBaseBlock.moveBlocks に揃える (R-11・R-12・R-14、#410)
+      // [実機 fixture piston-empty-extend-bud・piston-branch-vacate・piston-push-away-power・
+      // piston-base-nc-last-race: 4 本とも全 tick 一致。修正前は 8 / 10 / 8 / 23 セル食い違った]:
       //   1. 壊すセルを空気に (更新なし)
       //   2. 行き先を moving に (更新は 5 でまとめて出す)
       //   3. ヘッド位置を moving に
@@ -2068,7 +2070,7 @@ export class SimWorld {
       //      近隣更新: 壊したセル → 出発セル → ヘッド位置
       //   6. 最後に本体を伸びた状態にして、近隣更新 → 形状更新 (triggerEvent の flag 67 の書き込み)
       // 破壊対象 (チェーン終端の PUSH_DESTROY) を先に air 化する
-      // [確定: 26.2 moveBlocks — toDestroy を遠い順に destroy してから移動]。
+      // [確定: 26.2 PistonBaseBlock.moveBlocks — toDestroy を遠い順に destroy してから移動]。
       // アイテム化 (ドロップ) はさせない (13 §2、#64)
       for (let i = toDestroy.length - 1; i >= 0; i--) {
         this.setBlockAt(toDestroy[i], { type: 'air' })
@@ -2101,19 +2103,24 @@ export class SimWorld {
       this.afterPistonMove(
         // 形状更新 (オブザーバーが見る) は**行き先**も含める。ブロックが現れるので。
         // **空いた出発セルからも出す** (R-12)。ここに無いと、元位置を見るオブザーバーが
-        // 発火せず、横のダストも古い電力のまま残る (ダストの再計算の起点もこの列から作る)。
+        // 発火せず、横のダストも古い電力のまま残る (ダストの再計算の起点もこの列から作る)
+        // [実機 fixture piston-branch-vacate: 横のダストは t3 に 0 で十字、元位置を見る
+        // オブザーバーは t5 に ON]。
         // 壊したセルは必ず行き先かヘッド位置になるので、ここには並べない
         [...dests, headPos, ...vacated],
         // 近隣更新は**出発セル**と**ヘッド位置**から (#285)。行き先から出すと、そこに面した
         // 受電していないピストンが誤って縮む。
         // **ヘッド位置からは何も押さなくても出す** (R-11)。押すときは出発セルと重なるので 2 回目になる
+        // [実機 fixture piston-empty-extend-bud: ヘッド位置の隣の BUD ピストンが t3 に伸び始める]
         [...[...toDestroy].reverse(), ...[...pushList].reverse(), headPos],
       )
       // **本体は最後に伸びた状態にする** (R-14)
       // [確定: 26.2 PistonBaseBlock.triggerEvent — moveBlocks が戻ってから本体を flag 67 で書く]。
       // それまでの近隣更新で再判定される隣のピストンからは、本体はまだ縮んだピストンに見える。
       // 本体自身も出発セル・ヘッド位置の近隣更新で再判定されるが、まだ縮んでいるので何もしない。
-      // 押した塊で自分の電源を運び去っても、次の近隣更新までは伸びたまま残る (先に書くと 0-tick で縮む)。
+      // 押した塊で自分の電源を運び去っても、次の近隣更新までは伸びたまま残る (先に書くと 0-tick で縮む)
+      // [実機 fixture piston-push-away-power: t3 に伸び、t5 のヘッドの着地で再判定して t6 に縮み始める /
+      // piston-base-nc-last-race: 出発セルの上のピストンが本体の横のピストンより先に予約される]。
       // 本体は導体でも信号源でもないので、ダストの形と電力はここでは変わらない
       this.setBlockAt(ev.pos, { ...piston, extended: true })
       changed.push(posKey(ev.pos))
@@ -2466,7 +2473,8 @@ export class SimWorld {
     // 行き先からも出していたので、**受電していないのに縮むピストン**が生まれていた
     // (5×5 扉を 4 往復させると t456 で (8,7,1) が実機と食い違う)。
     // 伸長の**ヘッド位置**は行き先でも、何も押さないときも含めて最後に出す (R-11。
-    // 26.2 PistonBaseBlock.moveBlocks。呼び出し側が ncPositions の末尾に置く)。
+    // 26.2 PistonBaseBlock.moveBlocks。呼び出し側が ncPositions の末尾に置く)
+    // [実機 fixture piston-empty-extend-bud]。
     // ncPositions を渡さない経路 (収縮・着地) は今までどおり positions を使う
     for (const p of ncPositions ?? positions) this.submitMultiNC(p)
     for (const w of changedWires) {
