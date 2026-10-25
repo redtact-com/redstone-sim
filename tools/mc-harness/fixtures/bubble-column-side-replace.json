@@ -1,0 +1,332 @@
+{
+  "name": "bubble-column-side-replace",
+  "description": "穴の真下の泡柱の段の横のブロックを差し替えても (近隣更新 + 横からの形状更新) 予約し直さないことを見る (#381 / R-18 前半)。bubble-column-refill と同じ配置 (ソウルサンド (0,0,0) の上の泡柱 5 段 + 水源 (0,6,0) をガラスで囲う) に、t17 の setblock 1 つとプレイヤーの足場 (3,0,3) を足したもの (region も足場まで広げた)。t2 に (0,3,0) を抜く (t7 に上が水に戻る)。t17 に穴の真下の段 (0,2,0) の東のガラス (1,2,0) を石に差し替える。t20 に (0,3,0) へ水源を setblock する。26.2 BubbleColumnBlock.updateShape の読みでは横の隣が変わっても流体 tick しか入らず、柱が戻るのは水源を置いた 5gt 後の t25。旧 sim は t17 の近隣更新で t22 に戻していた",
+  "mcVersion": "1.21.1",
+  "ticks": 28,
+  "region": {
+    "from": [
+      -1,
+      -1,
+      -1
+    ],
+    "to": [
+      4,
+      8,
+      4
+    ]
+  },
+  "player": {
+    "spawn": [
+      3.5,
+      1.0,
+      3.5
+    ],
+    "facing": [
+      0,
+      0
+    ],
+    "lookAt": [
+      0.5,
+      1.35,
+      0.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "block": "soul_sand"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        0
+      ],
+      "block": "bubble_column[drag=false]"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        0
+      ],
+      "block": "water[level=0]"
+    },
+    {
+      "pos": [
+        -1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        1,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        2,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        3,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        3,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        3,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        4,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        4,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        4,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        5,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        5,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        5,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        -1,
+        6,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        1,
+        6,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        -1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        6,
+        1
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        0,
+        7,
+        0
+      ],
+      "block": "glass"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        3
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 17,
+      "pos": [
+        1,
+        2,
+        0
+      ],
+      "action": "setblock",
+      "block": "stone"
+    },
+    {
+      "tick": 20,
+      "pos": [
+        0,
+        3,
+        0
+      ],
+      "action": "setblock",
+      "block": "water[level=0]"
+    }
+  ]
+}
