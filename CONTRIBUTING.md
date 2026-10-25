@@ -66,4 +66,4 @@ JAVA_HOME=~/bluemap/jdk25 tools/decompile/fetch-and-decompile.sh 26.2
   - 新しい違反は凍結せずに直す。ルールの追加 (ESLint やプラグインの更新など) でやむを得ず凍結するときは `npx eslint . --suppress-rule <ルール>` を流し、PR に理由を書く。
   - 凍結した違反を直したら `npm run lint:prune` で凍結を減らす。減らさないと `npm run lint` が exit 2 で落ちる。
   - 凍結の件数を超えると、そのファイルのそのルールの違反が全部表示される。新しい 1 件は `git diff` で探す。
-  - `app/src/nbtIO.ts` の `no-explicit-any` は、変換器を sim の simToMc に寄せる作業でまとめて消す。React Compiler 系 (`react-hooks/*`) は、そのページを触る PR で触った範囲から減らす。
+  - `app/src/nbtIO.ts` の `no-explicit-any` は、変換器を sim の simToMc に寄せる作業でまとめて消す。React Compiler 系 (`react-hooks/*`) と `react-refresh/*` は、そのページを触る PR で触った範囲から減らす。
