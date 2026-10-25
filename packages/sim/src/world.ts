@@ -3085,6 +3085,8 @@ export class SimWorld {
         //   - 信号源でない更新 (石への差し替え) では再計算されず、通電時の向きが
         //     残ったまま固まる [fixture rail-junction-nonsignal]
         //   - 4 方向ジャンクションは給電しても動かない [fixture rail-junction-gate]
+        // 書見台は信号源 (isSignalSourceType。R-8) なので、固まっていた向きも setblock で隣に置くと
+        // 決め直される [fixture wire-connect-detector-rail-lectern: t5 に north_east → south_east]
         if (!isSignalSourceType(origin)) break
         if (countPotentialConnections(this, pos) !== 3) break
         this.applyRailPlacement(pos, block.shape, false)

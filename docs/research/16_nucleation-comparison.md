@@ -183,7 +183,7 @@
 | 段差の伝播 | 規則の形は 26.2 と同じ (横のブロックが導体のときだけ 1 段上のダストを読む)。ただし導体表の誤りで、グロウストーンの段では下りにも流れ、soul_sand / packed_ice の段では下りに流れない | 非導体の段でも下りに流れる **[実機]** | Nucleation (ガラス・上付きハーフの段は Nucleation だけが正しい。グロウストーンの段はどちらも誤り) |
 | 上り接続を切るブロック | 導体表と同じ表を引く。ただし表の誤りをそのまま受け、グロウストーンと銅の電球で切り、soul_sand / packed_ice / blue_ice では切らない | 別のリストを持ち、slime_block / lodestone / soul_sand が抜けている | 同等 (表を共有する作りは Nucleation が正しいが、切るブロックの誤りはどちらにもある) |
 | 導体表の正確さ | packed_ice / blue_ice / soul_sand を非導体、グロウストーン・銅の電球・ケーキを導体と取り違える | 実機で 1 個ずつ測った表 | redstone-sim |
-| 接続対象 (shouldConnectTo) | 検知レール・トラップチェスト・避雷針にも接続する。書見台は信号源に入っておらず、接続しない | detector_rail と lectern に接続しない。トラップチェスト (container に潰す) と避雷針 (decor) も信号源として扱わない | Nucleation |
+| 接続対象 (shouldConnectTo) | 検知レール・トラップチェスト・避雷針にも接続する。書見台は信号源に入っておらず、接続しない | detector_rail と lectern に接続する **[実機]** (R-8。#406 / PR#407 で直した。fixture wire-connect-detector-rail-lectern。以前はどちらにも接続しなかった)。トラップチェスト (container に潰す) と避雷針 (decor) はまだ信号源として扱わない | 同等 (検知レールは両方が正しい。書見台は redstone-sim、トラップチェストと避雷針は Nucleation だけが正しい) |
 | 接続形状の UP / SIDE | 横のブロックがフルブロックかで区別する (26.2 RedStoneWireBlock#getConnectingSide は、横のブロックのダスト側の面が頑丈かを見る) | 常に up (見た目だけの差) | Nucleation |
 | 除去時の追加更新 | 近傍更新だけで、再計算が欠ける | フックが無い | Nucleation |
 | 支え (canSurvive) | 無し (下からの形状更新を意図的に無視) | 無し | 同等 |
@@ -195,8 +195,8 @@
 | shouldPrioritize (-3) の判定 | 入力側を見て、しかも条件が逆 | 出力側のダイオードがこちらを向いていないとき (26.2 DiodeBlock#shouldPrioritize と同じ) | redstone-sim |
 | tick 中の自己 OFF 予約の優先度 | -2 固定 (26.2 DiodeBlock#tick と同じ) | -3 になりうる | Nucleation |
 | コンパレーターの側面入力 | 通常の信号で読むので、横のトーチで出力が 0 になる | 26.2 DiodeBlock#getAlternateSignal (SignalGetter#getControlInputSignal) 相当 | redstone-sim |
-| 背面の導体越し読み | 置き換え (26.2 と同じ) | max で合成 | Nucleation |
-| compare モードで出力が変わらない tick | 前方へ更新を出す (26.2 と同じ) | 出さない | Nucleation |
+| 背面の導体越し読み | 置き換え (26.2 と同じ) | 置き換え **[実機]** (R-4。#406 / PR#407 で直した。fixture comparator-through-conductor-replace。以前は max で合成していた) | 同等 |
+| compare モードで出力が変わらない tick | 前方へ更新を出す (26.2 と同じ) | 前方へ更新を出す **[実機]** (R-5。#406 / PR#407 で直した。fixture comparator-compare-front-nc。以前は出さなかった) | 同等 |
 | 出力の BE 保持 | 有り | 有り | 同等 |
 | トーチ burnout | 160 gt 後の再判定が無い。窓の境界も違う | 再判定あり (fixture torch-burnout-recovery) | redstone-sim |
 | トーチの NC 回数と順 | 26.2 の形 (2 段送信 1 回。起点は Direction.values() の順) | 回数は 1.21.1 の形 (2 段送信 2 回)。ただし起点の 6 隣を西・東・下・上・北・南の順で回し、vanilla の Direction.values() の順 (下・上・北・南・西・東) と違う (R-21) | 回数は版の違い (§3.4)。起点の順は Nucleation |
@@ -242,7 +242,7 @@
 | スタック上限の表 | 部分的な表。経路によっては 64 固定 | 1.21.1 の全 1333 アイテムから生成 | redstone-sim |
 | ラージチェスト (54 スロット) | 有り | 無し | Nucleation |
 | 蓋がふさがったチェスト (コンパレーター 0) | 有り (判定は full cube で近似) | 無し | Nucleation |
-| 検知レールのコンパレーター読み | 載っているトロッコの中身 | レールが ON なら 15 (普通のトロッコでも 15、実機は 0)。カートが無いときは 0 で一致 **[実機]** | Nucleation |
+| 検知レールのコンパレーター読み | 載っているトロッコの中身 | 常に 0 **[実機]** (R-3。#406 / PR#407 で直した。fixture detector-rail-comparator: 普通のトロッコが乗っても実機は 0。以前はレールが ON なら 15 だった)。トロッコを持たないので、中身を持つトロッコは表せない (13 §2) | 同等 (普通のトロッコの範囲)。中身を持つトロッコは Nucleation |
 | ホッパーの基本の移送 | 有り | 有り | 同等 |
 | 取り出しに失敗したときの CU | 有り | 無し | Nucleation |
 | ディスペンサーの特殊な挙動 | シュルカーボックス・防具立て・バケツ | バケツだけ | Nucleation |
@@ -282,12 +282,12 @@
 |---|---|---|---|---|
 | R-1 | ガラス・上付きハーフ・グロウストーンの段で、ダストが下へ流れる | RedstoneWireEvaluator#getIncomingWireSignal: 1 段上のダストを読むのは、横のブロックが導体のときだけ。非導体の段は上り専用 | **[実機]** 上から給電すると、実機は中段・下段とも 0、sim は 14 / 13。下から給電と石の段は一致 | ガラス段やハーフ段をダイオードとして使う縦配線 |
 | R-2 | 上り接続を切る判定に slime_block / lodestone / soul_sand が無い (blocks/wire.ts:11-22) | RedStoneWireBlock#getConnectingSide: 真上が導体なら切る。3 種はどれも導体 | [逆コンパイル+実行] 3 種で蓋をしても、sim では上段と下段が 14 のまま | スライムやソウルサンドの脇にダストを這わせる機構 (ガラスエレベーター等) |
-| R-3 | 普通のトロッコが乗ったディテクターレールを、コンパレーターが 15 と読む (world.ts:100-117) | DetectorRailBlock#getAnalogOutputSignal: コンテナ付きかコマンドブロック付きのトロッコ以外は 0。コンパレーターは通常の信号をこの値で置き換える | **[実機]** 実機 0 / sim 15 (トロッコが無ければ一致) | トロッコの通過をコンパレーターで検出する回路 |
-| R-4 | コンパレーターの導体越し読みを max で合成する (world.ts:3204-3207) | ComparatorBlock#getInputSignal: 置き換え | [逆コンパイル+実行] 空の樽を読むと sim 13 / vanilla 0 | ブロック越しの空検知・残量表示 |
-| R-5 | compare モードで出力が変わらない tick に、前方へ更新を出さない (world.ts:1583-1590) | ComparatorBlock#refreshOutputState: compare モードなら値が同じでも前方を更新する | [逆コンパイル+実行] 2 gt パルスを飲み込んだとき、前方の BUD ピストンが sim では伸びない | コンパレーターを BUD のトリガやパルス検出に使う回路 |
+| R-3 | 普通のトロッコが乗ったディテクターレールを、コンパレーターが 15 と読む (world.ts:100-117) | DetectorRailBlock#getAnalogOutputSignal: コンテナ付きかコマンドブロック付きのトロッコ以外は 0。コンパレーターは通常の信号をこの値で置き換える | **[実機]** 実機 0 / sim 15 (トロッコが無ければ一致)。fixture detector-rail-comparator: レールが点いたあとも (t3〜t8) コンパレーターは点かない。修正前の sim と 12 セル食い違う。**#406 / PR#407 で修正済み** | トロッコの通過をコンパレーターで検出する回路 |
+| R-4 | コンパレーターの導体越し読みを max で合成する (world.ts:3204-3207) | ComparatorBlock#getInputSignal: 置き換え | **[実機]** 弱充電 13 の石の奥が空の樽なら 0、中身 3 の樽なら 3、無しなら 13、カートの無い検知レールなら 0 (修正前の sim は 4 本とも 13)。fixture comparator-through-conductor-replace: 修正前の sim と 15 セル食い違う。**#406 / PR#407 で修正済み** | ブロック越しの空検知・残量表示 |
+| R-5 | compare モードで出力が変わらない tick に、前方へ更新を出さない (world.ts:1583-1590) | ComparatorBlock#refreshOutputState: compare モードなら値が同じでも前方を更新する | **[実機]** 2 gt パルスを飲み込んだ tick (t6) に、compare の前方の BUD ピストンだけが伸びる。subtract のピストンは t8 の近隣更新 (対照) まで伸びず、コンパレーターは 2 本とも一度も点かない。fixture comparator-compare-front-nc: 修正前の sim と 12 セル食い違う。**#406 / PR#407 で修正済み** | コンパレーターを BUD のトリガやパルス検出に使う回路 |
 | R-6 | リピーターが tick 中に自分の OFF を予約するとき、優先度が -3 になりうる (world.ts:1579) | DiodeBlock#tick: 常に -2。-3 を選ぶのは近隣更新から予約するときだけ | [逆コンパイル+実行] 側面ロックと重なると 2 gt 遅れる例を再現 | 直列のリピーターと側面ロックの組み合わせ |
 | R-7 | レバー/ボタンの近隣更新が 1 回少なく、しかも形状更新が先に出る (world.ts:1231-1239) | LeverBlock#pull: flag 3 の書き込みで自分の周り → 形状更新 → updateNeighbours | [逆コンパイル+実行] 同じ gt・同じ優先度のオブザーバーとコンパレーターの予約順が逆になる | 予約の順で勝敗が決まる競争 |
-| R-8 | ダストが detector_rail と lectern に接続しない (wire-shape.ts:42-71) | RedStoneWireBlock#shouldConnectTo: 信号源なら接続する | [逆コンパイル+実行] 接続が十字になり、横のランプまで点く | トロッコ検出の信号をダストで横へ引き出す配置 |
+| R-8 | ダストが detector_rail と lectern に接続しない (wire-shape.ts:42-71) | RedStoneWireBlock#shouldConnectTo: 信号源なら接続する | **[実機]** 検知レールと書見台の隣のダストは直線のまま (修正前の sim は十字になり、横のランプまで点く)。書見台は通常レールの向きの門番でも信号源 (setblock で置くと 3 方向ジャンクションが向きを決め直す)。fixture wire-connect-detector-rail-lectern: 修正前の sim と 27 セル食い違う。**#406 / PR#407 で修正済み** | トロッコ検出の信号をダストで横へ引き出す配置 |
 | R-9 | 押し反応の分類が 8 種で違う (world.ts:1763-1819) | PistonBaseBlock#isPushable と Blocks の登録。検知レール・銅の電球・トラップドア・塀・ガラス板は押せる。クラフターは BE を持つので不動。budding_amethyst と扉は壊れる | **[実機]** 8 種すべて実機と違う。sim は検知レールとクラフターを壊し、残りは押せない。budding_amethyst は取り込めない | 検知レールや塀・板を押す扉、クラフターや扉の前のピストン |
 | R-10 | 水・泡柱・シュルカーボックス・カボチャ類・苔・植木鉢・はしご・頭の押し反応。看板・旗・彫刻された本棚を押してしまう | 水・泡柱・シュルカー・カボチャ類・苔・植木鉢・はしご・頭は DESTROY。看板・旗・彫刻された本棚は BE を持つので不動 | [逆コンパイル+実行] (実機では未測定) | 水路のゲート、カボチャ・スイカの収穫ピストン |
 | R-11 | 何も押さない伸長で、ヘッド位置から近隣更新が出ない (world.ts:2036-2042) | PistonBaseBlock#moveBlocks: 伸長の最後に、必ずヘッド位置から出す | **[実機]** ヘッド位置の隣の BUD ピストンが、実機は t5、sim は t8 (3 gt 遅れ)。石を押す対照は一致 | 空打ちのヘッドで BUD を叩く回路 |
@@ -306,6 +306,7 @@
 補足:
 
 - R-1・R-3・R-9・R-11 は、実機ハーネスで同じ回路を走らせ、実機と sim の状態系列を比べて確定した。§4 の修正では、まず fixture にしてから直す。
+- R-3・R-4・R-5・R-8 は #406 / PR#407 で、fixture 4 本 (detector-rail-comparator / comparator-through-conductor-replace / comparator-compare-front-nc / wire-connect-detector-rail-lectern) を実機 1.21.1 で撮ってから直した (2026-10-25)。4 本とも修正後の sim と全 tick で一致した。
 - 1.21.1 と 26.2 で規則が同じことは、R-1〜R-8 について確かめた。1.21.1 の server jar を公式 mappings でデコンパイルし、
   9 クラス (LevelChunk / Level / RedstoneTorchBlock / LeverBlock / ButtonBlock / DiodeBlock / ComparatorBlock / RedStoneWireBlock / DetectorRailBlock) に加えて、
   Blocks (R-2 の導体: ソウルサンドは常に導体、スライムとロードストーンは既定のフルブロック判定で導体) と LecternBlock (R-8: 常に信号源) を読んだ。
@@ -409,7 +410,7 @@
 |---|---|---|
 | ダストの上り判定を「横が導体のときだけ上段を読む」にし、isWireCutBlock を isConductor に一本化する | R-1, R-2 | S |
 | トーチの 2 段送信の起点を Direction.values() の順にする。塀の形状更新の連鎖に、呼び直しでも引き継ぐ深さを持たせる | R-21, R-22 | S |
-| コンパレーターの 3 点を直す: 導体越しは置き換え、compare モードでは空振りでも前方更新、detector_rail をアナログ出力と接続対象に加える (lectern も接続対象に) | R-3, R-4, R-5, R-8 | S |
+| コンパレーターの 3 点を直す: 導体越しは置き換え、compare モードでは空振りでも前方更新、detector_rail をアナログ出力と接続対象に加える (lectern も接続対象に) (#406 / PR#407 で済み。fixture 4 本を実機で撮ってから直した) | R-3, R-4, R-5, R-8 | S |
 | リピーターの自己 OFF を -2 固定にする。レバー/ボタンは、形状更新より前に自分の周りへ NC を 1 回出し (flag 3 の書き込みの分)、形状更新 → updateNeighbours の NC の順にする (activateBlock は apply とは別の経路なので、R-15 の修正では直らない) | R-6, R-7 | S |
 | 押し反応の表を 26.2 の Blocks に合わせる。判定は PistonBaseBlock#isPushable の順にする: 硬さ -1 は不動、次に押し反応 (BLOCK は不動、DESTROY は壊す、PUSH_ONLY は向きしだい) で決め、NORMAL のものに限って BE 持ちを不動にする (シュルカー・ベル・飾り壺・頭は BE を持つが壊れる) | R-9, R-10 | M |
 | 伸長の末尾処理を moveBlocks の順にする。ヘッド位置から NC を出し、空いたセルに形状更新を出し、本体の更新を最後にする | R-11, R-12, R-14 | S〜M |

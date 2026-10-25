@@ -111,6 +111,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
 - 例外: コンパレーターが別ダイオードに向く場合は priority -1 になりパルスが通る。
 - 出典: note II-07 (https://note.com/enokilovin/n/nc2952f9d228c。現 ArcFrout `II-ChGph`) + デコンパイル (ObserverBlock/ComparatorBlock/ScheduledTick.DRAIN_ORDER) + https://minecraft.wiki/w/Redstone_circuits/Pulse で三重裏付け。
 - **→ 回帰テストの最重要ケース。**
+- 実機でも確認済み [実機 fixture comparator-compare-front-nc (#406)]: オブザーバーを背面で読む compare / subtract のコンパレーターは、
+  2gt パルスを受けても一度も点かない。compare の方は、飲み込んだ tick に前方の BUD ピストンだけを起こす (§6 comparator の R-5)。
+  sim 側の回帰は tests/circuits/timing/comparator-swallow-p0.rstest (トレース `Co{c.2-}`)。
 
 ---
 
@@ -611,7 +614,7 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 | 支持ブロック要件 | 支持を失うとドロップして消える | **非実装** | sim 全体が支持要件を持たない。一部だけ入れると不整合。実機仕様は fixture `rail-support-break` / `rail-slope-support-break` / `lever-support-break` に `skipUntil` 付きで記録 |
 | 貼り付き素子の支え | **ホッパーの上・伸びたピストンの上に置いたレバーは壊れて落ちる** | 残って給電し続ける | 上と同じ横断的判断。実測 (#328 fixture `lever-support-break`): ホッパー上の床レバーを ON にすると**レバーが消え**、ホッパーは `enabled=true` のまま。sim はレバーが残るので `enabled=false` になる。石の上のレバー (対照) は残る |
 | detector_rail のカート常駐 | 20gt ごとに数え直して通電を維持 | 20gt で必ず OFF | 折衷モデル (手動トリガ + 持続 gt)。fixture `detector-rail-cart-stay` に記録 |
-| コンパレーター読み取り | カートの中身を読む | 常に 0 | エンティティ非実装 |
+| コンパレーター読み取り | カートの中身を読む (普通のトロッコは 0) | 常に 0 | エンティティ非実装。普通のトロッコの範囲では実機と一致する [実機 fixture detector-rail-comparator (R-3。#406)]。ed3baa9 までの sim はレールが ON なら 15 を読んでいた |
 
 ---
 
