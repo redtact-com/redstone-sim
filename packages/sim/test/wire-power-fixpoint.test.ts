@@ -12,7 +12,7 @@ import { H_DIRS, H_DIR_VEC, ALL_DIRS } from '../src/types.js'
  * 収束するかを、ランダムな小さい盤面で「一から計算した値」と突き合わせる。
  *
  * 一から計算する側は blocks/wire.ts を使わず、vanilla の規則をここに書き直したもの
- * [確定: 1.21.1 RedStoneWireBlock#calculateTargetStrength — 隣のワイヤー最大 −1。
+ * [確定: 1.21.1 RedStoneWireBlock.calculateTargetStrength — 隣のワイヤー最大 −1。
  *  横が導体かつ直上が非導体なら 1 段上を、横が非導体なら 1 段下を読む]。
  * 動力源は redstone_block だけにする (6 方向に 15。導体を強充電しない) ので、
  * 源の規則もここに閉じる。

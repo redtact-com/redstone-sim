@@ -113,7 +113,7 @@ describe('非導体の段は上り専用 (R-1)', () => {
    * 上から給電 = U の東 (2,2,0) に redstone_block / 下から給電 = L の西 (-1,1,0) に redstone_block。
    * 1 段上のダストを読めるのは横のブロックが導体のときだけなので、非導体の段では
    * U は L を読む (下り) が L は U を読まない。石の段は両方向
-   * [確定: 1.21.1 RedStoneWireBlock#calculateTargetStrength]
+   * [確定: 1.21.1 RedStoneWireBlock.calculateTargetStrength]
    * [実機 fixture wire-step-nonconductor-down: 上から給電でガラス・グロウストーン・
    *  上付きハーフの段は中段・下段とも 0、石の段は 14 / 13]。
    */

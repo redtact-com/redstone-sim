@@ -2461,7 +2461,8 @@ export class SimWorld {
   /**
    * BFS の起点: 自身の隣接ワイヤー + 強充電され得る隣接導体 (solid / target) の
    * 隣接ワイヤー (dust→導体→dust は無いが、strong 源→導体→dust の 2 ホップは
-   * 電源になる)
+   * 電源になる) + pos を段越しに読むワイヤー (水平隣の 1 段上・下) + pos 自身のワイヤー。
+   * 後ろの 2 つは末尾に足す (下のコメント)
    */
   private collectWireStarts(pos: Pos3D): Pos3D[] {
     // 導体経由の 2 ホップ起点も NC_UPDATE_ORDER で集める (collectAdjacentWires と同規則)
@@ -2478,11 +2479,11 @@ export class SimWorld {
     // 消しても古い値のまま残っていた (wire-power-fixpoint.test.ts がランダムな盤面で検出。
     // 実機 fixture wire-step-nonconductor-down の z=16: 下段を消すと中段・上段は 0)。
     // vanilla は消えたダストの onRemove が隣の隣まで NC を配るので、この範囲は必ず再計算される
-    // [確定: 1.21.1 RedStoneWireBlock#onRemove — 6 方向の隣それぞれから updateNeighborsAt]。
+    // [確定: 1.21.1 RedStoneWireBlock.onRemove — 6 方向の隣それぞれから updateNeighborsAt]。
     // ここで足すのはダストの電力の再計算だけで、隣の隣にあるダスト以外の素子へ届く NC は
     // 今までどおり出ない (docs/research/16 §2.3 の「除去時の追加更新」)。
     // 置かれたダスト自身も、隣にダストも導体も無く形も変わらなければ (ガラスの上に dot で置く等)
-    // 起点に入らないので足す [確定: 1.21.1 RedStoneWireBlock#onPlace — 置かれたダストは自分の強さを
+    // 起点に入らないので足す [確定: 1.21.1 RedStoneWireBlock.onPlace — 置かれたダストは自分の強さを
     // 計算し直す] [実機 fixture wire-step-nonconductor-down の z=20: 真上の redstone_block で 15]。
     // **末尾に足す**: 既にほかの起点と連結していれば BFS で先に拾われて順序は変わらず、
     // 連結していないときだけ別の成分として後ろに付く

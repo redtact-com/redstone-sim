@@ -10,7 +10,7 @@ import { getSignal, getStrongPower, relative, isConductor } from '../power.js'
  *
  * **isConductor (power.ts) そのもの**。vanilla は真上の判定も横の判定も
  * isRedstoneConductor で決めるので、別の一覧は持たない
- * [確定: 1.21.1 RedStoneWireBlock#getConnectingSide / #calculateTargetStrength]。
+ * [確定: 1.21.1 RedStoneWireBlock.getConnectingSide / RedStoneWireBlock.calculateTargetStrength]。
  * 以前は別の一覧を持っていて slime_block / lodestone / soul_sand が抜けていた (R-2)。
  * stone / target / note_block / dropper / dispenser / crafter / lamp が切り、
  * glass / chest / observer / hopper / 銅の電球が切らないのは実機で測ってある
@@ -73,8 +73,8 @@ export function getConnectedWireNeighbors(pos: Pos3D, world: SimWorld): Pos3D[] 
 
 /**
  * 指定座標のワイヤーが電力を読む隣接ワイヤー座標の一覧 (入力用)。
- * [確定: 1.21.1 RedStoneWireBlock#calculateTargetStrength / 26.2
- *  RedstoneWireEvaluator#getIncomingWireSignal — 水平 4 方向それぞれで次を読む]
+ * [確定: 1.21.1 RedStoneWireBlock.calculateTargetStrength / 26.2
+ *  RedstoneWireEvaluator.getIncomingWireSignal — 水平 4 方向それぞれで次を読む]
  * - 同レイヤー: 横のセルがワイヤーなら読む (接続形状は見ない)
  * - 上り: 横のセルが導体で、かつ自分の直上が導体でないとき、横の 1 段上のワイヤー
  * - 下り: 横のセルが導体でないとき、横の 1 段下のワイヤー
