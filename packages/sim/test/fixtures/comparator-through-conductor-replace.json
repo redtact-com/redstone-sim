@@ -1,0 +1,693 @@
+{
+  "name": "comparator-through-conductor-replace",
+  "description": "R-4: コンパレーターが導体 1 個越しにアナログ出力を読むとき、通常の信号と合成するか置き換えるか。26.2 ComparatorBlock.getInputSignal は、通常の信号が 15 未満で背面が導体なら、その奥のアナログ値で置き換える (大きい方を取らない)。4 レーンとも 奥 (1,1,z) / 石 (2,1,z) / コンパレーター (3,1,z) / 出力ダスト (4,1,z) の並びで、石へは南から 3 本のダスト (2,1,z+1..z+3) が差し込む。t2 に (2,1,z+4) へレッドストーンブロックを置くと、石が 13 で弱充電される。奥は z=0 が空の樽、z=6 が石 64 個を 4 スロットに入れた樽 (信号 3)、z=12 が無し、z=18 がトロッコの無い検知レール (R-3 の導体越し)。置き換えなら出力ダストは 0 / 3 / 13 / 0、大きい方を取ると 13 / 13 / 13 / 13。z=6 は設置の時点で出力 3 なので、コンパレーターは powered=true、ダストは 3 で書く。レッドストーンブロックと隣のレーンの石の間は 1 マス空けた (z=5・11・17)",
+  "mcVersion": "1.21.1",
+  "ticks": 6,
+  "region": {
+    "from": [
+      0,
+      0,
+      0
+    ],
+    "to": [
+      6,
+      2,
+      22
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        6,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        2
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        3
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "block": "barrel[facing=north,open=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        0
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        1
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        3
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        7
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        9
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "block": "barrel[facing=north,open=false]",
+      "items": [
+        {
+          "slot": 0,
+          "id": "stone",
+          "count": 64
+        },
+        {
+          "slot": 1,
+          "id": "stone",
+          "count": 64
+        },
+        {
+          "slot": 2,
+          "id": "stone",
+          "count": 64
+        },
+        {
+          "slot": 3,
+          "id": "stone",
+          "count": 64
+        }
+      ]
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=true]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        6
+      ],
+      "block": "redstone_wire[east=side,north=none,power=3,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        7
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        9
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        13
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        14
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        15
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        12
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        12
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        12
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        13
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        14
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        15
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        1,
+        0,
+        18
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        18
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        18
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        4,
+        0,
+        18
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        19
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        20
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        0,
+        21
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        1,
+        1,
+        18
+      ],
+      "block": "detector_rail[powered=false,shape=north_south,waterlogged=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        18
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        18
+      ],
+      "block": "comparator[facing=west,mode=compare,powered=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        18
+      ],
+      "block": "redstone_wire[east=side,north=none,power=0,south=none,west=side]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        19
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        20
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        21
+      ],
+      "block": "redstone_wire[east=none,north=side,power=0,south=side,west=none]"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        1,
+        10
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        1,
+        16
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        2,
+        1,
+        22
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    }
+  ],
+  "expect": [
+    {
+      "tick": 2,
+      "changes": [
+        {
+          "pos": [
+            2,
+            1,
+            1
+          ],
+          "block": "redstone_wire[east=none,north=side,power=13,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            10
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            13
+          ],
+          "block": "redstone_wire[east=none,north=side,power=13,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            14
+          ],
+          "block": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            15
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            16
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            19
+          ],
+          "block": "redstone_wire[east=none,north=side,power=13,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            2
+          ],
+          "block": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            20
+          ],
+          "block": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            21
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            22
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            3
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            4
+          ],
+          "block": "redstone_block"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            7
+          ],
+          "block": "redstone_wire[east=none,north=side,power=13,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            8
+          ],
+          "block": "redstone_wire[east=none,north=side,power=14,south=side,west=none]"
+        },
+        {
+          "pos": [
+            2,
+            1,
+            9
+          ],
+          "block": "redstone_wire[east=none,north=side,power=15,south=side,west=none]"
+        }
+      ]
+    },
+    {
+      "tick": 4,
+      "changes": [
+        {
+          "pos": [
+            3,
+            1,
+            12
+          ],
+          "block": "comparator[facing=west,mode=compare,powered=true]"
+        },
+        {
+          "pos": [
+            4,
+            1,
+            12
+          ],
+          "block": "redstone_wire[east=side,north=none,power=13,south=none,west=side]"
+        }
+      ]
+    }
+  ],
+  "generated": {
+    "at": "2026-10-25T01:46:45.794Z",
+    "mc": "1.21.1",
+    "carpet": "1.21-1.4.147+v240613"
+  }
+}

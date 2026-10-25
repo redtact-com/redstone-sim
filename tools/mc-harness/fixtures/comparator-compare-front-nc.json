@@ -1,0 +1,36 @@
+{
+  "name": "comparator-compare-front-nc",
+  "description": "R-5: compare モードのコンパレーターは、tick で出力が変わらなくても前方へ近隣更新を出すか。26.2 ComparatorBlock.refreshOutputState は、出力が変わったときか compare モードのとき、前方とその周りへ近隣更新を出す。subtract モードで値が変わらなければ何もしない。2 レーンとも オブザーバー (1,1,z) facing=west → コンパレーター (2,1,z) → 空気 (3,1,z) → ピストン (4,1,z) facing=east の並びで、z=0 が compare、z=4 が subtract。t1 に (4,3,z) へレッドストーンブロックを置き、ピストンを準接続で給電だけされた状態 (BUD) にする。t2 に (0,1,z) へ石を置くとオブザーバーが t4 から 2gt のパルスを出す。t6 はオブザーバーの消灯がコンパレーターの tick より先に走るので、コンパレーターは一度も点かない (飲み込み。02 §2.4)。compare のレーンだけ、その空振りの tick の前方更新でピストンが t6 に伸びるはず。飲み込みそのものを実機で確かめるのもこの fixture が初めて。対照として t8 に subtract のピストンの真上 (4,2,4) へ石を置き、近隣更新を受けた subtract のピストンが t9 に伸び始め t11 にヘッドが出ることで、準接続の給電 (BUD) が成り立っていたことを同じ fixture で示す",
+  "mcVersion": "1.21.1",
+  "ticks": 11,
+  "region": { "from": [0, 0, 0], "to": [5, 3, 4] },
+  "player": { "spawn": [2.5, 1.0, 2.5], "facing": [0, 20], "lookAt": [2.5, 1.35, 4.5] },
+  "blocks": [
+    { "pos": [2, 0, 2], "block": "stone" },
+    { "pos": [0, 0, 0], "block": "stone" },
+    { "pos": [1, 0, 0], "block": "stone" },
+    { "pos": [2, 0, 0], "block": "stone" },
+    { "pos": [3, 0, 0], "block": "stone" },
+    { "pos": [4, 0, 0], "block": "stone" },
+    { "pos": [5, 0, 0], "block": "stone" },
+    { "pos": [1, 1, 0], "block": "observer[facing=west,powered=false]" },
+    { "pos": [2, 1, 0], "block": "comparator[facing=west,mode=compare,powered=false]" },
+    { "pos": [4, 1, 0], "block": "piston[extended=false,facing=east]" },
+    { "pos": [0, 0, 4], "block": "stone" },
+    { "pos": [1, 0, 4], "block": "stone" },
+    { "pos": [2, 0, 4], "block": "stone" },
+    { "pos": [3, 0, 4], "block": "stone" },
+    { "pos": [4, 0, 4], "block": "stone" },
+    { "pos": [5, 0, 4], "block": "stone" },
+    { "pos": [1, 1, 4], "block": "observer[facing=west,powered=false]" },
+    { "pos": [2, 1, 4], "block": "comparator[facing=west,mode=subtract,powered=false]" },
+    { "pos": [4, 1, 4], "block": "piston[extended=false,facing=east]" }
+  ],
+  "inputs": [
+    { "tick": 1, "pos": [4, 3, 0], "action": "setblock", "block": "redstone_block" },
+    { "tick": 1, "pos": [4, 3, 4], "action": "setblock", "block": "redstone_block" },
+    { "tick": 2, "pos": [0, 1, 0], "action": "setblock", "block": "stone" },
+    { "tick": 2, "pos": [0, 1, 4], "action": "setblock", "block": "stone" },
+    { "tick": 8, "pos": [4, 2, 4], "action": "setblock", "block": "stone" }
+  ]
+}
