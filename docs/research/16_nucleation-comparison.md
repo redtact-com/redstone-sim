@@ -62,7 +62,8 @@
    直し方の多くは小さい (§4)。
    - 2026-10-25 追記: R-1〜R-8 は B2 で、実機 1.21.1 の fixture を撮ってから直した
      (回帰ガード 6 本は #402 / PR#403、R-1・R-2 は #404 / PR#405、R-3・R-4・R-5・R-8 は #406 / PR#407、R-6・R-7 は #408 / PR#409)。
-     上の 3 の数と「近い点」は 2026-09-28 の調査時点のもので、コンパレーターの 3 点は今は直っている。
+     B3 では R-9・R-10 を #413 / PR#414 で直し (fixture 3 本・18 レーン)、そのときに見つけた R-23 を §3.1 に足した (食い違いは 23 件になった)。
+     上の 3 の数と「近い点」は 2026-09-28 の調査時点のもので、コンパレーターの 3 点と押し反応の分類は今は直っている。
 6. **コードは移植しない**。Nucleation 自身が 26.2 から書き写したと言うコードを TS に移すと、03 が避けている「Java→TS の翻訳」と同じことになる。
    挙動の事実・テストケース・キャプチャ手法だけを借りる (§5)。
 
@@ -216,8 +217,8 @@
 | 押し構造の探索 (addBlockLine・12 個上限) | 26.2 PistonStructureResolver の移植 | 同じ | 同等 |
 | 枝の方向順 | Direction.values() の順 | 北・南・東・西・上・下 | Nucleation |
 | PUSH_ONLY (釉薬テラコッタ) | 後ろ向きの粘着連鎖と、引きの開始で見落とす | 全経路で判定する **[実機で redstone-sim の正しさを確認]** | redstone-sim |
-| 押し反応の分類 | 手書きのリスト。シュルカーボックスを二重登録、水を運ぶ、BE 持ちの看板などを押す、ベル・飾り壺・頭を壊さずに運ぶ | 手書きのリスト。検知レールとクラフターを壊し、ドア・銅の電球・トラップドア・塀・板を押せない **[実機]**。水も押せない ([逆コンパイル+実行]、実機は未測定) | Nucleation (ただし水は両方とも誤り) |
-| 一般則 (硬さ -1・BE 持ちは不動) | 無し | 無し | 同等 |
+| 押し反応の分類 | 手書きのリスト。シュルカーボックスを二重登録、水を運ぶ、BE 持ちの看板などを押す、ベル・飾り壺・頭を壊さずに運ぶ | 以前は手書きのリストで、検知レールとクラフターを壊し、ドア・銅の電球・トラップドア・塀・板・水を押せなかった → **[実機]** fixture piston-push-normal / piston-push-destroy / piston-push-fluid-be (18 レーン) で確定し、#413 / PR#414 で 26.2 Blocks の登録を型と名前で引く表 (blocks/pushReaction.ts と blockNames.ts) にした (R-9・R-10) | Nucleation → redstone-sim |
+| 一般則 (硬さ -1・BE 持ちは不動) | 無し | 以前は無し → #413 / PR#414 で PistonBaseBlock.isPushable の順 (名指し → 押し反応 → NORMAL のうち BE 持ちは不動) にした。硬さは持たないので、硬さ -1 のもの (岩盤) は名指しと同じ block に畳んである | Nucleation → redstone-sim |
 | 着地 (2 tick 後・挿入順) | 有り | 有り | 同等 |
 | 伸長の最後のヘッド位置からの近隣更新 | 必ず出す | 押すものが無いと出ない **[実機: 3 gt 遅れ]** | Nucleation |
 | 空いた出発セルの形状更新 | 出す | 伸長で空いた枝の出発セルからは出さない (収縮では出す) | Nucleation |
@@ -291,8 +292,8 @@
 | R-6 | リピーターが tick 中に自分の OFF を予約するとき、優先度が -3 になりうる (world.ts:1579) | DiodeBlock#tick: 常に -2。-3 を選ぶのは近隣更新から予約するときだけ | **[実機]** fixture repeater-self-off-priority: 側面ロックの相手 (遅延 2) の自己 OFF と被ロック側 (遅延 3) の自己 OFF が同じ gt に重なると、実機は被ロック側が先に走って何もせず、ロックが外れてから OFF を積み直す (OFF は t24)。修正前の sim は -3 の相手が先に走って t18 に OFF。#408 / PR#409 で -2 固定にして直した | 直列のリピーターと側面ロックの組み合わせ |
 | R-7 | レバー/ボタンの近隣更新が 1 回少なく、しかも形状更新が先に出る (world.ts:1231-1239) | LeverBlock#pull: flag 3 の書き込みで自分の周り → 形状更新 → updateNeighbours。ButtonBlock#press と解除の ButtonBlock#tick → checkPressed も同じ順 | **[実機]** fixture lever-nc-before-shape-race / button-nc-before-shape-race: レバーを直接読むコンパレーターとレバーを見るオブザーバーが同じ gt・優先度 0 で予約されるとき、実機はコンパレーター側のピストンが先に動く (t6 に取り合うマスへ石。修正前の sim はガラス)。ボタンの解除でも同じ順 (t26 に石が戻る)。#408 / PR#409 で押下・解除とも直した | 予約の順で勝敗が決まる競争 |
 | R-8 | ダストが detector_rail と lectern に接続しない (wire-shape.ts:42-71) | RedStoneWireBlock#shouldConnectTo: 信号源なら接続する | **[実機]** 検知レールと書見台の隣のダストは直線のまま (修正前の sim は十字になり、横のランプまで点く)。書見台は通常レールの向きの門番でも信号源 (setblock で置くと 3 方向ジャンクションが向きを決め直す)。fixture wire-connect-detector-rail-lectern: 修正前の sim と 27 セル食い違う。**#406 / PR#407 で修正済み** | トロッコ検出の信号をダストで横へ引き出す配置 |
-| R-9 | 押し反応の分類が 8 種で違う (world.ts:1763-1819) | PistonBaseBlock#isPushable と Blocks の登録。検知レール・銅の電球・トラップドア・塀・ガラス板は押せる。クラフターは BE を持つので不動。budding_amethyst と扉は壊れる | **[実機]** 8 種すべて実機と違う。sim は検知レールとクラフターを壊し、残りは押せない。budding_amethyst は取り込めない | 検知レールや塀・板を押す扉、クラフターや扉の前のピストン |
-| R-10 | 水・泡柱・シュルカーボックス・カボチャ類・苔・植木鉢・はしご・頭の押し反応。看板・旗・彫刻された本棚を押してしまう | 水・泡柱・シュルカー・カボチャ類・苔・植木鉢・はしご・頭は DESTROY。看板・旗・彫刻された本棚は BE を持つので不動 | [逆コンパイル+実行] (実機では未測定) | 水路のゲート、カボチャ・スイカの収穫ピストン |
+| R-9 | 押し反応の分類が 8 種で違う (world.ts の旧 isMovable / isPushDestroy の手書きのリスト。今は resolvePushStructure の pushable が blocks/pushReaction.ts の表を引く) | PistonBaseBlock.isPushable と Blocks の登録。検知レール・銅の電球・トラップドア・塀・ガラス板は押せる。クラフターは BE を持つので不動。budding_amethyst と扉は壊れる | **[実機]** 8 種すべて実機と違った。修正前の sim は検知レールとクラフターを壊し、残りは押せず、budding_amethyst は取り込めなかった。fixture piston-push-normal (検知レール・銅の電球・トラップドア・フェンスゲート・石+塀・石+板の 6 レーン。粘着で押して引く) と piston-push-destroy (扉・budding_amethyst ほか 7 レーン) / piston-push-fluid-be (クラフターほか 5 レーン): 修正前の sim とは piston-push-normal で 138 セル、piston-push-fluid-be で 105 セル食い違い、piston-push-destroy は budding_amethyst の読み込みで止まる。**#413 / PR#414 で修正済み** (判定を isPushable の順にし、表を pushReaction.ts と blockNames.ts の 2 か所にまとめた。壊した扉の相方の半分も消す。着地した自分への neighborChanged をピストン限定から全部の型へ広げた。引き戻されて着地した銅の電球は t10 に受電して lit が反転する) | 検知レールや塀・板を押す扉、クラフターや扉の前のピストン |
+| R-10 | 水・泡柱・シュルカーボックス・カボチャ類・苔・植木鉢・はしご・頭の押し反応。看板・旗・彫刻された本棚を押してしまう (R-9 と同じ旧リスト) | 水・泡柱・シュルカー・カボチャ類・苔・植木鉢・はしご・頭は DESTROY。看板・旗・彫刻された本棚は BE を持つので不動 | **[実機]** fixture piston-push-destroy (カボチャ・シュルカーボックス・頭・植木鉢・はしご) と piston-push-fluid-be (水源・泡柱・看板・彫刻された本棚): 壊れるものは t3 に moving_piston、t5 に piston_head になり、t10 に引き戻しても戻らない。はしごの支えの石は動かない。BE 持ちの 3 種はピストンが伸びない。囲いの中の水源と泡柱は壊れたあと水が戻らない。26.2 を読んだ予想と全 tick で一致した。苔ブロック・旗・苔のカーペットは表に入れたが fixture には無い。**#413 / PR#414 で修正済み** | 水路のゲート、カボチャ・スイカの収穫ピストン |
 | R-11 | 何も押さない伸長で、ヘッド位置から近隣更新が出ない (world.ts:2036-2042) | PistonBaseBlock#moveBlocks: 伸長の最後に、必ずヘッド位置から出す | **[実機]** ヘッド位置の隣の BUD ピストンが、実機は t5、sim は t8 (3 gt 遅れ)。石を押す対照は一致 | 空打ちのヘッドで BUD を叩く回路 |
 | R-12 | 枝の空いた出発セルから形状更新が出ない。ダストの再計算も漏れる (world.ts:2020-2042) | moveBlocks: 空いたセルにも形状更新を出す | [逆コンパイル+実行] オブザーバーが発火しない。引き離したレッドストーンブロックの横のダストが 15 のまま残る | スライムで引き離したブロックの元位置を見るオブザーバー |
 | R-13 | addBranchingBlocks の方向順が vanilla と違う (world.ts:1918-1929) | Direction.values() の順 (下・上・北・南・西・東) | [逆コンパイル+実行] 上と北に枝があり、2 本のピストンが同じセルを取り合う形で勝者が逆になる (実機では未測定) | 多方向に枝がある粘着塊 |
@@ -305,12 +306,14 @@
 | R-20 | 分岐したダスト網の中の更新順 (network-piston) | 26.2 のコードを追うと、原点配置では E → N → S になり、Nucleation と一致する。world.test.ts:713-724 は S → E → N を固定しているが、この配置は実機で未観測 (09_snapshots/network-piston-order.md) | [逆コンパイル+実行] 中心座標 513 点のうち 76 点で、両エンジンの順序が食い違う | ダスト網で複数のピストンを起動する回路。**未確定** (§6) |
 | R-21 | トーチの状態が変わったときの 2 段送信で、起点の 6 隣を西・東・下・上・北・南の順に回す (world.ts:2517-2526) | RedstoneTorchBlock#onPlace (1.21.1 は #onRemove も) は Direction.values() の順 (下・上・北・南・西・東) で回す。1.21.1 と 26.2 で同じ | [逆コンパイル] | 距離 2 の素子に届く近隣更新の順が変わる。予約やブロックイベントの積まれる順に効きうる |
 | R-22 | 塀の形状更新の連鎖に上限が無い (world.ts:2317-2318 の深さ 512 の打ち切りが効かない) | Level#setBlock の updateLimit (既定 512) で、形状更新の連鎖は 512 段で止まる | [逆コンパイル+実行] emitShapeUpdate から呼び直すたびに深さを 0 から数え直すので、塀を 700 段積んで最上段を変えると全段が書き換わる | 512 段を超える塀の柱 (実用上はまれ) |
+| R-23 | 着地したブロックが自分自身に neighborChanged を呼ぶ順が、隣 6 マスへの近隣更新より前 (world.ts finalizeMovingPiston。#413 / PR#414 で呼び出しをピストン限定から全部の型へ広げたときに見つけた) | PistonMovingBlockEntity.finalTick と tick: 着地の setBlock (隣 6 マスへの近隣更新を含む) を終えてから、その位置のブロック自身に neighborChanged を呼ぶ | [逆コンパイル+実行] ピストン (PistonBaseBlock.onPlace の checkIfExtend) と銅の電球 (CopperBulbBlock.onPlace の checkAndFlip) は setBlock の中で先に判定するので sim の順で合う。ランプ・音符ブロック・トラップドア・フェンスゲートは、隣への更新との前後が入れ替わる。fixture piston-push-normal の電球レーンは sim の順で一致し、キャプチャ 62 本の結果も変わらなかった。#413 では揃えず、第 3 波で直す | 着地した先で受電するトラップドア・フェンスゲート・ランプと、その隣の素子が同じ gt に競う配置 |
 
 補足:
 
 - R-1・R-3・R-9・R-11 は、実機ハーネスで同じ回路を走らせ、実機と sim の状態系列を比べて確定した。§4 の修正では、まず fixture にしてから直す。
 - R-3・R-4・R-5・R-8 は #406 / PR#407 で、fixture 4 本 (detector-rail-comparator / comparator-through-conductor-replace / comparator-compare-front-nc / wire-connect-detector-rail-lectern) を実機 1.21.1 で撮ってから直した (2026-10-25)。4 本とも修正後の sim と全 tick で一致した。
 - R-6・R-7 は #408 / PR#409 で、fixture 3 本 (repeater-self-off-priority / lever-nc-before-shape-race / button-nc-before-shape-race) を実機 1.21.1 で撮ってから直した (2026-10-25)。3 本とも修正後の sim と全 tick で一致した。
+- R-9・R-10 は #413 / PR#414 で、fixture 3 本 (piston-push-normal / piston-push-destroy / piston-push-fluid-be。18 レーン) を実機 1.21.1 で撮ってから直した (2026-10-25)。3 本とも修正後の sim と全 tick・全セルで一致した。R-10 はこれで [逆コンパイル+実行] から [実機] になった。
 - 1.21.1 と 26.2 で規則が同じことは、R-1〜R-8 について確かめた。1.21.1 の server jar を公式 mappings でデコンパイルし、
   9 クラス (LevelChunk / Level / RedstoneTorchBlock / LeverBlock / ButtonBlock / DiodeBlock / ComparatorBlock / RedStoneWireBlock / DetectorRailBlock) に加えて、
   Blocks (R-2 の導体: ソウルサンドは常に導体、スライムとロードストーンは既定のフルブロック判定で導体) と LecternBlock (R-8: 常に信号源) を読んだ。
@@ -390,16 +393,17 @@
 - **15_project-review.md の数値が古い**: 対応 26 型・テスト 428・fixture 54 と書くが、実測は 52 型・783・135。
 - **コード中の古いコメント**:
   - world.ts:527 の「ST フェーズのみ」
-  - world.ts:1753 の isMovable の説明
-  - world.ts:1775 と types.ts:361 の「PushReaction STICKY」。26.2 の enum にこの値は無い
+  - world.ts:1753 の isMovable の説明 (#413 / PR#414 で isMovable ごと消し、表を blocks/pushReaction.ts に移した)
+  - world.ts:1775 と types.ts:361 の「PushReaction STICKY」。26.2 の enum にこの値は無い (#413 / PR#414 で直した。くっつく性質は PistonStructureResolver 側の判定で、押し反応は指定なし)
   - world.ts:2554 の「lamp は NC を発する」。26.2 は flag 2 で書くので NC は無く、挙動の方が正しい
-  - blockNames.ts:133 の「いずれも pushReaction(BLOCK)」。26.2 PistonBaseBlock#isPushable で見ると、押せない理由は次の 3 つに分かれ、BLOCK が決め手のものは無い:
+  - blockNames.ts:133 の「いずれも pushReaction(BLOCK)」。26.2 PistonBaseBlock.isPushable で見ると、押せない理由は次の 3 つに分かれ、BLOCK が決め手のものは無い:
     名指しの判定 (黒曜石・泣く黒曜石・リスポーンアンカー・強化深層岩)、硬さ -1 (岩盤・コマンドブロック 3 種・ストラクチャーブロック・ジグソー・バリア・エンドポータルの枠)、BE 持ち (スポナー・トライアルスポナー・金庫)。
-    budding_amethyst は DESTROY で壊れる
+    budding_amethyst は DESTROY で壊れる (#413 / PR#414 で直した。SOLID_PUSH_BLOCK のコメントに 3 つの理由を書き、budding_amethyst は SOLID_PUSH_DESTROY に移した)
   - power.ts:28、types.ts:54、types.ts:654
 - **使われていない定義**: IMMOVABLE_SOLID の 16 名のうち、効いているのは obsidian・crying_obsidian・bedrock・reinforced_deepslate の 4 名だけ。
   残りの 12 名 (respawn_anchor・spawner・trial_spawner・vault・budding_amethyst・command_block 系 3 種・structure_block・jigsaw・barrier・end_portal_frame) は isSolidBlockName を通らない。
   そのため取り込めない (mcstate は例外、app の nbtIO は警告を出して省略)。
+  #413 / PR#414 で IMMOVABLE_SOLID を SOLID_PUSH_BLOCK (取り込める 4 名だけ) に置き換え、budding_amethyst を SOLID_EXACT に足して取り込めるようにした。残りの 11 名は取り込めるようにするときに表へ足す (理由はコメントに残してある)。
 - **mc-harness の記述が古い**: README の skip 表と、compare.ts:314 のコメント。
 
 ---
@@ -416,7 +420,7 @@
 | トーチの 2 段送信の起点を Direction.values() の順にする。塀の形状更新の連鎖に、呼び直しでも引き継ぐ深さを持たせる | R-21, R-22 | S |
 | コンパレーターの 3 点を直す: 導体越しは置き換え、compare モードでは空振りでも前方更新、detector_rail をアナログ出力と接続対象に加える (lectern も接続対象に) (#406 / PR#407 で済み。fixture 4 本を実機で撮ってから直した) | R-3, R-4, R-5, R-8 | S |
 | リピーターの自己 OFF を -2 固定にする。レバー/ボタンは、形状更新より前に自分の周りへ NC を 1 回出し (flag 3 の書き込みの分)、形状更新 → updateNeighbours の NC の順にする (activateBlock は apply とは別の経路なので、R-15 の修正では直らない) (#408 / PR#409 で済み。ボタンの解除も同じ順にした) | R-6, R-7 | S |
-| 押し反応の表を 26.2 の Blocks に合わせる。判定は PistonBaseBlock#isPushable の順にする: 硬さ -1 は不動、次に押し反応 (BLOCK は不動、DESTROY は壊す、PUSH_ONLY は向きしだい) で決め、NORMAL のものに限って BE 持ちを不動にする (シュルカー・ベル・飾り壺・頭は BE を持つが壊れる) | R-9, R-10 | M |
+| 押し反応の表を 26.2 の Blocks に合わせる。判定は PistonBaseBlock.isPushable の順にする: 硬さ -1 は不動、次に押し反応 (BLOCK は不動、DESTROY は壊す、PUSH_ONLY は向きしだい) で決め、NORMAL のものに限って BE 持ちを不動にする (シュルカー・ベル・飾り壺・頭は BE を持つが壊れる) (#413 / PR#414 で済み。fixture 3 本 (18 レーン) を実機で撮ってから直した。表は blocks/pushReaction.ts と blockNames.ts の 2 か所。着地した自分への neighborChanged を呼ぶ順のずれは R-23 として残した) | R-9, R-10 | M |
 | 伸長の末尾処理を moveBlocks の順にする。ヘッド位置から NC を出し、空いたセルに形状更新を出し、本体の更新を最後にする | R-11, R-12, R-14 | S〜M |
 | addBranchingBlocks を Direction.values() の順にする (updates.ts にある既存の定数を使う) | R-13 | S |
 | ip-policy 違反を直し、ip-hygiene に record 宣言のパターンを足す (#386 / PR#387 で済み) | §3.5 | S |

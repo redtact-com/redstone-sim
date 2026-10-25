@@ -62,8 +62,8 @@ redstone-sim は **Web 上で動くレッドストーン回路シミュレータ
 
 ### 4.1 ピストンによる破壊 (PUSH_DESTROY)
 
-- 現状: sim は wire/トーチ等を「移動不可」として押し出し自体をブロックする (isMovable 外 =
-  障害物)。vanilla は PUSH_DESTROY のブロックを**破壊して**押し出す (回路トポロジーが変わる)
+- #64 以前: sim は wire/トーチ等を「移動不可」として押し出し自体をブロックしていた (当時の
+  isMovable 外 = 障害物)。vanilla は PUSH_DESTROY のブロックを**破壊して**押し出す (回路トポロジーが変わる)
 - 方針: collectPushList で PUSH_DESTROY 相当 (wire / torch / lever / button / 感圧板 / dot 等の
   非固体) を「破壊対象」として収集し、移動実行時にアイテム化なしで消滅させる。破壊による
   トポロジー変化は #51 の張り替え機構がそのまま追随する
@@ -72,10 +72,19 @@ redstone-sim は **Web 上で動くレッドストーン回路シミュレータ
   - 破壊はチェーン終端の 1 ブロック (toDestroy)。そこで連鎖が止まる
   - push limit 12 は toPush のみカウント (破壊対象は数えない — size>=12 チェックが add 前)
   - retract に破壊は無い (DESTROY 分岐は extending 時のみ)。sticky は PUSH_DESTROY を引かず置き去り
-  - sim の PushReaction 対応: DESTROY = wire / torch / wall_torch / lever / button 2 種 / 感圧板 4 種 /
-    repeater / comparator (いずれも vanilla DESTROY)。
-    MOVE = solid / lamp / redstone_block / target / note_block / 非伸長 piston。
-    障害物 (押し不可) = extended piston / piston_head / moving_piston / container。
+  - sim の押し反応の表は blocks/pushReaction.ts (型と、装飾・コンテナの名前で決まるもの) と
+    blocks/blockNames.ts (導体フルブロックの名前で決まるもの) の 2 か所にあり、判定は
+    26.2 PistonBaseBlock.isPushable の順 (空気 → ピストン本体 → 押し反応 → NORMAL のうち BE 持ちは不動)
+    [#413 / PR#414 (R-9・R-10)。実機 fixture piston-push-normal / piston-push-destroy / piston-push-fluid-be]:
+    DESTROY = wire / torch / wall_torch / lever / button 2 種 / 感圧板 4 種 / repeater / comparator /
+    扉 2 種 (相方の半分も消える) / water / bubble_column / シュルカーボックス / カボチャ類 4 種 / moss_block /
+    budding_amethyst / 植木鉢 / はしご / 頭・スカル / 苔のカーペット 2 種。
+    MOVE = solid (一般) / lamp / redstone_block / target / note_block / 非伸長 piston / observer / レール 4 種
+    (検知レールも) / slime・honey / glass / slab / 銅の電球 / トラップドア 2 種 / フェンスゲート / 塀 / 板 /
+    大釜 / コンポスター / ソウルサンド / 残りの装飾。PUSH_ONLY = 釉薬テラコッタ。
+    障害物 (押し不可) = extended piston / piston_head / moving_piston / lodestone / 黒曜石・泣く黒曜石・
+    強化深層岩・岩盤 (block) / BE 持ちで押し反応が既定のもの (container 3 種・hopper・dropper・dispenser・
+    crafter・lectern・看板・旗・彫刻された本棚)。
     **observer は #119 で可動化した** (vanilla どおり MOVE)。移動時の意味論は
     「着地した時点で 1 回発火する」= vanilla の ObserverBlock.onPlace 相当で、
     監視先が変わったかではなく**置かれたこと**が起動条件。実機 fixture
