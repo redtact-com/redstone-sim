@@ -101,6 +101,8 @@ const SOLID_EXACT = new Set([
   // 鉱物・金属ブロック (redstone_block は信号源なので上流で処理済み)
   'iron_block', 'gold_block', 'diamond_block', 'emerald_block', 'lapis_block',
   'coal_block', 'netherite_block', 'copper_block', 'amethyst_block',
+  // 芽生えたアメジスト。導体のフルブロックだが**ピストンで押すと壊れる** (R-9。下の表)
+  'budding_amethyst',
   'raw_iron_block', 'raw_gold_block', 'raw_copper_block',
   // 石英・プルプァ・プリズマリン
   'quartz_block', 'smooth_quartz', 'quartz_bricks', 'quartz_pillar', 'chiseled_quartz_block',
@@ -135,31 +137,57 @@ const NOT_SOLID_EXACT = new Set([
   'melon_stem', 'pumpkin_stem', 'attached_melon_stem', 'attached_pumpkin_stem',
 ])
 
+// ── 導体フルブロックの押し反応 (#253 / #255 / R-9 / R-10) ──────────────────────
+//
+// sim は材質を潰しているので、押し反応だけを名前で割って solid に載せる。
+// 判定の順と意味は blocks/pushReaction.ts を参照。**lodestone は別型**なので入れない。
+
 /**
- * 導体フルブロックのうち**ピストンで押せない**もの (#253)。
- * [確定: 26.2 — いずれも pushReaction(BLOCK)]
- *
- * sim は材質を潰しているのでここだけ名前で割る。**lodestone は別型**なので入れない。
+ * ピストンで動かないもの。26.2 PistonBaseBlock.isPushable で押せない理由は 3 つに分かれ、
+ * pushReaction(BLOCK) が決め手のものはこの中に無い:
+ *   - 名指し: obsidian / crying_obsidian / reinforced_deepslate (respawn_anchor も。未取り込み)
+ *   - 硬さ -1: bedrock (command_block 3 種 / structure_block / jigsaw / barrier /
+ *     end_portal_frame も。未取り込み。end_portal_frame はフルブロックでなく導体でもないので、読めるようにしても solid にしない)
+ *   - BlockEntity 持ち: spawner / trial_spawner / vault (未取り込み。取り込むときは
+ *     SOLID_WITH_BLOCK_ENTITY 側へ)
+ * sim に硬さは無いので、いまは取り込める 4 名だけを `block` として持つ。
  * [実機実測: ピストンの正面が黒曜石 → 伸びない / スライムの横が黒曜石 → 伸びる]
  */
-const IMMOVABLE_SOLID = new Set([
-  'obsidian', 'crying_obsidian', 'bedrock', 'reinforced_deepslate',
-  'respawn_anchor', 'spawner', 'trial_spawner', 'vault', 'budding_amethyst',
-  'command_block', 'chain_command_block', 'repeating_command_block',
-  'structure_block', 'jigsaw', 'barrier', 'end_portal_frame',
+const SOLID_PUSH_BLOCK = new Set([
+  'obsidian', 'crying_obsidian', 'reinforced_deepslate', 'bedrock',
 ])
 
-/** ピストンで押せない導体フルブロックか (#253) */
-export function isImmovableSolidName(name: string): boolean {
-  return IMMOVABLE_SOLID.has(stripNs(name))
-}
+/**
+ * 押されると壊れるもの [確定: 26.2 Blocks — いずれも pushReaction(DESTROY)]。
+ * [実機 fixture piston-push-destroy (1.21.1): budding_amethyst とカボチャは t3 に壊れて moving_piston、
+ *  t5 に piston_head。引き戻しても戻らない]。スイカ・くり抜かれたカボチャ・ジャック・オ・ランタン・
+ * 苔ブロックは 26.2 の読みだけ
+ */
+const SOLID_PUSH_DESTROY = new Set([
+  'pumpkin', 'melon', 'carved_pumpkin', 'jack_o_lantern', 'moss_block', 'budding_amethyst',
+])
 
 /**
- * **押せるが引けない**導体フルブロックか (#255)。
+ * 押し反応は既定 (NORMAL) だが BlockEntity を持つので動かないもの
+ * [確定: 26.2 ChiseledBookShelfBlock は BaseEntityBlock]
+ */
+const SOLID_WITH_BLOCK_ENTITY = new Set(['chiseled_bookshelf'])
+
+/**
+ * 導体フルブロックの押し反応。既定 (normal) なら undefined。
  * [確定: 26.2 — 釉薬テラコッタ 16 色は pushReaction(PUSH_ONLY)]
  */
-export function isPushOnlySolidName(name: string): boolean {
-  return stripNs(name).endsWith('_glazed_terracotta')
+export function solidPushReactionOf(name: string): 'block' | 'destroy' | 'push_only' | undefined {
+  const id = stripNs(name)
+  if (SOLID_PUSH_BLOCK.has(id)) return 'block'
+  if (SOLID_PUSH_DESTROY.has(id)) return 'destroy'
+  if (id.endsWith('_glazed_terracotta')) return 'push_only'
+  return undefined
+}
+
+/** BlockEntity を持つ導体フルブロックか (押し反応が normal でも動かない) */
+export function isSolidWithBlockEntity(name: string): boolean {
+  return SOLID_WITH_BLOCK_ENTITY.has(stripNs(name))
 }
 
 export function isSolidBlockName(name: string): boolean {
@@ -322,20 +350,14 @@ export function classifyPlainBlock(
   const nonConductive = toNonConductiveBlockState(name, props)
   if (nonConductive) return withInstrument(nonConductive)
   if (isSolidBlockName(name)) {
-    if (isImmovableSolidName(name)) {
-      return withInstrument({
-        type: 'solid', powered: false, name: id, immovable: true,
-        renderProps: appearanceProps('solid', props),
-      })
-    }
-    if (isPushOnlySolidName(name)) {
-      return withInstrument({
-        type: 'solid', powered: false, name: id, pushOnly: true,
-        renderProps: appearanceProps('solid', props),
-      })
-    }
+    // 押し反応と BlockEntity の有無は名前で決まる (上の表)。既定なら載せない
+    // (state に undefined のキーを持たせると往復比較のノイズになる)
+    const pushReaction = solidPushReactionOf(id)
     return withInstrument({
-      type: 'solid', powered: false, name: id, renderProps: appearanceProps('solid', props),
+      type: 'solid', powered: false, name: id,
+      ...(pushReaction !== undefined ? { pushReaction } : {}),
+      ...(isSolidWithBlockEntity(id) ? { hasBlockEntity: true } : {}),
+      renderProps: appearanceProps('solid', props),
     })
   }
   return null

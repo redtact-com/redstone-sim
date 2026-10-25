@@ -750,7 +750,8 @@ function blockStateToMinecraft(block: BlockState): [string, Record<string, strin
         type: (block as any).sticky ? 'sticky' : 'normal',
       }]
     // 取り込み元の名前があればそれに戻す (#343)。無ければ従来の代表名。
-    // **保存で材質が石に化けると `immovable` (黒曜石) や音符ブロックの音色まで失われる**
+    // **保存で材質が石に化けると押し反応 (黒曜石の `pushReaction: 'block'`。読み込みでは名前から引き直す。R-9)
+    // や音符ブロックの音色まで失われる**
     case 'solid':
       return [`minecraft:${(block as any).name ?? 'stone'}`, { ...(block as any).renderProps }]
     case 'glass':
@@ -925,7 +926,8 @@ function minecraftToBlockState(
   // **樽とシュルカーボックスはフルキューブ (導体)、チェストは違う (非導体)** (#291)
   if (isContainerBlockName(name)) {
     // **導通はシュルカーボックスも実機で測ってある** (#324 fixture shulker-box-conductor)。
-    // name を持たせるのは書き出しで元に戻すため (無いとシュルカーが樽になる)
+    // name は書き出しで元に戻すため (無いとシュルカーが樽になる) と、押し反応のため
+    // (シュルカーボックスはピストンで壊れる。blocks/pushReaction.ts。R-10) に持たせる
     return {
       type: 'container',
       name: name.replace(/^minecraft:/, ''),

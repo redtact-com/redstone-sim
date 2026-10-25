@@ -1,0 +1,338 @@
+{
+  "name": "piston-push-destroy",
+  "description": "R-9 / R-10 (docs/research/16 §3.1): 押し反応が DESTROY のブロックは、伸長の先端で壊れてピストンヘッドがその位置に入る。配置と入力は piston-push-normal と同じ (t2 に x=1 へ redstone_block、t7 に air)。レーン: z0 扉 (下半分を押す。上半分も消えるか) / z2 budding_amethyst / z4 カボチャ / z6 シュルカーボックス (BlockEntity を持つが DESTROY が先に効く) / z8 頭 (同じ) / z10 植木鉢 / z12 はしご (x=4 の石に掛ける。石は押されない)。26.2 Blocks を読んだ予想: 7 レーンとも x=3 が壊れて t3 に moving_piston、t5 に piston_head になり、t10 に引き戻しても戻らない (air のまま)。扉は t3 に上半分も air になる。扉と budding_amethyst は実機 1.21.1 で壊れることを確認済み (#384)。修正前の sim は扉・シュルカーを押せず、カボチャ・頭・植木鉢・はしごを運び、budding_amethyst は取り込めない",
+  "mcVersion": "1.21.1",
+  "ticks": 12,
+  "region": {
+    "from": [
+      -1,
+      0,
+      -1
+    ],
+    "to": [
+      5,
+      2,
+      13
+    ]
+  },
+  "player": {
+    "spawn": [
+      -0.5,
+      1.0,
+      6.5
+    ],
+    "facing": [
+      -90,
+      20
+    ],
+    "lookAt": [
+      3.5,
+      1.35,
+      6.5
+    ]
+  },
+  "blocks": [
+    {
+      "pos": [
+        3,
+        0,
+        0
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        0
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        0
+      ],
+      "block": "oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        3,
+        2,
+        0
+      ],
+      "block": "oak_door[facing=north,half=upper,hinge=left,open=false,powered=false]"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        2
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        2
+      ],
+      "block": "budding_amethyst"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        4
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        4
+      ],
+      "block": "pumpkin"
+    },
+    {
+      "pos": [
+        -1,
+        0,
+        6
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        6
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        6
+      ],
+      "block": "shulker_box[facing=up]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        8
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        8
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        8
+      ],
+      "block": "player_head[powered=false,rotation=0]"
+    },
+    {
+      "pos": [
+        3,
+        0,
+        10
+      ],
+      "block": "stone"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        10
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        10
+      ],
+      "block": "flower_pot"
+    },
+    {
+      "pos": [
+        2,
+        1,
+        12
+      ],
+      "block": "piston[extended=false,facing=east]"
+    },
+    {
+      "pos": [
+        3,
+        1,
+        12
+      ],
+      "block": "ladder[facing=west,waterlogged=false]"
+    },
+    {
+      "pos": [
+        4,
+        1,
+        12
+      ],
+      "block": "stone"
+    }
+  ],
+  "inputs": [
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        10
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 2,
+      "pos": [
+        1,
+        1,
+        12
+      ],
+      "action": "setblock",
+      "block": "redstone_block"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        0
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        2
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        4
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        6
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        8
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        10
+      ],
+      "action": "setblock",
+      "block": "air"
+    },
+    {
+      "tick": 7,
+      "pos": [
+        1,
+        1,
+        12
+      ],
+      "action": "setblock",
+      "block": "air"
+    }
+  ]
+}

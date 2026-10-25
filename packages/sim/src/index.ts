@@ -88,6 +88,7 @@ export {
 export { stackSizeOf, REPRESENTATIVE_ITEM } from './blocks/itemStacks.js'
 export {
   classifyPlainBlock, isSolidBlockName, toNonConductiveBlockState,
+  solidPushReactionOf, isSolidWithBlockEntity,
   isShulkerBoxName, isContainerBlockName, isContainerFullCube,
   doorLikeKindOf, buttonLikeKindOf, appearanceProps, weightedPlatePressedPower,
 } from './blocks/blockNames.js'
