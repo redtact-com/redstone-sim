@@ -45,6 +45,8 @@ redstone-sim/
 
 ## コマンド
 
+Node は 22.13 以上を使う (vitest 5 は ^22.12.0、ESLint 10 は ^22.13.0 を求める。CI は 22)。
+
 ```bash
 npm install          # ルートで一度（全 workspace を解決）
 npm run dev          # 開発サーバ（app）
@@ -67,6 +69,10 @@ npm run typecheck    # packages の型チェック
   `.github/workflows/pr-preview.yml`。手動デプロイは `app` で `npm run deploy`
 - 必要な secrets（未設定の間はスキップされる）: `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`
   （権限「アカウント / Cloudflare Pages / 編集」。発行手順は issue #4 参照）
+- 依存の更新: `.github/dependabot.yml` により、Dependabot が毎週月曜 09:00 (JST) に develop へ PR を出す。
+  npm の minor と patch は 1 本、github-actions も 1 本にまとめる。npm の major は 1 本ずつ来る
+  (vitest と `@vitest/*` だけは major も 1 本)。間接依存の脆弱性はリポ設定の security updates が直し、その PR も 1 本にまとめる。
+  止めている更新とその理由は dependabot.yml の先頭に書いてある
 
 ## クレジット・著作権
 
