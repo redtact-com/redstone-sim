@@ -2059,42 +2059,67 @@ export class SimWorld {
 
       // トレース: BE 実行 (伸長)。afterPistonMove の bu を updateFormula に収集
       this.traceProcess('BE', 'Pi', 'p', 0)
+      // 書き込みと更新の順は 26.2 PistonBaseBlock.moveBlocks に揃える (R-11・R-12・R-14):
+      //   1. 壊すセルを空気に (更新なし)
+      //   2. 行き先を moving に (更新は 5 でまとめて出す)
+      //   3. ヘッド位置を moving に
+      //   4. 枝で空いた出発セルを空気に
+      //   5. 形状更新: 行き先 → ヘッド位置 → 空いたセル
+      //      近隣更新: 壊したセル → 出発セル → ヘッド位置
+      //   6. 最後に本体を伸びた状態にして、近隣更新 → 形状更新 (triggerEvent の flag 67 の書き込み)
       // 破壊対象 (チェーン終端の PUSH_DESTROY) を先に air 化する
       // [確定: 26.2 moveBlocks — toDestroy を遠い順に destroy してから移動]。
-      // アイテム化 (ドロップ) はさせない (13 §2、#64)。NC/PP/接続張り替えは
-      // afterPistonMove が破壊座標込みで追随する
+      // アイテム化 (ドロップ) はさせない (13 §2、#64)
       for (let i = toDestroy.length - 1; i >= 0; i--) {
         this.setBlockAt(toDestroy[i], { type: 'air' })
         changed.push(posKey(toDestroy[i]))
       }
       // 遠い順: 押される各ブロックの行き先を moving(into=そのブロック) に
       const payloads = pushList.map(p => this.getBlockAt(p)!)
+      const dests: Pos3D[] = []
       for (let i = pushList.length - 1; i >= 0; i--) {
-        setMoving(neighbor(pushList[i], piston.facing), 'normal', payloads[i], true)
-      }
-      // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
-      // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
-      const destKeys = new Set(pushList.map(q => posKey(neighbor(q, piston.facing))))
-      for (const src of pushList) {
-        const k = posKey(src)
-        if (destKeys.has(k) || k === posKey(headPos)) continue
-        this.setBlockAt(src, { type: 'air' })
-        changed.push(k)
+        const dest = neighbor(pushList[i], piston.facing)
+        setMoving(dest, 'normal', payloads[i], true)
+        dests.push(dest)
       }
       // head セル (= 最近接 src と同座標) を head 行きの moving に
       setMoving(headPos, sticky ? 'sticky' : 'normal', {
         type: 'piston_head', facing: piston.facing, sticky,
       }, true)
-      this.setBlockAt(ev.pos, { ...piston, extended: true })
-      changed.push(posKey(ev.pos))
+      // 枝分かれ (スライム/蜂蜜の塊移動) では、元位置が「他のブロックの行き先」に
+      // ならないものが出る。一直線の押しだけを想定していると取り残されるので明示的に空にする (#121)
+      const destKeys = new Set(dests.map(posKey))
+      const vacated: Pos3D[] = []
+      for (const src of pushList) {
+        const k = posKey(src)
+        if (destKeys.has(k) || k === posKey(headPos)) continue
+        this.setBlockAt(src, { type: 'air' })
+        changed.push(k)
+        vacated.push(src)
+      }
       this.traceOpenUpdate(ev.pos)
       this.afterPistonMove(
-        // 形状更新 (オブザーバーが見る) は**行き先**も含める。ブロックが現れるので
-        [ev.pos, headPos, ...pushList.map(p => neighbor(p, piston.facing)), ...toDestroy],
-        // 近隣更新は**出発セル**だけ (#285)。行き先から出すと、そこに面した
-        // 受電していないピストンが誤って縮む
-        [ev.pos, ...pushList, ...toDestroy],
+        // 形状更新 (オブザーバーが見る) は**行き先**も含める。ブロックが現れるので。
+        // **空いた出発セルからも出す** (R-12)。ここに無いと、元位置を見るオブザーバーが
+        // 発火せず、横のダストも古い電力のまま残る (ダストの再計算の起点もこの列から作る)。
+        // 壊したセルは必ず行き先かヘッド位置になるので、ここには並べない
+        [...dests, headPos, ...vacated],
+        // 近隣更新は**出発セル**と**ヘッド位置**から (#285)。行き先から出すと、そこに面した
+        // 受電していないピストンが誤って縮む。
+        // **ヘッド位置からは何も押さなくても出す** (R-11)。押すときは出発セルと重なるので 2 回目になる
+        [...[...toDestroy].reverse(), ...[...pushList].reverse(), headPos],
       )
+      // **本体は最後に伸びた状態にする** (R-14)
+      // [確定: 26.2 PistonBaseBlock.triggerEvent — moveBlocks が戻ってから本体を flag 67 で書く]。
+      // それまでの近隣更新で再判定される隣のピストンからは、本体はまだ縮んだピストンに見える。
+      // 本体自身も出発セル・ヘッド位置の近隣更新で再判定されるが、まだ縮んでいるので何もしない。
+      // 押した塊で自分の電源を運び去っても、次の近隣更新までは伸びたまま残る (先に書くと 0-tick で縮む)。
+      // 本体は導体でも信号源でもないので、ダストの形と電力はここでは変わらない
+      this.setBlockAt(ev.pos, { ...piston, extended: true })
+      changed.push(posKey(ev.pos))
+      // Level.setBlock の中の順: 近隣更新 → 形状更新
+      this.submitMultiNC(ev.pos)
+      this.emitShapeUpdate(ev.pos)
       this.traceCloseUpdate('Pi', 'p', 0, 'BE')
     } else {
       // retract
@@ -2440,6 +2465,8 @@ export class SimWorld {
     //   **着地**したとき … 出す (finalizeMovingPiston 側)
     // 行き先からも出していたので、**受電していないのに縮むピストン**が生まれていた
     // (5×5 扉を 4 往復させると t456 で (8,7,1) が実機と食い違う)。
+    // 伸長の**ヘッド位置**は行き先でも、何も押さないときも含めて最後に出す (R-11。
+    // 26.2 PistonBaseBlock.moveBlocks。呼び出し側が ncPositions の末尾に置く)。
     // ncPositions を渡さない経路 (収縮・着地) は今までどおり positions を使う
     for (const p of ncPositions ?? positions) this.submitMultiNC(p)
     for (const w of changedWires) {
