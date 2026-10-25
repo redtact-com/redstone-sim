@@ -7,17 +7,6 @@ import { PNG } from 'pngjs'
 // 「自動フィットがテクスチャ読み込み後に走って上書きする」せいで、
 // ユニットテストでは捕まらなかった (実測: 距離 30 と 150 で描画が完全に同一)。
 
-declare global {
-  interface Window {
-    __demo?: {
-      ready: Promise<void>
-      load: (json: string) => boolean
-      setCamera: (o: Record<string, number>) => void
-      fitCamera: () => void
-    }
-  }
-}
-
 /** 縦に細長い回路 (41 段)。旧実装が引きすぎていた形 */
 const TALL = JSON.stringify({
   name: 'tall', mcVersion: '1.21.1', ticks: 2,

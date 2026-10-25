@@ -12,24 +12,6 @@ import { PNG } from 'pngjs'
 
 interface Pt { x: number; y: number }
 
-// e2e の spec は型検査されていない (#205)。使う口の型はここで宣言する
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      getSimStateAt: (x: number, y: number, z: number) => { type: string; powered?: boolean; lit?: boolean } | null
-      getMode: () => 'edit' | 'sim'
-      blockToClient: (x: number, y: number, z: number) => Pt | null
-    }
-    __embed?: {
-      isLoaded: () => boolean
-      getMode: () => string
-      getStateAt: (x: number, y: number, z: number) => { type: string; powered?: boolean } | null
-      blockToClient: (x: number, y: number, z: number) => Pt | null
-    }
-  }
-}
-
 /** 背景色 (IsometricView の gl.clearColor(0.1, 0.1, 0.12)) */
 const BG = [26, 26, 31]
 
@@ -62,9 +44,15 @@ async function startSim(page: Page) {
 }
 
 const leverOn = (page: Page) =>
-  page.evaluate(() => window.__editorTest!.getSimStateAt(0, 1, 0)?.powered ?? null)
+  page.evaluate(() => {
+    const b = window.__editorTest!.getSimStateAt(0, 1, 0)
+    return b?.type === 'lever' ? b.powered : null
+  })
 const lampLit = (page: Page) =>
-  page.evaluate(() => window.__editorTest!.getSimStateAt(4, 1, 0)?.lit ?? null)
+  page.evaluate(() => {
+    const b = window.__editorTest!.getSimStateAt(4, 1, 0)
+    return b?.type === 'lamp' ? b.lit : null
+  })
 async function at(page: Page, x: number, y: number, z: number): Promise<Pt> {
   const p = await page.evaluate(([x, y, z]) => window.__editorTest!.blockToClient(x, y, z), [x, y, z])
   expect(p, `blockToClient(${x},${y},${z})`).not.toBeNull()
@@ -195,7 +183,10 @@ test.describe('埋め込み', () => {
     await expect(page.getByText('Loading textures...')).toBeHidden({ timeout: 60_000 })
     await page.waitForFunction(() => window.__embed!.blockToClient(0, 0, 0) !== null)
 
-    const powered = () => page.evaluate(() => window.__embed!.getStateAt(0, 0, 0)?.powered ?? null)
+    const powered = () => page.evaluate(() => {
+      const b = window.__embed!.getStateAt(0, 0, 0)
+      return b?.type === 'lever' ? b.powered : null
+    })
     const leverAt = async () => (await page.evaluate(() => window.__embed!.blockToClient(0, 0, 0)))!
 
     // view (既定): 押しても変わらず、カーソルも変えない

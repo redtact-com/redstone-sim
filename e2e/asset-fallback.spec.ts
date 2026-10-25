@@ -8,16 +8,6 @@ import { PNG } from 'pngjs'
 // jsDelivr への要求を route.fetch で raw から取って返す形に変える
 // (それでも「jsDelivr の URL を組み立てて取りに行った」ことは確かめられる)。
 
-declare global {
-  interface Window {
-    __demo?: { ready: Promise<void> }
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string) => void
-      getMode: () => 'edit' | 'sim'
-    }
-  }
-}
-
 const RAW = 'https://raw.githubusercontent.com/**'
 const RAW_AND_JSD = /^https:\/\/(raw\.githubusercontent\.com|cdn\.jsdelivr\.net)\//
 const EXTERNAL_PNG = /^https:\/\/(raw\.githubusercontent\.com|cdn\.jsdelivr\.net)\/.*\.png$/

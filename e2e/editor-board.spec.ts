@@ -1,24 +1,9 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 
 // 盤面サイズの変更と回路全体のスライド (#226)。
 //
 // 要点は **確定するまで切り捨てない**こと。プレビューで盤面外の個数を出し、
 // 「確定」で捨て、「取消」で戻す。ここが崩れると取り込んだ回路が黙って欠ける。
-
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      clearAll: () => void
-      getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
-      getBoard: () => { x: number; y: number; z: number }
-      getPendingOutside: () => number | null
-      tapCell: (x: number, z: number) => void
-      selectTool: (type: string) => void
-    }
-  }
-}
 
 const ready = async (page: import('@playwright/test').Page): Promise<void> => {
   await page.goto('/')

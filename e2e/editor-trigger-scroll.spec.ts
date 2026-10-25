@@ -11,16 +11,6 @@ import { readFileSync } from 'node:fs'
 
 const LEVERS = 14   // 1 個約 130px。900px の画面にはまるで収まらない
 
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      getSimStateAt: (x: number, y: number, z: number) => { powered?: boolean } | null
-    }
-    __embed?: { isLoaded: () => boolean; getMode: () => string }
-  }
-}
-
 async function buildLevers(page: import('@playwright/test').Page) {
   await page.evaluate((n) => {
     const ed = window.__editorTest!
@@ -58,10 +48,13 @@ test('レバーが多いとき ▶ で端のレバーまで届いて押せる', 
 
   // **到達できるだけでなく押せる**こと (最後のレバーが ON になる)
   const last = LEVERS - 1
-  expect(await page.evaluate(x => window.__editorTest!.getSimStateAt(x, 1, 0)?.powered, last)).toBe(false)
+  const leverOn = (x: number) => page.evaluate(x => {
+    const b = window.__editorTest!.getSimStateAt(x, 1, 0)
+    return b?.type === 'lever' ? b.powered : null
+  }, x)
+  expect(await leverOn(last)).toBe(false)
   await page.getByTestId(`trigger-${last}-1-0`).click()
-  await expect.poll(() =>
-    page.evaluate(x => window.__editorTest!.getSimStateAt(x, 1, 0)?.powered, last)).toBe(true)
+  await expect.poll(() => leverOn(last)).toBe(true)
 })
 
 test('レバーが多いとき ホイールで横に流れる', async ({ page }) => {

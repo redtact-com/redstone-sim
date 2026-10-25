@@ -1,19 +1,7 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 
 // ⑤ 別ツールで既存ブロックのマスをタップ → 置き換え (#99)。
 // canvas ピクセル校正を避けるため __editorTest.tapCell (handleBlockClick 相当) で叩く。
-
-interface EditorTestApi {
-  placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-  getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
-  tapCell: (x: number, z: number) => void
-  selectTool: (type: string) => void
-}
-
-declare global {
-  interface Window { __editorTest?: EditorTestApi }
-}
 
 test('editor: 別ツール(ダスト)で既存リピーターのマスをタップ → wire に置換', async ({ page }) => {
   await page.goto('/')

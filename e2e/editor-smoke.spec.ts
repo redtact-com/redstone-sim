@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 
 // ① 配置 → START → +1 → レバートグル → ランプ点灯 の基本回帰。
 //
@@ -7,16 +6,6 @@ import type { BlockState } from '@redstone/sim'
 // 校正の脆弱性を排除)。tool 選択・START・+1・レバートグルは data-testid の実ボタン
 // クリックで駆動する。回路は fixture lever-wire-lamp と同じ「floor lever → wire×3
 // → lamp」を再現し、レバー ON でランプが点灯することを検証する。
-
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      getSimStateAt: (x: number, y: number, z: number) => BlockState | null
-      getMode: () => 'edit' | 'sim'
-    }
-  }
-}
 
 test('editor: 配置→START→tick→レバートグルでランプ点灯', async ({ page }) => {
   await page.goto('/')

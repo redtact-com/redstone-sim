@@ -1,19 +1,7 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 
 // ⑦ レバー/ボタンの取付面 (#111)。sim は元から Dir6 対応で、editor/UI/NBT が詰まっていた。
 // 壁レバーは「取付面のブロックだけ」を強充電する = 反対側のダストには届かない、で検証する。
-
-interface EditorTestApi {
-  placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-  getEditorBlockAt: (x: number, y: number, z: number) => BlockState | null
-  getSimStateAt: (x: number, y: number, z: number) => BlockState | null
-  getMode: () => string
-  clearAll: () => void
-}
-declare global {
-  interface Window { __editorTest?: EditorTestApi }
-}
 
 test('editor: 壁レバーを配置でき、取付面の向きが保たれる', async ({ page }) => {
   await page.goto('/')

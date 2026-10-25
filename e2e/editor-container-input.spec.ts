@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import type { BlockState } from '@redstone/sim'
 
 // #236 シミュレーション中に樽 (コンテナ) を触って入力にする。
 //
@@ -7,16 +6,6 @@ import type { BlockState } from '@redstone/sim'
 //   ① パネルのボタンで 1 段ずつ上げられる
 //   ② 数値入力で離れた値を一発で入れられる (階数指定の用途)
 // を実ボタン経由で確かめる。
-
-declare global {
-  interface Window {
-    __editorTest?: {
-      placeAt: (x: number, y: number, z: number, type: string, opts?: Record<string, unknown>) => void
-      getSimStateAt: (x: number, y: number, z: number) => BlockState | null
-      getMode: () => 'edit' | 'sim'
-    }
-  }
-}
 
 const outputAt = (page: import('@playwright/test').Page, x: number, y: number, z: number) =>
   page.evaluate(([x, y, z]) => {
