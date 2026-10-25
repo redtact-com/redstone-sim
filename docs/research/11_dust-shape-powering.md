@@ -59,7 +59,9 @@ I8 (#16) の observer-piston fixture 生成中に、単一接続 (直線形状) 
 - 物理接続 **2 本以上** (bend / T / cross) → 拡張なし (`nsEmpty` / `ewEmpty` がいずれも false)。
 
 `shouldConnectTo` (接続対象): redstone_wire / repeater (前後面) / observer (facing 面) /
-`isSignalSource()` (lever・button・torch・redstone_block・target・comparator は 4 面) [確定]。
+`isSignalSource()` (lever・button・torch・redstone_block・target・comparator・感圧板・detector_rail・lectern は 4 面) [確定]。
+sim は信号源の判定を power.ts の `isSignalSourceType` 1 か所に置いている (R-8)。
+trapped_chest と lightning_rod も vanilla では信号源だが、sim は型を持たないのでまだ接続しない (R-8 の残り)。
 **ピストン・ランプ・素の固体は非接続** → これらだけに囲まれた孤立ダストは cross になる。
 
 ---

@@ -323,11 +323,15 @@ export function isBlockPowered(world: SimWorld, pos: Pos3D): boolean {
  * [確定: 26.2 — isSignalSource を override しているのは RedStoneWireBlock /
  *  RedstoneTorchBlock / DiodeBlock (repeater・comparator) / LeverBlock /
  *  ButtonBlock / BasePressurePlateBlock / ObserverBlock / TargetBlock /
- *  PoweredBlock (= redstone_block) / DetectorRailBlock ほか sim 未実装の
- *  DaylightDetector・SculkSensor・TripWireHook・LightningRod・TrappedChest・Lectern]。
+ *  PoweredBlock (= redstone_block) / DetectorRailBlock / LecternBlock ほか、
+ *  sim 未実装の DaylightDetector・SculkSensor・TripWireHook と、sim では型を持たない
+ *  LightningRod (decor に入る)・TrappedChest (container に入る)]。
+ * 書見台は本の有無やページ送りに関係なく、常に信号源 (#240 で型になった。R-8)。
  *
  * **状態ではなくブロック種で決まる** ことに注意 (vanilla も defaultBlockState() に
- * 対して問う場面がある)。通常レールの向き再計算はこれを門番に使う (#142)。
+ * 対して問う場面がある)。使う場所は 2 つ:
+ *   - 通常レールの向き再計算の門番 (#142。world.ts の neighborChanged)
+ *   - ダストの接続判定 (wire-shape.ts の shouldConnectTo。R-8)
  */
 export function isSignalSourceType(type: BlockType): boolean {
   switch (type) {
@@ -347,6 +351,7 @@ export function isSignalSourceType(type: BlockType): boolean {
     case 'target':
     case 'redstone_block':
     case 'detector_rail':
+    case 'lectern':
       return true
     default:
       return false

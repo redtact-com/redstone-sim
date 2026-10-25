@@ -301,6 +301,10 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
   > 26.2 の実物とも実機 1.21.1 とも食い違う。実機 fixture `comparator-nc-own-tick` /
   > `repeater-nc-own-tick` が正で、ガードが無いと**遷移が 1gt 早まる**。
   tick で `refreshOutputState`: 出力値を ComparatorBlockEntity に保存し、POWERED を更新して前方更新。
+  前方更新を出すのは、保存した出力値が変わったときと、**compare モードのとき** (値が同じでも出す)。
+  subtract モードで値が変わらなければ何も出さない [確定: 26.2 ComparatorBlock.refreshOutputState]。
+  オブザーバーの 2gt パルスを飲み込んだ tick (§2.4) でも、compare なら前方の BUD を起こす
+  (R-5。実機 fixture comparator-compare-front-nc)。トレースではこの実行を `Co{c.2-}` と書く (08 §1 の失敗修飾)。
 - 側面入力 [確定: SignalGetter.getControlInputSignal(diodesOnly=false)]: ワイヤ (POWER 直読)・レッドストーンブロック (15)・
   その他は **direct signal (強出力) がその方向を向くもの** = リピーター/コンパレーター/**オブザーバー**。
   レバー/ボタン/トーチは水平方向へ direct signal を出さないため無効 (従来記述にオブザーバーを追加)。
@@ -313,6 +317,9 @@ BaseRailBlock / RailBlock / PoweredRailBlock / DetectorRailBlock + 実機 fixtur
     → #35 実機バグ報告 1 の根拠。sim は readComparatorSide で実装済み。
 - 背面入力 (`getInputSignal` override) [確定]: 背面ブロックが `hasAnalogOutputSignal` なら**その値で上書き** (通常信号より優先)。
   そうでなく信号 <15 かつ背面が導体なら、さらに 1 マス先のコンテナ/額縁 (ItemFrame.getAnalogOutput) を読む (固体 1 個越し)。
+  読めたときも**その値で置き換える**。大きい方は取らないので、弱充電された固体の奥が空の容器なら 0 になる
+  (R-4。実機 fixture comparator-through-conductor-replace)。
+  検知レールも `hasAnalogOutputSignal` を持つので、レールが点いていても通常信号の 15 は読まれない (下の rail 節。R-3)。
 - **コンテナ充填率→強度の変換式** [確定: AbstractContainerMenu.getRedstoneSignalFromContainer、未解明 #5 解消]:
   `f = (Σ 各スロットの count / maxStackSize) / スロット数` として `lerpDiscrete(f, 0, 15)` =
   「f が 0 なら 0、それ以外は f × 14 の切り捨て + 1」— 通説の「floor(1+14*fill)」と同値 (空 = 0、非空は最低 1)。
@@ -582,6 +589,12 @@ vanilla は形状決定を `place` と `connectTo` の 2 か所に持ち、**規
 - `powered` のトリガはカート検出のみ (`entityInside` / 20gt ごとの `tick` / `onPlace`)。
   持続は `PRESSED_CHECK_PERIOD = 20`
 - **OFF のタイミングはカートが去った時ではなく ON からの 20gt** で決まる [実機で確定]
+- コンパレーターに読ませる値 (`getAnalogOutputSignal`) は、powered のときに上のトロッコを調べ、
+  コマンドブロック付きならその成功回数、中身を持つトロッコならその充填率を返す。**普通のトロッコは 0**
+  [確定: 26.2 DetectorRailBlock / 実機 fixture detector-rail-comparator (R-3)]。
+  sim はトロッコを持たないので常に 0 を返す (下の「既知の抽象化」)
+- 信号源なので、**隣のダストは検知レールへ接続する** [確定: 26.2 RedStoneWireBlock.shouldConnectTo /
+  実機 fixture wire-connect-detector-rail-lectern (R-8)]
 
 **ピストンとの関係 [確定: 26.2 — レール 4 種とも pushReaction 未指定 = 既定 NORMAL]**
 

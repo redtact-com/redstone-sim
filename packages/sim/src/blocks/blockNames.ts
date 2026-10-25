@@ -183,12 +183,13 @@ export function isSolidBlockName(name: string): boolean {
  * **非導体・非信号源・ワイヤーを切らない**性質が同じものをここへ集約する。
  * 見た目だけは区別したいので取り込み元の文字列を保持する (判断 E)。
  *
- * `lectern` は本来コンパレーターで読める (階数指定に使われている) が、
- * 読み取りは未実装のため当面ここに入れる。
+ * `lectern` は #240 で専用の型になり (classifyPlainBlock が先に拾う)、R-8 で信号源にも
+ * なったので、ここには入れない。`lightning_rod` は vanilla では信号源だが、sim は
+ * まだ装飾に入れている (ダストが接続しない。R-8 の残りとして別に扱う)。
  */
 const DECOR_SUFFIXES = ['_stairs', '_hanging_sign', '_sign', '_banner', '_carpet']
 const DECOR_EXACT = new Set([
-  'end_rod', 'lectern', 'lightning_rod', 'flower_pot', 'chain', 'ladder',
+  'end_rod', 'lightning_rod', 'flower_pot', 'chain', 'ladder',
 ])
 
 /**

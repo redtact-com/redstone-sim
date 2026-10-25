@@ -95,7 +95,8 @@ type UpdateEntry =
 /**
  * コンパレーターが読む「アナログ出力」 (vanilla の hasAnalogOutputSignal / getAnalogOutputSignal)。
  * 持たないブロックは null。**直後と導体 1 個越しの両方で同じ判定を使う**
- * [確定: 26.2 ComparatorBlock.calculateOutputSignal]。
+ * [確定: 26.2 ComparatorBlock.getInputSignal]。
+ * 値を返したブロックは、通常の信号をその値で**置き換える** (readComparatorBack)。
  */
 function analogOutputOf(block: BlockState | null | undefined): number | null {
   if (!block) return null
@@ -113,6 +114,15 @@ function analogOutputOf(block: BlockState | null | undefined): number | null {
   // 書見台はページ番号を読む (#240)
   // [確定: 26.2 LecternBlock.getAnalogOutputSignal / LecternBlockEntity.getRedstoneSignal]
   if (block.type === 'lectern') return lecternSignal(block)
+  // 検知レールは**常に 0** (R-3)。アナログ出力を持つので、レールが点いていても
+  // 通常の信号 15 は 0 に置き換わる。
+  // [確定: 26.2 DetectorRailBlock.getAnalogOutputSignal — powered のときだけ上のトロッコを
+  //  調べ、コマンドブロック付きならその成功回数、中身を持つトロッコならその充填率を返す。
+  //  普通のトロッコを含め、それ以外は 0]
+  // sim はトロッコを持たない (13 §2 エンティティ境界) ので、数える相手が無く常に 0 になる。
+  // [実機: docs/research/16 §3.1 R-3 / fixture detector-rail-comparator —
+  //  普通のトロッコが乗ってもコンパレーターは点かない]
+  if (block.type === 'detector_rail') return 0
   return null
 }
 
@@ -366,11 +376,12 @@ export class SimWorld {
   /** 収集した bu トークンで updateFormula 行を発行し、収集を閉じる */
   private traceCloseUpdate(
     abbr: string, action: TraceAction, delay: number | 's', phase: TracePhase,
+    opts?: { failed?: boolean },
   ): void {
     if (this.tracer?.verbose && this.traceBuf) {
       this.tracer.push({
         kind: 'update', gt: this.currentTick, phase, abbr, action, delay,
-        reserve: false, updates: this.traceBuf,
+        reserve: false, failed: opts?.failed, updates: this.traceBuf,
       })
     }
     this.traceBuf = null
@@ -1586,6 +1597,19 @@ export class SimWorld {
       const newPowered = newOutputPower > 0
       if (block.powered !== newPowered || block.outputPower !== newOutputPower) {
         apply({ ...block, powered: newPowered, outputPower: newOutputPower }, 'c')
+      } else if (block.mode === 'compare') {
+        // **compare モードは出力が変わらなくても前方へ近隣更新を出す** (R-5)
+        // [確定: 26.2 ComparatorBlock.refreshOutputState — 保存した出力が変わったとき、
+        //  または compare モードのときに、前方の更新 (updateNeighborsInFront) を出す。
+        //  subtract モードで値が変わらなければ何も出さない]
+        // オブザーバーの 2gt パルスを飲み込んだ tick がこれに当たり、点かないまま
+        // 前方の BUD ピストンを起こす [実機 fixture comparator-compare-front-nc]。
+        // blockstate も出力も変わらないので、形状更新もダストの再計算も要らない。
+        // トレースは「実行したが変化しなかった」を 08 §1 の失敗修飾で Co{c.2-} と出す
+        this.traceProcess('ST', 'Co', 'c', elemDelay(block), { failed: true })
+        this.traceOpenUpdate(pos)
+        this.emitOutputShape(pos)
+        this.traceCloseUpdate('Co', 'c', elemDelay(block), 'ST', { failed: true })
       }
     } else if (block.type === 'button_stone' || block.type === 'button_wood') {
       if (block.powered) apply({ ...block, powered: false }, 'f')
@@ -3173,15 +3197,16 @@ export class SimWorld {
   /**
    * コンパレーター背面入力の信号強度 (0-15)。
    * [確定: 02 §6 comparator — ComparatorBlock.getInputSignal override]:
-   *   1. 背面ブロックが hasAnalogOutputSignal (= コンテナ) なら**その signal で上書き**
-   *      (通常信号より優先)。
+   *   1. 背面ブロックが hasAnalogOutputSignal (コンテナ・検知レールなど analogOutputOf が
+   *      値を返すもの) なら**その signal で上書き** (通常信号より優先)。
    *   2. そうでなければ通常信号 = DiodeBlock.getInputSignal:
    *      - 背面からの weak 信号 (getSignal。lever/torch/repeater/comparator を
    *        向き込みで評価)
    *      - 背面がワイヤなら接続形状に関係なく POWER を直読
    *      - 背面が導体 (solid / target) なら充電レベルを読む (Level.getSignal の
    *        conductor 分岐。target の自身出力は getSignal 側で max 済み)
-   *   3. 通常信号 < 15 かつ背面が導体なら、さらに 1 マス先のコンテナを読む
+   *   3. 通常信号 < 15 かつ背面が導体なら、さらに 1 マス先のアナログ出力を読み、
+   *      あれば通常信号を**その値で置き換える** (大きい方は取らない。R-4)
    *      (導体 1 個越し。target も isRedstoneConductor=true なので対象。
    *       額縁は sim 未対応)。
    */
@@ -3198,12 +3223,16 @@ export class SimWorld {
     if (back?.type === 'wire') i = Math.max(i, back.power)
     else if (isConductor(back)) i = Math.max(i, getSolidPower(this, backPos))
 
-    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読む
-    // [確定: 26.2 ComparatorBlock.calculateOutputSignal — hasAnalogOutputSignal を
-    //  直後と導体 1 個越しの両方で見る]
+    // 3. 導体 1 個越しの読み。vanilla は**アナログ出力を持つブロック全般**を読み、
+    //    あれば通常の信号を**その値で置き換える** (R-4)。奥の値が小さくても置き換わるので、
+    //    弱充電された石の奥に空の樽があると 0 になる
+    // [確定: 26.2 ComparatorBlock.getInputSignal — 通常の信号が 15 未満で背面が導体なら、
+    //  奥のアナログ値 (額縁を含む) を読み、あればそれを入力にする。大きい方は取らない]
+    // [実機 fixture comparator-through-conductor-replace — 奥が空の樽・中身 3 の樽・無し・
+    //  トロッコの無い検知レールの 4 レーン]
     if (i < 15 && isConductor(back)) {
       const far = analogOutputOf(this.getBlockAt(neighbor(backPos, backDir)))
-      if (far !== null) i = Math.max(i, far)
+      if (far !== null) i = far
     }
     return i
   }
