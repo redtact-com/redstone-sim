@@ -103,7 +103,7 @@ describe('最初の 8 枚', () => {
     const html = diagramHtml(name)
     expect(html.startsWith(`<figure class="dg" data-dg="${name}">`)).toBe(true)
     expect(html).toContain('<figcaption class="dg-cap">図: ')
-    expect(html).toMatch(/\(V\d\d §[\d.〜§]+ の言い換え\)/)
+    expect(html).toMatch(/\(V\d\d §[\d.〜§]+(・V\d\d §[\d.〜§]+)? の言い換え\)/)
     expect(html).not.toMatch(/NaN|undefined|Infinity/)
     expect(html).not.toMatch(/#[0-9a-fA-F]{3,6}\b|rgb\(|fill="|stroke="/)
     expect(count(html, /<svg /g)).toBe(DIAGRAMS[name].panels.length)

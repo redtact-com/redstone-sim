@@ -30,7 +30,7 @@ const SKIP = [
  * **全行**を見るフォルダ。図の文言 (`*.data.ts`) は文字列がそのまま画面に出るので、
  * コメント行だけでなく全部の行を検査する (#434)
  */
-const SCAN_ALL_LINES = ['packages/docs-kit/src/diagrams/']
+const SCAN_ALL_LINES = ['packages/docs-kit/src/diagrams/', 'docs-web/src/diagrams/']
 
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf-8' })

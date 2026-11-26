@@ -51,8 +51,9 @@ test('札は押すまでビューアを取らない。表示 → 1 tick → 再�
   await expect(card.locator('.fx-name')).toHaveText('powered-rail-chain')
   await expect(card.locator('.fx-meta')).toHaveText('23 ブロック・10 tick')
   await openCard(card)
-  // 取ったのは、ビューアのチャンク 1 個と、この fixture 1 本だけ
-  expect(heavy.filter(u => /\/assets\/viewer-/.test(u))).toHaveLength(1)
+  // 取ったのは、ビューアのチャンク 1 個 (とその見た目の CSS 1 個) と、この fixture 1 本だけ
+  expect(heavy.filter(u => /\/assets\/viewer-[^/]*\.js/.test(u))).toHaveLength(1)
+  expect(heavy.filter(u => /\/assets\/viewer-[^/]*\.css/.test(u))).toHaveLength(1)
   expect(heavy.filter(u => /\/data\/fixtures\//.test(u)).map(u => u.split('/').pop())).toEqual(['powered-rail-chain.json'])
   await expect(card.locator('.fx-open')).toHaveText('閉じる')
   await expect(card.locator('.fxv-note').first()).toHaveText('このエンジンの再生。実機の記録は fixture の expect')
@@ -137,6 +138,15 @@ test('注記: skip つきは理由を出して再生する。表の中のタグ�
   const name = (await chip.getAttribute('data-fx'))!.split(' ')[0]
   await chip.click()
   await expect(fold.locator(`.fx-card[data-fx-card="${name}"]`)).toBeVisible()
+
+  // 折りたたみの中で開いたビューアは、折りたたみを閉じると外れる (見えないまま文脈を持たない)
+  const inFold = fold.locator('.fx-card:has(.fx-open)').first()
+  await openCard(inFold)
+  await expect(page.locator('canvas')).toHaveCount(1)
+  await fold.locator('summary').click()
+  await expect(page.locator('canvas')).toHaveCount(0)
+  await fold.locator('summary').click()
+  await expect(inFold.locator('.fx-open')).toHaveText('表示')
 
   await openPage(page, '/docs/#/v15/4.10')
   const skip = page.locator('.fx-card[data-fx-card="detector-rail-cart-stay"]').first()

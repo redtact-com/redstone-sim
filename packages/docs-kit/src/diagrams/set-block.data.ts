@@ -50,7 +50,7 @@ export const DIR_NAMES: Record<Dir, string> = { D: '下', U: '上', N: '北', S:
 /** §2.3: 方向の並び 5 本。V06 §3.6 (ダストが使う並び) も同じ 5 本 */
 export const DIRECTION_ORDERS: DiagramDef = {
   title: '方向の並び (用途ごとに 5 本)',
-  source: 'V04 §2.3',
+  source: 'V04 §2.3・V06 §3.6',
   panels: [{
     kind: 'dirs',
     data: {

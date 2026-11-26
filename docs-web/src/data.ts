@@ -65,7 +65,8 @@ type ViewerModule = typeof import('@redstone/docs-kit/viewer')
 let viewer: Promise<ViewerModule> | null = null
 export function loadViewer(): Promise<ViewerModule> {
   if (!viewer) {
-    viewer = import('@redstone/docs-kit/viewer')
+    // ビューアの中の見た目 (viewer.css) も一緒に取る。札の見た目は最初の HTML に出るので docs.css に残す
+    viewer = Promise.all([import('@redstone/docs-kit/viewer'), import('./viewer.css')]).then(([m]) => m)
     viewer.catch(() => { viewer = null })
   }
   return viewer

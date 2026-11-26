@@ -10,6 +10,9 @@ const COLS: TickCol[] = [
   { label: 'T+2' },
 ]
 
+/** 記号の説明。伸長の図の下に出す (収縮の図より前に読める) */
+const SYMBOLS = 'P = ピストン本体・A = 腕のセル (ヘッドが入る)・B = ヘッドの 1 つ先・T = ブロックイベントが実行された tick。'
+
 /** §2.2〜§2.4: ピストンの伸長と収縮の時系列と、セルの移り変わり */
 export const PISTON_TIMELINE: DiagramDef = {
   title: 'ピストンの時系列 (伸長と収縮)',
@@ -34,6 +37,7 @@ export const PISTON_TIMELINE: DiagramDef = {
           { k: 'bar', lane: 5, from: 1, to: 3.25, text: 'moving_piston (中身 = 元のブロック)' },
           { k: 'bar', lane: 5, from: 3.25, to: 4, text: '元のブロック' },
         ],
+        notes: [SYMBOLS],
       },
     },
     {
@@ -55,7 +59,6 @@ export const PISTON_TIMELINE: DiagramDef = {
           { k: 'bar', lane: 4, from: 3.25, to: 4, text: '空気、または引いたブロック' },
         ],
         notes: [
-          'P = ピストン本体・A = 腕のセル (ヘッドが入る)・B = ヘッドの 1 つ先・T = ブロックイベントが実行された tick。',
           '積んだ相がブロックイベント相より前なら同じ tick に、後 (エンティティ相・BlockEntity 相・プレイヤー入力) なら次の tick に実行される。',
         ],
       },

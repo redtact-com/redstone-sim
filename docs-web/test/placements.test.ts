@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DIAGRAMS, diagramHtml } from '@redstone/docs-kit/diagrams'
+import { DIAGRAMS, LEVEL_PHASES, diagramHtml } from '@redstone/docs-kit/diagrams'
 import { PLACEMENTS, hasDiagrams, insertDiagrams } from '../src/diagrams/placements'
 
 /**
@@ -41,5 +41,44 @@ describe('図の置き場所 (placements)', () => {
     const out = insertDiagrams(html, sections, name => `<figure data-dg="${name}"></figure>`)
     expect(out).toBe(html.replace('</h3><div class="tbl">', '</h3><figure data-dg="direction-orders"></figure><div class="tbl">'))
     expect(insertDiagrams(html, [{ id: 'v04/2' }], diagramHtml)).toBe(html)
+  })
+})
+
+/**
+ * 図の数と md の突き合わせ。md の手順や表の行が増減したら、図も直すこと。
+ * 文言の中身までは比べない (人が見る)。
+ */
+describe('図の数が md と合う', () => {
+  /** md の 1 節 (`### 2.1 …` から次の見出しまで) の行 */
+  const sectionLines = (file: string, num: string): string[] => {
+    const lines = readFileSync(join(repo, 'docs/vanilla', file), 'utf-8').split('\n')
+    const start = lines.findIndex(l => l.startsWith(`### ${num} `))
+    expect(start, `${file} §${num}`).toBeGreaterThanOrEqual(0)
+    const rest = lines.slice(start + 1)
+    const end = rest.findIndex(l => /^#{1,3} /.test(l))
+    return end < 0 ? rest : rest.slice(0, end)
+  }
+  /** 一番外の番号つきの手順の数 */
+  const steps = (file: string, num: string) => sectionLines(file, num).filter(l => /^\d+\. /.test(l)).length
+  const flowSteps = (name: keyof typeof DIAGRAMS) => {
+    const p = DIAGRAMS[name].panels[0]
+    return p.kind === 'flow' ? p.data.steps.length : -1
+  }
+
+  it('手順の流れ 3 枚: 一番外の手順の数', () => {
+    expect(flowSteps('schedule-to-fire')).toBe(steps('02_scheduled-ticks.md', '2.2'))
+    expect(flowSteps('set-block-steps')).toBe(steps('04_set-block-and-updates.md', '2.1'))
+    expect(flowSteps('repeater-flip')).toBe(steps('07_diodes.md', '2.4'))
+  })
+
+  it('tick の間の時系列: 手順の数', () => {
+    const p = DIAGRAMS['tick-boundary'].panels[0]
+    const n = p.kind === 'ticks' ? p.data.items.filter(i => i.k === 'ev').length : -1
+    expect(n).toBe(steps('01_tick-loop.md', '2.4'))
+  })
+
+  it('相の時間割: 表の行 (L0〜) の数と ID', () => {
+    const rows = sectionLines('01_tick-loop.md', '2.3').map(l => /^\| (L\d+) \|/.exec(l)?.[1]).filter(Boolean)
+    expect(LEVEL_PHASES.map(p => p.id)).toEqual(rows)
   })
 })

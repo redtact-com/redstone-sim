@@ -31,7 +31,10 @@ let nextKey = 1
  * - 同時に生かすのは 2 個まで。3 個目を開くと一番古い物を外す
  * - 本文のチップ (`[実機 …]`) を押すと、その fixture の札へ寄せる
  *
- * ページを移ると本文ごと作り直されるので、開いていた物は全部外れる。
+ * - 折りたたみ (表の後ろの札) を閉じると、中で開いていた物を外す
+ *
+ * ページを移ると本文ごと作り直されるので、開いていた物は全部外れる。同じページの中の操作
+ * (節へ飛ぶ・既読・理解度) では本文の DOM が残るので、開いた物も残る (PageView.tsx の PageBody)。
  */
 export function FixtureCards({ root, fixtures }: {
   root: RefObject<HTMLElement | null>
@@ -58,8 +61,19 @@ export function FixtureCards({ root, fixtures }: {
       const chip = target.closest?.('.mk[data-fx]')
       if (chip && el.contains(chip)) revealCard(chip)
     }
+    // 折りたたみを閉じたら、中で開いていたビューアも外す (見えないまま文脈と同時 2 個の枠を使わない)。
+    // toggle は親へ伝わらないので capture で受ける
+    const onToggle = (e: Event) => {
+      const fold = e.target
+      if (!(fold instanceof HTMLDetailsElement) || fold.open) return
+      setOpen(list => list.some(o => fold.contains(o.card)) ? list.filter(o => !fold.contains(o.card)) : list)
+    }
     el.addEventListener('click', onClick)
-    return () => el.removeEventListener('click', onClick)
+    el.addEventListener('toggle', onToggle, true)
+    return () => {
+      el.removeEventListener('click', onClick)
+      el.removeEventListener('toggle', onToggle, true)
+    }
   }, [root])
 
   // 開閉を札の HTML に写す (ボタンの字・置き場の高さ)。ビューアが大きさを測る前に済ませる

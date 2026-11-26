@@ -10,12 +10,22 @@ import type { DocsModel } from './model'
 
 type Loaded = { id: string; data: PageData } | { id: string; error: string }
 
+/** 図のチャンクを待つ上限。応答が止まっても本文は出す */
+const DIAGRAMS_WAIT_MS = 3000
+
+function diagramsOrTimeout(): Promise<unknown> {
+  return Promise.race([
+    loadDiagrams().catch(() => null),
+    new Promise(resolve => window.setTimeout(resolve, DIAGRAMS_WAIT_MS)),
+  ])
+}
+
 /**
  * ページ 1 枚を取って覚える。次のページを 1 つ先に取っておく。
  * 取っている間は「読み込み中…」を出す (前のページの本文は残さない。残すと、上下の操作と前後が
  * 別のページの物になる)。読む順の次のページは先読みしてあるので、待ちが出るのは目次・参照・検索から飛ぶ時。
  * 図のある節を持つページは、図のチャンクも取り終えてから出す (後から差し込むと本文が下へずれる)。
- * 図のチャンクが取れなかった時は、図なしで本文を出す。
+ * 図のチャンクが取れなかった時と、`DIAGRAMS_WAIT_MS` 待っても応答が無い時は、図なしで本文を出す。
  */
 export function usePage(id: string): { data: PageData | null; error: string | null; loading: boolean; retry: () => void } {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
@@ -23,7 +33,7 @@ export function usePage(id: string): { data: PageData | null; error: string | nu
   useEffect(() => {
     let alive = true
     loadPage(id).then(async data => {
-      if (hasDiagrams(data.sections)) await loadDiagrams().catch(() => null)
+      if (hasDiagrams(data.sections)) await diagramsOrTimeout()
       return data
     }).then(
       data => {
@@ -56,6 +66,10 @@ export function PageBody({ data, section, row, fixtures }: {
     const kit = diagramsNow()
     return kit && hasDiagrams(data.sections) ? insertDiagrams(data.html, data.sections, kit.diagramHtml) : data.html
   }, [data])
+  // React は dangerouslySetInnerHTML の値のオブジェクトが変わるたびに innerHTML を入れ直す。
+  // 入れ直すと、開いているビューア (札の中へ portal で付けた物) と開いた折りたたみが消えるので、
+  // HTML が同じ間は同じオブジェクトを渡す (既読・理解度・節へ飛ぶ操作で親が描き直しても本文の DOM は残る)
+  const inner = useMemo(() => ({ __html: html }), [html])
   // 開いた時と、節の指定が変わった時に、自前でその節へスクロールする
   useEffect(() => {
     const el = section ? document.getElementById(headingDomId(section)) : null
@@ -68,7 +82,7 @@ export function PageBody({ data, section, row, fixtures }: {
   }, [data.id, section, row])
   return (
     <>
-      <article className="doc-body" ref={body} data-page={data.id} dangerouslySetInnerHTML={{ __html: html }} />
+      <article className="doc-body" ref={body} data-page={data.id} dangerouslySetInnerHTML={inner} />
       {/* 札の無いページでは何も付けない (ビューアのチャンクも取らない) */}
       {data.fixtures.length > 0 && <FixtureCards root={body} fixtures={fixtures} />}
     </>

@@ -9,6 +9,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test'
 //   3. 幅 375 px でページが横に流れない (00 §4 の表・V14 の 17 列の表)
 //   4. fixture の札の「表示」→ canvas が描ける → 1 tick 進む → 2D に切り替える →
 //      3 個目を開くと 1 個目が札に戻る
+//      開いたビューアは、ページの中の操作 (節へ飛ぶ・読んだ・理解度) では消えない
 //   5. ビューアの上でも wheel でページが流れる。ビューアのあるページを 20 回移っても
 //      「Too many active WebGL contexts」が出ない
 //   6. 図: 9 か所とも節の見出しの直後に出る。図のチャンクは図のあるページでだけ取る。
@@ -246,6 +247,50 @@ test('札の「表示」→ 描ける → 1 tick 進む → 2D → 3 個目を�
   expect(errors).toEqual([])
 })
 
+test('開いたビューアは、ページの中の操作 (節へ飛ぶ・読んだ・理解度) では消えない (#434)', async ({ page }) => {
+  const errors = collectErrors(page)
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/docs/#/v13/2')
+  await expect(article(page, 'v13/2')).toBeVisible()
+  const card = page.locator('.fx-card[data-fx-card="piston-basic"]').first()
+  await openCard(card)
+  const fxv = card.locator('.fxv')
+  await fxv.locator('.fxv-step').click()
+  await fxv.locator('.fxv-step').click()
+  await expect(fxv).toHaveAttribute('data-tick', '2')
+  // 本文の DOM が作り直されていないことを、札に付けた印で見る
+  await card.evaluate(el => { (el as HTMLElement & { __kept?: boolean }).__kept = true })
+  const kept = async () => {
+    await expect(page.locator('canvas')).toHaveCount(1)
+    await expect(fxv).toHaveAttribute('data-tick', '2')
+    await expect(card.locator('.fx-open')).toHaveText('閉じる')
+    expect(await card.evaluate(el => (el as HTMLElement & { __kept?: boolean }).__kept === true)).toBe(true)
+  }
+
+  // 右の欄「このページ」の節リンク
+  await page.locator('.outline a[href="#/v13/2?s=2.1"]').click()
+  await expect(page).toHaveURL(/#\/v13\/2\?s=2\.1$/)
+  await kept()
+  // 「読んだ」と理解度
+  const top = page.locator('.status-bar[data-where="top"]')
+  await top.locator('input[type="checkbox"]').check()
+  await expect(page.locator('.toc [aria-current="page"]')).toHaveAttribute('data-read', '1')
+  await kept()
+  await top.locator('input[type="range"]').fill('60')
+  await expect(page.locator('.status-bar[data-where="bottom"] input[type="range"]')).toHaveValue('60')
+  await kept()
+  // 止めた後も動く
+  await fxv.locator('.fxv-step').click()
+  await expect(fxv).toHaveAttribute('data-tick', '3')
+
+  // ページを移れば外れる
+  await page.goto('/docs/#/v15/4.8')
+  await expect(article(page, 'v15/4.8')).toBeVisible()
+  await expect(page.locator('canvas')).toHaveCount(0)
+
+  expect(errors).toEqual([])
+})
+
 test('ビューアの上でも wheel でページが流れる。ビューアのあるページを 20 回移っても文脈の警告が出ない (#434)', async ({ page }) => {
   test.setTimeout(180_000)
   const messages: string[] = []
@@ -320,7 +365,7 @@ test('図は節の見出しの直後に出る (9 か所)。図のチャンクは
   const viewers: string[] = []
   page.on('request', r => {
     if (/\/assets\/diagrams-/.test(r.url())) chunks.push(r.url())
-    if (/\/assets\/viewer-/.test(r.url())) viewers.push(r.url())
+    if (/\/assets\/viewer-[^/]*\.js/.test(r.url())) viewers.push(r.url())
   })
 
   // 図の無いページでは取らない

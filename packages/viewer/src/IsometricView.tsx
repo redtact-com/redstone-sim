@@ -236,6 +236,14 @@ export function IsometricView({
     return () => ro.disconnect()
   }, [requestDraw])
 
+  // タブが裏から戻った時も描き直す。裏に回っている間に絵を捨てるブラウザでは、"demand" だと
+  // 次の操作まで枠が空のままになる ("always" では予約が常にあるので何も起きない)
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) requestDraw() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [requestDraw])
+
   // ─── WebGL の文脈を手放す (#434) ───────────────────────────────────────────
   // canvas を DOM から外しても、文脈は GC されるまで残る。ブラウザの上限 (Chrome は 16) を
   // 越えると古い文脈から失われて警告が出るので、unmount で WEBGL_lose_context を呼んで返す。
