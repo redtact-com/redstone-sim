@@ -23,7 +23,8 @@
       "@redstone/sim":             ["../packages/sim/src/index.ts"],
       "@redstone/viewer":          ["../packages/viewer/src/index.ts"],
       "@redstone/docs-kit":        ["../packages/docs-kit/src/index.ts"],
-      "@redstone/docs-kit/viewer": ["../packages/docs-kit/src/viewer/index.ts"]
+      "@redstone/docs-kit/viewer": ["../packages/docs-kit/src/viewer/index.ts"],
+      "@redstone/docs-kit/diagrams": ["../packages/docs-kit/src/diagrams/index.ts"]
     }
   },
   "include": ["src"]

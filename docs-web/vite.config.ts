@@ -108,8 +108,9 @@ export default defineConfig({
   plugins: [react(), resourcepackFromApp(), dataFromDisk(), regenerateOnMdChange()],
   resolve: {
     // 同じモノレポの packages/* をソースのまま読む (app と同じ形)。
-    // `@redstone/docs-kit/viewer` を先に書く。前方一致なので、後ろだと入口の方に吸われる
+    // `@redstone/docs-kit/viewer` と `/diagrams` を先に書く。前方一致なので、後ろだと入口の方に吸われる
     alias: [
+      { find: '@redstone/docs-kit/diagrams', replacement: path.resolve(PACKAGES, 'docs-kit/src/diagrams/index.ts') },
       { find: '@redstone/docs-kit/viewer', replacement: path.resolve(PACKAGES, 'docs-kit/src/viewer/index.ts') },
       { find: '@redstone/docs-kit',        replacement: path.resolve(PACKAGES, 'docs-kit/src/index.ts') },
       { find: '@redstone/viewer',          replacement: path.resolve(PACKAGES, 'viewer/src/index.ts') },

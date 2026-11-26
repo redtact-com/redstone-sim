@@ -8,6 +8,7 @@ docs/vanilla (26.3 の読解メモ 21 本) と docs/research 17〜19 を、項�
 - md は書き換えない。`tools/docs-index` がビルド時に md を節とページに割って `public/data/` へ出す
   (生成物は追跡しない)
 - 本文の `[実機 1.21.1: 名前]` の下に fixture の札が出て、「表示」を押すと 3D/2D で再生できる
+- 一部の節には、見出しの直後に図 (自前の SVG) が出る
 
 ## 起動
 
@@ -65,6 +66,33 @@ md には何も書かない (生成器がタグを拾う)。
 - 200 ブロックを超える fixture は「大きいので埋め込まない」と出し、開けない
   (上限は `tools/docs-index/fixtures.ts` の `FIXTURE_EMBED_MAX_BLOCKS`)
 
+## 図
+
+md の表と手順を言い換えた図を、節の見出しの直後に出す。md には何も書かない。Mermaid は使わない。
+
+| 節 | 図 | 部品 |
+|---|---|---|
+| V01 §2.1 (§2.1〜§2.2) | サーバ 1 周 (区間 A → B → C) | `PhaseTimeline` |
+| V01 §2.3 | 相 L0〜L15 の時間割 | `PhaseTimeline` |
+| V01 §2.4 | tick の間の 7 手順 | `TickAxis` |
+| V02 §2.2 | 予約から発火まで | `StepFlow` |
+| V04 §2.1 | setBlock の 10 手順 | `StepFlow` |
+| V04 §2.3・V06 §3.6 | 方向の並び 5 本 | `DirectionOrder` |
+| V07 §2.4 | リピーターの反転の順 | `StepFlow` |
+| V13 §2.2 (§2.2〜§2.4) | ピストンの伸長と収縮の時系列 | `TickAxis` 2 枚 |
+
+- 部品 (4 つ) と文言は `packages/docs-kit/src/diagrams/` (`@redstone/docs-kit/diagrams`)。
+  「データ → SVG の文字列」の関数が本体で、React の部品はそれを包むだけ。docs-web には依存しない
+- 置き場所は `docs-web/src/diagrams/placements.ts` (節 ID → 図の名前)。図のチャンクは、図のある節を持つ
+  ページを初めて開いた時に取る (殻には入らない)
+- **図を足す**: `packages/docs-kit/src/diagrams/*.data.ts` に文言を書く → `catalog.ts` の `DIAGRAMS` に名前を足す
+  → `placements.ts` に「節 ID: 名前」を足す。文言は md の表と手順の言い換えだけにする
+  (`tools/ip-hygiene.test.ts` がこのフォルダの全行を見る)
+- md の手順が変わっても図は自動で変わらない。md を直したら、同じ節の `*.data.ts` も直す。
+  節の番号が動いて置き場所が宙に浮いた時は `docs-web/test/placements.test.ts` が落ちる
+- 色は CSS 変数 (`--dg-*`) で、明暗は `prefers-color-scheme` に従う。図の幅は 696 px に固定で、
+  狭い画面では図の枠の中で横に流れる (ページは横に流れない)
+
 ## 既読と理解度 (書き出しと読み込み)
 
 - 置き場はブラウザの localStorage のキー `rdsim:docs:status:v1` の 1 個。サーバには送らない
@@ -117,8 +145,8 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 
 | 場所 | 中身 |
 |---|---|
-| `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面・fixture の札を動かす `Fixtures.tsx`) と素の CSS 1 本 |
-| `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索・fixture の札の HTML (のちの解説サイトと共用)。`@redstone/docs-kit/viewer` は `FixtureViewer` (deepslate と sim を含むので別の入口) |
+| `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面・fixture の札を動かす `Fixtures.tsx`・図の置き場所 `diagrams/placements.ts`) と素の CSS 1 本 |
+| `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索・fixture の札の HTML (のちの解説サイトと共用)。`@redstone/docs-kit/viewer` は `FixtureViewer` (deepslate と sim を含むので別の入口)。`@redstone/docs-kit/diagrams` は図の 4 部品と文言 (これも別の入口) |
 | `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引・埋め込む fixture の `data/fixtures/*.json`) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
 | `e2e/docs-web.spec.ts` | 既読と理解度・検索・狭い幅 |
 | `e2e/docs-fixture-viewer.spec.ts` | fixture の札とビューア。押すまでチャンクを取らない・再生と 2D・同時 2 個・開け閉め 20 回で文脈の警告が出ない・置いただけでは wheel でページが流れる・止まっている間は rAF が回らない |
