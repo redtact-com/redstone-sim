@@ -66,6 +66,17 @@ md には何も書かない (生成器がタグを拾う)。
 - 200 ブロックを超える fixture は「大きいので埋め込まない」と出し、開けない
   (上限は `tools/docs-index/fixtures.ts` の `FIXTURE_EMBED_MAX_BLOCKS`)
 
+作りと確かめ方。
+
+- 札の HTML は生成器が出す (`packages/docs-kit/src/fixture-card.ts`)。押した時の処理は `docs-web/src/Fixtures.tsx`
+  (同時 2 個の数え方もここ)。ビューアの本体は `@redstone/docs-kit/viewer` の `FixtureViewer` で、
+  `IsometricView` (`interactive`・`frameLoop="demand"`・`resourcePackUrl`) と `FixtureRunner` を包む
+- 閉じた・ページを移ったビューアは WebGL の文脈を手放す (`WEBGL_lose_context`)。止まっている間は描かない
+- 最初の「表示」では、ビューアのチャンクのほかにリソースパックと、外の配信元のブロックの定義も取る
+  (viewer の元からの動き)。2 個目からは fixture 1 本だけ
+- 文脈を手放す動きは headless Chromium の e2e でしか見ていない。Safari と Firefox では、
+  札を 20 回ほど開け閉めして、コンソールに WebGL の文脈の警告が出ないことを手で見る
+
 ## 図
 
 md の表と手順を言い換えた図を、節の見出しの直後に出す。md には何も書かない。Mermaid は使わない。
@@ -148,9 +159,9 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 | `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面・fixture の札を動かす `Fixtures.tsx`・図の置き場所 `diagrams/placements.ts`) と素の CSS 1 本 |
 | `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索・fixture の札の HTML (のちの解説サイトと共用)。`@redstone/docs-kit/viewer` は `FixtureViewer` (deepslate と sim を含むので別の入口)。`@redstone/docs-kit/diagrams` は図の 4 部品と文言 (これも別の入口) |
 | `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引・埋め込む fixture の `data/fixtures/*.json`) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
-| `e2e/docs-web.spec.ts` | 既読と理解度・検索・狭い幅 |
-| `e2e/docs-fixture-viewer.spec.ts` | fixture の札とビューア。押すまでチャンクを取らない・再生と 2D・同時 2 個・開け閉め 20 回で文脈の警告が出ない・置いただけでは wheel でページが流れる・止まっている間は rAF が回らない |
-| `tools/demo/docs-gif.mjs` | PR 用の GIF (目次 → ページ → 理解度 → 検索) |
+| `e2e/docs-web.spec.ts` | 読む画面の通し。既読と理解度・検索・狭い幅・札の「表示」→ 1 tick → 2D → 3 個目で 1 個目が戻る・ビューアの上の wheel とビューアのあるページを 20 回移る・図 (9 か所とも見出しの直後・図のチャンクは図のあるページでだけ・幅 375 px で枠の中で流れる・明暗) |
+| `e2e/docs-fixture-viewer.spec.ts` | fixture の札とビューアの細かい動き。押すまでチャンクを取らない・再生と 2D・同時 2 個・開け閉め 20 回で文脈の警告が出ない・置いただけでは wheel でページが流れる・止まっている間は rAF が回らない |
+| `tools/demo/docs-gif.mjs` | PR 用の GIF。台本は 2 本: `--script reader` (既定。目次 → ページ → 理解度 → 検索)・`--script viewer` (図 → 3D の再生 → 2D) |
 
 節を足す・見出しの番号を変えると ID が変わる (その ID の既読の記録は外れる)。
 `tools/docs-index` のテストが落ちたら `npm run docs:index -- --ids` で一覧を作り直す。
