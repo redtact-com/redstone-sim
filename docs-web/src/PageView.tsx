@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 import { docsHref, headingDomId } from '@redstone/docs-kit'
-import type { PageData } from '@redstone/docs-kit'
+import type { FixtureInfo, PageData } from '@redstone/docs-kit'
 import { loadPage, prefetchPage } from './data'
+import { FixtureCards } from './Fixtures'
 import { groupLabel } from './model'
 import type { DocsModel } from './model'
 
@@ -38,7 +39,12 @@ export function usePage(id: string): { data: PageData | null; error: string | nu
 }
 
 /** 本文の HTML。ビルド時に作った物をそのまま置く (実行時にパーサは持たない) */
-export function PageBody({ data, section, row }: { data: PageData; section: string | null; row: string | null }) {
+export function PageBody({ data, section, row, fixtures }: {
+  data: PageData; section: string | null; row: string | null
+  /** fixture の目録 (札の注記に使う) */
+  fixtures: Record<string, FixtureInfo>
+}) {
+  const body = useRef<HTMLElement>(null)
   // 開いた時と、節の指定が変わった時に、自前でその節へスクロールする
   useEffect(() => {
     const el = section ? document.getElementById(headingDomId(section)) : null
@@ -49,7 +55,13 @@ export function PageBody({ data, section, row }: { data: PageData; section: stri
     target.classList.add('row-hit')
     return () => target.classList.remove('row-hit')
   }, [data.id, section, row])
-  return <article className="doc-body" data-page={data.id} dangerouslySetInnerHTML={{ __html: data.html }} />
+  return (
+    <>
+      <article className="doc-body" ref={body} data-page={data.id} dangerouslySetInnerHTML={{ __html: data.html }} />
+      {/* 札の無いページでは何も付けない (ビューアのチャンクも取らない) */}
+      {data.fixtures.length > 0 && <FixtureCards root={body} fixtures={fixtures} />}
+    </>
+  )
 }
 
 /** 見出しの後ろの最初の表から、1 列目が `row` の行を探す (`V18 の R4` の行き先) */
@@ -105,7 +117,7 @@ export function PageView({ model, pageId, section, top, bottom, pagerMid }: {
       {error
         ? <p className="notice notice-err" role="alert">ページを取れなかった ({error})。<button type="button" onClick={retry}>もう一度</button></p>
         : shown
-          ? <PageBody key={`${shown.id}:${again}`} data={shown} section={section} row={row} />
+          ? <PageBody key={`${shown.id}:${again}`} data={shown} section={section} row={row} fixtures={model.manifest.fixtures} />
           : <p className="loading">読み込み中…</p>}
       {shown && bottom}
       <nav className={pagerMid ? 'pager pager-3' : 'pager'} aria-label="前後のページ">

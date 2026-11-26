@@ -7,7 +7,6 @@ import { useRoute } from './router'
 import { Toc } from './Toc'
 import { PageOutline, PageView } from './PageView'
 import { Home } from './Home'
-import { WiringCheck } from './Wiring'
 import { SearchBox, SearchView } from './Search'
 import { Notes, Overall, Progress, ReadAndNext, StatusBar, statText, statusStore, useStatus } from './status'
 import { summarizeStatus } from '@redstone/docs-kit'
@@ -18,7 +17,7 @@ import { SHORT_PAGE_LINES } from './model'
  *
  * 画面は 3 欄 (目次・本文・このページ)。狭い幅では目次が引き出しになり、右の欄は出さない。
  * 検索の結果 (`#/_search?q=`) は本文の欄に出す。
- * `#/_wiring` は配線の確かめ (開発用)。ビューアの入口を dynamic import する唯一の場所
+ * 3D/2D のビューアは、本文の fixture の札の「表示」を押した時にだけ読む (Fixtures.tsx)
  */
 export function App() {
   const route = useRoute()
@@ -78,9 +77,7 @@ export function App() {
         </div>
         <Notes saved={status.saved} message={message} onClose={() => setMessage(null)} />
       </header>
-      {route.kind === 'wiring' ? (
-        <main className="solo"><WiringCheck /></main>
-      ) : 'error' in model ? (
+      {'error' in model ? (
         <main className="solo">
           <p className="notice notice-err" role="alert">目次を取れなかった ({model.error})。<button type="button" onClick={model.retry}>もう一度</button></p>
         </main>

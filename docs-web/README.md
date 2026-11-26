@@ -7,7 +7,7 @@ docs/vanilla (26.3 の読解メモ 21 本) と docs/research 17〜19 を、項�
   本番 (rdsim.com) と develop には出ない。出るのは **手元** と **PR のプレビューの `/docs/`** だけ
 - md は書き換えない。`tools/docs-index` がビルド時に md を節とページに割って `public/data/` へ出す
   (生成物は追跡しない)
-- 図と 3D/2D のビューアは次の PR で足す
+- 本文の `[実機 1.21.1: 名前]` の下に fixture の札が出て、「表示」を押すと 3D/2D で再生できる
 
 ## 起動
 
@@ -46,6 +46,24 @@ npm run stage:docs      # docs-web/dist を app/dist/docs へ写す (先に npm 
 
 `##` が 150 行を超えるメモだけ `###` でページを割る (564 ページ・節は 1,383)。
 ページでない ID (`#/v07`・`#/v07/4`・ページの中の節) は、入っているページへ寄せる。
+
+## fixture の札と 3D/2D のビューア
+
+本文の `[実機 1.21.1: 名前]` は小さなチップになり、タグのある段落・箇条書きの直後に 1 行の札
+(名前・ブロック数・tick 数・「表示」) が出る。表の中のタグの札は、表の後ろの 1 つの折りたたみにまとまる。
+md には何も書かない (生成器がタグを拾う)。
+
+- 「表示」を押すと、その場でビューアが開く。ビューアのチャンクと fixture の JSON はその時に初めて取る
+- 操作は 再生 / 止める・1 tick 進む・最初へ。3D と 2D を切り替えられ、2D は層を ± で上下する
+  (その層より上のブロックを外して真上から見る)
+- 置いただけではページのスクロールを奪わない。枠をクリックするとドラッグ・wheel・ピンチで動かせ、
+  Esc か外のクリックで戻る
+- 同時に開けるのは 2 個まで。3 個目を開くと一番古い物が札に戻る。ページを移ると全部閉じる
+- **再生するのはこのエンジンの計算**で、実機の記録ではない (実機の記録は fixture の `expect`)。
+  skip つきの fixture は「今のエンジンは実機と違う」と理由を出して再生する。
+  summon・item・kill を含む fixture は「エンティティは描かない」と出す
+- 200 ブロックを超える fixture は「大きいので埋め込まない」と出し、開けない
+  (上限は `tools/docs-index/fixtures.ts` の `FIXTURE_EMBED_MAX_BLOCKS`)
 
 ## 既読と理解度 (書き出しと読み込み)
 
@@ -99,11 +117,11 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 
 | 場所 | 中身 |
 |---|---|
-| `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面) と素の CSS 1 本 |
-| `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索 (のちの解説サイトと共用) |
-| `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
+| `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面・fixture の札を動かす `Fixtures.tsx`) と素の CSS 1 本 |
+| `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索・fixture の札の HTML (のちの解説サイトと共用)。`@redstone/docs-kit/viewer` は `FixtureViewer` (deepslate と sim を含むので別の入口) |
+| `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引・埋め込む fixture の `data/fixtures/*.json`) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
 | `e2e/docs-web.spec.ts` | 既読と理解度・検索・狭い幅 |
-| `e2e/docs-viewer-probe.spec.ts` | `packages/viewer` の確かめ (`#/_wiring` の下の試し)。付け外し 20 回で文脈の警告が出ない・`interactive` を外すと wheel でページが流れる・`frameLoop="demand"` で rAF が止まる |
+| `e2e/docs-fixture-viewer.spec.ts` | fixture の札とビューア。押すまでチャンクを取らない・再生と 2D・同時 2 個・開け閉め 20 回で文脈の警告が出ない・置いただけでは wheel でページが流れる・止まっている間は rAF が回らない |
 | `tools/demo/docs-gif.mjs` | PR 用の GIF (目次 → ページ → 理解度 → 検索) |
 
 節を足す・見出しの番号を変えると ID が変わる (その ID の既読の記録は外れる)。

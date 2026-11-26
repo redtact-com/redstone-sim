@@ -188,13 +188,6 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .home-doc-title { overflow-wrap: anywhere; }
 .home-doc-stat { flex: none; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.wiring { padding-left: 1.2em; }
-.wiring [data-state="ok"] b { color: #1a7f37; }
-.wiring [data-state="ng"] b { color: var(--accent); }
-.wiring span { color: var(--muted); }
-.wiring-viewer-box { height: 320px; max-width: 640px; background: #19191f; }
-.wiring-viewer-pad { height: 120vh; }
-
 /* ---- 中くらいの幅: 右の欄を出さない ---- */
 @media (max-width: 1180px) {
   .cols { grid-template-columns: 280px minmax(0, 1fr); }
@@ -302,3 +295,43 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .hit-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 0.8rem; color: var(--muted); }
 .hit-read { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; }
 .hit[data-read="1"] .toc-dot { background: var(--mk-fx-fg); border-color: var(--mk-fx-fg); }
+
+/* ==== fixture の札とビューア ==== */
+.mk[data-fx] { cursor: pointer; }
+.fx-cards { margin: 0.5em 0 0.9em; display: grid; gap: 4px; }
+.fx-card { border: 1px solid var(--line); border-radius: 6px; background: var(--bg-soft); font-size: 0.84rem; line-height: 1.5; }
+.fx-card[data-open] { border-color: var(--mk-fx-fg); }
+.fx-card.fx-hit { box-shadow: 0 0 0 2px var(--mk-fx-fg); }
+.fx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; padding: 3px 6px 3px 10px; min-height: 30px; }
+.fx-name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; overflow-wrap: anywhere; }
+.fx-meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-note { padding: 0 6px; border-radius: 4px; background: var(--mk-etc); color: var(--mk-etc-fg); font-size: 0.92em; }
+.fx-note-skip { background: var(--mk-need); color: var(--mk-need-fg); cursor: help; }
+.fx-big { margin-left: auto; color: var(--muted); }
+.fx-open {
+  margin-left: auto; padding: 1px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 0.95em;
+}
+.fx-open:hover { border-color: var(--mk-fx-fg); }
+.fx-fold { display: block; }
+.fx-fold > summary { cursor: pointer; padding: 2px 4px; color: var(--muted); font-size: 0.84rem; }
+.fx-fold[open] > summary { margin-bottom: 2px; }
+.fx-fold > .fx-card { margin-top: 4px; }
+.fx-view { padding: 0 6px 6px; }
+.fx-view > .loading, .fx-view > .notice { margin: 4px 0; }
+
+.fxv-frame { max-width: 720px; overflow: hidden; border-radius: 4px; background: #19191f; cursor: pointer; }
+.fxv[data-interactive="1"] .fxv-frame { cursor: auto; outline: 2px solid var(--mk-fx-fg); outline-offset: 1px; }
+.fxv-grab {
+  position: absolute; right: 6px; bottom: 6px; padding: 0 8px; border: 0; border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6); color: #e4e6ea; font-size: 0.78rem; line-height: 1.7;
+}
+.fxv-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; max-width: 720px; }
+.fxv-bar button { padding: 1px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.fxv-bar button:disabled { opacity: 0.45; cursor: default; }
+.fxv-bar button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.fxv-tick, .fxv-layer { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fxv-tick { min-width: 7.5em; margin: 0 4px; }
+.fxv-views, .fxv-layers { display: inline-flex; align-items: center; gap: 4px; }
+.fxv-views { margin-left: auto; }
+.fxv-note { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.5; max-width: 720px; }
+.fxv-note-warn { color: var(--mk-need-fg); }

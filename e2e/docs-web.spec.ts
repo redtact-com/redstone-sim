@@ -8,7 +8,7 @@ import { test, expect, type Page } from '@playwright/test'
 //      索引は検索の欄に入るまで取られない
 //   3. 幅 375 px でページが横に流れない (00 §4 の表・V14 の 17 列の表)
 //
-// ビューアと図の手順 (4・5) は次の PR で足す。
+// fixture の札とビューアの手順 (4・5) は e2e/docs-fixture-viewer.spec.ts にある。
 
 const STATUS_KEY = 'rdsim:docs:status:v1'
 const SEARCH_INDEX = 'search-index.json'

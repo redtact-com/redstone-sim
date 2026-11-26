@@ -1,5 +1,6 @@
-import { DOCS_DATA_VERSION, openSearchIndex, pageDataPath } from '@redstone/docs-kit'
+import { DOCS_DATA_VERSION, fixtureDataPath, openSearchIndex, pageDataPath } from '@redstone/docs-kit'
 import type { Manifest, PageData, SearchEngine, SearchIndexData } from '@redstone/docs-kit'
+import type { Fixture } from '@redstone/sim'
 import { dataUrl } from './paths'
 
 /**
@@ -8,6 +9,7 @@ import { dataUrl } from './paths'
  * - 目次 (manifest.json) は最初に 1 回
  * - ページは開いた時に 1 枚ずつ。取った物は覚えておき、同じページを 2 回取らない
  * - 検索の索引 (search-index.json) は、検索の欄に初めて入った時に 1 回
+ * - ビューアのチャンクと fixture の JSON は、札の「表示」を押した時に初めて取る
  * - 失敗した時は覚えない (もう一度開けば取り直す)
  */
 async function getJson<T extends { v: number }>(rel: string): Promise<T> {
@@ -55,4 +57,31 @@ export function loadSearch(): Promise<SearchEngine> {
     search.catch(() => { search = null })
   }
   return search
+}
+
+/** ビューアの入口 (deepslate と sim を含む別のチャンク)。e2e が「押すまで取られない」を見る */
+type ViewerModule = typeof import('@redstone/docs-kit/viewer')
+let viewer: Promise<ViewerModule> | null = null
+export function loadViewer(): Promise<ViewerModule> {
+  if (!viewer) {
+    viewer = import('@redstone/docs-kit/viewer')
+    viewer.catch(() => { viewer = null })
+  }
+  return viewer
+}
+
+const fixtures = new Map<string, Promise<Fixture>>()
+/** 埋め込める fixture 1 本 (`data/fixtures/<名前>.json`) */
+export function loadFixture(name: string): Promise<Fixture> {
+  let p = fixtures.get(name)
+  if (!p) {
+    const url = dataUrl(fixtureDataPath(name))
+    p = fetch(url).then(res => {
+      if (!res.ok) throw new Error(`${res.status} ${url}`)
+      return res.json() as Promise<Fixture>
+    })
+    fixtures.set(name, p)
+    p.catch(() => { fixtures.delete(name) })
+  }
+  return p
 }
