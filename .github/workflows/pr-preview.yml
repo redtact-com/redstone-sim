@@ -59,6 +59,22 @@ jobs:
           npm ci
           npm run build
 
+      # 読む用の Web (#434)。プレビューにだけ /docs/ として足す (本番の deploy.yml は足さない)。
+      # 落ちてもエディタのプレビューは止めない。その時は /docs/ を抜いて警告を出す
+      - name: 読む用の Web を /docs/ に足す
+        id: docs
+        if: steps.secrets.outputs.ok == 'true'
+        continue-on-error: true
+        run: |
+          npm run build:docs
+          npm run stage:docs
+
+      - name: /docs/ を抜く (読む用の Web のビルドが落ちた時)
+        if: steps.secrets.outputs.ok == 'true' && steps.docs.outcome == 'failure'
+        run: |
+          rm -rf app/dist/docs
+          echo "::warning::読む用の Web (build:docs) が落ちたので、プレビューから /docs/ を抜いた。原因は Test の build:docs を見る"
+
       - name: プレビューデプロイ (pr-${{ github.event.pull_request.number }})
         if: steps.secrets.outputs.ok == 'true'
         run: |
@@ -72,12 +88,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          DOCS: ${{ steps.docs.outcome }}
         run: |
           MARKER="<!-- pr-preview -->"
           URL="https://pr-${PR}.${PROJECT_NAME}.pages.dev"
+          if [ "$DOCS" = "success" ]; then
+            DOCS_LINE="- 読解メモ (読む用の Web): $URL/docs/"
+          else
+            DOCS_LINE="- 読解メモ (読む用の Web): ビルドが落ちたので今回は無い"
+          fi
           BODY="$MARKER
           🚀 **プレビュー:** $URL
 
+          $DOCS_LINE
           - commit: $SHA
           - PR クローズ時に自動削除されます"
           COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \

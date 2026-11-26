@@ -1,0 +1,34 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declarationDir": "./dist",
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "paths": {
+      "@redstone/sim": [
+        "../sim/src/index.ts"
+      ],
+      "@redstone/viewer": [
+        "../viewer/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../sim"
+    },
+    {
+      "path": "../viewer"
+    }
+  ]
+}

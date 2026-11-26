@@ -29,3 +29,6 @@ tools/decompile/jars/
 tools/decompile/work/
 tools/decompile/out/
 .claude/
+
+# 読む用の Web (#434) の生成物。npm run build:docs が md から作る (追跡しない)
+docs-web/public/data

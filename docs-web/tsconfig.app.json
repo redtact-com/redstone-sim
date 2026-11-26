@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "paths": {
+      "@redstone/sim":             ["../packages/sim/src/index.ts"],
+      "@redstone/viewer":          ["../packages/viewer/src/index.ts"],
+      "@redstone/docs-kit":        ["../packages/docs-kit/src/index.ts"],
+      "@redstone/docs-kit/viewer": ["../packages/docs-kit/src/viewer/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

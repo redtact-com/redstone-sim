@@ -1,0 +1,48 @@
+/*
+ * 読む用の Web の CSS (#434)。素の CSS 1 本で、Tailwind は入れない。
+ * エディタの index.css (overflow: hidden・touch-action: none) は引き継がない。
+ * 普通に縦にスクロールし、ピンチで拡大できる。
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1c1e21;
+  --muted: #5f6672;
+  --line: #d9dde3;
+  --accent: #b3261e;
+  --code-bg: #f3f4f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a;
+    --fg: #e4e6ea;
+    --muted: #9aa1ad;
+    --line: #30343b;
+    --accent: #ff7a6b;
+    --code-bg: #20242a;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  line-height: 1.75;
+}
+a { color: var(--accent); }
+code { background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.92em; }
+
+.shell-head {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 8px 16px; border-bottom: 1px solid var(--line);
+}
+.shell-title { font-weight: 700; text-decoration: none; color: var(--fg); }
+.shell-sub { color: var(--muted); font-size: 0.85em; }
+.shell-main { max-width: 860px; margin: 0 auto; padding: 16px; }
+
+.wiring { padding-left: 1.2em; }
+.wiring [data-state="ok"] b { color: #1a7f37; }
+.wiring [data-state="ng"] b { color: var(--accent); }
+.wiring span { color: var(--muted); }

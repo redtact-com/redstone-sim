@@ -1,0 +1,72 @@
+import { defineConfig } from 'vite'
+import type { Connect, Plugin } from 'vite'
+import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// 読む用の Web (#434)。編集用の app とは HTML もビルドも別にする。
+// 本番 (deploy.yml) はここをビルドしないので、rdsim.com には出ない。
+// 出るのは手元 (npm run dev:docs) と PR のプレビュー (/docs/) だけ。
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const PACKAGES = path.resolve(__dirname, '../packages')
+const RESOURCEPACK = path.resolve(__dirname, '../app/public/resourcepack')
+
+/** 手元で開くポート。既読と理解度は localStorage (オリジンごと) に置くので、毎回同じにする */
+export const DOCS_DEV_PORT = 4330
+
+const MIME: Record<string, string> = {
+  '.json': 'application/json', '.mcmeta': 'application/json',
+  '.png': 'image/png', '.md': 'text/markdown; charset=utf-8',
+}
+
+/**
+ * `/resourcepack/*` を app/public/resourcepack から返す (複製しない)。
+ *
+ * viewer はテクスチャを**ルート絶対**の `/resourcepack/...` で取る。PR のプレビューでは
+ * エディタと同じオリジンの `/docs/` に置くのでそのまま届くが、手元の dev と preview は
+ * オリジンが別なので、ここで同じパスを生やす。`--base /docs/` でもこのパスは動かない
+ */
+function resourcepackFromApp(): Plugin {
+  const handler: Connect.NextHandleFunction = (req, res, next) => {
+    const url = (req.url ?? '').split('?')[0]
+    if (!url.startsWith('/resourcepack/')) return next()
+    let rel: string
+    try { rel = decodeURIComponent(url.slice('/resourcepack/'.length)) } catch { return next() }
+    const file = path.resolve(RESOURCEPACK, rel)
+    // 置き場の外 (../) を読ませない
+    if (file !== RESOURCEPACK && !file.startsWith(RESOURCEPACK + path.sep)) { res.statusCode = 403; return res.end() }
+    fs.readFile(file, (err, buf) => {
+      // 無いファイルは 404 にする (SPA の fallback で HTML を返すと viewer が JSON として読んで落ちる)
+      if (err) { res.statusCode = 404; return res.end() }
+      res.setHeader('Content-Type', MIME[path.extname(file)] ?? 'application/octet-stream')
+      res.end(buf)
+    })
+  }
+  return {
+    name: 'docs-web:resourcepack-from-app',
+    configureServer(server) { server.middlewares.use(handler) },
+    configurePreviewServer(server) { server.middlewares.use(handler) },
+  }
+}
+
+export default defineConfig({
+  plugins: [react(), resourcepackFromApp()],
+  resolve: {
+    // 同じモノレポの packages/* をソースのまま読む (app と同じ形)。
+    // `@redstone/docs-kit/viewer` を先に書く。前方一致なので、後ろだと入口の方に吸われる
+    alias: [
+      { find: '@redstone/docs-kit/viewer', replacement: path.resolve(PACKAGES, 'docs-kit/src/viewer/index.ts') },
+      { find: '@redstone/docs-kit',        replacement: path.resolve(PACKAGES, 'docs-kit/src/index.ts') },
+      { find: '@redstone/viewer',          replacement: path.resolve(PACKAGES, 'viewer/src/index.ts') },
+      { find: '@redstone/sim',             replacement: path.resolve(PACKAGES, 'sim/src/index.ts') },
+    ],
+    dedupe: ['react', 'react-dom'],
+  },
+  server: {
+    port: DOCS_DEV_PORT,
+    strictPort: true,
+    fs: { allow: ['..'] },
+  },
+  preview: { port: DOCS_DEV_PORT, strictPort: true },
+})
