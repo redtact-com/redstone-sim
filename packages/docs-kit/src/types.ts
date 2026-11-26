@@ -32,6 +32,15 @@ export type MarkKind =
   | 'guess'   // [推定]
   | 'check'   // [要確認 …]・[要検証 …]
 
+/** 印の種類の並び (索引のビットの順。足すときは後ろに足す) */
+export const MARK_KINDS: readonly MarkKind[] = ['read', 'need', 'fx', 'ver', 'sure', 'meas', 'guess', 'check']
+
+/** 印の短い呼び名 (検索の結果のバッジと、CLI の `--mark` に使う) */
+export const MARK_LABELS: Record<MarkKind, string> = {
+  read: '26.3 読解', need: '要実機', fx: '実機', ver: '版差',
+  sure: '確定', meas: '実測', guess: '推定', check: '要確認',
+}
+
 /** 印の数。0 の種類は欄ごと省く */
 export type MarkCounts = Partial<Record<MarkKind, number>>
 

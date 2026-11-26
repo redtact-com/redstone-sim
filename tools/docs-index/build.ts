@@ -17,6 +17,8 @@ import type {
   FixtureInfo, Manifest, MarkKind, PageData, SectionRecord,
 } from '../../packages/docs-kit/src/types.js'
 import { anchorOf, pageDataPath } from '../../packages/docs-kit/src/ids.js'
+import { buildSearchIndex } from '../../packages/docs-kit/src/search.js'
+import type { SearchIndexData, SearchInput } from '../../packages/docs-kit/src/search.js'
 import { loadFixtures } from './fixtures.js'
 import type { FixtureMeta } from './fixtures.js'
 import { createRenderer } from './render.js'
@@ -53,7 +55,9 @@ export interface BuildStats {
   fixturesTagged: string[]
   fixturesEmbeddable: string[]
   /** 生成物の大きさ (バイト) */
-  bytes: { manifest: number; pagesTotal: number; pageMedian: number; pageMax: number; htmlTotal: number }
+  bytes: { manifest: number; pagesTotal: number; pageMedian: number; pageMax: number; htmlTotal: number; search: number }
+  /** 検索の索引の字句の種類の数 */
+  searchTerms: number
 }
 
 export interface DocsBuild {
@@ -63,6 +67,8 @@ export interface DocsBuild {
   pages: Map<string, PageData>
   /** 節 1 件の記録 (md の順)。検索の索引と AI 向けの JSONL の元 */
   records: SectionRecord[]
+  /** 検索の索引 (`search-index.json` の中身) */
+  search: SearchIndexData
   /** 出すファイル (`data/` からの相対パス → 中身) */
   files: Map<string, string>
   stats: BuildStats
@@ -146,9 +152,12 @@ export function buildDocs(
     },
   }
 
+  const search = buildSearchIndex(searchInputs(model, records))
+
   const files = new Map<string, string>()
   files.set('manifest.json', JSON.stringify(manifest))
   for (const [id, page] of pages) files.set(pageDataPath(id), JSON.stringify(page))
+  files.set(SEARCH_INDEX_FILE, JSON.stringify(search))
 
   const lens = manifest.pages.map(p => p.lines).sort((a, b) => a - b)
   const pageBytes = [...pages.keys()].map(id => Buffer.byteLength(files.get(pageDataPath(id))!)).sort((a, b) => a - b)
@@ -182,9 +191,24 @@ export function buildDocs(
       pageMedian: pageBytes[pageBytes.length >> 1],
       pageMax: pageBytes[pageBytes.length - 1],
       htmlTotal: [...pages.values()].reduce((a, p) => a + Buffer.byteLength(p.html), 0),
+      search: Buffer.byteLength(files.get(SEARCH_INDEX_FILE)!),
     },
+    searchTerms: Object.keys(search.terms).length,
   }
-  return { model, manifest, pages, records, files, stats }
+  return { model, manifest, pages, records, search, files, stats }
+}
+
+/** 検索の索引 (`data/` からの相対パス)。検索の欄に初めて入った時に取る */
+export const SEARCH_INDEX_FILE = 'search-index.json'
+
+/** 節の記録を、検索の索引に入れる形にする (親は模型から引く) */
+export function searchInputs(model: Model, records: readonly SectionRecord[]): SearchInput[] {
+  return records.map(r => ({
+    id: r.id, page: r.page, title: r.title,
+    parent: model.sectionById.get(r.id)!.parent,
+    text: r.text, marks: r.marks, fixtures: r.fixtures.length,
+    summary: r.summary, aliases: r.aliases,
+  }))
 }
 
 /** リポの md と fixture を読んで組み立てる */
@@ -238,6 +262,7 @@ function main(): void {
     `fixture: 本文が引く ${s.fixturesTagged.length} 本・埋め込める ${s.fixturesEmbeddable.length} 本・知らない名前 ${s.unknownFixtures.length}`,
     ...s.unknownFixtures.map(n => `  知らない名前: ${n}`),
     `大きさ: manifest ${kb(s.bytes.manifest)}・ページ ${s.pages} 本 ${kb(s.bytes.pagesTotal)} (中央値 ${kb(s.bytes.pageMedian)}・最大 ${kb(s.bytes.pageMax)})`,
+    `検索の索引: ${kb(s.bytes.search)}・字句 ${s.searchTerms} 種`,
     `${DATA_DIR} へ ${build.files.size} ファイル (${Math.round(performance.now() - t0)} ms)`,
   ].join('\n'))
 }

@@ -10,7 +10,7 @@
 
 export const DOCS_KIT_VERSION = 1
 
-export { DOCS_DATA_VERSION } from './types.js'
+export { DOCS_DATA_VERSION, MARK_KINDS, MARK_LABELS } from './types.js'
 export type {
   Manifest, ManifestDoc, ManifestGroup, ManifestPage, FixtureInfo,
   PageData, PageSection, SectionRecord, MarkKind, MarkCounts,
@@ -23,3 +23,9 @@ export {
 export type {
   PageStatus, StatusData, StatusSummary, StatusSnapshot, StatusStore, StatusStoreOptions, ImportResult,
 } from './status.js'
+export {
+  SEARCH_WEIGHTS, SEARCH_LIMIT, tokenize, buildSearchIndex, openSearchIndex, plainText, makeSnippet,
+} from './search.js'
+export type {
+  SearchInput, SearchIndexData, SearchHit, SearchOptions, SearchEngine, Snippet,
+} from './search.js'

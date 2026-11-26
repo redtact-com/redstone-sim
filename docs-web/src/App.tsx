@@ -8,6 +8,7 @@ import { Toc } from './Toc'
 import { PageOutline, PageView } from './PageView'
 import { Home } from './Home'
 import { WiringCheck } from './Wiring'
+import { SearchBox, SearchView } from './Search'
 import { Notes, Overall, Progress, ReadAndNext, StatusBar, statText, statusStore, useStatus } from './status'
 import { summarizeStatus } from '@redstone/docs-kit'
 import { SHORT_PAGE_LINES } from './model'
@@ -16,6 +17,7 @@ import { SHORT_PAGE_LINES } from './model'
  * 読む用の Web の殻 (#434)。
  *
  * 画面は 3 欄 (目次・本文・このページ)。狭い幅では目次が引き出しになり、右の欄は出さない。
+ * 検索の結果 (`#/_search?q=`) は本文の欄に出す。
  * `#/_wiring` は配線の確かめ (開発用)。ビューアの入口を dynamic import する唯一の場所
  */
 export function App() {
@@ -46,7 +48,7 @@ export function App() {
   }, [model, route.kind, route.kind === 'page' ? route.id : '', route.kind === 'page' ? route.s : null])
 
   // ページを移ったら引き出しを閉じる。Esc でも閉じる
-  useEffect(() => { setDrawer(false) }, [route.kind, target?.page, target?.section])
+  useEffect(() => { setDrawer(false) }, [route.kind, target?.page, target?.section, route.kind === 'search' ? route.q : ''])
   useEffect(() => {
     if (!drawer) return
     const on = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false) }
@@ -71,9 +73,7 @@ export function App() {
             aria-controls="toc-col" onClick={() => setDrawer(d => !d)}
           >☰ 目次</button>
           <a className="head-title" href="#/">docs</a>
-          <div className="head-search" role="search">
-            <input type="search" placeholder="検索 (準備中)" aria-label="検索" disabled />
-          </div>
+          <SearchBox route={route} />
           <div className="head-status">{overall}</div>
         </div>
         <Notes saved={status.saved} message={message} onClose={() => setMessage(null)} />
@@ -100,6 +100,8 @@ export function App() {
                 progress={<Progress model={ready} data={status.data} />}
                 docStat={key => statText(summarizeStatus(status.data, ready.docs.get(key)!.groups.flatMap(g => g.pages)))}
               />
+            ) : route.kind === 'search' ? (
+              <SearchView model={ready} query={route} data={status.data} />
             ) : target && page ? (
               <PageView
                 model={ready} pageId={target.page} section={target.section}
