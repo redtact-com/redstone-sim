@@ -15,6 +15,7 @@
     "dev:docs": "npm run docs:index && npm run dev -w docs-web",
     "build:docs": "npm run docs:index && npm run build -w docs-web",
     "docs:index": "tsx tools/docs-index/build.ts",
+    "docs:search": "tsx tools/docs-index/cli.ts",
     "stage:docs": "node tools/docs-index/stage.mjs",
     "lint": "npm run lint -w app",
     "test": "vitest run",

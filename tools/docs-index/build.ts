@@ -1,6 +1,7 @@
 /**
  * 読む用の Web の生成器 (#434)。docs/vanilla と docs/research 17〜19 の md を割り、
- * 目次 (manifest.json) とページ (pages/*.json) を docs-web/public/data へ出す。
+ * 目次 (manifest.json)・ページ (pages/*.json)・検索の索引 (search-index.json)・AI 向けの索引 (ai/) を
+ * docs-web/public/data へ出す。
  *
  *   npm run docs:index            … 生成する (docs-web/public/data。追跡しない)
  *   npm run docs:index -- --ids   … 節の ID の一覧 (tools/docs-index/section-ids.txt) も書き直す
@@ -19,6 +20,8 @@ import type {
 import { anchorOf, pageDataPath } from '../../packages/docs-kit/src/ids.js'
 import { buildSearchIndex } from '../../packages/docs-kit/src/search.js'
 import type { SearchIndexData, SearchInput } from '../../packages/docs-kit/src/search.js'
+import { buildAi, loadBlocksTable } from './ai.js'
+import type { AiIndex, BlocksTable } from './ai.js'
 import { loadFixtures } from './fixtures.js'
 import type { FixtureMeta } from './fixtures.js'
 import { createRenderer } from './render.js'
@@ -58,6 +61,8 @@ export interface BuildStats {
   bytes: { manifest: number; pagesTotal: number; pageMedian: number; pageMax: number; htmlTotal: number; search: number }
   /** 検索の索引の字句の種類の数 */
   searchTerms: number
+  /** AI 向けの索引: JSONL の大きさ・クラスの数・担当欄の参照 (解けた数)・ブロックの行・fixture */
+  ai: { jsonl: number; classes: number; classRefs: number; classRefsResolved: number; blocks: number; fixtures: number }
 }
 
 export interface DocsBuild {
@@ -65,8 +70,10 @@ export interface DocsBuild {
   manifest: Manifest
   /** ページの ID → ページのデータ */
   pages: Map<string, PageData>
-  /** 節 1 件の記録 (md の順)。検索の索引と AI 向けの JSONL の元 */
+  /** 節 1 件の記録 (md の順・クラスとブロックを埋めた物)。検索の索引と AI 向けの JSONL の元 */
   records: SectionRecord[]
+  /** AI 向けの索引 (`ai/` の下のファイルの中身と、引く関数に渡す表) */
+  ai: AiIndex
   /** 検索の索引 (`search-index.json` の中身) */
   search: SearchIndexData
   /** 出すファイル (`data/` からの相対パス → 中身) */
@@ -79,6 +86,7 @@ export function buildDocs(
   sources: readonly SourceFile[],
   fixtures: ReadonlyMap<string, FixtureMeta>,
   outside: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  blocks: BlocksTable = { note: '', blocks: [] },
 ): DocsBuild {
   const model = buildModel(sources)
   const renderer = createRenderer(model, fixtures, outside)
@@ -105,7 +113,7 @@ export function buildDocs(
 
   // 節の記録と、fixture → 節
   const fixtureSections = new Map<string, string[]>()
-  const records: SectionRecord[] = model.sections.map(s => {
+  const bare: SectionRecord[] = model.sections.map(s => {
     const f = rendered.get(s.page)!.bySection.get(s.id) ?? { marks: [] as MarkKind[], fixtures: [], refs: [] }
     for (const n of f.fixtures) {
       const list = fixtureSections.get(n) ?? []
@@ -152,12 +160,17 @@ export function buildDocs(
     },
   }
 
+  // AI 向けの索引。節の記録にクラスとブロックを入れる
+  const ai = buildAi(model, bare, fixtureInfo, blocks)
+  const records = ai.records
+
   const search = buildSearchIndex(searchInputs(model, records))
 
   const files = new Map<string, string>()
   files.set('manifest.json', JSON.stringify(manifest))
   for (const [id, page] of pages) files.set(pageDataPath(id), JSON.stringify(page))
   files.set(SEARCH_INDEX_FILE, JSON.stringify(search))
+  for (const [rel, text] of ai.files) files.set(rel, text)
 
   const lens = manifest.pages.map(p => p.lines).sort((a, b) => a - b)
   const pageBytes = [...pages.keys()].map(id => Buffer.byteLength(files.get(pageDataPath(id))!)).sort((a, b) => a - b)
@@ -194,8 +207,16 @@ export function buildDocs(
       search: Buffer.byteLength(files.get(SEARCH_INDEX_FILE)!),
     },
     searchTerms: Object.keys(search.terms).length,
+    ai: {
+      jsonl: Buffer.byteLength(files.get('ai/sections.jsonl')!),
+      classes: Object.keys(ai.byClass.classes).length,
+      classRefs: ai.coverage.refs,
+      classRefsResolved: ai.coverage.resolved,
+      blocks: Object.keys(ai.byBlock.blocks).length,
+      fixtures: Object.keys(ai.byFixture.fixtures).length,
+    },
   }
-  return { model, manifest, pages, records, search, files, stats }
+  return { model, manifest, pages, records, ai, search, files, stats }
 }
 
 /** 検索の索引 (`data/` からの相対パス)。検索の欄に初めて入った時に取る */
@@ -213,7 +234,7 @@ export function searchInputs(model: Model, records: readonly SectionRecord[]): S
 
 /** リポの md と fixture を読んで組み立てる */
 export function buildDocsFromRepo(root: string): DocsBuild {
-  return buildDocs(loadSources(root), loadFixtures(root), loadOutsideResearch(root))
+  return buildDocs(loadSources(root), loadFixtures(root), loadOutsideResearch(root), loadBlocksTable(root))
 }
 
 let cached: DocsBuild | null = null
@@ -263,6 +284,7 @@ function main(): void {
     ...s.unknownFixtures.map(n => `  知らない名前: ${n}`),
     `大きさ: manifest ${kb(s.bytes.manifest)}・ページ ${s.pages} 本 ${kb(s.bytes.pagesTotal)} (中央値 ${kb(s.bytes.pageMedian)}・最大 ${kb(s.bytes.pageMax)})`,
     `検索の索引: ${kb(s.bytes.search)}・字句 ${s.searchTerms} 種`,
+    `AI 向け: sections.jsonl ${kb(s.ai.jsonl)}・クラス ${s.ai.classes} (担当欄の参照 ${s.ai.classRefs}・解けた ${s.ai.classRefsResolved})・ブロック ${s.ai.blocks} 行・fixture ${s.ai.fixtures} 本`,
     `${DATA_DIR} へ ${build.files.size} ファイル (${Math.round(performance.now() - t0)} ms)`,
   ].join('\n'))
 }

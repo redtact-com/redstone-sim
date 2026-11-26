@@ -13,8 +13,8 @@ describe('生成物 (#434)', () => {
     expect(manifest.v).toBe(DOCS_DATA_VERSION)
     expect(manifest.counts.pages).toBe(manifest.pages.length)
     expect(pages.size).toBe(manifest.pages.length)
-    // 目次 + ページ + 検索の索引
-    expect(files.size).toBe(manifest.pages.length + 2)
+    // 目次 + ページ + 検索の索引 + AI 向けの索引 5 本
+    expect(files.size).toBe(manifest.pages.length + 2 + 5)
     expect(records.length).toBe(manifest.counts.sections)
     // 目次の 3 段 (メモ → ## → ページ) をたどると、読む順のページの並びになる
     expect(manifest.docs.flatMap(d => d.groups.flatMap(g => g.pages))).toEqual(manifest.pages.map(p => p.id))
@@ -71,8 +71,8 @@ describe('生成物 (#434)', () => {
     expect(r.text).toContain('shouldTurnOn')
     const src = model.docs.find(d => d.source.key === 'v07')!.source.text.split('\n')
     expect(src[r.line - 1]).toBe('### 4.3 リピーターの点灯条件とロック')
-    // 欄だけ用意して空のままにする物
-    expect([r.classes, r.blocks, r.summary, r.aliases]).toEqual([[], [], '', []])
+    // 欄だけ用意して空のままにする物 (クラスとブロックは ai.test.ts)
+    expect([r.summary, r.aliases]).toEqual(['', []])
     // fixture を引く節
     expect(records.find(x => x.id === 'v03/2.3')!.fixtures).toContain('piston-basic')
   })
