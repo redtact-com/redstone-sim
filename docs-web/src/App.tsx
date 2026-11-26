@@ -8,6 +8,9 @@ import { Toc } from './Toc'
 import { PageOutline, PageView } from './PageView'
 import { Home } from './Home'
 import { WiringCheck } from './Wiring'
+import { Notes, Overall, Progress, ReadAndNext, StatusBar, statText, statusStore, useStatus } from './status'
+import { summarizeStatus } from '@redstone/docs-kit'
+import { SHORT_PAGE_LINES } from './model'
 
 /**
  * 読む用の Web の殻 (#434)。
@@ -19,6 +22,8 @@ export function App() {
   const route = useRoute()
   const model = useModel()
   const [drawer, setDrawer] = useState(false)
+  const status = useStatus()
+  const [message, setMessage] = useState<string | null>(null)
   const head = useRef<HTMLElement>(null)
 
   // 見出しの帯の高さを CSS に渡す (目次の貼り付く位置と、節へ飛んだ時の余白に使う)
@@ -51,6 +56,12 @@ export function App() {
 
   const ready = 'model' in model ? model.model : null
 
+  // 開いたページを覚える (「続きから読む」)
+  useEffect(() => { if (target) statusStore.setLast(target.page) }, [target?.page])
+
+  const overall = ready && <Overall model={ready} data={status.data} onMessage={setMessage} />
+  const page = target && ready ? ready.pages.get(target.page) ?? null : null
+
   return (
     <div className="shell">
       <header className="head" ref={head}>
@@ -63,7 +74,9 @@ export function App() {
           <div className="head-search" role="search">
             <input type="search" placeholder="検索 (準備中)" aria-label="検索" disabled />
           </div>
+          <div className="head-status">{overall}</div>
         </div>
+        <Notes saved={status.saved} message={message} onClose={() => setMessage(null)} />
       </header>
       {route.kind === 'wiring' ? (
         <main className="solo"><WiringCheck /></main>
@@ -77,13 +90,24 @@ export function App() {
         <div className="cols">
           {drawer && <div className="drawer-back" onClick={() => setDrawer(false)} />}
           <aside id="toc-col" className={drawer ? 'toc-col open' : 'toc-col'}>
-            <Toc model={ready} current={target?.page ?? null} />
+            <div className="drawer-status">{overall}</div>
+            <Toc model={ready} current={target?.page ?? null} data={status.data} />
           </aside>
           <main className="main">
             {route.kind === 'home' ? (
-              <Home model={ready} />
-            ) : target ? (
-              <PageView model={ready} pageId={target.page} section={target.section} />
+              <Home
+                model={ready}
+                progress={<Progress model={ready} data={status.data} />}
+                docStat={key => statText(summarizeStatus(status.data, ready.docs.get(key)!.groups.flatMap(g => g.pages)))}
+              />
+            ) : target && page ? (
+              <PageView
+                model={ready} pageId={target.page} section={target.section}
+                // 10 行未満のページは上の操作を出さない (すぐ下に同じ物が来る)
+                top={page.page.lines >= SHORT_PAGE_LINES && <StatusBar id={target.page} data={status.data} where="top" />}
+                bottom={<StatusBar id={target.page} data={status.data} where="bottom" />}
+                pagerMid={<ReadAndNext id={target.page} next={ready.manifest.pages[page.index + 1]?.id ?? null} />}
+              />
             ) : (
               <NotFound id={route.kind === 'page' ? route.id : ''} />
             )}

@@ -61,10 +61,10 @@ function findRow(heading: HTMLElement, row: string): HTMLElement | null {
   return null
 }
 
-export function PageView({ model, pageId, section, top, bottom }: {
+export function PageView({ model, pageId, section, top, bottom, pagerMid }: {
   model: DocsModel; pageId: string; section: string | null
-  /** 本文の上と下に置く操作 (既読と理解度) */
-  top?: ReactNode; bottom?: ReactNode
+  /** 本文の上と下に置く操作 (既読と理解度)。`pagerMid` は前へ・次への間 (読んだにして次へ) */
+  top?: ReactNode; bottom?: ReactNode; pagerMid?: ReactNode
 }) {
   const { data, error, loading, retry } = usePage(pageId)
   // 表の行の指定 (`V18 の R4`)。押したリンクの行き先と一緒に覚え、ほかの道で移った時は持ち越さない
@@ -107,8 +107,9 @@ export function PageView({ model, pageId, section, top, bottom }: {
           ? <PageBody key={`${shown.id}:${again}`} data={shown} section={section} row={row} />
           : <p className="loading">読み込み中…</p>}
       {shown && bottom}
-      <nav className="pager" aria-label="前後のページ">
+      <nav className={pagerMid ? 'pager pager-3' : 'pager'} aria-label="前後のページ">
         {prev ? <a className="pager-prev" href={docsHref(prev.id)} rel="prev"><span>‹ 前へ</span><b>{prev.title}</b></a> : <span />}
+        {shown && pagerMid}
         {next ? <a className="pager-next" href={docsHref(next.id)} rel="next"><span>次へ ›</span><b>{next.title}</b></a> : <span />}
       </nav>
     </div>

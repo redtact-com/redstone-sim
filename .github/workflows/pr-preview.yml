@@ -65,6 +65,9 @@ jobs:
         id: docs
         if: steps.secrets.outputs.ok == 'true'
         continue-on-error: true
+        env:
+          # 読む側が「PR を閉じると記録が消える」の 1 行を出す目印 (docs-web/src/status.tsx の IS_PREVIEW)
+          VITE_DOCS_PREVIEW: '1'
         run: |
           npm run build:docs
           npm run stage:docs

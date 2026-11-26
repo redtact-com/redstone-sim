@@ -16,3 +16,10 @@ export type {
   PageData, PageSection, SectionRecord, MarkKind, MarkCounts,
 } from './types.js'
 export { docOf, anchorOf, headingDomId, pageDataPath, docsHref, parseDocsHash, findPage } from './ids.js'
+export {
+  STATUS_VERSION, DEFAULT_STATUS_PREFIX, statusKey, emptyStatus, parseStatus, mergeStatus,
+  summarizeStatus, statusFileName, clampUnderstanding, createStatusStore,
+} from './status.js'
+export type {
+  PageStatus, StatusData, StatusSummary, StatusSnapshot, StatusStore, StatusStoreOptions, ImportResult,
+} from './status.js'
