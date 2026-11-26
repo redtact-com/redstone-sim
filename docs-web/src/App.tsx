@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { DOCS_KIT_VERSION } from '@redstone/docs-kit'
+import { DOCS_DATA_VERSION, DOCS_KIT_VERSION } from '@redstone/docs-kit'
+import type { Manifest } from '@redstone/docs-kit'
 import { RESOURCEPACK_URL, dataUrl } from './paths'
 
 /**
@@ -74,7 +75,11 @@ function WiringCheck() {
       .then(j => set('resourcepack', 'ok', `${RESOURCEPACK_URL}/bundle.json・${Object.keys(j).length} キー`))
       .catch(e => set('resourcepack', 'ng', String(e)))
     getJson(dataUrl('manifest.json'))
-      .then(j => set('data', 'ok', `${dataUrl('manifest.json')}・${Object.keys(j).length} キー`))
+      .then(j => {
+        const m = j as unknown as Manifest
+        if (m.v !== DOCS_DATA_VERSION) throw new Error(`生成物の版が違う (${m.v})`)
+        set('data', 'ok', `${dataUrl('manifest.json')}・メモ ${m.counts.docs}・ページ ${m.counts.pages}・節 ${m.counts.sections}`)
+      })
       .catch(e => set('data', 'ng', String(e)))
     return () => { alive = false }
   }, [])
