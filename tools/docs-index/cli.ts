@@ -4,6 +4,7 @@
  *
  *   npm run docs:search -- リピーター ロック         … 語で探す (ID・見出し・file:line・抜粋)
  *   npm run docs:search -- --id v07/4.3             … 節の本文 (下の節も含む)。メモの ID なら見出しの一覧
+ *   npm run docs:search -- --id v07/0               … メモの前置きだけ (メモの全文は `--id v07 --full`)
  *   npm run docs:search -- --block repeater         … ブロック ID・和名 → クラス → 節
  *   npm run docs:search -- --class RepeaterBlock    … クラス → 節 (00 の網羅表)
  *   npm run docs:search -- --fixture piston-basic   … fixture → 節
@@ -41,6 +42,8 @@ export interface CliResult {
 export interface CliArgs {
   json: boolean
   help: boolean
+  /** `--id <メモの ID>` と使う: 見出しの一覧ではなく全文を返す */
+  full: boolean
   limit: number | null
   id: string | null
   class: string | null
@@ -56,13 +59,14 @@ const VALUE_FLAGS = ['id', 'class', 'block', 'fixture', 'mark', 'doc', 'limit'] 
 /** 引数を読む。`--id v07/4.3` と `--id=v07/4.3` の両方を受ける。知らない旗は誤りにする */
 export function parseArgs(argv: readonly string[]): CliArgs | { error: string } {
   const args: CliArgs = {
-    json: false, help: false, limit: null, id: null, class: null, block: null, fixture: null, mark: null, doc: null, query: '',
+    json: false, help: false, full: false, limit: null, id: null, class: null, block: null, fixture: null, mark: null, doc: null, query: '',
   }
   const words: string[] = []
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--') { words.push(...argv.slice(i + 1)); break }
     if (a === '--json') { args.json = true; continue }
+    if (a === '--full') { args.full = true; continue }
     if (a === '--help' || a === '-h') { args.help = true; continue }
     const m = /^--([a-z]+)(?:=(.*))?$/.exec(a)
     if (!m) { words.push(a); continue }
@@ -83,7 +87,9 @@ export function parseArgs(argv: readonly string[]): CliArgs | { error: string } 
 export const USAGE = `使い方: npm run docs:search -- [旗] [語 …]
 
   語 …                  語で探す (節の見出しと本文。空白で区切る)
-  --id <ID>             節の本文 (v07/4.3・「V07 §4.3」)。メモの ID (v07) なら見出しの一覧
+  --id <ID>             節の本文 (v07/4.3・「V07 §4.3」。下の節も含む)。メモの前置き (v07/0) は前置きだけ。
+                        メモの ID (v07) なら見出しの一覧
+  --full                --id <メモの ID> と使う: メモの全文 (1 本まるごと。長い)
   --block <ID か和名>    ブロック → クラス → 節 (repeater・リピーター・minecraft:repeater)
   --class <クラス名>     クラス → 節 (00 の網羅表の担当欄)
   --fixture <名前>       fixture → 節
@@ -145,6 +151,17 @@ export function run(argv: readonly string[], build: DocsBuild): CliResult {
     const memo = model.docs.find(d => d.source.key === id)
     if (memo) {
       const sections = ai.records.filter(r => docOf(r.id) === id).map(r => ({ ...pointer(r), level: r.level }))
+      if (args.full) {
+        const text = memo.source.text.replace(/\s+$/, '')
+        const endLine = text.split('\n').length
+        if (args.json) {
+          return json({
+            id, found: true, kind: 'doc', full: true, label: memo.label, title: memo.title, file: memo.source.file,
+            line: 1, endLine, where: `${memo.source.file}:1`, sections: sections.map(s => s.id), text,
+          })
+        }
+        return { code: 0, out: [`${id}  ${memo.label} ${memo.title}`, `    ${memo.source.file}:1-${endLine}`, '', text].join('\n') }
+      }
       if (args.json) return json({ id, found: true, kind: 'doc', label: memo.label, title: memo.title, file: memo.source.file, sections })
       return {
         code: 0,
@@ -161,10 +178,11 @@ export function run(argv: readonly string[], build: DocsBuild): CliResult {
       if (args.json) return json({ id, found: false, note: 'その ID の節は無い', near }, 1)
       return { code: 1, out: [`その ID の節は無い: ${id}`, ...(near.length ? [`近い ID: ${near.join(' ')}`] : [])].join('\n') }
     }
-    // その節と、下の節 (md の順で続く、より深い見出し)
+    // その節と、下の節 (md の順で続く、より深い見出し)。メモの前置き (`#` の節) は前置きだけを返す
+    // (下の節を含めるとメモ 1 本まるごとになり、sections.jsonl の同じ ID の text と食い違う。全文は `--id v07 --full`)
     const at = model.sections.indexOf(head)
     let end = at + 1
-    while (end < model.sections.length && model.sections[end].doc === head.doc && model.sections[end].level > head.level) end++
+    while (head.level > 1 && end < model.sections.length && model.sections[end].doc === head.doc && model.sections[end].level > head.level) end++
     const subtree = model.sections.slice(at, end)
     const last = subtree[subtree.length - 1]
     const source = model.docs.find(d => d.source.key === head.doc)!.source.text.split('\n')

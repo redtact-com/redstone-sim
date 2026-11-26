@@ -32,6 +32,8 @@ function serveDir(prefix: string, dir: string): Connect.NextHandleFunction {
     try { rel = decodeURIComponent(url.slice(prefix.length)) } catch { return next() }
     const file = path.resolve(dir, rel)
     if (file !== dir && !file.startsWith(dir + path.sep)) { res.statusCode = 403; return res.end() }
+    // 読めないパス (URL の %00 など) は、readFile が呼んだその場で throw する。それも 404 にする
+    if (file.includes('\0')) { res.statusCode = 404; return res.end() }
     fs.readFile(file, (err, buf) => {
       // 無いファイルは 404 にする (SPA の fallback で HTML を返すと、読む側が JSON として読んで落ちる)
       if (err) { res.statusCode = 404; return res.end() }

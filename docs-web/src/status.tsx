@@ -32,10 +32,17 @@ export function statText(s: StatusSummary): string {
   return s.avg === null ? `${s.read}/${s.total}` : `${s.read}/${s.total} ${s.avg}`
 }
 
+/** つまみを動かすキー (Tab などで通り過ぎただけの時は確定しない) */
+const RANGE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'])
+
 /** ページの上と下に置く操作: 「読んだ」と理解度 (5 刻み) */
 export function StatusBar({ id, data, where }: { id: string; data: StatusData; where: 'top' | 'bottom' }) {
   const e = data.pages[id]
   const read = e?.r === 1
+  // 理解度が付いているか。「読んだ」を外すと値は残すが、未設定として出す (つまみも 0 へ戻す)
+  const rated = read && e?.u !== undefined
+  // 未設定のつまみは 0 の位置にあるので、0 を選んでも change が出ない。押した・キーで動かした時点で今の値を確定する
+  const commit = (el: HTMLInputElement) => { if (!rated) statusStore.setUnderstanding(id, Number(el.value)) }
   return (
     <div className="status-bar" data-where={where}>
       <label className="status-read">
@@ -45,11 +52,14 @@ export function StatusBar({ id, data, where }: { id: string; data: StatusData; w
       <label className="status-u">
         <span>理解度</span>
         <input
-          type="range" min={0} max={100} step={5} value={e?.u ?? 0}
-          aria-valuetext={read && e?.u !== undefined ? String(e.u) : '未設定'}
+          type="range" min={0} max={100} step={5} value={rated ? e.u : 0}
+          data-unset={rated ? undefined : ''}
+          aria-valuetext={rated ? String(e.u) : '未設定'}
           onChange={ev => statusStore.setUnderstanding(id, Number(ev.target.value))}
+          onPointerUp={ev => commit(ev.currentTarget)}
+          onKeyUp={ev => { if (RANGE_KEYS.has(ev.key)) commit(ev.currentTarget) }}
         />
-        <output>{read && e?.u !== undefined ? e.u : '—'}</output>
+        <output>{rated ? e.u : '—'}</output>
       </label>
     </div>
   )

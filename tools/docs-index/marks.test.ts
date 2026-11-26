@@ -31,9 +31,33 @@ describe('印 (#434)', () => {
     const { manifest } = buildDocsFromRepoCached()
     const total: Record<string, number> = {}
     for (const p of manifest.pages) for (const [k, n] of Object.entries(p.marks)) total[k] = (total[k] ?? 0) + n
-    expect(total).toEqual({ read: 633, need: 257, fx: 208, ver: 164, sure: 22, meas: 25, guess: 13, check: 15 })
+    // 凡例の印 (メモの頭の「確かさの表記は次のとおり」の箇条書きや表・README §4) は数えない
+    expect(total).toEqual(TOTAL)
+  })
+
+  it('実物: 凡例の印はバッジにするが、節の印には入れない', () => {
+    const build = buildDocsFromRepoCached()
+    // メモの前置きの節は、凡例のほかに [要実機]・[版差]・[実機] を持たない
+    const intros = build.records.filter(r => r.level === 1)
+    expect(intros).toHaveLength(24)
+    for (const r of intros) {
+      for (const kind of ['need', 'ver', 'fx'] as const) expect(r.marks, `${r.id} ${kind}`).not.toContain(kind)
+    }
+    expect(build.records.find(r => r.id === 'v-readme/4')!.marks).toEqual([])
+    // バッジは残る (v07 の前置きの 4 行・v09 と v11 は表)
+    for (const id of ['v07/0', 'v09/0', 'v11/0']) {
+      expect(build.pages.get(id)!.html, id).toContain('<span class="mk mk-need">要実機</span>')
+      expect(build.pages.get(id)!.marks, id).toEqual({})
+    }
+    // 凡例でない前置きの印は数える (00 の「すべて 26.3 のコードを読んで確かめた」)
+    expect(build.pages.get('v00/0')!.marks).toEqual({ read: 1 })
+    // 本文の印は変わらない
+    expect(build.records.find(r => r.id === 'v07/4.3')!.marks).toContain('read')
   })
 })
+
+/** 印の数 (凡例を除く) */
+const TOTAL = { read: 613, need: 236, fx: 189, ver: 121, sure: 21, meas: 21, guess: 11, check: 14 }
 
 describe('fixture のタグ (#434)', () => {
   it('複数名のタグを割る (・ , 、 /)', () => {

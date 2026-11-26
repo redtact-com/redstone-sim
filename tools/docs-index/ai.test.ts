@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { DOCS_DATA_VERSION } from '../../packages/docs-kit/src/index.js'
-import type { SectionRecord } from '../../packages/docs-kit/src/index.js'
 import {
   BLOCKS_FILE, loadBlocksTable, lookupBlock, lookupClass, lookupFixture, normalizeKey,
   NOT_IN_BLOCK_TABLE, NOT_IN_CLASS_TABLE,
 } from './ai.js'
-import type { ByBlock, ByClass, ByFixture } from './ai.js'
+import type { ByBlock, ByClass, ByFixture, JsonlRow } from './ai.js'
 import { buildDocsFromRepoCached, readSectionIds, repoRoot } from './build.js'
 
 /** AI 向けの索引 (#434): JSONL・逆引き 3 本・README・ブロックの手書きの表 */
@@ -13,7 +12,7 @@ import { buildDocsFromRepoCached, readSectionIds, repoRoot } from './build.js'
 describe('sections.jsonl', () => {
   const build = buildDocsFromRepoCached()
   const lines = build.files.get('ai/sections.jsonl')!.split('\n').filter(Boolean)
-  const rows = lines.map(l => JSON.parse(l) as SectionRecord)
+  const rows = lines.map(l => JSON.parse(l) as JsonlRow)
 
   it('1,383 行で、ID が節の ID の一覧と一致する', () => {
     expect(rows).toHaveLength(1383)
@@ -24,7 +23,7 @@ describe('sections.jsonl', () => {
     for (const r of rows) {
       expect(Object.keys(r), r.id).toEqual([
         'id', 'page', 'file', 'line', 'level', 'title', 'path', 'text',
-        'classes', 'fixtures', 'marks', 'refs', 'blocks', 'summary', 'aliases',
+        'classes', 'fixtures', 'skipFixtures', 'marks', 'refs', 'blocks', 'summary', 'aliases',
       ])
     }
     const r = rows.find(x => x.id === 'v07/4.3')!
@@ -34,6 +33,19 @@ describe('sections.jsonl', () => {
     expect([r.summary, r.aliases]).toEqual(['', []])
     // 1 行 1 件 (本文の改行は JSON の中で逃がしてある)
     expect(lines.every(l => l.startsWith('{"id":"') && l.endsWith('}'))).toBe(true)
+  })
+
+  it('skip つきの fixture を引く節には印が入る (6 本)', () => {
+    const byFixture = JSON.parse(build.files.get('ai/by-fixture.json')!) as ByFixture
+    const skipped = Object.entries(byFixture.fixtures).filter(([, f]) => f.skip !== undefined).map(([n]) => n).sort()
+    expect(skipped).toHaveLength(6)
+    const marked = rows.filter(r => r.skipFixtures.length > 0)
+    expect([...new Set(marked.flatMap(r => r.skipFixtures))].sort()).toEqual(skipped)
+    // 印は fixtures の中の名前だけで、skip つきを引く節は全部印を持つ
+    for (const r of rows) {
+      expect(r.skipFixtures, r.id).toEqual(r.fixtures.filter(n => skipped.includes(n)))
+    }
+    expect(marked.map(r => r.id).sort()).toEqual([...new Set(skipped.flatMap(n => byFixture.fixtures[n].sections))].sort())
   })
 
   it('節にクラスとブロックが入る。メモ全体が担当の物は前置きの節', () => {

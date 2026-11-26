@@ -133,6 +133,24 @@ describe('--id', () => {
     expect(cli('--id', 'v07').out).toContain('v07/4.3  4.3 リピーターの点灯条件とロック')
   })
 
+  it('メモの前置き (v07/0) は前置きだけ。全文は --id v07 --full', () => {
+    const intro = data('--id', 'v07/0')
+    expect(intro.json).toMatchObject({ id: 'v07/0', kind: 'section', line: 1, sections: ['v07/0'] })
+    expect(intro.json.endLine).toBeLessThan(40)
+    expect(intro.json.text).not.toContain('## 1.')
+    // sections.jsonl の同じ ID の text と同じ範囲 (見出しの行 + 本文)
+    const rec = buildDocsFromRepoCached().records.find(r => r.id === 'v07/0')!
+    expect(intro.json.text).toContain(rec.text.trim())
+    // --block repeater が返す節 (メモ全体) を続けて引いても、1 本まるごとは出ない
+    expect(data('--block', 'repeater').json.block.sections[0]).toMatchObject({ id: 'v07/0', whole: true })
+    const full = data('--id', 'v07', '--full')
+    expect(full.json).toMatchObject({ id: 'v07', kind: 'doc', full: true, line: 1, where: 'docs/vanilla/07_diodes.md:1' })
+    expect(full.json.endLine).toBeGreaterThan(1000)
+    expect(full.json.text).toContain('### 4.3 ')
+    expect(cli('--id', 'v07', '--full').out).toContain('docs/vanilla/07_diodes.md:1-')
+    expect(parseArgs(['--id', 'v07', '--full'])).toMatchObject({ id: 'v07', full: true })
+  })
+
   it('無い ID は 1 で終わり、近い ID を挙げる', () => {
     const res = data('--id', 'v07/4.99')
     expect(res.code).toBe(1)

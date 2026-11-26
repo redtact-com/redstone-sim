@@ -62,6 +62,7 @@ md からその場で索引を作るので、ビルドは要らない (約 1 秒
 ```bash
 npm run docs:search -- リピーター ロック        # 語で探す (節の ID・見出し・file:line・抜粋)
 npm run docs:search -- --id v07/4.3            # 節の本文 (下の節も含む)。v07 ならメモの見出しの一覧
+npm run docs:search -- --id v07 --full         # メモの全文 (v07/0 は前置きだけ)
 npm run docs:search -- --block repeater        # ブロック ID・和名 → クラス → 節
 npm run docs:search -- --class RepeaterBlock   # クラス → 節 (00 の網羅表の担当欄)
 npm run docs:search -- --fixture piston-basic  # fixture → 節

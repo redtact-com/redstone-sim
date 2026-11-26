@@ -50,9 +50,9 @@ export function tokenize(raw: string): string[] {
     // 部分: 記号と camelCase の境目で割る
     const parts = w.replace(/([a-z0-9])([A-Z])/g, '$1\u0000$2').split(/[#._\-\u0000]+/).filter(Boolean)
     if (parts.length > 1) for (const p of parts) out.push(p.toLowerCase())
-    // `Class#method`・`a.b` の左右
+    // `Class#method`・`a.b` の左右。部分と同じ切れ目 (`1.21.1`・`4.3`) は 2 回出さない
     const segs = w.split(/[#.]+/).filter(Boolean)
-    if (segs.length > 1) for (const p of segs) out.push(p.toLowerCase())
+    if (segs.length > 1) for (const p of segs) if (!parts.includes(p)) out.push(p.toLowerCase())
   }
   return out
 }

@@ -27,6 +27,9 @@ npm run stage:docs      # docs-web/dist を app/dist/docs へ写す (先に npm 
 
 - `stage:docs` を使うのは PR のプレビュー (`pr-preview.yml`) と e2e (`playwright.config.ts`) だけ。
   手元で試した後は `rm -rf app/dist/docs` で戻す
+- e2e (`npm run test:e2e`) は app の preview (4320) の `/docs/` で回す。手元では動いている 4320 を使い回すので、
+  docs の無い preview が残っていると `e2e/docs-web.spec.ts` だけ落ちる。先に `lsof -ti:4320 | xargs -r kill` で止める。
+  e2e の後も `app/dist/docs` が残るので、同じく `rm -rf app/dist/docs` で戻す
 - ビルドした物を単体で見る時は `cd docs-web && npx vite preview --base /docs/ --port 4331`
   (`--base` を付けないと `/docs/data` が取れない)
 - `VITE_DOCS_PREVIEW=1 npm run build:docs` で、PR のプレビュー用の注意の 1 行
@@ -69,6 +72,7 @@ Web の検索は、自前の 2-gram の索引 + BM25 (`packages/docs-kit/src/sea
 ```bash
 npm run docs:search -- リピーター ロック        # 語で探す (節の ID・見出し・file:line・抜粋)
 npm run docs:search -- --id v07/4.3            # 節の本文 (下の節も含む)
+npm run docs:search -- --id v07 --full         # メモの全文 (v07/0 は前置きだけ)
 npm run docs:search -- --block repeater        # ブロック ID・和名 → クラス → 節
 npm run docs:search -- --class RepeaterBlock   # クラス → 節 (00 の網羅表の担当欄)
 npm run docs:search -- --fixture piston-basic  # fixture → 節
@@ -85,7 +89,7 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 
 | ファイル | 中身 |
 |---|---|
-| `sections.jsonl` | 節 1 件 = 1 行 (1,383 行)。`id`・`page`・`file`・`line`・`title`・`path`・`text` (md のまま)・`classes`・`fixtures`・`marks`・`refs`・`blocks` ほか |
+| `sections.jsonl` | 節 1 件 = 1 行 (1,383 行)。`id`・`page`・`file`・`line`・`title`・`path`・`text` (md のまま)・`classes`・`fixtures`・`skipFixtures` (skip つき = 今のエンジンは実機と違う)・`marks` (凡例の印は数えない)・`refs`・`blocks` ほか |
 | `by-class.json` | クラス → 節 (00 の網羅表の担当欄が主。本文の一致は補助の欄) |
 | `by-fixture.json` | fixture → 節 (skip つきの物には印) |
 | `by-block.json` | ブロック ID・和名 → クラス → 節 |

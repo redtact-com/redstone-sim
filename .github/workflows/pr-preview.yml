@@ -65,6 +65,8 @@ jobs:
         id: docs
         if: steps.secrets.outputs.ok == 'true'
         continue-on-error: true
+        # 固まった時も failure にして /docs/ だけ抜く (手元では 4 秒ほど)
+        timeout-minutes: 5
         env:
           # 読む側が「PR を閉じると記録が消える」の 1 行を出す目印 (docs-web/src/status.tsx の IS_PREVIEW)
           VITE_DOCS_PREVIEW: '1'

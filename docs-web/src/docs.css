@@ -246,6 +246,7 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .status-u { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 0; }
 .status-u span { white-space: nowrap; color: var(--muted); }
 .status-u input { flex: 1 1 auto; min-width: 0; max-width: 320px; accent-color: var(--accent); }
+.status-u input[data-unset] { opacity: 0.55; }
 .status-u output { min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pager-3 { grid-template-columns: 1fr auto 1fr; margin-top: 12px; }

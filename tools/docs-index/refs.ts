@@ -18,7 +18,11 @@
  * - vanilla のメモの中の裸の `16 §2.4` は vanilla 16 だが、次のどれかなら research 16 (この Web に無い):
  *   後ろに `R-21` が続く・§9 の見出しが research 16 を挙げている・§9 の中で矢印が無く、
  *   その番号の節が research 16 にある (節の番号は vanilla と research で重なるので、節の有無だけでは決まらない)
- * - `12 → 15` のような値の移り変わりは参照にしない (矢印の左が数字)。README の読む順の表だけは別
+ * - `12 → 15`・`141 体以上 → 15`・`9 エンティティ → 10 BlockEntity` のような値や番号つきの項の
+ *   移り変わりは参照にしない (矢印の直前が数字・左の項が量だけ・左の項が 1 つ前の番号で始まる)。
+ *   README の読む順の表だけは別。
+ *   `→ 11 → 09` のように直前がメモの参照なら、メモの番号の連鎖として引き継ぐ
+ * - `R17`〜`R19` は、vanilla 18 の中でも直後が `§` なら research のメモ (表の行に節は無い)
  */
 
 import { RESEARCH_IN_SCOPE } from './split.js'
@@ -105,6 +109,34 @@ const MASTER = new RegExp([
   String.raw`(?<bare>(?<![\w.§/-])(?<bnum>\d{2})(?=\s?(?:§\s?\d|付録|は\s?§\s?\d|→\s?\d{2}(?![\d_.]))))`,
 ].join('|'), 'g')
 
+/** 矢印の左の項の区切り。ここから矢印までを 1 つの項として見る */
+const TERM_BREAK = /[→・、,，(（|。:：;；]/g
+
+/** 量だけの項 (`141 体以上`・`1〜10 体`・`3 個`) */
+const QUANTITY = /^\s*\d[\d.,〜~]*\s?(?:体|個|本|件|行|回|倍|段|枚|マス|gt|tick|%)?(?:以上|以下|未満|超)?\s*$/
+
+/**
+ * `→ NN` が値の矢印か。次のどれか:
+ * - 矢印の直前が数字 (`12 → 15`)
+ * - 左の項 (直前の区切りから矢印まで) が量だけ (`141 体以上 → 15`)
+ * - 左の項が 1 つ前の番号で始まる (`9 エンティティ → 10 BlockEntity → 11 …` の番号つきの並び)
+ *
+ * 左の項に参照がある (`01 §4.5 の表 → 08`) なら、数字はメモや節の番号なので値と読まない。
+ * 数字で始まるだけの文 (`2 マスの自分を読むだけ … → 11`) はメモの参照のまま。
+ */
+function isValueArrow(text: string, at: number, lastRefEnd: number, num: string): boolean {
+  const before = text.slice(0, at)
+  if (/\d\s?$/.test(before)) return true
+  let start = 0
+  TERM_BREAK.lastIndex = 0
+  for (let k: RegExpExecArray | null; (k = TERM_BREAK.exec(before));) start = k.index + 1
+  if (lastRefEnd > start) return false
+  const term = before.slice(start)
+  if (QUANTITY.test(term)) return true
+  const head = /^\s*(\d+)(?![\d.])/.exec(term)
+  return head !== null && Number(head[1]) + 1 === Number(num)
+}
+
 /** 直前の参照から引き継ぐ物 */
 interface Chain {
   end: number
@@ -123,6 +155,8 @@ export function splitRefs(text: string, ctx: RefContext, index: RefIndex): RefPi
   /** 各 piece がメモだけの参照か (後ろの節と 1 つにまとめるため) */
   const docOnly: boolean[] = []
   let pos = 0
+  /** 最後に出した参照の終わり */
+  let refEnd = 0
   let chain: Chain | null = null
   const self: DocRef | null = /^[vr]\d\d$/.test(ctx.selfKey) ? { kind: ctx.selfKind, num: ctx.selfKey.slice(1) } : null
 
@@ -134,6 +168,7 @@ export function splitRefs(text: string, ctx: RefContext, index: RefIndex): RefPi
     plain(from)
     pieces.push(target ? { text: text.slice(from, to), target } : { text: text.slice(from, to) })
     docOnly.push(isDoc && target !== null)
+    if (target) refEnd = to
     pos = to
   }
   const chained = (at: number): Chain | null => (chain && SEP.test(text.slice(chain.end, at)) ? chain : null)
@@ -209,7 +244,9 @@ export function splitRefs(text: string, ctx: RefContext, index: RefIndex): RefPi
       const c = chained(at)
       const afterV18 = chain !== null && chain.doc !== null && keyOf(chain.doc) === 'v18'
         && (chain.mode === 'row' ? c !== null : /^\s?の\s?$/.test(text.slice(chain.end, at)))
-      if (afterV18 || ctx.selfKey === 'v18') {
+      // `R18 §6.2` は research のメモ (表の行は節を持たない)
+      const researchSection = RESEARCH_IN_SCOPE.includes(g.rnum) && /^\s?§\s?\d/.test(text.slice(end))
+      if ((afterV18 || ctx.selfKey === 'v18') && !researchSection) {
         // vanilla 18 §2.3 の表の行
         const row = `R${Number(g.rnum)}`
         if (index.rows.has(row)) {
@@ -246,9 +283,13 @@ export function splitRefs(text: string, ctx: RefContext, index: RefIndex): RefPi
       }
     } else if (g.wnum !== undefined) {
       const numAt = at + g.arrow.length
-      // `12 → 15` は値の移り変わり。README の読む順 (01 → 02) だけはメモの番号
-      const valueArrow = /\d\s?$/.test(text.slice(0, at)) && ctx.selfKey !== 'v-readme'
-      const d: DocRef = { kind: ctx.selfKind, num: g.wnum }
+      // メモの番号の連鎖 (`→ 11 → 09`): 直前がメモの参照なら、ディレクトリごと引き継ぐ
+      const prev: Chain | null = chain
+      const link = prev !== null && prev.mode === 'doc' && !prev.dead && prev.doc !== null
+        && /^\s*$/.test(text.slice(prev.end, at)) ? prev.doc : null
+      // 値の移り変わりは参照にしない。README の読む順 (01 → 02) だけはメモの番号
+      const valueArrow = link === null && ctx.selfKey !== 'v-readme' && isValueArrow(text, at, refEnd, g.wnum)
+      const d: DocRef = { kind: link ? link.kind : ctx.selfKind, num: g.wnum }
       const t = valueArrow ? null : docTarget(d)
       if (t) {
         emit(numAt, end, t, true)

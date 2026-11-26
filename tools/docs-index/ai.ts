@@ -199,7 +199,8 @@ export function buildAi(
   }))
 
   const files = new Map<string, string>()
-  files.set('ai/sections.jsonl', filled.map(r => JSON.stringify(jsonlRow(r))).join('\n') + '\n')
+  const skipped = new Set(Object.entries(fixtures).filter(([, f]) => f.skip !== undefined).map(([name]) => name))
+  files.set('ai/sections.jsonl', filled.map(r => JSON.stringify(jsonlRow(r, skipped))).join('\n') + '\n')
   files.set('ai/by-class.json', JSON.stringify(byClass))
   files.set('ai/by-fixture.json', JSON.stringify(byFixture))
   files.set('ai/by-block.json', JSON.stringify(byBlock))
@@ -210,11 +211,21 @@ export function buildAi(
   }
 }
 
+/** sections.jsonl の 1 行 (節の記録 + skip つきの fixture の印) */
+export interface JsonlRow extends SectionRecord {
+  /**
+   * `fixtures` のうち skip つきの物 (今のエンジンは実機と違う)。実機の裏づけとして読む時は、
+   * この名前の fixture の expect を見る (理由は by-fixture.json の `skip`)
+   */
+  skipFixtures: string[]
+}
+
 /** JSONL の 1 行。欄の並びを決める (README の表と同じ順) */
-function jsonlRow(r: SectionRecord): SectionRecord {
+export function jsonlRow(r: SectionRecord, skipped: ReadonlySet<string>): JsonlRow {
   return {
     id: r.id, page: r.page, file: r.file, line: r.line, level: r.level, title: r.title, path: r.path,
-    text: r.text, classes: r.classes, fixtures: r.fixtures, marks: r.marks, refs: r.refs, blocks: r.blocks,
+    text: r.text, classes: r.classes, fixtures: r.fixtures, skipFixtures: r.fixtures.filter(n => skipped.has(n)),
+    marks: r.marks, refs: r.refs, blocks: r.blocks,
     summary: r.summary, aliases: r.aliases,
   }
 }
@@ -364,7 +375,8 @@ md が正で、ここは写し。リポには入れていない (\`npm run docs:
 | \`text\` | 本文 (md のまま。見出しの行は含まず、次の見出しの手前まで。下の節の本文は含まない) |
 | \`classes\` | この節が担当のクラス (00 の網羅表)。メモ全体が担当のクラスは、前置きの節に入る |
 | \`fixtures\` | 本文が引く fixture の名前 |
-| \`marks\` | 本文と見出しに出る印の種類。\`read\` = 26.3 読解・\`need\` = 要実機・\`fx\` = 実機・\`ver\` = 版差・\`sure\` = 確定・\`meas\` = 実測・\`guess\` = 推定・\`check\` = 要確認 |
+| \`skipFixtures\` | \`fixtures\` のうち skip つきの物。**今のエンジンが実機と違う** fixture なので、実機の裏づけとして読む時は fixture の expect を見る (理由は by-fixture.json の \`skip\`) |
+| \`marks\` | 本文と見出しに出る印の種類 (メモの頭の凡例の印は数えない)。\`read\` = 26.3 読解・\`need\` = 要実機・\`fx\` = 実機・\`ver\` = 版差・\`sure\` = 確定・\`meas\` = 実測・\`guess\` = 推定・\`check\` = 要確認 |
 | \`refs\` | 本文が引く節の ID (解けた物だけ) |
 | \`blocks\` | この節が担当のブロック (by-block.json の行の名前) |
 | \`summary\`・\`aliases\` | 節の要約と別名。欄だけあり、今は空 |
@@ -403,6 +415,7 @@ md が正で、ここは写し。リポには入れていない (\`npm run docs:
 npm run docs:search -- リピーター ロック        # 語で探す (ID・見出し・file:line・抜粋)
 npm run docs:search -- --json リピーター ロック # JSON で受ける
 npm run docs:search -- --id v07/4.3            # 節の本文 (下の節も含む)
+npm run docs:search -- --id v07 --full         # メモの全文 (v07/0 は前置きだけ)
 npm run docs:search -- --block repeater        # ブロック ID・和名 → 節
 npm run docs:search -- --class RepeaterBlock   # クラス → 節
 npm run docs:search -- --fixture piston-basic  # fixture → 節

@@ -10,7 +10,8 @@ type Loaded = { id: string; data: PageData } | { id: string; error: string }
 
 /**
  * ページ 1 枚を取って覚える。次のページを 1 つ先に取っておく。
- * 取り終わるまでは前のページを出したままにする (白い画面を挟まない)。
+ * 取っている間は「読み込み中…」を出す (前のページの本文は残さない。残すと、上下の操作と前後が
+ * 別のページの物になる)。読む順の次のページは先読みしてあるので、待ちが出るのは目次・参照・検索から飛ぶ時。
  */
 export function usePage(id: string): { data: PageData | null; error: string | null; loading: boolean; retry: () => void } {
   const [loaded, setLoaded] = useState<Loaded | null>(null)

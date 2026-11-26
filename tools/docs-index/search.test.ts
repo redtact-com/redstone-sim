@@ -59,7 +59,7 @@ describe('検索の当たり方 (24 問・#434)', () => {
 
   it('上位 3 件に 20 問以上・上位 10 件に 22 問以上・1 位は 14 問以上', () => {
     const top = (n: number) => ranks.filter(r => r > 0 && r <= n).length
-    const missed = QUESTIONS.filter((_, i) => !(ranks[i] > 0 && ranks[i] <= 3)).map(([q], i) => `${q} (${ranks[i] || '-'})`)
+    const missed = QUESTIONS.map(([q], i) => ({ q, rank: ranks[i] })).filter(x => !(x.rank > 0 && x.rank <= 3)).map(x => `${x.q} (${x.rank || '-'})`)
     expect(top(3), `外れ: ${missed.join(' / ')}`).toBeGreaterThanOrEqual(20)
     expect(top(10)).toBeGreaterThanOrEqual(22)
     expect(top(1)).toBeGreaterThanOrEqual(14)
@@ -105,6 +105,9 @@ describe('検索の当たり方 (24 問・#434)', () => {
     expect(fx.hits.every(h => h.fixtures > 0)).toBe(true)
   })
 
+  // brotli は Node の既定 (品質 11) の値。配信の側の圧縮はこれより弱いことがあり、届く量は gzip に近くなりうる。
+  // docs/vanilla の md が増えてここが落ちた時は、(1) 索引を削る (字句の部分を減らす・本文の重みつきの回数を丸める)
+  // (2) 上限を見直して PR に書く、のどちらかを選ぶ。黙って上限だけを上げない
   it('大きさ: brotli で 500 kB 以下', () => {
     const json = build.files.get(SEARCH_INDEX_FILE)!
     expect(brotliCompressSync(json).length).toBeLessThanOrEqual(500 * 1024)

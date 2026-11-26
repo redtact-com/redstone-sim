@@ -42,6 +42,17 @@ test('読んだ + 理解度 60 が再読み込みで残り、目次の集計が�
   // 上の操作で付ける。理解度を動かすと下の操作も同じ値になる
   const top = page.locator('.status-bar[data-where="top"]')
   const bottom = page.locator('.status-bar[data-where="bottom"]')
+  // 未設定のつまみは 0 の位置にある。0 を選んでも (値は変わらないが) 理解度 0 が付き、読んだになる
+  await expect(top.locator('output')).toHaveText('—')
+  await top.locator('input[type="range"]').focus()
+  await page.keyboard.press('Home')
+  await expect(top.locator('output')).toHaveText('0')
+  await expect(top.locator('input[type="checkbox"]')).toBeChecked()
+  // 読んだを外すと、つまみも表示も未設定に戻る
+  await top.locator('input[type="checkbox"]').uncheck()
+  await expect(top.locator('output')).toHaveText('—')
+  await expect(top.locator('input[type="range"]')).toHaveValue('0')
+
   await top.locator('input[type="checkbox"]').check()
   await top.locator('input[type="range"]').fill('60')
   await expect(bottom.locator('input[type="checkbox"]')).toBeChecked()

@@ -8,6 +8,8 @@
  *   切った数は呼び出し側に返し、単体テストが数を見張る
  * - `---` は捨てる。表は 1 個ずつ横スクロールの枠で包む
  * - 印はバッジに、節の参照はリンクにする (md には何も書き足さない)
+ * - 凡例の印 (メモの前置きの「確かさの表記は次のとおり」とその箇条書き・README の §4) はバッジには
+ *   するが、節の印とページの印の数には入れない (「要実機あり」の絞り込みに凡例が混ざらないように)
  *
  * 出す HTML の形は packages/docs-kit/src/types.ts の `PageData.html` に書いてある。
  */
@@ -49,6 +51,8 @@ export interface RenderedPage {
   hrDropped: number
   refs: number
   refsOutside: number
+  /** 凡例の中の印 (バッジにはするが `marks` には数えない) */
+  legendMarks: number
   missing: MissingRef[]
   /** 名前の形なのに実在しない fixture */
   unknownFixtures: string[]
@@ -99,6 +103,24 @@ export function under9(section: Section, model: Model): boolean {
   let s: Section | undefined = section
   while (s && s.level > 2) s = s.parent ? model.sectionById.get(s.parent) : undefined
   return s !== undefined && s.id === `${s.doc}/9`
+}
+
+/** 凡例だけの節の題 (README §4) */
+const LEGEND_TITLE = '確かさの表記'
+
+/**
+ * 凡例の始まりの文 (メモの前置きにある)。書き方は 4 通り:
+ * 「確かさの表記は次のとおり」「確かさの印は次のとおり」「確かさの表記:」「確かさは [..] / [..] で書く」と、
+ * vanilla 18 の「本メモだけ次の 1 つを足す」。「確かさの表記は 01〜19 と同じである」は凡例ではない
+ */
+const LEGEND_LEAD = /確かさ(?:の表記|の印)?(?:は次のとおり|\s?[:：]|は\s?\[)|次の \d+ つを足す/
+
+/** 凡例の表の見出しの 1 列目 (`| 表記 | 意味 |`) */
+const LEGEND_TABLE_HEAD = '表記'
+
+/** 節が凡例だけの節か (docs/vanilla/README.md の「確かさの表記」) */
+export function isLegendSection(section: Section): boolean {
+  return section.title.replace(/^[\d.]+\s*/, '') === LEGEND_TITLE
 }
 
 const CJK = /[⺀-鿿豈-﫿＀-￯　-〿]/
@@ -162,7 +184,7 @@ export function createRenderer(
     const lines = doc.source.text.split('\n').slice(page.line - 1, page.endLine)
     const out: RenderedPage = {
       html: '', marks: {}, fixtures: [], strong: 0, tables: 0, longTables: 0, emDropped: 0, hrDropped: 0,
-      refs: 0, refsOutside: 0, missing: [], unknownFixtures: [], bySection: new Map(),
+      refs: 0, refsOutside: 0, legendMarks: 0, missing: [], unknownFixtures: [], bySection: new Map(),
     }
     const byLine = new Map(page.sections.map(s => [s.line, s]))
     let section = page.sections[0]
@@ -182,8 +204,8 @@ export function createRenderer(
     let compared: DocRef | null = comparedDoc(section, model)
     let inCompare = under9(section, model)
 
-    /** 行の中の並びを描き直す: 斜体を切る → 参照 → 印 */
-    const inline = (children: Token[]): Token[] => {
+    /** 行の中の並びを描き直す: 斜体を切る → 参照 → 印。`legend` は凡例の中 (印を数えない) */
+    const inline = (children: Token[], legend: boolean): Token[] => {
       // 1. 斜体を文字に戻し、隣り合う文をつなぐ
       const merged: Token[] = []
       for (const c of children) {
@@ -266,10 +288,12 @@ export function createRenderer(
           innerPlain = head + between.map(t => (t.type === 'docs_raw' ? t.meta?.plain ?? '' : t.type === 'text' || t.type === 'code_inline' ? t.content : '')).join('') + tail.content.slice(0, closeAt)
           after = tail.content.slice(closeAt + 1)
         }
-        out.marks[kind] = (out.marks[kind] ?? 0) + 1
-        add(facts(section.id).marks, kind)
+        if (!legend) {
+          out.marks[kind] = (out.marks[kind] ?? 0) + 1
+          add(facts(section.id).marks, kind)
+        } else out.legendMarks++
         let fx = ''
-        if (kind === 'fx') {
+        if (kind === 'fx' && !legend) {
           const tag = parseFixtureTag(innerPlain, fixtures)
           for (const n of tag.names) { add(out.fixtures, n); add(facts(section.id).fixtures, n) }
           for (const n of tag.unknown) add(out.unknownFixtures, n)
@@ -308,9 +332,29 @@ export function createRenderer(
       }
     }
 
+    // 凡例: メモの前置き (# の節) で凡例の始まりの文と、その直後の箇条書きか表。見出しが「表記」の表
+    let legendArmed = false
+    let legendUntil = -1
+    const closeOf = (from: number, open: string, close: string): number => {
+      let depth = 0
+      for (let j = from; j < tokens.length; j++) {
+        if (tokens[j].type === open) depth++
+        else if (tokens[j].type === close && --depth === 0) return j
+      }
+      return tokens.length
+    }
     for (let i = 0; i < tokens.length; i++) {
       const t = tokens[i]
       if (t.type === 'hr') { out.hrDropped++; continue }
+      if (legendArmed && t.type !== 'paragraph_close') {
+        legendArmed = false
+        if (t.type === 'bullet_list_open') legendUntil = closeOf(i, 'bullet_list_open', 'bullet_list_close')
+        else if (t.type === 'table_open') legendUntil = closeOf(i, 'table_open', 'table_close')
+      }
+      if (t.type === 'table_open' && section.level === 1) {
+        const head = tokens.slice(i).find(x => x.type === 'inline')
+        if (head && head.content.trim() === LEGEND_TABLE_HEAD) legendUntil = closeOf(i, 'table_open', 'table_close')
+      }
       if (t.type === 'heading_open') {
         const s = byLine.get(page.line + (t.map ? t.map[0] : 0))
         if (!s) throw new Error(`${page.id}: 見出しの行が節に対応しない (${t.map})`)
@@ -330,7 +374,9 @@ export function createRenderer(
       else if (t.type === 'tr_open') column = -1
       else if (t.type === 'td_open' || t.type === 'th_open') column++
       else if (t.type === 'inline' && t.children) {
-        t.children = inline(t.children)
+        const lead = section.level === 1 && LEGEND_LEAD.test(t.content)
+        if (lead) legendArmed = true
+        t.children = inline(t.children, lead || i < legendUntil || isLegendSection(section))
         // リンクを外した所は、閉じのタグも span にそろえる
         let span = false
         for (const c of t.children) {
