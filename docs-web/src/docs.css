@@ -192,6 +192,8 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .wiring [data-state="ok"] b { color: #1a7f37; }
 .wiring [data-state="ng"] b { color: var(--accent); }
 .wiring span { color: var(--muted); }
+.wiring-viewer-box { height: 320px; max-width: 640px; background: #19191f; }
+.wiring-viewer-pad { height: 120vh; }
 
 /* ---- 中くらいの幅: 右の欄を出さない ---- */
 @media (max-width: 1180px) {

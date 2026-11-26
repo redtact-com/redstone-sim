@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { DOCS_DATA_VERSION, DOCS_KIT_VERSION } from '@redstone/docs-kit'
 import type { Manifest } from '@redstone/docs-kit'
 import { RESOURCEPACK_URL, dataUrl } from './paths'
+
+// ビューア本体 (deepslate を含む) もここを開いた時だけ取る
+const WiringViewer = lazy(() => import('./WiringViewer'))
 
 type Check = { name: string; state: 'wait' | 'ok' | 'ng'; note: string }
 
@@ -11,6 +14,7 @@ type Check = { name: string; state: 'wait' | 'ok' | 'ng'; note: string }
  * - ビューアの入口は**ここを開いた時だけ** dynamic import する。殻のチャンクに deepslate を入れない
  * - リソースパックがルート絶対のパスで届くこと (base が `/docs/` でもずれないこと) を見る
  * - 生成物が base の配下から届くことを見る
+ * - 下に `packages/viewer` の確かめ (付け外し・interactive・描く頻度) を出す
  */
 export function WiringCheck() {
   const [checks, setChecks] = useState<Check[]>([
@@ -56,6 +60,9 @@ export function WiringCheck() {
           </li>
         ))}
       </ul>
+      <Suspense fallback={<p className="loading">ビューアを読み込み中…</p>}>
+        <WiringViewer />
+      </Suspense>
     </>
   )
 }

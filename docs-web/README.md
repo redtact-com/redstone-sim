@@ -103,6 +103,7 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 | `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索 (のちの解説サイトと共用) |
 | `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
 | `e2e/docs-web.spec.ts` | 既読と理解度・検索・狭い幅 |
+| `e2e/docs-viewer-probe.spec.ts` | `packages/viewer` の確かめ (`#/_wiring` の下の試し)。付け外し 20 回で文脈の警告が出ない・`interactive` を外すと wheel でページが流れる・`frameLoop="demand"` で rAF が止まる |
 | `tools/demo/docs-gif.mjs` | PR 用の GIF (目次 → ページ → 理解度 → 検索) |
 
 節を足す・見出しの番号を変えると ID が変わる (その ID の既読の記録は外れる)。

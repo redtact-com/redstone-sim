@@ -258,6 +258,47 @@ describe('blocks_states / blocks_models (#395)', () => {
   })
 })
 
+describe('リソースパックの基点 URL (#434)', () => {
+  const OTHER = 'https://example.test/kit/pack'
+
+  it('既定は /resourcepack', () => {
+    expect(assets.DEFAULT_RESOURCE_PACK_URL).toBe('/resourcepack')
+  })
+
+  it('基点を渡すと bundle・JSON・テクスチャをその下から取る (末尾の / は無視)', async () => {
+    const { textures: _omit, ...old } = BUNDLE
+    const calls = stubFetch(url => {
+      if (url === `${OTHER}/bundle.json`) return json(old)
+      if (url.startsWith(`${OTHER}/assets/minecraft/textures/`)) return png()
+      return notFound()
+    })
+    expect(await assets.fetchPackJson('blockstates/lever.json', `${OTHER}/`)).toEqual({ variants: {} })
+    expect((await assets.fetchTextureBlob('block/stone', OTHER)).kind).toBe('ok')
+    expect(calls).toEqual([`${OTHER}/bundle.json`, `${OTHER}/assets/minecraft/textures/block/stone.png`])
+  })
+
+  it('基点ごとに別々に覚える (既定の基点で覚えた物を別の基点に使わない)', async () => {
+    stubImageDecoding()
+    const calls = stubFetch(url => {
+      if (url === BUNDLE_URL) return json(BUNDLE)
+      if (url === `${OTHER}/bundle.json`) return json({ ...BUNDLE, blockstates: { lever: { variants: { other: 1 } } } })
+      return png()
+    })
+    expect(await assets.fetchPackJson('blockstates/lever.json')).toEqual({ variants: {} })
+    expect(await assets.fetchPackJson('blockstates/lever.json', OTHER)).toEqual({ variants: { other: 1 } })
+    expect(await assets.fetchPackJson('blockstates/lever.json')).toEqual({ variants: {} })
+    // テクスチャも基点ごと。パックにある物はそれぞれの基点から 1 回ずつ取る
+    await assets.fetchTexture('entity/chest/trapped')
+    await assets.fetchTexture('entity/chest/trapped', OTHER)
+    await assets.fetchTexture('entity/chest/trapped', OTHER)
+    expect(calls).toEqual([
+      BUNDLE_URL, `${OTHER}/bundle.json`,
+      `${PACK_TEX}entity/chest/trapped.png`,
+      `${OTHER}/assets/minecraft/textures/entity/chest/trapped.png`,
+    ])
+  })
+})
+
 describe('パレットのアイコンの置き場 (#276)', () => {
   it('MCMETA_BASE の値は変えない (アイコンはミラーに載せていない)', () => {
     expect(assets.MCMETA_BASE)

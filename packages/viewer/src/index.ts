@@ -16,3 +16,5 @@ export { fitDistance, maxZoomOut, VIEWER_FOV_DEG, VIEWER_FAR, VIEWER_NEAR } from
 
 // パレットアイコンなどアプリ側からも参照する (#276)。**定数を 2 か所に置かない**
 export { MCMETA_BASE } from './renderer/mcAssets'
+// リソースパックの基点 URL の既定 (#434)。変えるときは IsometricView の resourcePackUrl
+export { DEFAULT_RESOURCE_PACK_URL } from './renderer/mcAssets'
