@@ -1,7 +1,7 @@
 /**
  * 読む用の Web の生成器 (#434)。docs/vanilla と docs/research 17〜19 の md を割り、
- * 目次 (manifest.json)・ページ (pages/*.json)・検索の索引 (search-index.json)・AI 向けの索引 (ai/) を
- * docs-web/public/data へ出す。
+ * 目次 (manifest.json)・ページ (pages/*.json)・検索の索引 (search-index.json)・AI 向けの索引 (ai/)・
+ * 埋め込む fixture (fixtures/*.json) を docs-web/public/data へ出す。
  *
  *   npm run docs:index            … 生成する (docs-web/public/data。追跡しない)
  *   npm run docs:index -- --ids   … 節の ID の一覧 (tools/docs-index/section-ids.txt) も書き直す
@@ -17,12 +17,12 @@ import { DOCS_DATA_VERSION } from '../../packages/docs-kit/src/types.js'
 import type {
   FixtureInfo, Manifest, MarkKind, PageData, SectionRecord,
 } from '../../packages/docs-kit/src/types.js'
-import { anchorOf, pageDataPath } from '../../packages/docs-kit/src/ids.js'
+import { anchorOf, fixtureDataPath, pageDataPath } from '../../packages/docs-kit/src/ids.js'
 import { buildSearchIndex } from '../../packages/docs-kit/src/search.js'
 import type { SearchIndexData, SearchInput } from '../../packages/docs-kit/src/search.js'
 import { buildAi, loadBlocksTable } from './ai.js'
 import type { AiIndex, BlocksTable } from './ai.js'
-import { loadFixtures } from './fixtures.js'
+import { FIXTURE_EMBED_MAX_BLOCKS, loadFixtureFiles, loadFixtures } from './fixtures.js'
 import type { FixtureMeta } from './fixtures.js'
 import { createRenderer } from './render.js'
 import type { MissingRef, RenderedPage } from './render.js'
@@ -58,7 +58,13 @@ export interface BuildStats {
   fixturesTagged: string[]
   fixturesEmbeddable: string[]
   /** 生成物の大きさ (バイト) */
-  bytes: { manifest: number; pagesTotal: number; pageMedian: number; pageMax: number; htmlTotal: number; search: number }
+  bytes: {
+    manifest: number; pagesTotal: number; pageMedian: number; pageMax: number; htmlTotal: number; search: number
+    /** 埋め込む fixture の JSON (合計・中央値・最大) */
+    fixturesTotal: number; fixtureMedian: number; fixtureMax: number
+  }
+  /** `data/fixtures/` に出した fixture (名前の順) */
+  fixturesWritten: string[]
   /** 検索の索引の字句の種類の数 */
   searchTerms: number
   /** AI 向けの索引: JSONL の大きさ・クラスの数・担当欄の参照 (解けた数)・ブロックの行・fixture */
@@ -87,6 +93,8 @@ export function buildDocs(
   fixtures: ReadonlyMap<string, FixtureMeta>,
   outside: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
   blocks: BlocksTable = { note: '', blocks: [] },
+  /** 埋め込める fixture の中身 (名前 → 詰めた JSON)。本文が引く物だけを出す */
+  fixtureFiles: ReadonlyMap<string, string> = new Map(),
 ): DocsBuild {
   const model = buildModel(sources)
   const renderer = createRenderer(model, fixtures, outside)
@@ -171,6 +179,16 @@ export function buildDocs(
   for (const [id, page] of pages) files.set(pageDataPath(id), JSON.stringify(page))
   files.set(SEARCH_INDEX_FILE, JSON.stringify(search))
   for (const [rel, text] of ai.files) files.set(rel, text)
+  // 埋め込む fixture。本文が引く物のうち、ブロックが上限以下の物だけ
+  const fixturesWritten: string[] = []
+  for (const [name, info] of Object.entries(fixtureInfo)) {
+    const text = fixtureFiles.get(name)
+    if (!info.embed || text === undefined) continue
+    if (info.blocks > FIXTURE_EMBED_MAX_BLOCKS) throw new Error(`${name}: ${info.blocks} ブロックは上限 ${FIXTURE_EMBED_MAX_BLOCKS} を超える`)
+    files.set(fixtureDataPath(name), text)
+    fixturesWritten.push(name)
+  }
+  const fixtureBytes = fixturesWritten.map(n => Buffer.byteLength(files.get(fixtureDataPath(n))!)).sort((a, b) => a - b)
 
   const lens = manifest.pages.map(p => p.lines).sort((a, b) => a - b)
   const pageBytes = [...pages.keys()].map(id => Buffer.byteLength(files.get(pageDataPath(id))!)).sort((a, b) => a - b)
@@ -205,7 +223,11 @@ export function buildDocs(
       pageMax: pageBytes[pageBytes.length - 1],
       htmlTotal: [...pages.values()].reduce((a, p) => a + Buffer.byteLength(p.html), 0),
       search: Buffer.byteLength(files.get(SEARCH_INDEX_FILE)!),
+      fixturesTotal: fixtureBytes.reduce((a, b) => a + b, 0),
+      fixtureMedian: fixtureBytes[fixtureBytes.length >> 1] ?? 0,
+      fixtureMax: fixtureBytes[fixtureBytes.length - 1] ?? 0,
     },
+    fixturesWritten,
     searchTerms: Object.keys(search.terms).length,
     ai: {
       jsonl: Buffer.byteLength(files.get('ai/sections.jsonl')!),
@@ -234,7 +256,7 @@ export function searchInputs(model: Model, records: readonly SectionRecord[]): S
 
 /** リポの md と fixture を読んで組み立てる */
 export function buildDocsFromRepo(root: string): DocsBuild {
-  return buildDocs(loadSources(root), loadFixtures(root), loadOutsideResearch(root), loadBlocksTable(root))
+  return buildDocs(loadSources(root), loadFixtures(root), loadOutsideResearch(root), loadBlocksTable(root), loadFixtureFiles(root))
 }
 
 let cached: DocsBuild | null = null
@@ -281,6 +303,7 @@ function main(): void {
     `参照: リンク ${s.refs}・この Web に無い資料 ${s.refsOutside}・解けない ${s.missing.length}`,
     ...s.missing.map(m => `  解けない: ${m.section} の「${m.text}」→ ${m.want}`),
     `fixture: 本文が引く ${s.fixturesTagged.length} 本・埋め込める ${s.fixturesEmbeddable.length} 本・知らない名前 ${s.unknownFixtures.length}`,
+    `  fixtures/ へ ${s.fixturesWritten.length} 本 ${kb(s.bytes.fixturesTotal)} (中央値 ${kb(s.bytes.fixtureMedian)}・最大 ${kb(s.bytes.fixtureMax)})`,
     ...s.unknownFixtures.map(n => `  知らない名前: ${n}`),
     `大きさ: manifest ${kb(s.bytes.manifest)}・ページ ${s.pages} 本 ${kb(s.bytes.pagesTotal)} (中央値 ${kb(s.bytes.pageMedian)}・最大 ${kb(s.bytes.pageMax)})`,
     `検索の索引: ${kb(s.bytes.search)}・字句 ${s.searchTerms} 種`,

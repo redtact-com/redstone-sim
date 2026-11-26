@@ -13,8 +13,8 @@ describe('生成物 (#434)', () => {
     expect(manifest.v).toBe(DOCS_DATA_VERSION)
     expect(manifest.counts.pages).toBe(manifest.pages.length)
     expect(pages.size).toBe(manifest.pages.length)
-    // 目次 + ページ + 検索の索引 + AI 向けの索引 5 本
-    expect(files.size).toBe(manifest.pages.length + 2 + 5)
+    // 目次 + ページ + 検索の索引 + AI 向けの索引 5 本 + 埋め込む fixture
+    expect(files.size).toBe(manifest.pages.length + 2 + 5 + Object.values(manifest.fixtures).filter(f => f.embed).length)
     expect(records.length).toBe(manifest.counts.sections)
     // 目次の 3 段 (メモ → ## → ページ) をたどると、読む順のページの並びになる
     expect(manifest.docs.flatMap(d => d.groups.flatMap(g => g.pages))).toEqual(manifest.pages.map(p => p.id))

@@ -27,6 +27,11 @@ export function pageDataPath(pageId: string): string {
   return `pages/${pageId}.json`
 }
 
+/** fixture のデータの相対パス (`data/` から。`fixtures/piston-basic.json`)。埋め込める物だけがある */
+export function fixtureDataPath(name: string): string {
+  return `fixtures/${name}.json`
+}
+
 /**
  * ハッシュ型の URL を作る (`#/v07/4.3?s=4.3.2`)。
  * 節がページの頭なら `?s=` は付けない。

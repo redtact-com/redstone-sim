@@ -122,7 +122,10 @@ export interface FixtureInfo {
   blocks: number
   /** 再生する tick の数 */
   ticks: number
-  /** 埋め込める大きさか (ブロックが上限以下)。false は「大きいので埋め込まない」と出す */
+  /**
+   * 埋め込める大きさか (ブロックが上限以下)。false は「大きいので埋め込まない」と出す。
+   * true の物だけ `data/fixtures/<名前>.json` がある (中身は fixture の JSON を詰めた物)
+   */
   embed: boolean
   /** skip つき (今のエンジンは実機と違う) のとき、その理由 */
   skip?: string
@@ -160,6 +163,8 @@ export interface PageData {
    * - 節の参照は `<a class="ref" href="#/v07/4.3?s=4.3.2" data-ref="v07/4.3.2">`。
    *   この Web に無い資料は `<span class="ref-out">`、解けなかった物は `<span class="ref-miss">`
    * - 印は `<span class="mk mk-need">`。fixture のタグは `data-fx="名前 名前"` を持つ
+   * - fixture の札は、タグのある段落・箇条書きの直後の `<div class="fx-cards">`。表の中のタグの札は
+   *   表の後ろの `<details class="fx-cards fx-fold">` にまとめる。札の形は fixture-card.ts
    * - 表は `<div class="tbl">` で包む。50 行を超える表は `tbl tbl-long`
    */
   html: string

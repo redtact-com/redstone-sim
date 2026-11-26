@@ -11,6 +11,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FixtureInfo } from '../../packages/docs-kit/src/types.js'
+import { FIXTURE_ENTITY_ACTIONS } from '../../packages/docs-kit/src/fixture-card.js'
 import { findMarks, stripFences } from './marks.js'
 
 /** 記事に埋め込むブロックの数の上限。超える fixture は「大きいので埋め込まない」と出す */
@@ -32,7 +33,7 @@ interface FixtureFile {
 export type FixtureMeta = Omit<FixtureInfo, 'sections'>
 
 /** エンティティを出し入れする入力。ビューアはエンティティを描かない */
-const ENTITY_ACTIONS = new Set(['summon', 'item', 'kill'])
+const ENTITY_ACTIONS = new Set(FIXTURE_ENTITY_ACTIONS)
 
 /** fixture を全部読んで、名前 → 情報にする */
 export function loadFixtures(root: string): Map<string, FixtureMeta> {
@@ -49,6 +50,21 @@ export function loadFixtures(root: string): Map<string, FixtureMeta> {
     if (skip) meta.skip = skip
     if ((fx.inputs ?? []).some(i => i.action !== undefined && ENTITY_ACTIONS.has(i.action))) meta.entities = true
     out.set(f.slice(0, -'.json'.length), meta)
+  }
+  return out
+}
+
+/**
+ * 記事に埋め込める fixture の中身 (名前 → 詰めた JSON)。上限を超える物は入れない。
+ * 生成器はこのうち本文が引く物だけを `data/fixtures/<名前>.json` に出す
+ */
+export function loadFixtureFiles(root: string): Map<string, string> {
+  const dir = join(root, FIXTURE_DIR)
+  const out = new Map<string, string>()
+  for (const f of readdirSync(dir).filter(f => f.endsWith('.json')).sort()) {
+    const fx = JSON.parse(readFileSync(join(dir, f), 'utf-8')) as FixtureFile
+    if (fx.blocks.length > FIXTURE_EMBED_MAX_BLOCKS) continue
+    out.set(f.slice(0, -'.json'.length), JSON.stringify(fx))
   }
   return out
 }

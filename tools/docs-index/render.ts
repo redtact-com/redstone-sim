@@ -8,6 +8,8 @@
  *   切った数は呼び出し側に返し、単体テストが数を見張る
  * - `---` は捨てる。表は 1 個ずつ横スクロールの枠で包む
  * - 印はバッジに、節の参照はリンクにする (md には何も書き足さない)
+ * - fixture のタグ (`[実機 1.21.1: 名前]`) は小さなチップのままにし、タグのある段落・箇条書きの直後に
+ *   1 行の札を置く。表の中のタグの札は、表の後ろの 1 つの折りたたみにまとめる (本文を押し流さない)
  * - 凡例の印 (メモの前置きの「確かさの表記は次のとおり」とその箇条書き・README の §4) はバッジには
  *   するが、節の印とページの印の数には入れない (「要実機あり」の絞り込みに凡例が混ざらないように)
  *
@@ -18,6 +20,7 @@ import MarkdownIt from 'markdown-it'
 import Token from 'markdown-it/lib/token.mjs'
 import type { MarkCounts, MarkKind } from '../../packages/docs-kit/src/types.js'
 import { anchorOf, docsHref, headingDomId } from '../../packages/docs-kit/src/ids.js'
+import { fixtureCardsHtml } from '../../packages/docs-kit/src/fixture-card.js'
 import type { FixtureMeta } from './fixtures.js'
 import { parseFixtureTag } from './fixtures.js'
 import { MARK_OPEN, markKind } from './marks.js'
@@ -56,6 +59,10 @@ export interface RenderedPage {
   missing: MissingRef[]
   /** 名前の形なのに実在しない fixture */
   unknownFixtures: string[]
+  /** 置いた札の fixture の名前 (置いた順。同じ名前が別の段落にあれば重なる) */
+  cards: string[]
+  /** 表の後ろの折りたたみの数 */
+  cardFolds: number
   /** 節ごとの集計 (節の ID → 印の種類・fixture・解けた参照の ID) */
   bySection: Map<string, SectionFacts>
 }
@@ -184,7 +191,8 @@ export function createRenderer(
     const lines = doc.source.text.split('\n').slice(page.line - 1, page.endLine)
     const out: RenderedPage = {
       html: '', marks: {}, fixtures: [], strong: 0, tables: 0, longTables: 0, emDropped: 0, hrDropped: 0,
-      refs: 0, refsOutside: 0, legendMarks: 0, missing: [], unknownFixtures: [], bySection: new Map(),
+      refs: 0, refsOutside: 0, legendMarks: 0, missing: [], unknownFixtures: [], cards: [], cardFolds: 0,
+      bySection: new Map(),
     }
     const byLine = new Map(page.sections.map(s => [s.line, s]))
     let section = page.sections[0]
@@ -201,6 +209,9 @@ export function createRenderer(
     const kept: Token[] = []
     let inTable = false
     let column = -1
+    // 札を待っている fixture (今の段落・箇条書きの中のタグ / 今の表の中のタグ)。重複は 1 枚にする
+    const cardRow: string[] = []
+    const cardFold: string[] = []
     let compared: DocRef | null = comparedDoc(section, model)
     let inCompare = under9(section, model)
 
@@ -295,7 +306,11 @@ export function createRenderer(
         let fx = ''
         if (kind === 'fx' && !legend) {
           const tag = parseFixtureTag(innerPlain, fixtures)
-          for (const n of tag.names) { add(out.fixtures, n); add(facts(section.id).fixtures, n) }
+          for (const n of tag.names) {
+            add(out.fixtures, n)
+            add(facts(section.id).fixtures, n)
+            add(inTable ? cardFold : cardRow, n)
+          }
           for (const n of tag.unknown) add(out.unknownFixtures, n)
           if (tag.names.length) fx = ` data-fx="${esc(tag.names.join(' '))}"`
         }
@@ -329,6 +344,18 @@ export function createRenderer(
         open.tag = 'span'
         open.meta = { ...(open.meta ?? {}), span: true }
         out.refsOutside++
+      }
+    }
+
+    /** 待っている札を出す。段落・箇条書きの分はそのまま並べ、表の分は 1 つの折りたたみにまとめる */
+    const flushCards = () => {
+      for (const [names, fold] of [[cardRow, false], [cardFold, true]] as const) {
+        if (names.length === 0) continue
+        const html = fixtureCardsHtml(names.map(n => [n, fixtures.get(n)!] as const), fold)
+        kept.push(raw(html, ''))
+        out.cards.push(...names)
+        if (fold) out.cardFolds++
+        names.length = 0
       }
     }
 
@@ -385,7 +412,10 @@ export function createRenderer(
         }
       }
       kept.push(t)
+      // 一番外のまとまり (段落・箇条書き・表・見出し) が閉じた所に、中のタグの札を置く
+      if (t.level === 0 && t.nesting === -1) flushCards()
     }
+    flushCards()
     out.html = md.renderer.render(kept, md.options, env)
     return out
   }
