@@ -207,6 +207,9 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
   .toc-col {
     position: fixed; top: var(--head-h); left: 0; bottom: 0; z-index: 20;
     width: min(88vw, 340px); height: auto;
+    /* 上の align-self: start を戻す。残すと top と bottom の間に伸びず、中身の高さ (約 2,000px) の
+       箱が画面の外まで続いて、引き出しの中を下まで流せない */
+    align-self: auto;
     background: var(--bg); transform: translateX(-100%); visibility: hidden;
     transition: transform 0.15s ease, visibility 0s 0.15s;
   }
