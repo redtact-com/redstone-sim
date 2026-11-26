@@ -56,7 +56,7 @@ export const LEVEL_PHASES: PhaseCell[] = [
   { id: 'L15', label: 'デバッグ同期' },
 ]
 
-/** §2.3: ServerLevel#tick の相の時間割 */
+/** §2.3: ServerLevel.tick の相の時間割 */
 export const LEVEL_PHASE_TIMELINE: DiagramDef = {
   title: 'ServerLevel#tick の相の時間割 (L0〜L15)',
   source: 'V01 §2.3',

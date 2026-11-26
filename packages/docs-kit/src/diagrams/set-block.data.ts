@@ -3,7 +3,7 @@ import type { Dir } from './direction-order.js'
 
 /** 図の文言 (#434): docs/vanilla/04_set-block-and-updates.md §2.1・§2.3 の手順と表の言い換え */
 
-/** §2.1: Level#setBlock の 1 回の書き込み (10 手順) */
+/** §2.1: Level.setBlock の 1 回の書き込み (10 手順) */
 export const SET_BLOCK_STEPS: DiagramDef = {
   title: '1 回の書き込みで起きること (Level#setBlock)',
   source: 'V04 §2.1',
