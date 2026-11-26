@@ -6,6 +6,7 @@
  * - この入口は**軽い物だけ**を出す (型・ID の決まり・検索・状態の保存・fixture の札の HTML)。DOM にも WebGL にも触らない
  * - 3D/2D のビューアは `@redstone/docs-kit/viewer` に分ける。deepslate を引き込むので、
  *   読む側が「表示」を押した時にだけ dynamic import する
+ * - 図 (自前の SVG の 4 部品と文言) は `@redstone/docs-kit/diagrams` に分ける。図のあるページでだけ読む
  */
 
 export const DOCS_KIT_VERSION = 1

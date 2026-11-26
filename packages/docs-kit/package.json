@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./viewer": "./src/viewer/index.ts"
+    "./viewer": "./src/viewer/index.ts",
+    "./diagrams": "./src/diagrams/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
