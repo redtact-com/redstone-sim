@@ -16,6 +16,7 @@ Rust (WASM) で同じ挙動のエンジンを組むための土台にする。�
   4. 版ごとの違い
 - 各メモは、条件・定数・フラグ値・優先度・遅延・方向の並びを数値のまま書く。そのまま実装に落とせる粒度を目指した。
 - 読んだだけでは決まらない所は [要実機] として残した。正解は実機で撮る。撮り方は docs/research/18_ground-truth-oracle.md、確かめる回路の集め方は docs/research/17_circuit-corpus.md にある。
+- このメモ集をもとにした Rust (WASM) エンジンの設計案は docs/research/19_rust-wasm-engine.md にある。各メモの §7 を設計のどこで受けるかの対応表は、その §4.3 にある。
 
 ## 2. 基準の版
 
@@ -161,6 +162,7 @@ Rust (WASM) で同じ挙動のエンジンを組むための土台にする。�
 | docs/research/16_nucleation-comparison.md | 別のエンジン (Nucleation) との比較。各メモの §9 が R 番号の指摘を 26.3 の読みで照らした |
 | docs/research/17_circuit-corpus.md | 正しさを確かめる回路の集め方。主軸は、各メモの §8 のプローブを fixture に起こして実機で撮ること |
 | docs/research/18_ground-truth-oracle.md | 26.3 で tick ごとの正解を撮る方法。推奨は、26.3 の GameTestServer をプロセス内に立てる自前の起動コード |
+| docs/research/19_rust-wasm-engine.md | このメモ集をもとにした Rust (WASM) エンジンの設計案 (方針レビュー用)。V06 §7.3 のように、このディレクトリのメモを「V + 番号」で引く |
 | docs/research の 07・11・12・13 ほか | 個別の調査 (Mojira の原票・ダストの形・更新抑制・範囲の方針)。各メモの §9 で照らした |
 | packages/sim/src (今の TS エンジン) | コードは変えていない。26.3 との違いは各メモの §9 に書いた |
 | tools/mc-harness/fixtures・packages/sim/test/fixtures | 1.21.1 の実機の正解。26.3 に使えるかは 19 §6.6 |
