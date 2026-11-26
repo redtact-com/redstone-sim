@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.resolve(__dirname, '..')
 const PACKAGES = path.resolve(REPO, 'packages')
 const RESOURCEPACK = path.resolve(REPO, 'app/public/resourcepack')
+const DATA = path.resolve(__dirname, 'public/data')
 
 /** 手元で開くポート。既読と理解度は localStorage (オリジンごと) に置くので、毎回同じにする */
 export const DOCS_DEV_PORT = 4330
@@ -20,6 +21,24 @@ export const DOCS_DEV_PORT = 4330
 const MIME: Record<string, string> = {
   '.json': 'application/json', '.mcmeta': 'application/json',
   '.png': 'image/png', '.md': 'text/markdown; charset=utf-8',
+}
+
+/** `prefix` で始まる URL を `dir` の下のファイルで返す。無いファイルは 404、置き場の外 (../) は 403 */
+function serveDir(prefix: string, dir: string): Connect.NextHandleFunction {
+  return (req, res, next) => {
+    const url = (req.url ?? '').split('?')[0]
+    if (!url.startsWith(prefix)) return next()
+    let rel: string
+    try { rel = decodeURIComponent(url.slice(prefix.length)) } catch { return next() }
+    const file = path.resolve(dir, rel)
+    if (file !== dir && !file.startsWith(dir + path.sep)) { res.statusCode = 403; return res.end() }
+    fs.readFile(file, (err, buf) => {
+      // 無いファイルは 404 にする (SPA の fallback で HTML を返すと、読む側が JSON として読んで落ちる)
+      if (err) { res.statusCode = 404; return res.end() }
+      res.setHeader('Content-Type', MIME[path.extname(file)] ?? 'application/octet-stream')
+      res.end(buf)
+    })
+  }
 }
 
 /**
@@ -30,25 +49,26 @@ const MIME: Record<string, string> = {
  * オリジンが別なので、ここで同じパスを生やす。`--base /docs/` でもこのパスは動かない
  */
 function resourcepackFromApp(): Plugin {
-  const handler: Connect.NextHandleFunction = (req, res, next) => {
-    const url = (req.url ?? '').split('?')[0]
-    if (!url.startsWith('/resourcepack/')) return next()
-    let rel: string
-    try { rel = decodeURIComponent(url.slice('/resourcepack/'.length)) } catch { return next() }
-    const file = path.resolve(RESOURCEPACK, rel)
-    // 置き場の外 (../) を読ませない
-    if (file !== RESOURCEPACK && !file.startsWith(RESOURCEPACK + path.sep)) { res.statusCode = 403; return res.end() }
-    fs.readFile(file, (err, buf) => {
-      // 無いファイルは 404 にする (SPA の fallback で HTML を返すと viewer が JSON として読んで落ちる)
-      if (err) { res.statusCode = 404; return res.end() }
-      res.setHeader('Content-Type', MIME[path.extname(file)] ?? 'application/octet-stream')
-      res.end(buf)
-    })
-  }
+  const handler = serveDir('/resourcepack/', RESOURCEPACK)
   return {
     name: 'docs-web:resourcepack-from-app',
     configureServer(server) { server.middlewares.use(handler) },
     configurePreviewServer(server) { server.middlewares.use(handler) },
+  }
+}
+
+/**
+ * 手元の dev では、生成物 (`/data/*`) をディスクから直に返す。
+ *
+ * Vite の dev は public の中のファイルの一覧を覚えていて、生成器が置き場を消して作り直すと
+ * 一覧から半分ほど抜ける (実測: 565 本のうち 299 本が HTML の fallback になった)。
+ * 一覧を通さずに読めば、作り直した直後でも全部届く
+ */
+function dataFromDisk(): Plugin {
+  return {
+    name: 'docs-web:data-from-disk',
+    apply: 'serve',
+    configureServer(server) { server.middlewares.use(serveDir('/data/', DATA)) },
   }
 }
 
@@ -83,7 +103,7 @@ function regenerateOnMdChange(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), resourcepackFromApp(), regenerateOnMdChange()],
+  plugins: [react(), resourcepackFromApp(), dataFromDisk(), regenerateOnMdChange()],
   resolve: {
     // 同じモノレポの packages/* をソースのまま読む (app と同じ形)。
     // `@redstone/docs-kit/viewer` を先に書く。前方一致なので、後ろだと入口の方に吸われる

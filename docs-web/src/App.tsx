@@ -1,99 +1,127 @@
-import { useEffect, useState } from 'react'
-import { DOCS_DATA_VERSION, DOCS_KIT_VERSION } from '@redstone/docs-kit'
-import type { Manifest } from '@redstone/docs-kit'
-import { RESOURCEPACK_URL, dataUrl } from './paths'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { anchorOf, findPage } from '@redstone/docs-kit'
+import { loadManifest } from './data'
+import { buildModel } from './model'
+import type { DocsModel } from './model'
+import { useRoute } from './router'
+import { Toc } from './Toc'
+import { PageOutline, PageView } from './PageView'
+import { Home } from './Home'
+import { WiringCheck } from './Wiring'
 
 /**
- * 読む用の Web の殻 (#434)。今は空のページで、配線だけを確かめる。
- * 目次・ページ・状態・検索は後の段で足す。
+ * 読む用の Web の殻 (#434)。
+ *
+ * 画面は 3 欄 (目次・本文・このページ)。狭い幅では目次が引き出しになり、右の欄は出さない。
+ * `#/_wiring` は配線の確かめ (開発用)。ビューアの入口を dynamic import する唯一の場所
  */
 export function App() {
-  const hash = useHash()
+  const route = useRoute()
+  const model = useModel()
+  const [drawer, setDrawer] = useState(false)
+  const head = useRef<HTMLElement>(null)
+
+  // 見出しの帯の高さを CSS に渡す (目次の貼り付く位置と、節へ飛んだ時の余白に使う)
+  useLayoutEffect(() => {
+    const el = head.current
+    if (!el) return
+    const set = () => document.documentElement.style.setProperty('--head-h', `${el.offsetHeight}px`)
+    set()
+    const ro = new ResizeObserver(set)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // 行き先。ページの ID でなくても (割った `##`・メモ・ページの中の節)、入っているページへ寄せる
+  const target = useMemo(() => {
+    if (route.kind !== 'page' || !('model' in model)) return null
+    const hit = findPage(model.model.manifest, route.id)
+    if (!hit) return null
+    return { page: hit.page, section: route.s ?? (hit.section ? anchorOf(hit.section) : null) }
+  }, [model, route.kind, route.kind === 'page' ? route.id : '', route.kind === 'page' ? route.s : null])
+
+  // ページを移ったら引き出しを閉じる。Esc でも閉じる
+  useEffect(() => { setDrawer(false) }, [route.kind, target?.page, target?.section])
+  useEffect(() => {
+    if (!drawer) return
+    const on = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false) }
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [drawer])
+
+  const ready = 'model' in model ? model.model : null
+
   return (
     <div className="shell">
-      <header className="shell-head">
-        <a className="shell-title" href="#/">docs</a>
-        <span className="shell-sub">Java 版 26.3 のレッドストーン読解メモ</span>
+      <header className="head" ref={head}>
+        <div className="head-row">
+          <button
+            type="button" className="head-menu" aria-label="目次を開く" aria-expanded={drawer}
+            aria-controls="toc-col" onClick={() => setDrawer(d => !d)}
+          >☰ 目次</button>
+          <a className="head-title" href="#/">docs</a>
+          <div className="head-search" role="search">
+            <input type="search" placeholder="検索 (準備中)" aria-label="検索" disabled />
+          </div>
+        </div>
       </header>
-      <main className="shell-main">
-        {hash === '#/_wiring' ? <WiringCheck /> : <Empty />}
-      </main>
+      {route.kind === 'wiring' ? (
+        <main className="solo"><WiringCheck /></main>
+      ) : 'error' in model ? (
+        <main className="solo">
+          <p className="notice notice-err" role="alert">目次を取れなかった ({model.error})。<button type="button" onClick={model.retry}>もう一度</button></p>
+        </main>
+      ) : !ready ? (
+        <main className="solo"><p className="loading">読み込み中…</p></main>
+      ) : (
+        <div className="cols">
+          {drawer && <div className="drawer-back" onClick={() => setDrawer(false)} />}
+          <aside id="toc-col" className={drawer ? 'toc-col open' : 'toc-col'}>
+            <Toc model={ready} current={target?.page ?? null} />
+          </aside>
+          <main className="main">
+            {route.kind === 'home' ? (
+              <Home model={ready} />
+            ) : target ? (
+              <PageView model={ready} pageId={target.page} section={target.section} />
+            ) : (
+              <NotFound id={route.kind === 'page' ? route.id : ''} />
+            )}
+          </main>
+          <aside className="side-col">
+            {target && <PageOutline pageId={target.page} />}
+          </aside>
+        </div>
+      )}
     </div>
   )
 }
 
-function useHash(): string {
-  const [hash, setHash] = useState(() => window.location.hash)
-  useEffect(() => {
-    const on = () => setHash(window.location.hash)
-    window.addEventListener('hashchange', on)
-    return () => window.removeEventListener('hashchange', on)
-  }, [])
-  return hash
-}
+type ModelState = { model: DocsModel } | { error: string; retry: () => void } | { loading: true }
 
-function Empty() {
-  return (
-    <>
-      <h1>docs</h1>
-      <p>読む画面はこれから足す。配線の確かめは <a href="#/_wiring">#/_wiring</a>。</p>
-    </>
-  )
-}
-
-type Check = { name: string; state: 'wait' | 'ok' | 'ng'; note: string }
-
-/**
- * 配線の確かめ (開発用)。
- *
- * - ビューアの入口は**ここを開いた時だけ** dynamic import する。殻のチャンクに deepslate を入れない
- * - リソースパックがルート絶対のパスで届くこと (base が `/docs/` でもずれないこと) を見る
- * - 生成物が base の配下から届くことを見る
- */
-function WiringCheck() {
-  const [checks, setChecks] = useState<Check[]>([
-    { name: 'viewer', state: 'wait', note: '' },
-    { name: 'resourcepack', state: 'wait', note: '' },
-    { name: 'data', state: 'wait', note: '' },
-  ])
+function useModel(): ModelState {
+  const [state, setState] = useState<{ model: DocsModel } | { error: string } | null>(null)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let alive = true
-    const set = (name: string, state: Check['state'], note: string) => {
-      if (alive) setChecks(cs => cs.map(c => (c.name === name ? { name, state, note } : c)))
-    }
-    import('@redstone/docs-kit/viewer')
-      .then(m => {
-        const f = m.fixtureFrame({ from: [0, 0, 0], to: [5, 1, 1] })
-        set('viewer', 'ok', `fixtureFrame の距離 ${f.distance.toFixed(2)}`)
-      })
-      .catch(e => set('viewer', 'ng', String(e)))
-    const getJson = (url: string) => fetch(url).then(r => {
-      if (!r.ok) throw new Error(`${r.status} ${url}`)
-      return r.json() as Promise<Record<string, unknown>>
-    })
-    getJson(`${RESOURCEPACK_URL}/bundle.json`)
-      .then(j => set('resourcepack', 'ok', `${RESOURCEPACK_URL}/bundle.json・${Object.keys(j).length} キー`))
-      .catch(e => set('resourcepack', 'ng', String(e)))
-    getJson(dataUrl('manifest.json'))
-      .then(j => {
-        const m = j as unknown as Manifest
-        if (m.v !== DOCS_DATA_VERSION) throw new Error(`生成物の版が違う (${m.v})`)
-        set('data', 'ok', `${dataUrl('manifest.json')}・メモ ${m.counts.docs}・ページ ${m.counts.pages}・節 ${m.counts.sections}`)
-      })
-      .catch(e => set('data', 'ng', String(e)))
+    loadManifest().then(
+      m => { if (alive) setState({ model: buildModel(m) }) },
+      e => { if (alive) setState({ error: String(e instanceof Error ? e.message : e) }) },
+    )
     return () => { alive = false }
-  }, [])
+  }, [attempt])
+  return useMemo<ModelState>(() => {
+    if (!state) return { loading: true }
+    if ('error' in state) return { error: state.error, retry: () => { setState(null); setAttempt(n => n + 1) } }
+    return state
+  }, [state])
+}
+
+function NotFound({ id }: { id: string }) {
   return (
-    <>
-      <h1>配線の確かめ</h1>
-      <p>docs-kit の版 {DOCS_KIT_VERSION}・base <code>{import.meta.env.BASE_URL}</code></p>
-      <ul className="wiring">
-        {checks.map(c => (
-          <li key={c.name} data-check={c.name} data-state={c.state}>
-            <b>{c.name}</b> {c.state} <span>{c.note}</span>
-          </li>
-        ))}
-      </ul>
-    </>
+    <div className="page">
+      <h1>ページが無い</h1>
+      <p><code>{id}</code> というページは目次に無い。節の番号が変わった可能性がある。<a href="#/">最初の画面へ</a></p>
+    </div>
   )
 }
