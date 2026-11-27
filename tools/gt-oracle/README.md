@@ -131,7 +131,7 @@ R18 §4.5 の表のうち O1 に要る物と、動かして見つけた物。
 | 1.21.1 の expect との差 | 130 本とも無い (canonicalize する前の expect の文字列でも同じ) |
 | 2 回の一致 | 一致 |
 | 入力の効き方 | use 184 (Success 182・Pass 2)・setblock 123・item 15・summon 4・kill 3。Pass の 2 件は素手で鉄のドアと鉄のトラップドアを使う door-desync と trapdoor-desync で、1.21.1 の expect とも合う |
-| 外した 4 本 | pressure-plate-stone・pressure-plate-wood (step)、lever-support-break・shulker-box-conductor (レバーかボタンの setblock と trustAuthored)。R18 §8 が版差を予想した「/setblock で部品を消す・置き換える」入力は、撮った 130 本にも 123 件ある。tick の境界の盤面には差が出なかった |
+| 外した 4 本 | pressure-plate-stone・pressure-plate-wood (step)、lever-support-break・shulker-box-conductor (レバーかボタンの setblock と trustAuthored)。撮った 130 本の setblock 123 件では、tick の境界の盤面に差が出なかった。R18 §8 が予想した /setblock の後始末の版差がどこまで盤面に出るかは、O2・O3 で外した側も撮って確かめる |
 
 ## IP の決まり
 
