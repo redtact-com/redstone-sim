@@ -29,3 +29,7 @@ tools/decompile/jars/
 tools/decompile/work/
 tools/decompile/out/
 .claude/
+
+# 26.3 のオラクル (#439) の作業フォルダ。サーバ jar・展開したライブラリ・class・ワールド・
+# 撮った結果が入る。Mojang 由来物なのでコミットしない (docs/research/18 §4.1)
+tools/gt-oracle/work/
