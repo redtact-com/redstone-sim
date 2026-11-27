@@ -32,8 +32,12 @@ const VERBATIM: { name: string; re: RegExp }[] = [
   { name: 'Java の型付き引数リスト', re: /\w\s*\(\s*(final\s+)?([A-Z]\w*(<[^>()]*>)?|int|long|boolean|double|float|byte|short|char)(\[\])?\s+[a-z]\w*\s*[,)]/ },
 ]
 
-/** 走査対象。生成物・fixture・デコンパイル作業ディレクトリは除く */
-const SCAN_EXT = ['.ts', '.tsx', '.md', '.sc', '.mjs']
+/**
+ * 走査対象。生成物・fixture・デコンパイル作業ディレクトリは除く。
+ * .java は 26.3 のオラクルの起動コード (tools/gt-oracle/java。#439)。ほかのソースと同じく**コメント行だけ**を見る
+ * (自前のコードの文は Java の形をしているので、文まで見ると全部が当たる)
+ */
+const SCAN_EXT = ['.ts', '.tsx', '.md', '.sc', '.mjs', '.java']
 const SKIP = [
   'tools/ip-hygiene.test.ts',        // このファイル自身 (パターンを持っている)
   'docs/ip-policy.md',               // 書き方の見本として ✗ 例を載せている
