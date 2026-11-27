@@ -296,6 +296,14 @@ Level#setBlock が出す [26.3 読解: LevelChunk#setBlockState / Level#setBlock
 **取り付け**: FaceAttachedHorizontalDirectionalBlock#canSurvive は支えの面が sturdy か。
 #updateShape は支えの向きからの PP で生存を確かめ、だめなら空気にする
 (壊れて落ちる。→ 04 の updateOrDestroy)。[実機 1.21.1: lever-support-break]
+- **レバーは NC に反応しない**。LeverBlock も、親の FaceAttachedHorizontalDirectionalBlock・HorizontalDirectionalBlock・Block も
+  neighborChanged を上書きしない。既定の BlockBehaviour#neighborChanged は何もしない。だから NC では、取り付けの確認も powered の変更も起きない。
+  取り付けを確かめるのは PP だけである [26.3 読解: LeverBlock・FaceAttachedHorizontalDirectionalBlock・BlockBehaviour#neighborChanged]。
+- 支えがフラグ 16 つきの書き込み (PP を出さない) で消えると、周りへ NC が届いてもレバーは残る。次に支えの向きから PP が届いた時に壊れる。
+- PP の確認は、**支えの向きから届いた PP だけ**で行う。ほかの 5 方向からの PP では何もしない (今の状態のまま)。
+- 判定に使うのは**世界の今の支え**である。#updateShape は #canSurvive を呼び、#canAttach が取り付け先の座標の状態を世界から読み直す。
+  PP が運んできた「相手の状態」は使わない。ダストの下からの PP は逆で、運ばれた状態で判定する (→ 06 §4.6)。
+- 1.21.1・26.2・26.4-pre-1 も同じである (どの版のレバーも neighborChanged を持たない)。ボタンも同じ親を使い、neighborChanged を持たない (§4.2)。
 
 ### 4.2 ボタン
 

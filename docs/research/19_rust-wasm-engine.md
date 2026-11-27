@@ -596,7 +596,15 @@ pub struct Updater {
 
 **入力は tick の関数の外で受ける**。呼ばれたその場で、連鎖を最後まで回し切る。
 
-- fixture の規約は「state[t] は tick t の全相の後、tick t の入力の直後」である。step を 1 回呼び、その tick の入力を呼び、状態を読む。これで規約どおりになる。
+- fixture の規約は「state[t] は tick t の全相の後、tick t の入力の直後」である (tools/mc-harness/README.md の「tick 規約」)。実行器は次の形で回す。
+  1. 初めの盤面を置く (§4.2 の「そのまま」)。これは **tick −1 の状態**である。tick 0 の全相は、もう済んだものとして扱う。
+  2. t = 0 では **step を呼ばない**。tick 0 の入力だけを入れ、状態を読む。これが state[0] である。
+  3. t = 1 〜 ticks では、step を 1 回呼び、tick t の入力を入れ、状態を読む。これが state[t] である。
+- step を呼ぶ回数は ticks 回で、ticks + 1 回ではない。t = 0 の前にも step を呼ぶと、初めの盤面に持ち込んだ予約 (fixture の scheduled ほか) が 1 tick 早く発火し、以後の全 tick が 1 つずれる。
+  予約も BE も持たない静かな盤面では差が出ないので、テストは step の回数を直に確かめる。
+- この数え方は、正解を撮る側と同じである。
+  - 26.3 のオラクル (tools/gt-oracle/java/gtoracle/Driver.java の SETTLE → RECORD): settle の最後の tick に tick −1 を撮り、同じ tick の中で tick 0 の入力を入れて tick 0 を撮る。次の tick からは、1 tick 進むたびに t を 1 増やし、入力を入れて撮る。
+  - TS の実行器 (packages/sim/src/fixture-driver.ts の runFixtureOnSim): settle した世界から始め、t が 1 以上の時だけ tick を進めてから、入力を入れて読む。
 - 今のアプリも、入力の直後に状態を同期で読む。この使い方を保つ。
 - 予約の基準の時刻は今の game_time である。入力由来の予約は、tick の中の予約より 1 tick 早く見える (V01 §2.4)。
 - 凍結と step は「時計と L4 以外の相を飛ばす。ticker は掃除だけ」で表す。積む側は止めない (V03 §7.3)。
