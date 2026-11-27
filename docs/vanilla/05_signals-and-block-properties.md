@@ -73,6 +73,7 @@
 引数は「源の位置」と「読み手から源への向き」である。
 
 1. 源の位置の状態を取る。範囲外 (高さの外と、チャンク座標の上限の外) は void_air になる。[26.3 読解: Level#getBlockState・#isInValidBounds]
+   範囲の数値は → 04 §4.1 (overworld は高さ −64〜319、水平は ±約 3355 万)。void_air の性質は §4.7.6。
 2. その状態の getSignal に位置と向きを渡し、弱い信号 s を得る。
 3. その状態が導体 (isRedstoneConductor にその位置を渡して真) なら、getDirectSignalTo (源の位置) と s の大きい方を返す。
 4. 導体でなければ s を返す。
@@ -510,6 +511,22 @@ reinforced_deepslate, lodestone, nether_portal, end_portal, end_gateway, barrier
 
 **PUSH_PULL (886)**: 上に無いもの全部。
 
+**縦切りの 5 種の生の値** (Properties の値そのもの。isPushable を通す前)
+
+| ブロック | 生の値 | 登録での指定 |
+|---|---|---|
+| air・cave_air・void_air | PUSH_PULL | 指定なし (既定) |
+| stone | PUSH_PULL | 指定なし (既定) |
+| redstone_lamp | PUSH_PULL | 指定なし (既定) |
+| lever | POPPED | 指定あり |
+| redstone_wire | POPPED | 指定あり |
+
+- 空気の 3 種は押し反応を指定していないので、生の値は既定の PUSH_PULL である。「空気 (素通り)」(§4.6.4) は押し反応の値ではなく、空気の印 (§4.7.6) による分類である。
+- 空気の生の値は、結果に効く所が無い。ブロックの押し反応を読むのは PistonBaseBlock#isPushable と、PistonStructureResolver (POPPED かを 2 か所で見る)、
+  PistonBaseBlock の引き戻し (PUSH_PULL 以外かを見る) だけで、どれも空気の印を先に見るか、PUSH_PULL として素通りする。
+  列には PUSH_PULL を入れておけば、どの読み手でも実機と同じ結果になる。
+- 押し反応は状態によらずブロックに 1 つである (§3.6)。レバーの 24 状態・ダストの 1296 状態・ランプの 2 状態は、それぞれ全部同じ値である。
+
 #### 4.6.4 isPushable を通した実効の分類 (26.3)
 
 | 分類 | 数 | ブロック |
@@ -645,6 +662,41 @@ reinforced_deepslate, lodestone, nether_portal, end_portal, end_gateway, barrier
 - 5 種の外の値は、状態ダンプ (§3.7 B) で取る。今のダンプの列は「上面と下面の FULL」だけなので、状態表の列にする時は 6 方向 × 3 種の 18 個に広げる。
 - 床置きの CENTER には、支えとは別の門番が 1 つある。Block#canSupportCenter は、下向きの面を問われた相手がタグ unstable_bottom_center
   (木のフェンスゲート 13 種) なら、支えを見ずに偽を返す (付録 C.1 のランタンの行)。RIGID の入口 (Block#canSupportRigidBlock) は真下の上面だけを問う。
+
+#### 4.7.6 空気の仲間 (air・cave_air・void_air) [26.3 読解: Blocks の 3 つの登録, AirBlock, Properties#air, BlockStateBase#isAir, Level#getBlockState・#getFluidState・#getBlockEntity・#setBlock, LevelChunk#getBlockState・#setBlockState]
+
+- 3 種は**同じクラス (AirBlock) を、同じ性質の指定で**登録している。指定は replaceable・noCollision・ドロップなし・空気の印の 4 つで、違うのは登録名だけである。
+  3 種ともプロパティを持たず、状態は 1 つずつである。
+- だから状態表の列は 3 種で全部同じになる。
+
+| 列 | 3 種の値 | 参照 |
+|---|---|---|
+| 空気の印 (isAir) | 真 | 印を持つのは 26.3 でこの 3 種だけ |
+| replaceable | 真 | §4.7.1 |
+| 導体 | 偽 (当たり判定が空) | §4.4 |
+| 信号源・弱い信号・強い信号・アナログ出力 | 偽・0・0・無し (既定のまま) | §4.2 |
+| 押し反応の生の値 | PUSH_PULL (isPushable では空気の印で先に真) | §4.6.3 |
+| 面の支え | 18 個とも偽 | §4.7.5 |
+| legacy solid | 偽 (当たり判定が空) | §4.7.2 |
+| 硬さ・BE・ランダム tick・流体の状態 | 0・無し・無し・空 | §3.6 |
+| フック (neighborChanged・updateShape・設置・撤去・tick) | 全部既定 (何もしない。updateShape は自分を返す) | → 04 |
+
+- 違いは**ブロックの同一性**だけである。同一性を見るのは、予約 tick とブロックイベントの種類の照合 (→ 02・03)、setBlock の「ブロックが変わったか」(→ 04 §4.2 の手順 5)、
+  NC が運ぶ「送り元のブロック」(→ 04 §4.5)、それに air を名指しする少数の所である。
+  名指しは、world/level の下では地形生成・高さマップ・生成中のチャンク・砂漠の環境音・植木鉢・カボチャの像の組み立てにあり、レッドストーンの素子の判定には無い。
+  素子が「空気か」を問う所は空気の印で見る (ピストン・Block#updateOrDestroy・Level#destroyBlock・カーペットの存続など)。
+- **範囲の外の void_air** (→ 04 §4.1 の範囲):
+  - 読むと void_air の既定の状態が返る。流体の状態は「空」、BlockEntity は「無し」が返る。チャンクは引かない。
+  - 書き込みは false で、何も起きない。void_air を別のブロックへ置き換えることはできない。
+  - 範囲の外の座標へ届いた NC と SU は、void_air の既定のフックへ渡り、何もしない。更新器の件数 (→ 04 §4.3) は進む。
+  - 26.3 で void_air を返すのは、範囲の外の読みと、空のチャンク・生成中のチャンクの読みだけである。読み込み済みの範囲の内の空のマスは air か cave_air である。
+- エンジンで「高さの外は空気として読む」のは、列の値が同じなので、信号・支え・押し・置き換えの結果を変えない。
+  変わりうるのは同一性を見る所だけで、5 種の縦切りでは、高さの外の座標を送り元や種類の照合に使う経路が無い。
+  状態表に void_air (と cave_air) を足す時は、air の行を写して名前だけ変えればよい。
+- **空気だけのセクション**には 1 つ癖がある。チャンクは、空気の印を持たないブロックが 1 つも無いセクションを「空気だけ」と数える。
+  - そのセクションを読むと、中身が cave_air でも air の既定の状態が返る (LevelChunk#getBlockState)。
+  - そのセクションへ空気の印を持つ状態を書くと「無し」が返り、何も起きない (→ 04 §4.2 の手順 1)。air だけのセクションへ cave_air は書けない。
+  - 回路に効く差ではないが、fixture の初期配置に cave_air を含む世界を読み込む時、読み返した名前が air になりうる。
 
 ---
 
