@@ -32,3 +32,7 @@ tools/decompile/out/
 
 # 読む用の Web (#434) の生成物。npm run build:docs が md から作る (追跡しない)
 docs-web/public/data
+
+# 26.3 のオラクル (#439) の作業フォルダ。サーバ jar・展開したライブラリ・class・ワールド・
+# 撮った結果が入る。Mojang 由来物なのでコミットしない (docs/research/18 §4.1)
+tools/gt-oracle/work/
