@@ -30,8 +30,11 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   // 本番ビルドを起こしてから preview で配信する。ビルド込みなので起動は長め。
+  // 読む用の Web (#434) は PR のプレビューと同じ形にする: app のビルドの後に
+  // docs-web をビルドして app/dist/docs へ写し、app の preview の /docs/ で開く
+  // (同じオリジンなので /resourcepack がそろう)。webServer は 1 本のまま。
   webServer: {
-    command: `npm run build -w app && npm run preview -w app -- --port ${PORT} --strictPort --host 127.0.0.1`,
+    command: `npm run build -w app && npm run build:docs && npm run stage:docs && npm run preview -w app -- --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

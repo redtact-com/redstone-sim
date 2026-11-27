@@ -1,0 +1,18 @@
+/* ビューアの中の見た目 (#434)。ビューアのチャンクと一緒に、札の「表示」を押した時に取る (data.ts の loadViewer)。
+   色は docs.css の変数を使う */
+.fxv-frame { max-width: 720px; overflow: hidden; border-radius: 4px; background: #19191f; cursor: pointer; }
+.fxv[data-interactive="1"] .fxv-frame { cursor: auto; outline: 2px solid var(--mk-fx-fg); outline-offset: 1px; }
+.fxv-grab {
+  position: absolute; right: 6px; bottom: 6px; padding: 0 8px; border: 0; border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6); color: #e4e6ea; font-size: 0.78rem; line-height: 1.7;
+}
+.fxv-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; max-width: 720px; }
+.fxv-bar button { padding: 1px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.fxv-bar button:disabled { opacity: 0.45; cursor: default; }
+.fxv-bar button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.fxv-tick, .fxv-layer { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fxv-tick { min-width: 7.5em; margin: 0 4px; }
+.fxv-views, .fxv-layers { display: inline-flex; align-items: center; gap: 4px; }
+.fxv-views { margin-left: auto; }
+.fxv-note { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; line-height: 1.5; max-width: 720px; }
+.fxv-note-warn { color: var(--mk-need-fg); }

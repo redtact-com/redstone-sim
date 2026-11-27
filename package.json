@@ -5,12 +5,18 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "app"
+    "app",
+    "docs-web"
   ],
   "scripts": {
     "dev": "npm run dev -w app",
     "build": "npm run build -w app",
     "preview": "npm run preview -w app",
+    "dev:docs": "npm run docs:index && npm run dev -w docs-web",
+    "build:docs": "npm run docs:index && npm run build -w docs-web",
+    "docs:index": "tsx tools/docs-index/build.ts",
+    "docs:search": "tsx tools/docs-index/cli.ts",
+    "stage:docs": "node tools/docs-index/stage.mjs",
     "lint": "npm run lint -w app",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -18,7 +24,7 @@
     "demo-gif": "node tools/demo/demo-gif.mjs",
     "demo-mp4": "node tools/demo/demo-mp4.mjs",
     "e2e": "playwright test",
-    "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json app/tsconfig.json && tsc -p tools/tsconfig.json",
+    "typecheck": "tsc -b packages/sim/tsconfig.json packages/editor/tsconfig.json packages/viewer/tsconfig.json packages/docs-kit/tsconfig.json app/tsconfig.json docs-web/tsconfig.json && tsc -p tools/tsconfig.json",
     "harness:up": "DOCKER_API_VERSION=1.44 docker compose -f tools/mc-harness/docker-compose.yml up -d",
     "harness:down": "DOCKER_API_VERSION=1.44 docker compose -f tools/mc-harness/docker-compose.yml down",
     "gen-item-stacks": "node tools/gen-item-stacks.mjs",
@@ -30,8 +36,10 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
     "@playwright/test": "^1.61.1",
+    "@types/markdown-it": "^14.2.0",
     "@types/ws": "^8.18.1",
     "gifenc": "^1.0.3",
+    "markdown-it": "^14.3.3",
     "playwright": "^1.61.1",
     "pngjs": "^7.0.0",
     "tsx": "^4.22.4",

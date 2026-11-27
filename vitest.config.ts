@@ -12,9 +12,14 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/.claude/**', '**/dist/**', '**/e2e/**'],
   },
   resolve: {
-    alias: {
-      '@redstone/sim':    path.resolve(__dirname, 'packages/sim/src/index.ts'),
-      '@redstone/editor': path.resolve(__dirname, 'packages/editor/src/index.ts'),
-    },
+    // 配列で書く。`@redstone/docs-kit/viewer` を入口より先に置く (前方一致で吸われないように)
+    alias: [
+      { find: '@redstone/sim',             replacement: path.resolve(__dirname, 'packages/sim/src/index.ts') },
+      { find: '@redstone/editor',          replacement: path.resolve(__dirname, 'packages/editor/src/index.ts') },
+      { find: '@redstone/viewer',          replacement: path.resolve(__dirname, 'packages/viewer/src/index.ts') },
+      { find: '@redstone/docs-kit/diagrams', replacement: path.resolve(__dirname, 'packages/docs-kit/src/diagrams/index.ts') },
+      { find: '@redstone/docs-kit/viewer', replacement: path.resolve(__dirname, 'packages/docs-kit/src/viewer/index.ts') },
+      { find: '@redstone/docs-kit',        replacement: path.resolve(__dirname, 'packages/docs-kit/src/index.ts') },
+    ],
   },
 })

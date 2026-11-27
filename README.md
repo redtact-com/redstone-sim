@@ -54,6 +54,29 @@ npm test             # sim / editor のユニットテスト（vitest）
 npm run typecheck    # packages の型チェック
 ```
 
+## 読解メモを引く (CLI と AI 向けの索引)
+
+docs/vanilla (26.3 の読解メモ 21 本) と docs/research 17〜19 は、節ごとに引ける。
+md からその場で索引を作るので、ビルドは要らない (約 1 秒)。
+
+```bash
+npm run docs:search -- リピーター ロック        # 語で探す (節の ID・見出し・file:line・抜粋)
+npm run docs:search -- --id v07/4.3            # 節の本文 (下の節も含む)。v07 ならメモの見出しの一覧
+npm run docs:search -- --id v07 --full         # メモの全文 (v07/0 は前置きだけ)
+npm run docs:search -- --block repeater        # ブロック ID・和名 → クラス → 節
+npm run docs:search -- --class RepeaterBlock   # クラス → 節 (00 の網羅表の担当欄)
+npm run docs:search -- --fixture piston-basic  # fixture → 節
+npm run docs:search -- --mark need ピストン     # 印で絞る (--doc v13 でメモで絞る)
+npm run --silent docs:search -- --json --block repeater   # JSON で受ける
+```
+
+- 節の ID は「メモの番号 + 見出しの番号」(`v07/4.3` = docs/vanilla/07 の §4.3)。一覧は `tools/docs-index/section-ids.txt`
+- `--block` の表 (`tools/docs-index/blocks.json`) はレッドストーン部品だけ。表に無いブロックは「表に無い」と返る
+  (メモに記述が無いという意味ではない。その時は語で探す)
+- `npm run docs:index` は、読む用の Web (`npm run dev:docs`) のデータと AI 向けの索引
+  (`docs-web/public/data/ai/` の `sections.jsonl`・`by-class.json`・`by-fixture.json`・`by-block.json`・`README.md`) を出す。
+  生成物は追跡しない。PR のプレビューでは `/docs/data/ai/` から取れる
+
 ## ブランチ運用とデプロイ
 
 | ブランチ | 役割 | URL（push で自動更新） |
