@@ -73,6 +73,7 @@
 引数は「源の位置」と「読み手から源への向き」である。
 
 1. 源の位置の状態を取る。範囲外 (高さの外と、チャンク座標の上限の外) は void_air になる。[26.3 読解: Level#getBlockState・#isInValidBounds]
+   範囲の数値は → 04 §4.1 (overworld は高さ −64〜319、水平は ±約 3355 万)。void_air の性質は §4.7.6。
 2. その状態の getSignal に位置と向きを渡し、弱い信号 s を得る。
 3. その状態が導体 (isRedstoneConductor にその位置を渡して真) なら、getDirectSignalTo (源の位置) と s の大きい方を返す。
 4. 導体でなければ s を返す。
@@ -510,6 +511,22 @@ reinforced_deepslate, lodestone, nether_portal, end_portal, end_gateway, barrier
 
 **PUSH_PULL (886)**: 上に無いもの全部。
 
+**縦切りの 5 種の生の値** (Properties の値そのもの。isPushable を通す前)
+
+| ブロック | 生の値 | 登録での指定 |
+|---|---|---|
+| air・cave_air・void_air | PUSH_PULL | 指定なし (既定) |
+| stone | PUSH_PULL | 指定なし (既定) |
+| redstone_lamp | PUSH_PULL | 指定なし (既定) |
+| lever | POPPED | 指定あり |
+| redstone_wire | POPPED | 指定あり |
+
+- 空気の 3 種は押し反応を指定していないので、生の値は既定の PUSH_PULL である。「空気 (素通り)」(§4.6.4) は押し反応の値ではなく、空気の印 (§4.7.6) による分類である。
+- 空気の生の値は、結果に効く所が無い。ブロックの押し反応を読むのは PistonBaseBlock#isPushable と、PistonStructureResolver (POPPED かを 2 か所で見る)、
+  PistonBaseBlock の引き戻し (PUSH_PULL 以外かを見る) だけで、どれも空気の印を先に見るか、PUSH_PULL として素通りする。
+  列には PUSH_PULL を入れておけば、どの読み手でも実機と同じ結果になる。
+- 押し反応は状態によらずブロックに 1 つである (§3.6)。レバーの 24 状態・ダストの 1296 状態・ランプの 2 状態は、それぞれ全部同じ値である。
+
 #### 4.6.4 isPushable を通した実効の分類 (26.3)
 
 | 分類 | 数 | ブロック |
@@ -585,6 +602,101 @@ reinforced_deepslate, lodestone, nether_portal, end_portal, end_gateway, barrier
 - 葉は支えの形が空なので、どの面も支えにならない (LeavesBlock#getBlockSupportShape)。葉の上にダスト・トーチ・リピーターは置けず、横にレバーも付かない。
   ガラスは非導体だが支えにはなる。
 - 開いたシュルカーは底の面だけが支えになる (§4.4.3)。
+- この表は支えを「求める側」である。支えを「出す側」(どの状態のどの面が支えるか) は §4.7.5 にある。
+
+#### 4.7.5 面の支えを出す側 [26.3 読解: BlockStateBase#isFaceSturdy, BlockStateBase の Cache, BlockBehaviour#getBlockSupportShape・#getCollisionShape・#getShape, SupportType, Block#isFaceFull, VoxelShape#getFaceShape]
+
+支えの答えは「状態・面の方向・SupportType」で決まる真偽である。求め方は次のとおり。
+
+1. **支えの形**を取る (getBlockSupportShape)。既定は当たり判定の形である。
+   当たり判定の形の既定は、noCollision のブロックなら空、そうでなければ輪郭の形 (getShape) である。輪郭の形の既定は 1 ブロックの立方体である。
+2. 支えの形から、問われた方向の**面の形**を取る。面の形は、支えの形がその方向のブロックの境界に接している部分の断面である。
+   空の形の面は空で、立方体の面は全面である。
+3. SupportType ごとに面の形を見る。
+   - FULL: 面の形が全面 (16×16 ピクセル) に等しい。
+   - CENTER: 面の形が、中央の 2×2 ピクセル (7〜9) を全部含む。
+   - RIGID: 面の形が、外周の 2 ピクセル幅の枠 (全面から中央の 12×12 を抜いた形) を全部含む。
+4. SupportType を渡さない問い合わせは FULL である。
+
+- 値は 1 状態につき 6 方向 × 3 種 = **18 個**である。動的形状でないブロックは、状態のキャッシュを作る時に「空のブロック取得器・原点」で 18 個を計算して持つ。
+  だから位置にも周りのブロックにも依らない。状態表の列にできる。
+- 動的形状のブロック (キャッシュを持たない) は、問われるたびにその位置で計算する。支えに効くのはシュルカーボックスである (§4.4.3)。
+- 全面が FULL の面は、CENTER と RIGID も真である。空の面は 3 種とも偽である。3 種が割れるのは、面を一部だけ覆う形 (塀・柵・板ガラスなど) だけである。
+
+**縦切りの 5 種の値** (26.3)。5 種とも getBlockSupportShape を上書きせず、動的形状でもない。
+
+| ブロック | 登録の性質 | 支えの形 | 6 面 × 3 種の値 |
+|---|---|---|---|
+| air (cave_air・void_air も同じ) | noCollision | 空 | 18 個とも偽 |
+| stone | 当たり判定あり。輪郭は既定 (立方体) | 立方体 | 18 個とも真 |
+| lever (24 状態すべて) | noCollision | 空 | 18 個とも偽 |
+| redstone_wire (1296 状態すべて) | noCollision | 空 | 18 個とも偽 |
+| redstone_lamp (lit の真偽とも) | 当たり判定あり。輪郭は既定 (立方体) | 立方体 | 18 個とも真 |
+
+- つまり「石とランプは 6 面とも FULL、レバーとダストはどの面も支えない」でよい。石とランプは CENTER と RIGID も 6 面とも真である。
+- レバーとダストは輪郭の形 (選択の枠) を持つが、noCollision なので当たり判定が空になり、支えの形も空になる。輪郭の形は支えに効かない。
+- ランプの支えは lit で変わらない。導体かどうか (§4.4) とも独立である (この 5 種ではたまたま一致する)。
+
+**縦切りで支えを求める所** (求める側の式は → 06・09)。
+
+| 求める側 | 見る相手 | 見る面 | 種類 | 支え以外の例外 |
+|---|---|---|---|---|
+| ダストの存続 (RedstoneWireBlock#canSurvive) | 真下 | 上面 | FULL | 真下が hopper なら支えを見ずに可 |
+| ダストの上り接続 (RedstoneWireBlock#getConnectingSide) | 横の隣 | 上面 (載せられるか) と、ダストに向いた側面 (up か side か) | FULL | 横の隣がトラップドアか hopper なら、上面を見ずに「載せられる」とする。側面の支えは例外なく見る |
+| レバーの存続 (FaceAttachedHorizontalDirectionalBlock#canAttach) | 取り付け先 (床付けは真下・天井付けは真上・壁付けは facing の逆の隣) | レバーに向いた面 | FULL | なし |
+
+- 5 種だけの世界では、ダストは石かランプの上にだけ残り、レバーは石かランプにだけ付く。ダストの上にもレバーの上にも何も載らない。
+
+**支えの形を上書きするクラス** (26.3 の全部。5 種の外。状態表を広げる時に効く)。
+
+| クラス | 支えの形 |
+|---|---|
+| LeavesBlock | 常に空 (どの面も支えない。§4.7.4) |
+| SoulSandBlock・MudBlock | 常に立方体 (当たり判定は 1 ブロックより低いが、6 面とも支える) |
+| SnowLayerBlock | 段数どおりの高さの形 (当たり判定は 1 段低い。上面が全面になるのは 8 段だけ) |
+| FenceGateBlock | 開いていれば空。閉じていれば支え専用の形 (当たり判定とは別の形) |
+| ShulkerBoxBlock | BE があって閉じていなければ、開いた時の支え専用の形。それ以外は立方体 (動的形状。§4.4.3) |
+| ChorusFlowerBlock | 支え専用の形 |
+| CeilingHangingSignBlock・WallHangingSignBlock | 輪郭の形 (当たり判定とは別) |
+
+- 5 種の外の値は、状態ダンプ (§3.7 B) で取る。今のダンプの列は「上面と下面の FULL」だけなので、状態表の列にする時は 6 方向 × 3 種の 18 個に広げる。
+- 床置きの CENTER には、支えとは別の門番が 1 つある。Block#canSupportCenter は、下向きの面を問われた相手がタグ unstable_bottom_center
+  (木のフェンスゲート 13 種) なら、支えを見ずに偽を返す (付録 C.1 のランタンの行)。RIGID の入口 (Block#canSupportRigidBlock) は真下の上面だけを問う。
+
+#### 4.7.6 空気の仲間 (air・cave_air・void_air) [26.3 読解: Blocks の 3 つの登録, AirBlock, Properties#air, BlockStateBase#isAir, Level#getBlockState・#getFluidState・#getBlockEntity・#setBlock, LevelChunk#getBlockState・#setBlockState]
+
+- 3 種は**同じクラス (AirBlock) を、同じ性質の指定で**登録している。指定は replaceable・noCollision・ドロップなし・空気の印の 4 つで、違うのは登録名だけである。
+  3 種ともプロパティを持たず、状態は 1 つずつである。
+- だから状態表の列は 3 種で全部同じになる。
+
+| 列 | 3 種の値 | 参照 |
+|---|---|---|
+| 空気の印 (isAir) | 真 | 印を持つのは 26.3 でこの 3 種だけ |
+| replaceable | 真 | §4.7.1 |
+| 導体 | 偽 (当たり判定が空) | §4.4 |
+| 信号源・弱い信号・強い信号・アナログ出力 | 偽・0・0・無し (既定のまま) | §4.2 |
+| 押し反応の生の値 | PUSH_PULL (isPushable では空気の印で先に真) | §4.6.3 |
+| 面の支え | 18 個とも偽 | §4.7.5 |
+| legacy solid | 偽 (当たり判定が空) | §4.7.2 |
+| 硬さ・BE・ランダム tick・流体の状態 | 0・無し・無し・空 | §3.6 |
+| フック (neighborChanged・updateShape・設置・撤去・tick) | 全部既定 (何もしない。updateShape は自分を返す) | → 04 |
+
+- 違いは**ブロックの同一性**だけである。同一性を見るのは、予約 tick とブロックイベントの種類の照合 (→ 02・03)、setBlock の「ブロックが変わったか」(→ 04 §4.2 の手順 5)、
+  NC が運ぶ「送り元のブロック」(→ 04 §4.5)、それに air を名指しする少数の所である。
+  名指しは、world/level の下では地形生成・高さマップ・生成中のチャンク・砂漠の環境音・植木鉢・カボチャの像の組み立てにあり、レッドストーンの素子の判定には無い。
+  素子が「空気か」を問う所は空気の印で見る (ピストン・Block#updateOrDestroy・Level#destroyBlock・カーペットの存続など)。
+- **範囲の外の void_air** (→ 04 §4.1 の範囲):
+  - 読むと void_air の既定の状態が返る。流体の状態は「空」、BlockEntity は「無し」が返る。チャンクは引かない。
+  - 書き込みは false で、何も起きない。void_air を別のブロックへ置き換えることはできない。
+  - 範囲の外の座標へ届いた NC と SU は、void_air の既定のフックへ渡り、何もしない。更新器の件数 (→ 04 §4.3) は進む。
+  - 26.3 で void_air を返すのは、範囲の外の読みと、空のチャンク・生成中のチャンクの読みだけである。読み込み済みの範囲の内の空のマスは air か cave_air である。
+- エンジンで「高さの外は空気として読む」のは、列の値が同じなので、信号・支え・押し・置き換えの結果を変えない。
+  変わりうるのは同一性を見る所だけで、5 種の縦切りでは、高さの外の座標を送り元や種類の照合に使う経路が無い。
+  状態表に void_air (と cave_air) を足す時は、air の行を写して名前だけ変えればよい。
+- **空気だけのセクション**には 1 つ癖がある。チャンクは、空気の印を持たないブロックが 1 つも無いセクションを「空気だけ」と数える。
+  - そのセクションを読むと、中身が cave_air でも air の既定の状態が返る (LevelChunk#getBlockState)。
+  - そのセクションへ空気の印を持つ状態を書くと「無し」が返り、何も起きない (→ 04 §4.2 の手順 1)。air だけのセクションへ cave_air は書けない。
+  - 回路に効く差ではないが、fixture の初期配置に cave_air を含む世界を読み込む時、読み返した名前が air になりうる。
 
 ---
 
