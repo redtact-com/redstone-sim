@@ -118,7 +118,7 @@ function compareRuns(dirA: string, dirB: string): boolean {
   const names = [...new Set([...a.plan.fixtures.map(f => f.name), ...b.plan.fixtures.map(f => f.name)])]
   const rows = names.flatMap(n => diffRuns(n, a.results.get(n), b.results.get(n)))
   if (rows.length === 0) {
-    console.log(`2 回の結果は一致した (${names.length} 本: ${names.join(', ')})`)
+    console.log(`2 回の結果は一致した (${names.length} 本${names.length <= 10 ? `: ${names.join(', ')}` : ''})`)
     return true
   }
   console.log(`2 回の結果が ${rows.length} か所で違う:`)

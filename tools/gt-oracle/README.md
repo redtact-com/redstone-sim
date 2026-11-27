@@ -62,7 +62,7 @@ GameTest の tick は、全ディメンションの tick と接続の tick の�
 | 種類 | 扱い |
 |---|---|
 | ブロック状態 | 範囲を毎 tick 読む。空気は持たない |
-| `use` | 偽の ServerPlayer (GameTestHelper.makeMockServerPlayer。世界には入れない) から、ServerPlayerGameMode.useItemOn を呼ぶ。当たりはブロックの中心・上の面、手は空 (R18 §4.4)。何も起きなければ失敗にする |
+| `use` | 偽の ServerPlayer (GameTestHelper.makeMockServerPlayer。世界には入れない) から、ServerPlayerGameMode.useItemOn を呼ぶ。当たりはブロックの中心・上の面、手は空 (R18 §4.4)。結果の種類 (Success・Pass など) を記録する。狙いを外さないので、何も起きなくても失敗にしない (素手の鉄のドアは Pass が正しい) |
 | `setblock`・`summon`・`kill`・`item` | 今のハーネスと同じコマンドの文字列を、Commands.performPrefixedCommand で実行する。失敗したら失敗にする |
 | コンテナの中身 (`items`) | /item replace で入れる (今と同じ) |
 | まだ写していない (起動前に止める) | `step`・`container`・`tp`・`lectern`、書見台の本、レバーとボタンの `setblock` (今のハーネスは支えブロックの隣にも更新を足している #290。写し方は O2)、`trustAuthored` と見えない状態の注入 (O4) |
@@ -105,7 +105,7 @@ R18 §4.5 の表のうち O1 に要る物と、動かして見つけた物。
 | EULA | `GT_ORACLE_ACCEPT_EULA=true` が無いと、run.sh も起動コードも止まる |
 | 版ごとの API の揺れ | jar から読んだ版が `GT_ORACLE_MC_VERSION` と違えば止まる。版を上げるときは縦切りの 2 本で確かめる |
 | redstone_experiments が入るとダストの更新順が変わる | GameTestServer は全部のデータパックを有効にして起動するので、効いている機能フラグを最初の tick で読む。redstone_experiments があれば止まる。実測では `trade_rebalance` と `vanilla` だけだった |
-| 入力が空振りしても進むと、「何も起きない」系列を正解として書く | use が何も起こさなかったら、コマンドが失敗したら、その 1 本を失敗にする |
+| 入力の写し方を誤ったまま進むと、「何も起きない」系列を正解として書く | コマンドが失敗したら、その 1 本を失敗にする。use は狙いを外さないので、結果の種類を記録するだけにする |
 | **[実測] tick が全速で回るので、チャンクの待ちを tick の数で測れない** | GameTestServer は tick の間を待たない。チャンクの生成は別スレッドで壁時計で進むので、待ちの間に約 3,000 tick 進んだ。待ちの上限は時間 (60 秒) で決め、tick の予算は大きくとる |
 | **[実測] bind mount の上のワールドは、終了時のチャンクの保存に 10 秒かかる** | ワールドはコンテナの tmpfs に作って捨てる。全体が 17 秒から 7 秒になった |
 | **[実測] ネットワークなしのコンテナでは、自分のホスト名を引けずに起動ログへ例外が出る** | `--hostname localhost` で起動する |
@@ -121,6 +121,17 @@ R18 §4.5 の表のうち O1 に要る物と、動かして見つけた物。
 | run.sh --twice の全体 | 21.8 秒 |
 | 1.21.1 の expect との差 | lever-wire-lamp・lamp-off-delay とも無い |
 | 2 回の一致 | 一致 (tick ごとのブロックと入力の効き方) |
+
+参考に、今のハーネスの定義 134 本のうち O1 の入力の範囲に入る 130 本も `--twice` で撮った (26.3 の fixture はコミットしていない)。
+
+| 項目 | 値 |
+|---|---|
+| 撮る (130 本・3,393 tick) | 1.8〜1.9 秒。R18 §5 の推定 (134 本で 1 分程度) より 1 桁速い |
+| 起動・コンテナ全体 | 6.1〜6.2 秒・8.8 秒 |
+| 1.21.1 の expect との差 | 130 本とも無い (canonicalize する前の expect の文字列でも同じ) |
+| 2 回の一致 | 一致 |
+| 入力の効き方 | use 184 (Success 182・Pass 2)・setblock 123・item 15・summon 4・kill 3。Pass の 2 件は素手で鉄のドアと鉄のトラップドアを使う door-desync と trapdoor-desync で、1.21.1 の expect とも合う |
+| 外した 4 本 | pressure-plate-stone・pressure-plate-wood (step)、lever-support-break・shulker-box-conductor (レバーかボタンの setblock と trustAuthored)。R18 §8 が版差を予想した「/setblock で部品を消す・置き換える」入力は、撮った 130 本にも 123 件ある。tick の境界の盤面には差が出なかった |
 
 ## IP の決まり
 

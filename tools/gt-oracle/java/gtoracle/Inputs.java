@@ -31,9 +31,11 @@ import net.minecraft.world.phys.Vec3;
 // - setblock・summon・kill・item: 今のハーネスと同じコマンドの文字列を、プロセス内のコマンドの入口
 //   (Commands.performPrefixedCommand) で実行する。rcon と同じコマンドの処理を通り、待ちが無い
 //
-// 入力が効かなかった (use が何もしなかった・コマンドが失敗した) ときは例外にする。
-// 黙って進むと「何も起きない」系列を正解として書いてしまう (今のハーネスの #242 の穴と同じ)。
-// それ以外の action (step・container・tp・lectern) は O2 で写す。gen-datapack.ts が先に止める
+// use の結果 (InteractionResult の種類) は記録するだけで、何も起きなくても失敗にしない。
+// 狙いを外すことが無いので、何も起きないのは実機の答えである (素手で鉄のドアを使う door-desync など)。
+// コマンドが失敗したときは例外にする。黙って進むと、写し方の誤りで「何も起きない」系列を正解として書いてしまう
+// (今のハーネスの #242 の穴と同じ)。それ以外の action (step・container・tp・lectern) は O2 で写す。
+// gen-datapack.ts が先に止める
 final class Inputs {
    private final GameTestHelper helper;
    private final ServerLevel level;
@@ -54,7 +56,11 @@ final class Inputs {
       log.addProperty("action", action);
       log.add("pos", input.getAsJsonArray("pos"));
       switch (action) {
-         case "use" -> log.addProperty("result", this.use(p));
+         case "use" -> {
+         InteractionResult r = this.use(p);
+         log.addProperty("result", r.getClass().getSimpleName());
+         log.addProperty("consumesAction", r.consumesAction());
+      }
          case "setblock" -> {
             if (!input.has("block")) {
                throw new IllegalArgumentException("setblock に block が無い");
@@ -99,19 +105,14 @@ final class Inputs {
       }
    }
 
-   private String use(final BlockPos p) {
+   private InteractionResult use(final BlockPos p) {
       if (this.player == null) {
          this.player = (ServerPlayer)this.helper.makeMockServerPlayer(GameType.SURVIVAL);
       }
       // 当たりはブロックの中心・上の面。空の手での使用は当たりの位置を読まない部品だけを今は撮る
       BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(p), Direction.UP, p, false);
-      InteractionResult r = this.player.gameMode.useItemOn(
+      return this.player.gameMode.useItemOn(
          this.player, this.level, this.player.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
-      String name = r.getClass().getSimpleName();
-      if (!r.consumesAction()) {
-         throw new IllegalStateException("use が効かなかった: " + xyz(p) + " " + this.level.getBlockState(p) + " → " + name);
-      }
-      return name;
    }
 
    /** コマンドを 1 本実行する。結果の値と返ってきた文を記録し、失敗なら例外にする */

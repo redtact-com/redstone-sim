@@ -99,6 +99,7 @@ final class Driver {
       Phase phase = Phase.WAIT_CHUNKS;
       int waited;
       long waitStartedNanos;
+      long chunkWaitMs;
       int settleLeft;
       int t;
       long startGameTime;
@@ -200,6 +201,7 @@ final class Driver {
                }
                return;
             }
+            run.chunkWaitMs = run.waited == 0 ? 0 : (System.nanoTime() - run.waitStartedNanos) / 1_000_000L;
             this.place(run);
             run.placedGameTime = this.level.getGameTime();
             run.phase = Phase.SETTLE;
@@ -370,7 +372,7 @@ final class Driver {
       result.addProperty("placedGameTime", run.placedGameTime);
       result.addProperty("startGameTime", run.startGameTime);
       result.addProperty("chunkWaitTicks", run.waited);
-      result.addProperty("chunkWaitMs", run.waited == 0 ? 0 : (System.nanoTime() - run.waitStartedNanos) / 1_000_000L);
+      result.addProperty("chunkWaitMs", run.chunkWaitMs);
       result.addProperty("wallMs", wallMs);
       result.add("inputs", run.inputLog);
       result.add("ticks", run.snapshots);
@@ -396,6 +398,7 @@ final class Driver {
       summary.addProperty("ok", error == null);
       summary.addProperty("wallMs", wallMs);
       summary.addProperty("chunkWaitTicks", run.waited);
+      summary.addProperty("chunkWaitMs", run.chunkWaitMs);
       if (error != null) {
          summary.addProperty("error", describe(error));
       }
