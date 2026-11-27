@@ -109,3 +109,18 @@ npm run e2e            # 本番ビルド → vite preview → Playwright
 (`demo-canvas`) には `data-testid` を付与し、テキスト一致や DOM 構造依存を排除している。
 グリッド配置と sim 状態読み取りだけは `window.__editorTest` 経由 (canvas ピクセル
 校正が脆弱なため)。
+
+## 読む用の Web の GIF (#434)
+
+```bash
+node tools/demo/docs-gif.mjs            # app と docs-web をビルドして撮る
+node tools/demo/docs-gif.mjs --no-build # 既存の app/dist と docs-web/dist を使う
+```
+
+`/docs/` を台本どおりに操作して撮る (目次 → ページ → 理解度 → 検索)。出力先の既定は
+`.github/pr-assets/<現在のブランチ名>/docs-reader.gif`。PR のプレビューと同じ形
+(app の preview の `/docs/`) で撮り、終わると `app/dist/docs` を消す。
+`--frames <dir>` を付けると各フレームの PNG も残る。
+
+GIF の合成 (`encodeGif`)・サーバ待ち (`waitForServer`)・preview の起動 (`startAppPreview`)・
+ブラウザの起動 (`launchBrowser`) は `lib.mjs` にあり、`demo-gif.mjs` と共用する。

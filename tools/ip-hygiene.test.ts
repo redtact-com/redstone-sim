@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ABSOLUTE, VERBATIM } from './ip-hygiene-patterns.js'
 
 /**
  * デコンパイル由来の **Java コードの逐語引用**が入り込んでいないかを見張る。
@@ -16,26 +17,11 @@ import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** Java の**文そのもの**に見えるパターン (説明文には出ない形) */
-const VERBATIM: { name: string; re: RegExp }[] = [
-  { name: 'java コードフェンス', re: /```java/ },
-  // `level.setBlock(...);` のような呼び出し文 (末尾セミコロン付き)
-  { name: 'Java の呼び出し文', re: /\b(level|state|this|world)\.[A-Za-z]\w*\([^)]*\)\s*;/ },
-  // クラス名・メソッド名そのものは**事実**なので許す (典拠として必要)。
-  // 落とすのは「文の写し」だけにする
-  // メソッドシグネチャの写し
-  { name: 'Java のメソッドシグネチャ', re: /\b(public|protected|private)\s+(static\s+)?[\w<>[\]]+\s+\w+\s*\([^)]*\)\s*\{/ },
-  // record 宣言の写し。修飾子も `{` も付けずに貼ると上のパターンをすり抜ける (#386)
-  { name: 'Java の record 宣言', re: /\brecord\s+[A-Z]\w*(<[^>]*>)?\s*\(/ },
-  // 「型 名前」の並ぶ引数リストの写し (修飾子を落とした宣言も拾う)。TypeScript は
-  // `name: Type` の順なので、`(BlockPos pos, int delay)` の形は Java の字面にしか出ない
-  { name: 'Java の型付き引数リスト', re: /\w\s*\(\s*(final\s+)?([A-Z]\w*(<[^>()]*>)?|int|long|boolean|double|float|byte|short|char)(\[\])?\s+[a-z]\w*\s*[,)]/ },
-]
-
 /** 走査対象。生成物・fixture・デコンパイル作業ディレクトリは除く */
 const SCAN_EXT = ['.ts', '.tsx', '.md', '.sc', '.mjs']
 const SKIP = [
-  'tools/ip-hygiene.test.ts',        // このファイル自身 (パターンを持っている)
+  'tools/ip-hygiene.test.ts',        // このファイル自身 (誤検知の例を注記に持っている)
+  'tools/ip-hygiene-patterns.ts',    // パターンそのものを持っている
   'docs/ip-policy.md',               // 書き方の見本として ✗ 例を載せている
   'docs/research/03_legal-decompile.md', // 規約の逐語引用 (これは規約文であってコードではない)
 ]
@@ -71,18 +57,10 @@ describe('著作権まわりの衛生 (docs/ip-policy.md)', () => {
   it('手元の絶対パスがコミットされていない (#322)', () => {
     // 公開リポなので **Windows / Linux のユーザ名がそのまま読める**状態を作らない。
     // 回路ファイルは配布物ではないため、パスを残しても再現の助けにならない
-    const ABSOLUTE: { name: string; re: RegExp }[] = [
-      // #358: テストが手元にしか無いファイルを絶対パスで参照して CI だけ落ちた。
-      // 「絶対パスをコミットしない」規則で同時に防げる
-      { name: 'エージェントの一時ディレクトリ', re: /\/tmp\/claude-\d+\// },
-      { name: 'WSL 経由の Windows パス', re: /\/mnt\/[a-z]\/Users\// },
-      { name: 'Windows パス', re: /[A-Za-z]:\\Users\\/ },
-      { name: 'ホームディレクトリ', re: /\/(home|Users)\/[A-Za-z0-9._-]+\// },
-    ]
     const tracked = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf-8' })
       .split('\n').filter(Boolean)
       .filter(f => !f.startsWith('.github/pr-assets/'))   // 画像は中身を見ない
-      .filter(f => f !== 'tools/ip-hygiene.test.ts')      // このファイル自身 (パターンを持っている)
+      .filter(f => f !== 'tools/ip-hygiene-patterns.ts')  // パターンそのものを持っている
     const hits: string[] = []
     for (const f of tracked) {
       let text: string

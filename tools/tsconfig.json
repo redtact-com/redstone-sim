@@ -16,5 +16,5 @@
     "esModuleInterop": true,
     "isolatedModules": true
   },
-  "include": ["mc-harness/runner/**/*.ts", "demo/**/*.mjs"]
+  "include": ["mc-harness/runner/**/*.ts", "demo/**/*.mjs", "docs-index/**/*.ts", "*.test.ts", "ip-hygiene-patterns.ts"]
 }

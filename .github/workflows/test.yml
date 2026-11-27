@@ -40,6 +40,19 @@ jobs:
       - name: build
         run: npm run build
 
+      # 読む用の Web (#434) は本番のビルドに入れない。deploy.yml は上と同じ `npm run build` の
+      # app/dist をそのまま出すので、ここに docs が無ければ rdsim.com にも出ない
+      - name: 本番のビルドに docs が入っていない
+        run: |
+          if [ -e app/dist/docs ]; then
+            echo "::error::npm run build が app/dist/docs を作った。読む用の Web は本番に出さない (#434)"
+            exit 1
+          fi
+
+      # md が壊れて生成器が落ちるとここで赤になる (PR のプレビューは /docs/ を抜くだけで止めない)
+      - name: build:docs (読む用の Web)
+        run: npm run build:docs
+
   # E2E スモーク (issue #70)。本番ビルド (vite preview) に対して Playwright を回す。
   # GIF 生成 (npm run demo-gif) はローカル専用で CI には入れない。
   e2e:
