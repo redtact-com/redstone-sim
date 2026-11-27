@@ -45,7 +45,7 @@ npm run stage:docs      # docs-web/dist を app/dist/docs へ写す (先に npm 
 | `#/v07/2?s=2.3` | ページの中の節へ飛ぶ |
 | `#/_search?q=…&doc=v07&f=need,fx` | 検索の結果 (メモ・要実機あり・版差あり・fixture あり・未読だけ で絞れる) |
 
-`##` が 150 行を超えるメモだけ `###` でページを割る (564 ページ・節は 1,383)。
+`##` が 150 行を超えるメモだけ `###` でページを割る (564 ページ・節は 1,385)。
 ページでない ID (`#/v07`・`#/v07/4`・ページの中の節) は、入っているページへ寄せる。
 
 ## fixture の札と 3D/2D のビューア
@@ -155,7 +155,7 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 
 | ファイル | 中身 |
 |---|---|
-| `sections.jsonl` | 節 1 件 = 1 行 (1,383 行)。`id`・`page`・`file`・`line`・`title`・`path`・`text` (md のまま)・`classes`・`fixtures`・`skipFixtures` (skip つき = 今のエンジンは実機と違う)・`marks` (凡例の印は数えない)・`refs`・`blocks` ほか |
+| `sections.jsonl` | 節 1 件 = 1 行 (1,385 行)。`id`・`page`・`file`・`line`・`title`・`path`・`text` (md のまま)・`classes`・`fixtures`・`skipFixtures` (skip つき = 今のエンジンは実機と違う)・`marks` (凡例の印は数えない)・`refs`・`blocks` ほか |
 | `by-class.json` | クラス → 節 (00 の網羅表の担当欄が主。本文の一致は補助の欄) |
 | `by-fixture.json` | fixture → 節 (skip つきの物には印) |
 | `by-block.json` | ブロック ID・和名 → クラス → 節 |

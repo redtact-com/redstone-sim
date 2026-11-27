@@ -14,8 +14,8 @@ describe('sections.jsonl', () => {
   const lines = build.files.get('ai/sections.jsonl')!.split('\n').filter(Boolean)
   const rows = lines.map(l => JSON.parse(l) as JsonlRow)
 
-  it('1,383 行で、ID が節の ID の一覧と一致する', () => {
-    expect(rows).toHaveLength(1383)
+  it('1,385 行で、ID が節の ID の一覧と一致する', () => {
+    expect(rows).toHaveLength(1385)
     expect(rows.map(r => r.id)).toEqual(readSectionIds(repoRoot))
   })
 
@@ -268,7 +268,7 @@ describe('ai/README.md', () => {
   it('欄の説明と引き方がある。数は実物と合う', () => {
     const build = buildDocsFromRepoCached()
     const text = build.files.get('ai/README.md')!
-    for (const word of ['sections.jsonl', 'by-class.json', 'by-fixture.json', 'by-block.json', '表に無い', 'npm run docs:search', '1383 行', '110 本']) {
+    for (const word of ['sections.jsonl', 'by-class.json', 'by-fixture.json', 'by-block.json', '表に無い', 'npm run docs:search', '1385 行', '110 本']) {
       expect(text, word).toContain(word)
     }
     for (const key of ['id', 'page', 'file', 'level', 'title', 'path', 'text', 'classes', 'fixtures', 'marks', 'refs', 'blocks', 'summary']) {

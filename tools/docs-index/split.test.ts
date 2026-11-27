@@ -61,11 +61,11 @@ describe('ページの分け方 (#434)', () => {
     // 方針の表の 594 は、割った ## (30 個) の「見出しと前置きだけの切れ端」を 1 ページに数えた値。
     // 規則 4 (前置きは先頭の ### のページに付ける) を当てると 30 少ない 564 になる
     expect(stats.pages).toBe(564)
-    expect(stats.sections).toBe(1383)
+    expect(stats.sections).toBe(1385)
     expect(stats.lines.overSplit).toBeLessThanOrEqual(7)
     expect(stats.lines.max).toBeLessThanOrEqual(269)
     expect(stats.lines.short).toBe(26)
-    expect(stats.lines.median).toBe(29)
+    expect(stats.lines.median).toBe(30)
   })
 
   it('実物: 割った ## は 30 個で、どれも前置きごと先頭の ### のページに入る', () => {
