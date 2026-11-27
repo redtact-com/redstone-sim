@@ -188,11 +188,6 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .home-doc-title { overflow-wrap: anywhere; }
 .home-doc-stat { flex: none; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.wiring { padding-left: 1.2em; }
-.wiring [data-state="ok"] b { color: #1a7f37; }
-.wiring [data-state="ng"] b { color: var(--accent); }
-.wiring span { color: var(--muted); }
-
 /* ---- 中くらいの幅: 右の欄を出さない ---- */
 @media (max-width: 1180px) {
   .cols { grid-template-columns: 280px minmax(0, 1fr); }
@@ -300,3 +295,26 @@ a.ref { text-decoration-thickness: 1px; text-underline-offset: 2px; }
 .hit-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 0.8rem; color: var(--muted); }
 .hit-read { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; }
 .hit[data-read="1"] .toc-dot { background: var(--mk-fx-fg); border-color: var(--mk-fx-fg); }
+
+/* ==== fixture の札とビューア ==== */
+.mk[data-fx] { cursor: pointer; }
+.fx-cards { margin: 0.5em 0 0.9em; display: grid; gap: 4px; }
+.fx-card { border: 1px solid var(--line); border-radius: 6px; background: var(--bg-soft); font-size: 0.84rem; line-height: 1.5; }
+.fx-card[data-open] { border-color: var(--mk-fx-fg); }
+.fx-card.fx-hit { box-shadow: 0 0 0 2px var(--mk-fx-fg); }
+.fx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; padding: 3px 6px 3px 10px; min-height: 30px; }
+.fx-name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; overflow-wrap: anywhere; }
+.fx-meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-note { padding: 0 6px; border-radius: 4px; background: var(--mk-etc); color: var(--mk-etc-fg); font-size: 0.92em; }
+.fx-note-skip { background: var(--mk-need); color: var(--mk-need-fg); cursor: help; }
+.fx-big { margin-left: auto; color: var(--muted); }
+.fx-open {
+  margin-left: auto; padding: 1px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 0.95em;
+}
+.fx-open:hover { border-color: var(--mk-fx-fg); }
+.fx-fold { display: block; }
+.fx-fold > summary { cursor: pointer; padding: 2px 4px; color: var(--muted); font-size: 0.84rem; }
+.fx-fold[open] > summary { margin-bottom: 2px; }
+.fx-fold > .fx-card { margin-top: 4px; }
+.fx-view { padding: 0 6px 6px; }
+.fx-view > .loading, .fx-view > .notice { margin: 4px 0; }

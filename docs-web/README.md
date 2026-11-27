@@ -7,7 +7,8 @@ docs/vanilla (26.3 の読解メモ 21 本) と docs/research 17〜19 を、項�
   本番 (rdsim.com) と develop には出ない。出るのは **手元** と **PR のプレビューの `/docs/`** だけ
 - md は書き換えない。`tools/docs-index` がビルド時に md を節とページに割って `public/data/` へ出す
   (生成物は追跡しない)
-- 図と 3D/2D のビューアは次の PR で足す
+- 本文の `[実機 1.21.1: 名前]` の下に fixture の札が出て、「表示」を押すと 3D/2D で再生できる
+- 一部の節には、見出しの直後に図 (自前の SVG) が出る
 
 ## 起動
 
@@ -46,6 +47,71 @@ npm run stage:docs      # docs-web/dist を app/dist/docs へ写す (先に npm 
 
 `##` が 150 行を超えるメモだけ `###` でページを割る (564 ページ・節は 1,385)。
 ページでない ID (`#/v07`・`#/v07/4`・ページの中の節) は、入っているページへ寄せる。
+
+## fixture の札と 3D/2D のビューア
+
+本文の `[実機 1.21.1: 名前]` は小さなチップになり、タグのある段落・箇条書きの直後に 1 行の札
+(名前・ブロック数・tick 数・「表示」) が出る。表の中のタグの札は、表の後ろの 1 つの折りたたみにまとまる。
+md には何も書かない (生成器がタグを拾う)。
+
+- 「表示」を押すと、その場でビューアが開く。ビューアのチャンクと fixture の JSON はその時に初めて取る
+- 操作は 再生 / 止める・1 tick 進む・最初へ。3D と 2D を切り替えられ、2D は層を ± で上下する
+  (その層より上のブロックを外して真上から見る)
+- 置いただけではページのスクロールを奪わない。枠をクリックするとドラッグ・wheel・ピンチで動かせ、
+  Esc か外のクリックで戻る
+- 同時に開けるのは 2 個まで。3 個目を開くと一番古い物が札に戻る。ページを移ると全部閉じる。
+  同じページの中の操作 (節へ飛ぶ・「読んだ」・理解度) では閉じない。表の後ろの折りたたみを閉じると、中の物は閉じる
+- **再生するのはこのエンジンの計算**で、実機の記録ではない (実機の記録は fixture の `expect`)。
+  skip つきの fixture は「今のエンジンは実機と違う」と理由を出して再生する。
+  summon・item・kill を含む fixture は「エンティティは描かない」と出す
+- 200 ブロックを超える fixture は「大きいので埋め込まない」と出し、開けない
+  (上限は `tools/docs-index/fixtures.ts` の `FIXTURE_EMBED_MAX_BLOCKS`)
+
+作りと確かめ方。
+
+- 札の HTML は生成器が出す (`packages/docs-kit/src/fixture-card.ts`)。押した時の処理は `docs-web/src/Fixtures.tsx`
+  (同時 2 個の数え方もここ)。ビューアの本体は `@redstone/docs-kit/viewer` の `FixtureViewer` で、
+  `IsometricView` (`interactive`・`frameLoop="demand"`・`resourcePackUrl`) と `FixtureRunner` を包む
+- 閉じた・ページを移ったビューアは WebGL の文脈を手放す (`WEBGL_lose_context`)。止まっている間は描かない
+- 札の見た目は `docs.css` (最初の HTML に出るので殻に入れる)。ビューアの中の見た目は `viewer.css` で、
+  ビューアのチャンクと一緒に取る (`data.ts` の `loadViewer`)
+- 本文の HTML は、中身が同じ間は入れ直さない (`PageView.tsx` の `PageBody`)。入れ直すと、札の中へ付けた
+  ビューアと開いた折りたたみが消える
+- 最初の「表示」では、ビューアのチャンクのほかにリソースパックと、外の配信元のブロックの定義も取る
+  (viewer の元からの動き)。2 個目からは fixture 1 本だけ
+- 文脈を手放す動きは headless Chromium の e2e で見ている。Playwright の Firefox でも 1 回見た
+  (開け閉め 20 回で外した 20 個が失われ、置いただけの wheel でページが流れる)。Safari は見ていないので、
+  札を 20 回ほど開け閉めして、コンソールに文脈が多すぎる旨の警告が出ないことと、
+  タブを裏へ回して戻した後も絵が残ることを手で見る
+
+## 図
+
+md の表と手順を言い換えた図を、節の見出しの直後に出す。md には何も書かない。Mermaid は使わない。
+
+| 節 | 図 | 部品 |
+|---|---|---|
+| V01 §2.1 (§2.1〜§2.2) | サーバ 1 周 (区間 A → B → C) | `PhaseTimeline` |
+| V01 §2.3 | 相 L0〜L15 の時間割 | `PhaseTimeline` |
+| V01 §2.4 | tick の間の 7 手順 | `TickAxis` |
+| V02 §2.2 | 予約から発火まで | `StepFlow` |
+| V04 §2.1 | setBlock の 10 手順 | `StepFlow` |
+| V04 §2.3・V06 §3.6 | 方向の並び 5 本 | `DirectionOrder` |
+| V07 §2.4 | リピーターの反転の順 | `StepFlow` |
+| V13 §2.2 (§2.2〜§2.4) | ピストンの伸長と収縮の時系列 | `TickAxis` 2 枚 |
+
+- 部品 (4 つ) と文言は `packages/docs-kit/src/diagrams/` (`@redstone/docs-kit/diagrams`)。
+  「データ → SVG の文字列」の関数が本体で、React の部品はそれを包むだけ。docs-web には依存しない
+- 置き場所は `docs-web/src/diagrams/placements.ts` (節 ID → 図の名前)。図のチャンクは、図のある節を持つ
+  ページを初めて開いた時に取る (殻には入らない)
+- **図を足す**: `packages/docs-kit/src/diagrams/*.data.ts` に文言を書く → `catalog.ts` の `DIAGRAMS` に名前を足す
+  → `placements.ts` に「節 ID: 名前」を足す。文言は md の表と手順の言い換えだけにする
+  (`tools/ip-hygiene.test.ts` がこのフォルダと `docs-web/src/diagrams/` の全行を見る)
+- md の手順が変わっても図は自動で変わらない。md を直したら、同じ節の `*.data.ts` も直す。
+  節の番号が動いて置き場所が宙に浮いた時と、手順や表の行の**数**が md と合わなくなった時は
+  `docs-web/test/placements.test.ts` が落ちる (文言の中身は比べない)
+- 図のチャンクの応答が 3 秒無い時と取れなかった時は、図なしで本文を出す
+- 色は CSS 変数 (`--dg-*`) で、明暗は `prefers-color-scheme` に従う。図の幅は 696 px に固定で、
+  狭い画面では図の枠の中で横に流れる (ページは横に流れない)
 
 ## 既読と理解度 (書き出しと読み込み)
 
@@ -99,11 +165,12 @@ AI 向けの索引を `docs-web/public/data/ai/` へ出す。PR のプレビュ�
 
 | 場所 | 中身 |
 |---|---|
-| `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面) と素の CSS 1 本 |
-| `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索 (のちの解説サイトと共用) |
-| `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
-| `e2e/docs-web.spec.ts` | 既読と理解度・検索・狭い幅 |
-| `tools/demo/docs-gif.mjs` | PR 用の GIF (目次 → ページ → 理解度 → 検索) |
+| `docs-web/src/` | 殻 (ルータ・目次・ページ・状態の画面・検索の画面・fixture の札を動かす `Fixtures.tsx`・図の置き場所 `diagrams/placements.ts`) と素の CSS 1 本 |
+| `packages/docs-kit/` | `@redstone/docs-kit`。生成物の型・ID・状態の保存・検索・fixture の札の HTML (のちの解説サイトと共用)。`@redstone/docs-kit/viewer` は `FixtureViewer` (deepslate と sim を含むので別の入口)。`@redstone/docs-kit/diagrams` は図の 4 部品と文言 (これも別の入口) |
+| `tools/docs-index/` | 生成器 (分割・ID・参照の解決・印・HTML 化・索引・埋め込む fixture の `data/fixtures/*.json`) と CLI。`section-ids.txt` と `blocks.json` は追跡する |
+| `e2e/docs-web.spec.ts` | 読む画面の通し。既読と理解度・検索・狭い幅・札の「表示」→ 1 tick → 2D → 3 個目で 1 個目が戻る・ビューアの上の wheel とビューアのあるページを 20 回移る・図 (9 か所とも見出しの直後・図のチャンクは図のあるページでだけ・幅 375 px で枠の中で流れる・明暗) |
+| `e2e/docs-fixture-viewer.spec.ts` | fixture の札とビューアの細かい動き。押すまでチャンクを取らない・再生と 2D・同時 2 個・開け閉め 20 回で文脈の警告が出ない・置いただけでは wheel でページが流れる・止まっている間は rAF が回らない |
+| `tools/demo/docs-gif.mjs` | PR 用の GIF。台本は 2 本: `--script reader` (既定。目次 → ページ → 理解度 → 検索)・`--script viewer` (図 → 3D の再生 → 2D) |
 
 節を足す・見出しの番号を変えると ID が変わる (その ID の既読の記録は外れる)。
 `tools/docs-index` のテストが落ちたら `npm run docs:index -- --ids` で一覧を作り直す。

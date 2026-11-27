@@ -115,10 +115,17 @@ npm run e2e            # 本番ビルド → vite preview → Playwright
 ```bash
 node tools/demo/docs-gif.mjs            # app と docs-web をビルドして撮る
 node tools/demo/docs-gif.mjs --no-build # 既存の app/dist と docs-web/dist を使う
+node tools/demo/docs-gif.mjs --script viewer   # 図 → 3D の再生 → 2D
 ```
 
-`/docs/` を台本どおりに操作して撮る (目次 → ページ → 理解度 → 検索)。出力先の既定は
-`.github/pr-assets/<現在のブランチ名>/docs-reader.gif`。PR のプレビューと同じ形
+`/docs/` を台本どおりに操作して撮る。台本は 2 本で、`--script` で選ぶ。
+
+| 台本 | 中身 | 既定の大きさ |
+|---|---|---|
+| `reader` (既定) | 目次 → ページ → 理解度 → 検索 | 960x600 |
+| `viewer` | V13 §2.2 の図 → fixture の札の「表示」→ 3D の再生 → 2D で 1 tick ずつ → 層 | 1280x720 (図が本文の欄に収まる幅) |
+
+出力先の既定は `.github/pr-assets/<現在のブランチ名>/docs-<台本>.gif`。PR のプレビューと同じ形
 (app の preview の `/docs/`) で撮り、終わると `app/dist/docs` を消す。
 `--frames <dir>` を付けると各フレームの PNG も残る。
 

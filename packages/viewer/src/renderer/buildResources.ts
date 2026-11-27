@@ -37,13 +37,14 @@ async function overlayPackData(
   blockNames: string[],
   statesJson: Record<string, unknown>,
   modelsJson: Record<string, unknown>,
+  packUrl: string | undefined,
 ): Promise<void> {
   const names = [...new Set(blockNames.map(n => n.replace('minecraft:', '')))]
 
   // blockstateをパックから取得し、モデル参照を収集
   const allModelRefs = new Set<string>()
   await Promise.all(names.map(async (name) => {
-    const packState = await fetchPackJson(`blockstates/${name}.json`)
+    const packState = await fetchPackJson(`blockstates/${name}.json`, packUrl)
     if (!packState) return
     statesJson[name] = packState
     collectModelRefsFromState(packState).forEach(ref => allModelRefs.add(ref))
@@ -66,7 +67,7 @@ async function overlayPackData(
     await Promise.all(batch.map(async (modelRef) => {
       // modelRef: "block/lever/off" → file: "models/block/lever/off.json"
       const filePath = modelRef.replace(/^block\//, '')
-      const packModel = await fetchPackJson(`models/block/${filePath}.json`)
+      const packModel = await fetchPackJson(`models/block/${filePath}.json`, packUrl)
       if (!packModel) return
 
       // フルパスキーで登録（getBlockModel の id.path と一致させる）
@@ -95,13 +96,16 @@ export interface BuiltResources {
   assets: AssetState
 }
 
-export async function buildResources(blockNames: string[]): Promise<BuiltResources> {
+/**
+ * @param packUrl カスタムリソースパックの基点 URL (#434)。省くと既定 (`DEFAULT_RESOURCE_PACK_URL`)
+ */
+export async function buildResources(blockNames: string[], packUrl?: string): Promise<BuiltResources> {
   const [statesJsonBase, modelsJsonBase] = await Promise.all([
     getBlockStates(),
     getBlockModels(),
     // パック JSON を 1 本にまとめた bundle.json を**並行して**先読みする (#276)。
     // 取れなければ個別取得にフォールバックするので、失敗しても壊れない
-    preloadPackBundle(),
+    preloadPackBundle(packUrl),
   ])
 
   // JSON がどのミラーからも届かない → 全ブロックを単色の立方体で描く (#395)。
@@ -115,7 +119,7 @@ export async function buildResources(blockNames: string[]): Promise<BuiltResourc
   const modelsJson: Record<string, unknown> = { ...modelsJsonBase }
 
   // パックデータをオーバーレイ（パックにあるブロックのみ上書き）
-  await overlayPackData(blockNames, statesJson, modelsJson)
+  await overlayPackData(blockNames, statesJson, modelsJson, packUrl)
 
   // variant 必須プロパティの既定値 (#343)。sim が捨てたプロパティを描画時に補う
   const defaultProps = new Map<string, Record<string, string>>()
@@ -188,7 +192,7 @@ export async function buildResources(blockNames: string[]): Promise<BuiltResourc
   // 取得・先頭フレームの切り出し・image/png への正規化と検証は fetchTexture が行い、
   // 結果をページ内で覚える (#395)。作り直しのときは取り直さない
   const results = await Promise.all(
-    [...texturePaths].map(async (path) => [path, await fetchTexture(path)] as const),
+    [...texturePaths].map(async (path) => [path, await fetchTexture(path, packUrl)] as const),
   )
   // アトラスのスロットは texturePaths の順に並ぶ (#395)。以前は取得が終わった順に並んで読み込むたびに変わり、
   // テクセルの境目の画素が揺れていた (同じビルドを読み込み直すだけで最大 60 画素違った)

@@ -1,24 +1,41 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 import { docsHref, headingDomId } from '@redstone/docs-kit'
-import type { PageData } from '@redstone/docs-kit'
-import { loadPage, prefetchPage } from './data'
+import type { FixtureInfo, PageData } from '@redstone/docs-kit'
+import { diagramsNow, loadDiagrams, loadPage, prefetchPage } from './data'
+import { hasDiagrams, insertDiagrams } from './diagrams/placements'
+import { FixtureCards } from './Fixtures'
 import { groupLabel } from './model'
 import type { DocsModel } from './model'
 
 type Loaded = { id: string; data: PageData } | { id: string; error: string }
 
+/** 図のチャンクを待つ上限。応答が止まっても本文は出す */
+const DIAGRAMS_WAIT_MS = 3000
+
+function diagramsOrTimeout(): Promise<unknown> {
+  return Promise.race([
+    loadDiagrams().catch(() => null),
+    new Promise(resolve => window.setTimeout(resolve, DIAGRAMS_WAIT_MS)),
+  ])
+}
+
 /**
  * ページ 1 枚を取って覚える。次のページを 1 つ先に取っておく。
  * 取っている間は「読み込み中…」を出す (前のページの本文は残さない。残すと、上下の操作と前後が
  * 別のページの物になる)。読む順の次のページは先読みしてあるので、待ちが出るのは目次・参照・検索から飛ぶ時。
+ * 図のある節を持つページは、図のチャンクも取り終えてから出す (後から差し込むと本文が下へずれる)。
+ * 図のチャンクが取れなかった時と、`DIAGRAMS_WAIT_MS` 待っても応答が無い時は、図なしで本文を出す。
  */
 export function usePage(id: string): { data: PageData | null; error: string | null; loading: boolean; retry: () => void } {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let alive = true
-    loadPage(id).then(
+    loadPage(id).then(async data => {
+      if (hasDiagrams(data.sections)) await diagramsOrTimeout()
+      return data
+    }).then(
       data => {
         if (!alive) return
         setLoaded({ id, data })
@@ -38,7 +55,21 @@ export function usePage(id: string): { data: PageData | null; error: string | nu
 }
 
 /** 本文の HTML。ビルド時に作った物をそのまま置く (実行時にパーサは持たない) */
-export function PageBody({ data, section, row }: { data: PageData; section: string | null; row: string | null }) {
+export function PageBody({ data, section, row, fixtures }: {
+  data: PageData; section: string | null; row: string | null
+  /** fixture の目録 (札の注記に使う) */
+  fixtures: Record<string, FixtureInfo>
+}) {
+  const body = useRef<HTMLElement>(null)
+  // 図のある節の見出しの直後に図を差し込む (置き場所は diagrams/placements.ts)
+  const html = useMemo(() => {
+    const kit = diagramsNow()
+    return kit && hasDiagrams(data.sections) ? insertDiagrams(data.html, data.sections, kit.diagramHtml) : data.html
+  }, [data])
+  // React は dangerouslySetInnerHTML の値のオブジェクトが変わるたびに innerHTML を入れ直す。
+  // 入れ直すと、開いているビューア (札の中へ portal で付けた物) と開いた折りたたみが消えるので、
+  // HTML が同じ間は同じオブジェクトを渡す (既読・理解度・節へ飛ぶ操作で親が描き直しても本文の DOM は残る)
+  const inner = useMemo(() => ({ __html: html }), [html])
   // 開いた時と、節の指定が変わった時に、自前でその節へスクロールする
   useEffect(() => {
     const el = section ? document.getElementById(headingDomId(section)) : null
@@ -49,7 +80,13 @@ export function PageBody({ data, section, row }: { data: PageData; section: stri
     target.classList.add('row-hit')
     return () => target.classList.remove('row-hit')
   }, [data.id, section, row])
-  return <article className="doc-body" data-page={data.id} dangerouslySetInnerHTML={{ __html: data.html }} />
+  return (
+    <>
+      <article className="doc-body" ref={body} data-page={data.id} dangerouslySetInnerHTML={inner} />
+      {/* 札の無いページでは何も付けない (ビューアのチャンクも取らない) */}
+      {data.fixtures.length > 0 && <FixtureCards root={body} fixtures={fixtures} />}
+    </>
+  )
 }
 
 /** 見出しの後ろの最初の表から、1 列目が `row` の行を探す (`V18 の R4` の行き先) */
@@ -105,7 +142,7 @@ export function PageView({ model, pageId, section, top, bottom, pagerMid }: {
       {error
         ? <p className="notice notice-err" role="alert">ページを取れなかった ({error})。<button type="button" onClick={retry}>もう一度</button></p>
         : shown
-          ? <PageBody key={`${shown.id}:${again}`} data={shown} section={section} row={row} />
+          ? <PageBody key={`${shown.id}:${again}`} data={shown} section={section} row={row} fixtures={model.manifest.fixtures} />
           : <p className="loading">読み込み中…</p>}
       {shown && bottom}
       <nav className={pagerMid ? 'pager pager-3' : 'pager'} aria-label="前後のページ">

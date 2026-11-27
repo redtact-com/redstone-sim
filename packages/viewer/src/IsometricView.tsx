@@ -74,6 +74,11 @@ export interface IsometricViewHandle {
    * e2e が実際の座標をクリック・タップして確かめるために使う
    */
   blockToClient: (pos: Pos3D) => { x: number; y: number } | null
+  /**
+   * 次のフレームで 1 回描く (#434)。`frameLoop="demand"` の間に、ビューアが自分では気づけない
+   * 変更 (`cameraInputRef` に値を入れた、など) を伝えるために呼ぶ。`"always"` では何もしなくてよい
+   */
+  invalidate: () => void
 }
 
 export interface IsometricViewProps {
@@ -110,7 +115,37 @@ export interface IsometricViewProps {
   onReady?: () => void
   /** 命令的な口 (#397)。ref を渡すと、マウント中は中身が入る (cameraInputRef と同じ形) */
   viewRef?: React.MutableRefObject<IsometricViewHandle | null>
+  /**
+   * 操作を受けるか (#434)。既定は true (今までどおり)。
+   *
+   * false の間は wheel と touch を奪わない: wheel を止めず (ビューアの上でもページが流れる)、
+   * `touch-action` を外し (指でなぞるとページが流れる)、ドラッグ・ピンチ・クリックにも反応しない。
+   * 記事の途中に置くとき、押して有効にするまでページのスクロールを邪魔しないために使う。
+   * click などの DOM イベントは今までどおり親へ伝わるので、有効にする操作は親で受けられる
+   */
+  interactive?: boolean
+  /**
+   * カスタムリソースパックの基点 URL (#434)。既定は `/resourcepack` (エディタと同じ)。
+   * 基点の下に `bundle.json` と `assets/minecraft/...` を置く。変えると資源を取り直して作り直す
+   */
+  resourcePackUrl?: string
+  /**
+   * いつ描くか (#434)。
+   * - `"always"` (既定・今までどおり): 毎フレーム描く
+   * - `"demand"`: 絵が変わりうる時だけ描き、止まっている間は requestAnimationFrame を回さない。
+   *   描くのは snapshot・`topDown`・`placementY` の変化、ビューア上の操作 (ドラッグ・ピンチ・wheel)、
+   *   canvas の大きさの変化、`viewRef` の `invalidate()` を呼んだ時。
+   *   **`cameraInputRef` は自分では見張らない**ので、値を入れたら `invalidate()` を呼ぶ。
+   *   `cameraStateRef` は描いた時にだけ更新される
+   */
+  frameLoop?: 'always' | 'demand'
 }
+
+/**
+ * unmount してから WebGL の文脈を手放すまでの待ち (ms)。
+ * StrictMode の「外してすぐ付け直す」は同じ canvas を使い回すので、その間は手放さない
+ */
+const CONTEXT_RELEASE_DELAY_MS = 0
 
 // ─── コンポーネント ────────────────────────────────────────────────────────────
 
@@ -124,6 +159,9 @@ export function IsometricView({
   cameraInputRef,
   onReady,
   viewRef,
+  interactive = true,
+  resourcePackUrl,
+  frameLoop = 'always',
 }: IsometricViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // init effect は deps=[] で一度だけ張るため、最新の onReady を ref 経由で読む
@@ -132,7 +170,24 @@ export function IsometricView({
   const rendererRef = useRef<StructureRenderer | null>(null)
   const structureRef = useRef<Structure | null>(null)
   const prevSnapshotRef = useRef<WorldSnapshot | null>(null)
+  // ─── 描くタイミング (#434) ─────────────────────────────────────────────────
+  /** 予約済みの requestAnimationFrame の ID。0 = 予約なし (止まっている) */
   const animFrameRef = useRef<number>(0)
+  /** 今の文脈で 1 フレーム描く関数。初期化が済むまでと、外した後は null */
+  const drawRef = useRef<(() => void) | null>(null)
+  const frameLoopRef = useRef(frameLoop)
+  frameLoopRef.current = frameLoop
+  /**
+   * 次のフレームで描く。**もう予約があれば何もしない**ので、毎フレーム描く `"always"` では
+   * どこから呼んでも今までと同じ (1 フレームに 1 回)。`"demand"` ではこれを呼んだ時だけ描く
+   */
+  const requestDraw = useCallback(() => {
+    if (animFrameRef.current !== 0 || !drawRef.current) return
+    animFrameRef.current = requestAnimationFrame(() => {
+      animFrameRef.current = 0
+      drawRef.current?.()
+    })
+  }, [])
   /** 最後に寄りを合わせたときの回路サイズ ("x,y,z")。変わったら合わせ直す (#238) */
   const fittedSizeRef = useRef<string>('')
   /**
@@ -165,6 +220,52 @@ export function IsometricView({
     onWheel3D,
     getPanScale,
   } = useCamera(topDown)
+
+  // useCamera が topDown の切り替えでカメラを置き直す (この effect はその後に走る)。
+  // placementY は 2D の当たり判定にしか使わないが、呼び出し側が層の絵と一緒に変えるので拾っておく。
+  // frameLoop を "always" に戻した時は、ここから毎フレームの繰り返しが再開する
+  useEffect(() => { requestDraw() }, [topDown, placementY, frameLoop, requestDraw])
+
+  // canvas の大きさは描く時に合わせている。"demand" では大きさが変わった時に描き直す
+  // ("always" では予約が常にあるので何も起きない)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => requestDraw())
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [requestDraw])
+
+  // タブが裏から戻った時も描き直す。裏に回っている間に絵を捨てるブラウザでは、"demand" だと
+  // 次の操作まで枠が空のままになる ("always" では予約が常にあるので何も起きない)
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) requestDraw() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [requestDraw])
+
+  // ─── WebGL の文脈を手放す (#434) ───────────────────────────────────────────
+  // canvas を DOM から外しても、文脈は GC されるまで残る。ブラウザの上限 (Chrome は 16) を
+  // 越えると古い文脈から失われて警告が出るので、unmount で WEBGL_lose_context を呼んで返す。
+  // 資源の作り直し (extraKey) では同じ文脈を使い続けるので、ここは unmount の時だけ。
+  // StrictMode は同じ canvas のまま「外す → 付ける」をするので、タイマーで 1 拍置き、
+  // 付け直されたら取り消す
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (releaseTimerRef.current !== null) {
+      clearTimeout(releaseTimerRef.current)
+      releaseTimerRef.current = null
+    }
+    const canvas = canvasRef.current
+    return () => {
+      if (!canvas) return
+      releaseTimerRef.current = setTimeout(() => {
+        releaseTimerRef.current = null
+        // 取れなかった (WebGL 非対応) なら null。別の種類の文脈を作ってしまわないよう 'webgl' だけ見る
+        canvas.getContext('webgl')?.getExtension('WEBGL_lose_context')?.loseContext()
+      }, CONTEXT_RELEASE_DELAY_MS)
+    }
+  }, [])
 
   // ─── ピンチ状態 ────────────────────────────────────────────────────────────
   const activePointers = useRef<Map<number, {x: number; y: number}>>(new Map())
@@ -298,12 +399,12 @@ export function IsometricView({
 
   useEffect(() => {
     if (!viewRef) return
-    const handle: IsometricViewHandle = { blockToClient }
+    const handle: IsometricViewHandle = { blockToClient, invalidate: requestDraw }
     viewRef.current = handle
     return () => {
       if (viewRef.current === handle) viewRef.current = null
     }
-  }, [viewRef, blockToClient])
+  }, [viewRef, blockToClient, requestDraw])
 
   // ─── ポインターイベント ────────────────────────────────────────────────────
 
@@ -312,6 +413,7 @@ export function IsometricView({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (!interactive) return
       activePointers.current.set(e.pointerId, {x: e.clientX, y: e.clientY})
       e.currentTarget.setPointerCapture(e.pointerId)
 
@@ -350,11 +452,14 @@ export function IsometricView({
       const pos = hitBlock(e.clientX, e.clientY)
       if (pos) onBlockClick(pos, e.button === 2 ? 'right' : 'left')
     },
-    [topDown, panMode, onBlockClick, hitBlock, onRightMouseDown],
+    [interactive, topDown, panMode, onBlockClick, hitBlock, onRightMouseDown],
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (!interactive) return
+      // カメラが動くのは押している間だけ。"demand" のために描く予約を入れる ("always" では何も起きない)
+      if (e.buttons !== 0) requestDraw()
       activePointers.current.set(e.pointerId, {x: e.clientX, y: e.clientY})
 
       // 2本指: ピンチズーム + パン
@@ -433,12 +538,13 @@ export function IsometricView({
       const pos = hitBlock(e.clientX, e.clientY)
       if (pos) onBlockClick(pos, 'left')
     },
-    [topDown, panMode, onBlockClick, hitBlock, onMouseDown, onMouseMove, onRightMouseMove, placementY, cameraRef, getPanScale, updateHover],
+    [interactive, requestDraw, topDown, panMode, onBlockClick, hitBlock, onMouseDown, onMouseMove, onRightMouseMove, placementY, cameraRef, getPanScale, updateHover],
   )
 
   /** pointerup に加えて pointerleave と pointercancel でも呼ぶ */
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
+      if (!interactive) return
       // 3D: しきい値の内側で離したらクリック・タップ (#397)
       const g = gestureRef.current
       if (!topDown && g && g.id === e.pointerId) {
@@ -463,27 +569,46 @@ export function IsometricView({
       // pointercancel の後や、タッチの pointerup 後の pointerleave では捕捉が外れている
       else if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
     },
-    [topDown, onBlockClick, pickForTap, onMouseUp, onRightMouseUp],
+    [interactive, topDown, onBlockClick, pickForTap, onMouseUp, onRightMouseUp],
   )
+
+  // 操作の途中で interactive が false になったら、押しかけ・回しかけを全部捨てる (#434)
+  useEffect(() => {
+    if (interactive) return
+    activePointers.current.clear()
+    lastPinchDist.current = null
+    lastPinchMid.current = null
+    gestureRef.current = null
+    isPainting.current = false
+    hoverTargetRef.current = false
+    setHoverTarget(false)
+    setIsPanning(false)
+    onMouseUp()
+    onRightMouseUp()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive])
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
+      if (!interactive) return
       e.preventDefault()
       if (!topDown || !onBlockClick) return
       const pos = hitBlock(e.clientX, e.clientY)
       if (pos) onBlockClick(pos, 'right')
     },
-    [topDown, onBlockClick, hitBlock],
+    [interactive, topDown, onBlockClick, hitBlock],
   )
 
   // ─── ホイール (zoom-to-cursor 対応) ───────────────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    // interactive=false の間は listener を付けない (#434)。preventDefault しないのでページが流れる
+    if (!canvas || !interactive) return
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
+      requestDraw()
       const cam = cameraRef.current
       const structure = structureRef.current
 
@@ -521,7 +646,7 @@ export function IsometricView({
 
     canvas.addEventListener('wheel', handleWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', handleWheel)
-  }, [topDown, placementY, cameraRef])
+  }, [topDown, placementY, cameraRef, interactive, requestDraw])
 
   // ─── プリロードに無いブロック名の収集 (#234) ──────────────────────────────
   // 装飾は取り込み元の名前をそのまま持つので固定表に列挙できない。ここで拾って
@@ -554,7 +679,7 @@ export function IsometricView({
     }
 
     let cancelled = false
-    let rafId = 0
+    let draw: (() => void) | null = null
 
     ;(async () => {
       try {
@@ -563,7 +688,7 @@ export function IsometricView({
 
         // 取得先に届かなくても例外にせず、単色で描くリソースを返す (#395)
         const { resources, assets: builtAssets } = await buildResources(
-          [...VIEWER_PRELOAD_BLOCKS, ...extraNamesRef.current])
+          [...VIEWER_PRELOAD_BLOCKS, ...extraNamesRef.current], resourcePackUrl)
         if (cancelled) return
 
         // 初回スナップショットで Structure を構築
@@ -605,7 +730,7 @@ export function IsometricView({
         setStatus('ready')
         let readyFired = false
 
-        const draw = () => {
+        draw = () => {
           if (!structureRef.current || !rendererRef.current) return
           const cam = cameraRef.current
 
@@ -650,10 +775,13 @@ export function IsometricView({
             onReadyRef.current?.()
           }
 
-          rafId = requestAnimationFrame(draw)
+          // "always" は毎フレーム描き続ける。"demand" はここで止まり、requestDraw を待つ (#434)
+          if (frameLoopRef.current === 'always') requestDraw()
         }
-        rafId = requestAnimationFrame(draw)
-        animFrameRef.current = rafId
+        // 作り直し (extraKey・resourcePackUrl) のときは、前の文脈の予約が残っていない
+        // (cleanup で取り消している) ので、ここで必ず最初の 1 フレームが予約される
+        drawRef.current = draw
+        requestDraw()
       } catch (err: unknown) {
         if (cancelled) return
         const msg = err instanceof Error ? err.message : String(err)
@@ -665,13 +793,15 @@ export function IsometricView({
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(rafId)
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = 0
+      if (drawRef.current === draw) drawRef.current = null
       rendererRef.current = null
       structureRef.current = null
       prevSnapshotRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extraKey]) // 初回マウント時 + 未知ブロック名が増えたとき (#234)
+  }, [extraKey, resourcePackUrl]) // 初回マウント時 + 未知ブロック名が増えたとき (#234) + 資源の基点が変わったとき (#434)
 
   // ─── snapshot 変化時に構造を再構築 ──────────────────────────────────────
 
@@ -706,7 +836,8 @@ export function IsometricView({
     renderer.setStructure(newStructure)
     structureRef.current = newStructure
     prevSnapshotRef.current = snapshot
-  }, [snapshot])
+    requestDraw()
+  }, [snapshot, requestDraw])
 
   // ─── レンダリング ──────────────────────────────────────────────────────────
 
@@ -731,16 +862,18 @@ export function IsometricView({
           height: '100%',
           display: 'block',
           // 3D: 押せる素子の上で pointer、回している間は grabbing (#397)
-          cursor: isPanning ? 'grabbing' : topDown ? (panMode ? 'grab' : editable ? 'crosshair' : 'grab')
+          // interactive=false (#434): 操作を受けないので、カーソルは親に任せ、指のスクロールも通す
+          cursor: !interactive ? undefined
+            : isPanning ? 'grabbing' : topDown ? (panMode ? 'grab' : editable ? 'crosshair' : 'grab')
             : (hoverTarget && onBlockClick ? 'pointer' : 'grab'),
-          touchAction: 'none',
+          touchAction: interactive ? 'none' : 'auto',
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onWheel={topDown ? undefined : onWheel3D}
+        onWheel={topDown || !interactive ? undefined : onWheel3D}
         onContextMenu={handleContextMenu}
       />
       {status === 'loading' && (

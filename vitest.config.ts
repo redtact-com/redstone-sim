@@ -17,6 +17,7 @@ export default defineConfig({
       { find: '@redstone/sim',             replacement: path.resolve(__dirname, 'packages/sim/src/index.ts') },
       { find: '@redstone/editor',          replacement: path.resolve(__dirname, 'packages/editor/src/index.ts') },
       { find: '@redstone/viewer',          replacement: path.resolve(__dirname, 'packages/viewer/src/index.ts') },
+      { find: '@redstone/docs-kit/diagrams', replacement: path.resolve(__dirname, 'packages/docs-kit/src/diagrams/index.ts') },
       { find: '@redstone/docs-kit/viewer', replacement: path.resolve(__dirname, 'packages/docs-kit/src/viewer/index.ts') },
       { find: '@redstone/docs-kit',        replacement: path.resolve(__dirname, 'packages/docs-kit/src/index.ts') },
     ],

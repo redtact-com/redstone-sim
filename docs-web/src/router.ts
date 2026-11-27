@@ -9,7 +9,6 @@ import { parseDocsHash } from '@redstone/docs-kit'
  */
 export type Route =
   | { kind: 'home' }
-  | { kind: 'wiring' }
   | { kind: 'page'; id: string; s: string | null }
   | ({ kind: 'search' } & SearchQuery)
 
@@ -29,7 +28,6 @@ export const EMPTY_SEARCH: SearchQuery = { q: '', doc: null, flags: [] }
 export function parseRoute(hash: string): Route {
   const p = parseDocsHash(hash)
   if (!p || p.id === '') return { kind: 'home' }
-  if (p.id === '_wiring') return { kind: 'wiring' }
   if (p.id === '_search') {
     const at = hash.indexOf('?')
     const params = new URLSearchParams(at < 0 ? '' : hash.slice(at + 1))

@@ -26,6 +26,12 @@ const SKIP = [
   'docs/research/03_legal-decompile.md', // 規約の逐語引用 (これは規約文であってコードではない)
 ]
 
+/**
+ * **全行**を見るフォルダ。図の文言 (`*.data.ts`) は文字列がそのまま画面に出るので、
+ * コメント行だけでなく全部の行を検査する (#434)
+ */
+const SCAN_ALL_LINES = ['packages/docs-kit/src/diagrams/', 'docs-web/src/diagrams/']
+
 function trackedFiles(): string[] {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf-8' })
     .split('\n').filter(Boolean)
@@ -39,12 +45,13 @@ describe('著作権まわりの衛生 (docs/ip-policy.md)', () => {
     for (const f of trackedFiles()) {
       let text: string
       try { text = readFileSync(join(repoRoot, f), 'utf-8') } catch { continue }
-      const isMd = f.endsWith('.md')
+      const allLines = f.endsWith('.md') || SCAN_ALL_LINES.some(d => f.startsWith(d))
       text.split('\n').forEach((line, i) => {
         // ソースは**コメント行だけ**を見る。実装の TypeScript が
-        // `this.neighborChanged(pos);` のような形で誤検知するため
+        // `this.neighborChanged(pos);` のような形で誤検知するため。
+        // md と SCAN_ALL_LINES のフォルダは全行を見る
         const t = line.trim()
-        if (!isMd && !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'))) return
+        if (!allLines && !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'))) return
         for (const p of VERBATIM) {
           if (p.re.test(line)) hits.push(`${f}:${i + 1} [${p.name}] ${t.slice(0, 100)}`)
         }
@@ -52,6 +59,11 @@ describe('著作権まわりの衛生 (docs/ip-policy.md)', () => {
     }
     expect(hits, `Java の字面を貼らないこと (典拠はクラス名・メソッド名 + 自分の言葉で書く)\n${hits.join('\n')}`)
       .toEqual([])
+  })
+
+  it('図のフォルダは全行の検査の対象に入っている (#434)', () => {
+    const files = trackedFiles().filter(f => SCAN_ALL_LINES.some(d => f.startsWith(d)))
+    expect(files.filter(f => f.endsWith('.data.ts')).length).toBeGreaterThan(0)
   })
 
   it('手元の絶対パスがコミットされていない (#322)', () => {

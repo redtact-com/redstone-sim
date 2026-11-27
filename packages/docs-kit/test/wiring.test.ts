@@ -3,7 +3,7 @@ import { FixtureRunner } from '@redstone/sim'
 import type { Fixture } from '@redstone/sim'
 import { fitDistance } from '@redstone/viewer'
 import { DOCS_KIT_VERSION } from '@redstone/docs-kit'
-import { fixtureFrame } from '@redstone/docs-kit/viewer'
+import { FixtureViewer, fixtureFrame } from '@redstone/docs-kit/viewer'
 
 /**
  * 配線の最小のテスト (#434)。docs-kit から viewer と sim を import できることを見る。
@@ -14,6 +14,7 @@ describe('docs-kit の配線', () => {
   it('入口と viewer の入口を別々に import できる', () => {
     expect(DOCS_KIT_VERSION).toBe(1)
     expect(typeof fixtureFrame).toBe('function')
+    expect(typeof FixtureViewer).toBe('function')
   })
 
   it('viewer の fitDistance で枠を決める', () => {
