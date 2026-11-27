@@ -7,7 +7,7 @@ import { EMPTY_SEARCH, parseRoute, searchHref } from './router'
 import type { Route, SearchFlag, SearchQuery } from './router'
 
 /**
- * 検索 (#434)。節 (1,383 件) を自前の 2-gram + BM25 (docs-kit の search.ts) で引く。
+ * 検索 (#434)。節 (1,385 件) を自前の 2-gram + BM25 (docs-kit の search.ts) で引く。
  *
  * - 索引は、検索の欄に初めて入った時に取る (最初の表示では取らない)
  * - 結果は本文の欄に 20 件。押すとページ + 節へ飛ぶ
