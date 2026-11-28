@@ -202,6 +202,12 @@
 
 **設置**: RedstoneLampBlock#getStateForPlacement は lit を hasNeighborSignal で決める。onPlace は持たない。[26.3 読解]
 
+- 読むのは、置く先のマスの受電である。読む時点は書き込みの前 (→ 04 §4.13 の手順 4) で、置く先にはまだ古いブロック (空気など) がある。hasNeighborSignal は 6 隣を見るので、置く先の中身には依らない。
+- 受電した所に置いたランプは、**点いた状態で置かれる**。予約は積まない。消えたまま置かれて後から点くのではない。
+- setPlacedBy も持たない (Block の既定)。プレイヤーの設置でランプ自身がするのは、置く状態を決めることだけである。
+- **支えの条件は無い**。RedstoneLampBlock は canSurvive を上書きせず、親は Block だけなので、既定の「常に真」(BlockBehaviour#canSurvive) を使う。宙にも置けるし、周りが変わっても消えない。プロパティを持たない石なども同じである。
+- 網羅表 A (00 §4.1) の RedstoneLampBlock の行に PL が無かったのは、表の取りこぼしだった (→ 00 §4.3)。正しいのはこの節である。
+
 **NC (RedstoneLampBlock#neighborChanged)** — サーバー側だけ:
 
 1. lit と hasNeighborSignal を比べる。同じなら終わり。

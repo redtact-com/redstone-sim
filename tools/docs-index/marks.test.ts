@@ -57,7 +57,7 @@ describe('印 (#434)', () => {
 })
 
 /** 印の数 (凡例を除く) */
-const TOTAL = { read: 621, need: 236, fx: 189, ver: 121, sure: 21, meas: 21, guess: 11, check: 14 }
+const TOTAL = { read: 626, need: 237, fx: 189, ver: 121, sure: 21, meas: 21, guess: 11, check: 14 }
 
 describe('fixture のタグ (#434)', () => {
   it('複数名のタグを割る (・ , 、 /)', () => {

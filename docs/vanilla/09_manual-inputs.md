@@ -139,7 +139,8 @@ LivingEntity#aiStep) で起きる。モブ・アイテム・矢はエンティ�
 
 取り付け方向: FaceAttachedHorizontalDirectionalBlock#getConnectedDirection は
 床 → 上、天井 → 下、壁 → facing を返す。支えはその逆向きの隣。
-床置きの facing は置いた人の向き、壁は facing の逆側に支えがある。
+床置きと天井付けの facing は、置いた人が見ている水平の向きと**同じ**である (逆ではない)。壁は facing の逆側に支えがある。
+置いた時の powered は常に偽である。決め方の全部は §4.1 の「置いた時の状態」に書く。
 [26.3 読解: FaceAttachedHorizontalDirectionalBlock#getConnectedDirection / #getStateForPlacement]
 
 ### 3.2 BlockEntity に持つ値
@@ -292,6 +293,49 @@ Level#setBlock が出す [26.3 読解: LevelChunk#setBlockState / Level#setBlock
 3. 自分 6 の PP。
 ピストンに壊されたときは、押し終わりにまとめてこのフックが呼ばれる (引数の「ピストン移動」は偽で渡るので updateNeighbours が走る。
 [26.3 読解: PistonBaseBlock#moveBlocks] → 13)。
+
+**置いた時の状態** [26.3 読解: FaceAttachedHorizontalDirectionalBlock#getStateForPlacement・#canSurvive・#canAttach, BlockPlaceContext#getNearestLookingDirections, UseOnContext#getHorizontalDirection, Direction#orderedByNearest・#fromYRot, Entity#getDirection, LeverBlock のコンストラクタ]
+
+プレイヤーがレバーを置く時の状態は、親の FaceAttachedHorizontalDirectionalBlock#getStateForPlacement が決める。LeverBlock は上書きしない。ボタンも同じ親を使う。
+設置の流れの全体 (どの段で呼ばれるか) は → 04 §4.13。
+
+1. 候補の向きを 6 つ、決まった順に並べる (下の「候補の順」)。
+2. 順に 1 つずつ、その向きを「支えのある側」として状態を作る。
+   - 向きが下: face = floor。向きが上: face = ceiling。どちらも facing = **置いた人が見ている水平の向き**。
+   - 向きが水平 (北・東・南・西): face = wall、facing = **その向きの逆** (支えから離れる向き)。
+   - ほかのプロパティは既定の状態のままである。**powered は偽**。
+3. 作った状態の canSurvive を、置く先のマスで呼ぶ。真なら、その状態を返して終わる。
+4. 偽なら次の候補へ進む。**6 つとも偽なら「無し」を返し、レバーは置かれない** (04 §4.13 の手順 4 で FAIL)。
+
+- **powered はいつも偽**である。getStateForPlacement は受電を読まない。支えが強充電されていても、隣に信号源があっても、切れたレバーが置かれる。
+  レバーは設置フックも setPlacedBy も持たず、NC にも反応しないので、置いた後に自分で入ることも無い。入るのは「使う」と起動型の爆発だけである。
+- 見ている水平の向き (Entity#getDirection → Direction#fromYRot) は、yaw を 90 で割って 0.5 を足し、切り捨てた値の下位 2 ビットで決まる。
+  0 = 南・1 = 西・2 = 北・3 = 東。yaw が −45 以上 45 未満なら南、45 以上 135 未満なら西である。プレイヤーのいない文脈では北になる。
+- 床置きのレバーを、南を向いて置くと facing = south になる。リピーターなど「向きの逆」を使うブロック (→ 07 §4.13) とは逆なので注意する。
+- 支えの判定 (#canSurvive → #canAttach) は、取り付け先のマスの、こちらを向いた面が頑丈 (FULL) かである。床置きなら真下のブロックの上面を見る。
+
+候補の順 (BlockPlaceContext#getNearestLookingDirections):
+
+1. まず、見ている向きに近い順に 6 方向を並べる (Direction#orderedByNearest)。
+   - 視線の 3 軸の成分の大きさは、x が |sin(yaw)| × cos(pitch)、z が |cos(yaw)| × cos(pitch)、y が |sin(pitch)| である。
+   - 各軸で、視線が向いている側の向きを取る。成分が 0 の時は、x は西・z は北・y は下になる。
+   - 3 つを成分の大きい順に並べる。同じ大きさの時は、z が x より先、y は 1 番目の軸と同点なら後・2 番目以下の軸と同点なら先である。
+   - 後ろの 3 つは、前の 3 つの逆向きを逆順に並べた物である (4 番目 = 3 番目の逆、6 番目 = 1 番目の逆)。
+2. 押したブロックが置き換え可能でなければ (普通の設置)、**「押した面の逆向き」を先頭へ移す**。ほかの 5 つの順は変えない。
+   押したブロックが置き換え可能 (草など) で、そのマスに置く時は、1 の順のままである。
+
+押した面ごとの結果 (押したブロックが置き換え可能でない時):
+
+| 押した面 | 最初の候補 | 置かれる状態 (支えが頑丈な時) |
+|---|---|---|
+| ブロックの上面 | 下 | face = floor、facing = 見ている水平の向き |
+| ブロックの下面 | 上 | face = ceiling、facing = 見ている水平の向き |
+| ブロックの横の面 (例: 北の面) | その面の逆 (南) | face = wall、facing = 押した面の向き (北) |
+
+- 最初の候補は、押したブロックが支えになるので、普通は通る。通らないのは、押したブロックのその面が頑丈でない時である (面の頑丈さは → 05 §4.7.4)。
+- その時は、**残りの 5 つの向きを見ている向きに近い順に試す**。つまり、置く先のマスの別の隣に頑丈な面があれば、そちらに付く。
+  例: 下付きのハーフブロックの上面を押し、置く先の北隣に石がある。下が通らないので、視線に近い順に試し、北の番で face = wall・facing = south が通る。
+- 置き換え可能なマスを直に押した時 (草を押してそこに置く) は、押した面を使わない。視線に一番近い向きから順に試すので、見下ろしていて真下が頑丈なら床置きになる。
 
 **取り付け**: FaceAttachedHorizontalDirectionalBlock#canSurvive は支えの面が sturdy か。
 #updateShape は支えの向きからの PP で生存を確かめ、だめなら空気にする
@@ -948,6 +992,7 @@ pressure-plate-wood・pressure-plate-stone・target-conduct・lever-wire-lamp �
 - 26.3 PressurePlateBlock#getSignalStrength / #getSignalForState / #setSignalForState
 - 26.3 WeightedPressurePlateBlock#getSignalStrength / #getPressedTime
 - 26.3 BlockSetType (各定数) / Blocks (ボタン・感圧板・紐・フック・避雷針などの登録)
+- 26.3 FaceAttachedHorizontalDirectionalBlock#getStateForPlacement・#canSurvive・#canAttach、BlockPlaceContext#getNearestLookingDirections、UseOnContext#getHorizontalDirection、Direction#orderedByNearest・#fromYRot、Entity#getDirection — レバーとボタンの置いた時の状態 (§4.1)
 - 26.3 TripWireBlock#entityInside / #tick / #checkPressed / #updateSource / #onPlace / #affectNeighborsAfterRemoval / #playerWillDestroy / #updateShape / #getShape / #getEntityInsideCollisionShape / #shouldConnectTo
 - 26.3 TripWireHookBlock#calculateState / #tick / #setPlacedBy / #emitState / #notifyNeighbors / #onRemoved / #affectNeighborsAfterRemoval / #ownSignal / #getDirectSignal / #canSurvive / #updateShape
 - 26.3 TrappedChestBlock#ownSignal / #getDirectSignal / #isSignalSource、TrappedChestBlockEntity#signalOpenCount

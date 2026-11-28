@@ -112,7 +112,7 @@ Rust (WASM) で同じ挙動のエンジンを組むための土台にする。�
 | [01_tick-loop.md](01_tick-loop.md) | サーバーの 1 tick の流れ (区間 A〜C・B1〜B5)、ServerLevel#tick の相 L0〜L15、/tick の freeze・step・sprint、ランダム tick、BlockEntity 相、プレイヤーの操作が入る位相 |
 | [02_scheduled-ticks.md](02_scheduled-ticks.md) | 予約 tick (LevelTicks) の並び (時刻・優先度・予約順)、先勝ちの重複抑止、1 tick 65536 件の上限、保存形式、scheduleTick を呼ぶ全ブロックの表 |
 | [03_block-events.md](03_block-events.md) | ブロックイベントのキュー (積む・回す・照合する)、捨てられる・延びる条件、全イベントの表 |
-| [04_set-block-and-updates.md](04_set-block-and-updates.md) | setBlock のフラグの全ビット、NC・SU・CU の配り方と順 (CollectingNeighborUpdater)、形状更新の深さ 512、連鎖の上限 1,000,000、Orientation、/setblock の経路 |
+| [04_set-block-and-updates.md](04_set-block-and-updates.md) | setBlock のフラグの全ビット、NC・SU・CU の配り方と順 (CollectingNeighborUpdater)、形状更新の深さ 512、連鎖の上限 1,000,000、Orientation、/setblock の経路、プレイヤーの設置と破壊の手順 |
 | [05_signals-and-block-properties.md](05_signals-and-block-properties.md) | 信号モデル (強/弱・導体・準接続)、信号源の全表、導体と押し反応の全ブロックの表、状態表の作り方。付録に F1 (接続と形) と F3 (支え) |
 | [06_redstone-wire.md](06_redstone-wire.md) | ダストの接続・形状・電力、既定の評価器 (HashSet の反復順を含む) と実験の評価器、設置・除去・右クリック |
 | [07_diodes.md](07_diodes.md) | リピーターとコンパレーター (BlockEntity を含む)。入力の計算、ロック、予約の優先度、前方の更新 |
@@ -141,14 +141,14 @@ Rust (WASM) で同じ挙動のエンジンを組むための土台にする。�
 | 01_tick-loop.md | 11 | 11_outputs.md | 12 |
 | 02_scheduled-ticks.md | 7 | 12_dispenser-dropper-crafter.md | 3 |
 | 03_block-events.md | 7 | 13_pistons.md | 13 |
-| 04_set-block-and-updates.md | 7 | 14_containers-hoppers-analog.md | 12 |
+| 04_set-block-and-updates.md | 8 | 14_containers-hoppers-analog.md | 12 |
 | 05_signals-and-block-properties.md | 17 | 15_rails.md | 11 |
 | 06_redstone-wire.md | 6 | 16_fluids-falling-blocks.md | 14 |
 | 07_diodes.md | 11 | 17_entities-interplay.md | 20 |
 | 08_torch-observer-redstone-block.md | 14 | 18_determinism-java-semantics.md | 10 |
 | 09_manual-inputs.md | 25 | 19_version-diffs.md | 6 |
 
-- 合計は **211 件**である (docs/vanilla の 00〜19)。
+- 合計は **212 件**である (docs/vanilla の 00〜19)。うち 1 件は、2026-11-28 に 04 §4.14 (プレイヤーの破壊) で足した。
 - 関連資料の docs/research/18_ground-truth-oracle.md にも 7 件ある (同じ数え方)。docs/research/17_circuit-corpus.md は 0 件。
 - 多くの [要実機] には、確かめる回路がそのメモの §8 (付録では付録の検証案) にある。撮る順と採取の仕組みは docs/research/18 §6 にある。
 
@@ -196,7 +196,7 @@ CI の衛生テスト (tools/ip-hygiene.test.ts) が、Java の呼び出し文�
 
 ## 10. 残っている主な項目
 
-- [要実機] の 211 件 (§6)。26.3 で撮る採取の仕組みはまだ無い (docs/research/18 §6)。
+- [要実機] の 212 件 (§6)。26.3 で撮る採取の仕組みはまだ無い (docs/research/18 §6)。
 - 00 の O-1: かまど 3 種の LIT と醸造台の HAS_BOTTLE の書き込み (オブザーバーに見える) が、14 に無い。
 - 18 §4.6.4 の乱数の表に、レッドストーン鉱石が光るときに引く乱数の行が無い (09 付録 A.11)。
 - スイレンの葉がボートで壊れる経路 (LilyPadBlock の entityInside) は、どのメモにも無い (00 の LilyPadBlock の行)。

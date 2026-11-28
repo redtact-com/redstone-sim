@@ -467,8 +467,8 @@ budding_amethyst・アメジストの芽は共鳴しない。
 | チェスト・トラップチェスト・樽・シュルカーボックス | 開いている人数が 0 → 正、正 → 0 | container_open (10) / container_close (9) | 本体 | 開け閉めした者。見回り (ContainerOpenersCounter#recheckOpeners) で数え直したときは無し | 入力 / L6 | 14 |
 | コンポスター | 層が増える・空になる (ホッパー経由も) | block_change (11) | 本体 | 入れた者 / 無し | 入力 / L13 | 14 |
 | 模様入りの本棚・ジュークボックス | 中身が変わる (ホッパー経由も) | block_change (11) | 本体 | 影響=新しい状態 | 入力 / L13 | 14 |
-| プレイヤーの設置 | BlockItem#place で置いた後 (置いたブロックの近隣更新・onPlace より後) | block_place (13) | 置いた位置 | (プレイヤー, 置いた直後の状態。TNT のようにすぐ消えたら空気) | 入力 | — |
-| プレイヤーの破壊 | Block#playerWillDestroy (撤去の前) | block_destroy (12) | 壊した位置 | (プレイヤー, 元の状態) | 入力 | — |
+| プレイヤーの設置 | BlockItem#place で置いた後 (置いたブロックの近隣更新・onPlace より後) | block_place (13) | 置いた位置 | (プレイヤー, 置いた直後の状態。TNT のようにすぐ消えたら空気) | 入力 | 04 §4.13 |
+| プレイヤーの破壊 | Block#playerWillDestroy (撤去の前) | block_destroy (12) | 壊した位置 | (プレイヤー, 元の状態) | 入力 | 04 §4.14 |
 | 支えを失った・壊れた | Level#destroyBlock で撤去できた後。Block#updateOrDestroy (形状更新で空気になった) から来る | block_destroy (12) | その位置 | (壊した者か無し, 元の状態) | 形状更新の場 | 04 |
 | スカルクセンサー | 作動した | sculk_sensor_tendrils_clicking (振動でない)。隣のアメジストに resonate_f | 本体 / アメジスト | 元の発生元 | L13 | 10 |
 

@@ -116,13 +116,13 @@ describe('ページの HTML (#434)', () => {
     expect(html).toContain('<td>本メモ <a class="ref" href="#/v07/1" data-ref="v07/1">§1</a> と同じ</td>')
   })
 
-  it('実物: 入れている版の markdown-it で太字 1,310 個・表 728 個が効き、斜体は 0', () => {
+  it('実物: 入れている版の markdown-it で太字 1,378 個・表 742 個が効き、斜体は 0', () => {
     const { stats, pages } = buildDocsFromRepoCached()
     const all = [...pages.values()].map(p => p.html).join('\n')
-    expect(stats.strong).toBe(1310)
-    expect(all.match(/<strong>/g)!.length).toBe(1310)
-    expect(stats.tables).toBe(728)
-    expect(all.match(/<div class="tbl[^"]*"><table>/g)!.length).toBe(728)
+    expect(stats.strong).toBe(1378)
+    expect(all.match(/<strong>/g)!.length).toBe(1378)
+    expect(stats.tables).toBe(742)
+    expect(all.match(/<div class="tbl[^"]*"><table>/g)!.length).toBe(742)
     expect(all).not.toContain('<em>')
     expect(all).not.toContain('<hr')
     expect(stats.hrDropped).toBe(236)

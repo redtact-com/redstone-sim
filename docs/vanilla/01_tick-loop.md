@@ -630,8 +630,8 @@ runGameElements は次の TickRateManager#tick で初めて変わる (§4.2)。
 
 | 操作 | 入口 | 位相 |
 |---|---|---|
-| ブロックへの右クリック (レバー・ボタン・リピーターの遅延変更・コンテナを開く・ブロックの設置) | ServerGamePacketListenerImpl#handleUseItemOn → ServerPlayerGameMode#useItemOn | 区間 A |
-| 破壊の開始・中断・完了 (クリエイティブの即破壊を含む) | ServerGamePacketListenerImpl#handlePlayerAction → ServerPlayerGameMode#handleBlockBreakAction | 区間 A |
+| ブロックへの右クリック (レバー・ボタン・リピーターの遅延変更・コンテナを開く・ブロックの設置) | ServerGamePacketListenerImpl#handleUseItemOn → ServerPlayerGameMode#useItemOn。設置の手順は → 04 §4.13 | 区間 A |
+| 破壊の開始・中断・完了 (クリエイティブの即破壊を含む) | ServerGamePacketListenerImpl#handlePlayerAction → ServerPlayerGameMode#handleBlockBreakAction。破壊の手順は → 04 §4.14 | 区間 A |
 | サバイバルで、完了のパケットが早すぎた破壊の後追い | ServerPlayerGameMode#tick (ServerPlayer#tick から) | L12 |
 | コンテナ内のクリック (アイテムの出し入れ) | ServerGamePacketListenerImpl#handleContainerClick | 区間 A |
 | チャット欄のコマンド | ServerGamePacketListenerImpl#handleChatCommand → tryHandleChat がサーバのタスクとして登録。**このハンドラは専用キューへ回さない**。ネットワークスレッドが到着の時点でタスクを積む | 到着後の最初の区間 C (tick の実行中に届けば、その tick の区間 C) |

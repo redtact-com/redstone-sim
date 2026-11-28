@@ -537,7 +537,7 @@ updateNeighborsInFront が呼ばれる契機の一覧:
 
 [26.3 読解: DiodeBlock#getStateForPlacement, RepeaterBlock#getStateForPlacement, DiodeBlock#onPlace, #setPlacedBy, LevelChunk#setBlockState]
 
-プレイヤーがアイテムで置く場合の順 (BlockItem の流れは → 09_manual-inputs.md / 04_set-block-and-updates.md):
+プレイヤーがアイテムで置く場合の順 (BlockItem の流れの全体は → 04_set-block-and-updates.md §4.13):
 
 1. 置く状態を決める。FACING はプレイヤーの水平の向きの逆。リピーターは、その場で isLocked を読んで LOCKED を決める。POWERED は false。足場が無い (canSurvive が偽) なら置けない [26.3 読解: BlockItem#canPlace]。
 2. flag 11 (1 + 2 + 8) で書く [26.3 読解: BlockItem#placeBlock]。
