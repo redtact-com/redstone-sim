@@ -1224,7 +1224,7 @@ tick のフェーズごとにまとめて回す形にしない。1 つの予約 
 | 配置 | 専用サーバーで max-chained-neighbor-updates を小さい値 (例 20) にし、ダストの線をレバーで点ける |
 | 観測 | どのダストまで電力が変わるか。ログの「最初に捨てた座標」。カウントが「Multi は 1 件・SU は 1 方向 1 件」で合うか |
 
-### プレイヤーの設置と破壊を撮る手段 (P10・P11 と、06 §8 の P4・P5、08 §8 の P-15、15 §5.5 が使う)
+### プレイヤーの設置と破壊を撮る手段 (P10・P11 と、06 §8 の P4・P5、07 §8 の P-9、08 §8 の P-15、11 §8 の P6、15 §5.5 が使う)
 
 今の fixture は、盤面を無更新で置き、入力は use と /setblock などのコマンドで入れる。**プレイヤーの設置 (§4.13) と破壊 (§4.14) を通る入力は、どちらのハーネスにも無い**。
 /setblock は経路が違い (§4.11)、孤立したダストが点になる (→ 06 §4.14.1) ので、代わりにならない。
@@ -1239,25 +1239,28 @@ tick のフェーズごとにまとめて回す形にしない。1 つの予約 
 - 破壊は ServerPlayerGameMode#destroyBlock が公開のメソッドなので、偽プレイヤーから直に呼べる。§4.14 の手順 1〜11 をそのまま通る。
   入口の表 (掘る時間・Block#attack) は通らない。
 - 入力を入れる位置は use と同じ (テスト関数の毎 tick の呼び出しの中) なので、tick の規約はそのまま使える。
+- GameTestHelper の置く・壊すの手助け (#placeAt・#placeBlock・#destroyBlock) は使わない。どれも §4.13・§4.14 と経路が違うからである。
+  #placeAt は ItemStack#useOn を直に呼ぶので、§4.13 の入口を飛ばす (座標もテストの原点から測る)。#placeBlock はプレイヤーの無い文脈で置くので、水平の向きがいつも北になる。#destroyBlock は Level#destroyBlock を呼ぶので、§4.14 の Level#removeBlock の経路でない。
 
 要る物:
 
 | 物 | 中身 |
 |---|---|
-| 入力の種類 (fixture の形式) | 置く: 押すブロックの位置・押す面・持つアイテム・見ている向き (yaw と pitch)・しゃがむか。壊す: 位置。今の形式に無いので足す (tools/mc-harness/README.md の入力の表・tools/gt-oracle の計画の検査・写す側の to-fixture.ts) |
-| 偽プレイヤーの手 | 置くたびに、利き手にアイテムを持たせる。サバイバルの偽プレイヤーは置くと 1 つ減るので、毎回入れ直すか、クリエイティブの偽プレイヤーにする |
-| 偽プレイヤーの向き | 置く前に yaw と pitch を入れる。レバー・リピーター・オブザーバー・ピストンなどの置く状態は、見ている向きで決まる (→ 09 §4.1)。今の use は向きを入れていない |
-| 当たり (面と位置) | 押す面を入力から取る。今は上の面に固定である。置く先のマスは「押したブロックの面の先」なので (§4.13)、床の上に置くなら床のブロックの上の面を押す |
+| 入力の種類 (fixture の形式) | 置く: 押すブロックの位置・押す面・当たりの点 (既定は押す面の中心)・持つアイテム・見ている向き (yaw と pitch)・しゃがむか。壊す: 位置とモード (クリエイティブかサバイバル)。今の形式に無いので足す (fixture の型の packages/sim/src/fixture-driver.ts・tools/mc-harness/README.md の入力の表・tools/gt-oracle の計画の検査・写す側の to-fixture.ts)。TS の実行器は、知らない action を「使う」として扱う。place・break をそう扱わないよう、置き場を分けるか、知らない action で止める |
+| 偽プレイヤーの手 | 置くたびに、利き手にアイテムを持たせる。サバイバルの偽プレイヤーは置くと 1 つ減るので、毎回入れ直すか、クリエイティブの偽プレイヤーにする。置いた後 (次の use の前) に利き手を空にし、しゃがみを戻す。または、置く・壊す用の偽プレイヤーを use 用と別に持つ。手に物が残ると、後の use で、押したブロックが行動を消費しない時 (ランプ・石・線の形のダストなど) に、その物が黙って置かれる |
+| 偽プレイヤーの向き | 置く前に、体の yaw (Entity#setYRot)・頭の yaw (LivingEntity#setYHeadRot)・pitch (Entity#setXRot) を同じ値で入れる。レバー・リピーター・オブザーバー・ピストンなどの置く状態は、見ている向きで決まる (→ 09 §4.1)。体の yaw だけでは、頭の向きを読む置く状態 (オブザーバー・ピストン・ディスペンサーの向き、レバーとトーチの候補の順) に効かない。偽プレイヤーは tick されないので、頭が体にそろわないからである。ServerPlayer#teleportTo は接続を使うので使わない。今の use は向きを入れていない |
+| 当たり (面と位置) | 押す面を入力から取る。今は上の面に固定である。置く先のマスは「押したブロックの面の先」なので (§4.13)、床の上に置くなら床のブロックの上の面を押す。当たりの点も入力から取る (既定は押す面の中心。今はブロックの中心)。トラップドア・ドア・ハーフブロック・階段は、点で置く状態が変わる |
 | しゃがみ | 押すブロックが「使う」に反応する物 (レバー・リピーター・十字か点のダストほか) の時は、しゃがませて §4.13 の入口の 1 を飛ばす。石の床を押すなら要らない |
-| 壊す側の落とし物 | サバイバルの偽プレイヤーは、落とし物のアイテムを世界に出す。盤面だけを撮るなら、クリエイティブの偽プレイヤーで壊す (書き込みは同じ。§4.14)。落とし物を出さない判定が偽プレイヤーで真になるかは、作る時に確かめる |
-| 結果の記録 | 置く: 戻りの種類 (Success・Fail・Pass) を記録する。断られる設置 (支えが無い・置き換え可能でない) は Fail が正しいので、失敗にしない。壊す: 戻りの真偽を記録する |
+| 壊す側のモード | サバイバルの偽プレイヤーは、落とし物のアイテムを世界に出す。3 素子と石の盤面だけを撮るなら、クリエイティブの偽プレイヤーで壊す (書き込みは同じ。§4.14)。クリエイティブで作った偽プレイヤーは、落とし物を出さず、置いてもアイテムが減らない [26.3 読解: GameTestHelper#makeMockServerPlayer, GameType#updatePlayerAbilities, Player#preventsBlockDrops・#hasInfiniteMaterials]。モードで盤面が違うブロックと、クリエイティブでもアイテムを出すブロック (中身のあるシュルカーボックス・コンテナほか) は §4.14 の「違い」にある。それらを撮る時は、入力のモードで偽プレイヤーを選ぶ。サバイバルでは、空気に #destroyBlock を呼ばない (実機の入口が空気で止めるため。呼ぶと、実機では出ない block_destroy が出る) |
+| 結果の記録 | 置く: 戻りの種類 (Success・Fail・Pass) と、置いた先のマス・書き込みの直後に読み直した状態 (§4.13 の手順 8。置けなかった時は無し) を記録する。戻りの種類だけでは、押したブロックの「使う」が行動を消費した時と区別できない。断られる設置 (支えが無い・置き換え可能でない) は Fail が正しいので、失敗にしない。壊す: 戻りの真偽を記録する |
 | 初めの盤面 | 今のまま (無更新で置いて settle)。P10 では床だけを初めの盤面にし、素子は全部入力で置く |
-| 比べる相手 | TS のエンジン (packages/sim) には、置く・壊すの入力が無い。この fixture は、Rust のエンジンの適合の試験 (redstone-engine の conformance) だけが読む。今の比べる道具 (compare.ts。1.21.1 の expect と比べる) には掛けられない |
+| 比べる相手 | TS のエンジン (packages/sim) には、置く・壊すの入力が無い。この fixture は、Rust のエンジンの適合の試験 (redstone-engine の conformance) だけが読む。Rust の置く入力は、置く先のマスと状態を受ける形である (押した面と向きから状態を決める形は持たない)。だから、上の記録の「置いた先のマス」と「読み直した状態」の 2 つで写す。今の比べる道具 (compare.ts。1.21.1 の expect と比べる) には掛けられない |
+
+偽プレイヤーは世界に入っていない。設置の当たり判定 (§4.13 の手順 6) は世界のエンティティの一覧だけを見るので、偽プレイヤー自身は邪魔をしない。向きは、体と頭の 2 つを入れれば (上の表)、入れた値がそのまま読まれる [26.3 読解: EntityGetter#isUnobstructed, Direction#orderedByNearest, LivingEntity#getViewYRot, Entity#getDirection, Player#aiStep]。
 
 確かめていない所 (作る時に見る):
 
-- 偽プレイヤーは世界に入っていない。設置の当たり判定 (§4.13 の手順 6) は世界のエンティティだけを見るので、偽プレイヤー自身は邪魔をしないはずである。
-- 利き手にアイテムを入れる・向きを入れる操作が、世界に入っていない偽プレイヤーでそのまま効くか。
+- 利き手にアイテムを入れる操作が、世界に入っていない偽プレイヤーでそのまま効くか。
 - GameEvent (block_place・block_destroy) とレベルイベントが、世界に入っていない偽プレイヤーを出所にして例外を出さないか。今の use (レバーは出所なし) では通っていない道である。
 
 **1.21.1 のハーネス (tools/mc-harness) では、すすめない**。fabric-carpet の偽プレイヤーは世界に入った本物のプレイヤーなので、アイテムを持たせて右クリックさせれば設置はできる。
@@ -1408,6 +1411,6 @@ Rust のエンジンの正解は 26.3 で撮るので、オラクルの側に足
 - 26.3 MovingPistonBlock#destroy・DoublePlantBlock#preventDropFromBottomPart。playerDestroy を上書きする 4 クラス (BeehiveBlock・DoublePlantBlock・IceBlock・TurtleEggBlock。world/level/block の全クラスを検索) と TurtleEggBlock#decreaseEggs
 - 26.3 AbstractBedBlock#playerWillDestroy・DecoratedPotBlock#playerWillDestroy・ShulkerBoxBlock#playerWillDestroy・BeehiveBlock#playerWillDestroy、EmptyFluid#createLegacyBlock、MultifaceBlock#canBeReplaced、BlockItem#updateBlockEntityComponents、ItemStack#consume
 - 26.3 GameEventDispatcher#post・VibrationSystem.Listener#handleGameEvent・VibrationSystem.User#isValidVibration・SculkSensorBlockEntity の canReceiveVibration (§4.14 の空気の block_destroy)
-- 26.3 GameTestHelper#makeMockServerPlayer・#placeAt (§8 の撮る手段)
+- 26.3 GameTestHelper#makeMockServerPlayer・#placeAt・#placeBlock・#destroyBlock、GameType#updatePlayerAbilities、Player#preventsBlockDrops・#hasInfiniteMaterials、EntityGetter#isUnobstructed、LivingEntity#setYHeadRot (§8 の撮る手段)
 - 1.21.1 Level#setBlock・LevelChunk#setBlockState・BlockBehaviour#onRemove・ServerLevel#blockUpdated・NeighborUpdater・CollectingNeighborUpdater・SetBlockCommand・BlockInput#place (版差の確認)
 - 26.2・26.4-pre-1 の同名クラス (差分の確認)
