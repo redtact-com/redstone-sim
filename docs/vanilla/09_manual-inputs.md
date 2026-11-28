@@ -311,7 +311,9 @@ Level#setBlock が出す [26.3 読解: LevelChunk#setBlockState / Level#setBlock
   レバーは設置フックも setPlacedBy も持たず、NC にも反応しないので、置いた後に自分で入ることも無い。入るのは「使う」と起動型の爆発だけである。
 - 見ている水平の向き (Entity#getDirection → Direction#fromYRot) は、yaw を 90 で割って 0.5 を足し、切り捨てた値の下位 2 ビットで決まる。
   0 = 南・1 = 西・2 = 北・3 = 東。yaw が −45 以上 45 未満なら南、45 以上 135 未満なら西である。
-  UseOnContext#getHorizontalDirection はプレイヤーが無ければ北を返すが、レバーではそこへ届かない。候補の順がプレイヤーを読むので、プレイヤーの無い BlockPlaceContext ではレバーを置けない。
+  UseOnContext#getHorizontalDirection は、プレイヤーが無ければ北を返す。
+  素の BlockPlaceContext は、候補の順 (Direction#orderedByNearest) がプレイヤーを読む。だからプレイヤーが無いと、そこで止まってレバーを置けない。
+  候補の順を自分で持つ文脈 (GameTestHelper#placeBlock が作る物) では、プレイヤーが無くても置ける。その時、床と天井の facing は北になる (→ 04 §8)。
 - **yaw は 2 つある**。facing が読むのは体の向き (yRot。Entity#getDirection)、候補の順が読むのは頭の向き (yHeadRot。LivingEntity#getViewYRot) と pitch (xRot) である。
   移動のパケットが書くのは yRot と xRot だけで、頭の向きは Player#aiStep が毎 tick 体にそろえる。だから普通は同じ値だが、同じ区間 A の中で向きを変えてすぐ置くと、facing は新しい向き、候補の順は前の tick の頭の向きで決まる。
   [26.3 読解: LivingEntity#getViewYRot, Entity#getViewYRot・#getDirection, Player#aiStep]
@@ -361,7 +363,8 @@ Level#setBlock が出す [26.3 読解: LevelChunk#setBlockState / Level#setBlock
 - その時は、**残りの 5 つの向きを見ている向きに近い順に試す**。つまり、置く先のマスの別の隣に頑丈な面があれば、そちらに付く。
   例: 下付きのハーフブロックの上面を押し、置く先の北隣に石がある。下が通らないので、視線に近い順に試し、北の番で face = wall・facing = south が通る。
 - 置き換え可能なマスを直に押した時 (草を押してそこに置く) は、押した面を使わない。視線に一番近い向きから順に試す。
-  下向きの成分が水平の成分より大きい時 (45° より深く見下ろす時) は、真下が頑丈なら床置きになる。浅く見下ろしている時は、見ている水平の向きの隣を先に試す。
+  |sin(pitch)| が、先に来る水平の値に cos(pitch) を掛けた物より大きい時は、下が先頭になるので、真下が頑丈なら床置きになる。
+  目安は、yaw が東西南北の正面なら 45° より深く、斜め 45° なら約 35.3° より深く見下ろす時である。それより浅い時は、候補の順で先に来る水平の向きの隣を先に試す。
 
 **取り付け**: FaceAttachedHorizontalDirectionalBlock#canSurvive は支えの面が sturdy か。
 #updateShape は支えの向きからの PP で生存を確かめ、だめなら空気にする
@@ -1018,7 +1021,7 @@ pressure-plate-wood・pressure-plate-stone・target-conduct・lever-wire-lamp �
 - 26.3 PressurePlateBlock#getSignalStrength / #getSignalForState / #setSignalForState
 - 26.3 WeightedPressurePlateBlock#getSignalStrength / #getPressedTime
 - 26.3 BlockSetType (各定数) / Blocks (ボタン・感圧板・紐・フック・避雷針などの登録)
-- 26.3 FaceAttachedHorizontalDirectionalBlock#getStateForPlacement・#canSurvive・#canAttach、BlockPlaceContext#getNearestLookingDirections、UseOnContext#getHorizontalDirection、Direction#orderedByNearest・#fromYRot、Entity#getDirection・#getViewYRot、LivingEntity#getViewYRot、Player#aiStep、Mth#sin・#cos — レバーとボタンの置いた時の状態 (§4.1)。候補の順のちょうどの角度の表は、この式と表を別に計算した値
+- 26.3 FaceAttachedHorizontalDirectionalBlock#getStateForPlacement・#canSurvive・#canAttach、BlockPlaceContext#getNearestLookingDirections、UseOnContext#getHorizontalDirection、Direction#orderedByNearest・#fromYRot、Entity#getDirection・#getViewYRot、LivingEntity#getViewYRot、Player#aiStep、Mth#sin・#cos、GameTestHelper#placeBlock (プレイヤーの無い文脈) — レバーとボタンの置いた時の状態 (§4.1)。候補の順のちょうどの角度の表は、この式と表を別に計算した値
 - 26.3 TripWireBlock#entityInside / #tick / #checkPressed / #updateSource / #onPlace / #affectNeighborsAfterRemoval / #playerWillDestroy / #updateShape / #getShape / #getEntityInsideCollisionShape / #shouldConnectTo
 - 26.3 TripWireHookBlock#calculateState / #tick / #setPlacedBy / #emitState / #notifyNeighbors / #onRemoved / #affectNeighborsAfterRemoval / #ownSignal / #getDirectSignal / #canSurvive / #updateShape
 - 26.3 TrappedChestBlock#ownSignal / #getDirectSignal / #isSignalSource、TrappedChestBlockEntity#signalOpenCount
