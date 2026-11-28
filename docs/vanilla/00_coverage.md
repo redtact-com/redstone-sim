@@ -27,6 +27,7 @@ docs/vanilla の 01〜19 が、Java 版 26.3 のレッドストーンに関わ�
 hooks-26.3.tsv は、26.3 のデコンパイルの world/level/block/ を走査し、次の 34 個のフック名のどれかを宣言するクラスを、親クラスと宣言したフックと一緒に書き出した表である。
 neighborChanged・updateShape・getSignal・getDirectSignal・isSignalSource・hasAnalogOutputSignal・getAnalogOutputSignal・tick・randomTick・onPlace・affectNeighborsAfterRemoval・onRemove・triggerEvent・entityInside・stepOn・useWithoutItem・useItemOn・attack・onProjectileHit・getStateForPlacement・canSurvive・isRandomlyTicking・getTicker・onExplosionHit・fallOn・setPlacedBy・playerWillDestroy・destroy・spawnAfterBreak・updateIndirectNeighbourShapes・isPathfindable・getPistonPushReaction・canBeReplaced・onBlockStateChange。
 名前だけで拾うので、この 34 個の外で効くクラス (例: DropperBlock・PoweredRailBlock・RailBlock・BlockEntity の多く) は入らない。それを C で補った。
+初めの走査は、戻り値の型の前に注釈が付く宣言を拾えなかった。拾うと、34 個のどれかを宣言するのは 258 クラスになる。差の 7 クラスは C に置いたままである (§4.3)。
 
 ### 1.2 判定の手順
 
@@ -122,7 +123,7 @@ neighborChanged・updateShape・getSignal・getDirectSignal・isSignalSource・h
 |---|---|---|---|
 | O-1 | かまど 3 種の BE の tick は、燃えているかが変わると LIT をフラグ 3 で書き、そのあと setChanged する (AbstractFurnaceBlockEntity#serverTick)。醸造台の BE の tick は、瓶の有無が変わると HAS_BOTTLE の 3 つをフラグ 2 で書く (BrewingStandBlockEntity#serverTick)。どちらもオブザーバーに見えるが、14 はアナログ値と CU しか書いていない | 未解決 (14 は補充していない) | 14 §4.10 |
 | O-2 | 参照の行き止まり: 01 §4.5 の表 (作物の成長 → 08)、01 §1.2 と 11 §1.2 (redstone_ore → 11 → 09 / 17)、12 §4.9 (performBonemeal → 11・16)、10 §1.2 (アレイ → 17) の先に本文が無い。09 §1.2 (TestBlock → 00_coverage) と 01 §4.10 (コマンドブロック → 00_coverage) は 11 §4.13 で足りる | 解消 (仕上げ) | 直した参照: 01 §1.2 と §4.5 の表 (成長 → 11 付録 F、redstone_ore → 09 付録 A)、01 §4.10 (→ 11 §4.13)、02 §4.9 表 A・B (コマンドブロック → 11 §4.13、火 → 11 付録 F.14)、09 §1.2 (→ 11 §4.13)、10 §1.2 (アレイ → 17 付録 A.2)、11 §1.2 (鉱石 → 09 付録 A)、12 §4.9 (→ 11 付録 F.12)、17 §4.20 (鉱石 → 09 付録 A)、18 §4.6.4 の表 (作物・火 → 11 付録 F)、05 付録 C.4・E.3 と 11 付録 F.0 (付録どうしの参照)。あわせて、09 §2.2 の「02 §1.4」(docs/research/02 の節) を docs/research/02_behavior-spec.md §1.4 と書き直した |
-| O-3 | hooks-26.3.tsv は 34 個のフック名だけで拾うので、updateState (レール)・dispenseFrom と getDispenseMethod (DropperBlock)・performBonemeal・BlockEntity の serverTick が入らない。網羅を機械で見直すときは、world/level/block 配下で scheduleTick・blockEvent・updateNeighbourForOutputSignal・setBlock を呼ぶクラスも数える (この表の C はそれで補った) | 方法の注意 | — (この表を作り直すとき。各メモの §6 は TSV の外のクラスも個別に比べている: 12 §6 の DropperBlock、14 §6 の醸造台とかまどの燃料、09 §6 の書見台など) |
+| O-3 | hooks-26.3.tsv は 34 個のフック名だけで拾うので、updateState (レール)・dispenseFrom と getDispenseMethod (DropperBlock)・performBonemeal・BlockEntity の serverTick が入らない。網羅を機械で見直すときは、world/level/block 配下で scheduleTick・blockEvent・updateNeighbourForOutputSignal・setBlock を呼ぶクラスも数える (この表の C はそれで補った)。走査し直すときは、注釈 (@Nullable) つきの宣言も拾う。拾うと増える 7 クラスは、もう C にある (§4.3) | 方法の注意 | — (この表を作り直すとき。各メモの §6 は TSV の外のクラスも個別に比べている: 12 §6 の DropperBlock、14 §6 の醸造台とかまどの燃料、09 §6 の書見台など) |
 | O-4 | 今の TS 実装の塀・板ガラス・泡柱の型の注記は 26.2 の読みを典拠にしている (packages/sim/src/types.ts)。26.3 のメモ (G-F1) を足すときに、26.2 → 26.3 の版差も確かめる | 解消 | 塀と板ガラスは、26.2 の読みが 26.3 でもそのまま使える (05 付録 D・付録 G の G-7)。泡柱は 26.2 と 26.3 で規則が同じだが、TS のテストが典拠にする「26.2」の持ち主 (ソウルサンドの予約) は 26.2 にも当たらない (16 §6・§9.2) |
 
 ---
@@ -423,15 +424,16 @@ PL と TK の欄は、2026-11-28 に数え直して直した (§4.3)。
 初めの hooks-26.3.tsv は、戻り値の型の前に注釈 (@Nullable) が付く宣言を拾えていなかった。
 34 個のフックのうち、これに当たるのは getStateForPlacement と getTicker の 2 つだけである。26.3 の world/level/block を走査し直して、欄を直した [26.3 読解: 各クラスの宣言]。
 
-| フック | 宣言するクラス | うち注釈つき (取りこぼし) | 表の直し |
+| フック | 宣言するクラス | うち注釈つきを持つ | 表の直し |
 |---|---|---|---|
-| getStateForPlacement | 117 | 48 | **PL を 34 行に足した**。残りの 14 のうち 12 行は、onPlace か setPlacedBy でもう PL が付いていた。2 クラス (KelpBlock・MultifaceSpreader) は、34 個のフックをこれしか宣言しないので表 A に無い |
-| getTicker | 34 | 34 (全部) | **TK を 29 行に足した** (直す前は TK の行が 0 だった)。5 クラス (EntityBlock・FurnaceBlock・BlastFurnaceBlock・SmokerBlock・TrialSpawnerBlock) は、これしか宣言しないので表 A に無い |
+| getStateForPlacement | 117 | 48 | 取りこぼしは 47 クラスである (GrowingPlantBlock は、注釈の無い別の getStateForPlacement (乱数を受ける版) も宣言するので、初めから拾えていた)。**PL を 34 行に足した**。残りの 14 のうち 11 行は onPlace か setPlacedBy で、GrowingPlantBlock はその別の宣言で、もう PL が付いていた。2 クラス (KelpBlock・MultifaceSpreader) は、34 個のフックをこれしか宣言しないので表 A に無い |
+| getTicker | 34 | 34 (全部。取りこぼしも 34) | **TK を 29 行に足した** (直す前は TK の行が 0 だった)。5 クラス (EntityBlock・FurnaceBlock・BlastFurnaceBlock・SmokerBlock・TrialSpawnerBlock) は、これしか宣言しないので表 A に無い |
 
 - PL の行は 104 から **138** になった。PL を足した 34 行: AmethystClusterBlock・BambooStalkBlock・BarrierBlock・BaseCoralPlantTypeBlock・BaseCoralWallFanBlock・BellBlock・CalibratedSculkSensorBlock・CampfireBlock・CocoaBlock・ConduitBlock・CoralBlock・CreakingHeartBlock・**FaceAttachedHorizontalDirectionalBlock**・HangingRootsBlock・LadderBlock・LanternBlock・MangrovePropaguleBlock・MangroveRootsBlock・MultifaceBlock・**RedstoneLampBlock**・RedstoneWallTorchBlock・SculkShriekerBlock・SeaPickleBlock・SeagrassBlock・ShelfMushroomBlock・SlabBlock・SnowLayerBlock・SpeleothemBlock・TallSeagrassBlock・VineBlock・WallHangingSignBlock・WallSignBlock・WallTorchBlock・WaterloggedTransparentBlock。
 - 本文と表が食い違っていた 2 つは、**本文が正しい**。RedstoneLampBlock#getStateForPlacement (lit を受電で決める。11 §4.1) と FaceAttachedHorizontalDirectionalBlock#getStateForPlacement (レバーとボタンの face・facing。09 §4.1) は、どちらも 26.3 にある。
-- 表 A に無い 7 クラスは、どれも表 C (§6) に行がある。だから §1・§2 の件数 (A 251・C 170・合計 582) と、各行の担当・状態は変えていない。直したのはフックの欄だけである。
-- **ほかの欄は信じてよい**。注釈つきの戻り値を持つのは上の 2 つのフックだけで、残りの 32 個 (戻り値が真偽・整数・状態・列挙・無し) は、数え直しても表と 1 行も違わなかった。
+- 表 A に無い 7 クラスは、どれも表 C (§6) に行がある。だから §1・§2 の件数 (A 251・C 170・合計 582) と、各行の状態は変えていない。直したのはフックの欄と、FaceAttachedHorizontalDirectionalBlock の行の担当 (09 から 09 §4.1 へ、節まで絞った) と備考である。
+- **ほかの欄は信じてよい**。注釈つきの戻り値を持つのは上の 2 つのフックだけで、残りの 32 個 (戻り値が真偽・整数・状態・InteractionResult・PushReaction・無し) は、数え直しても表と 1 行も違わなかった。
+  このうち onRemove と onBlockStateChange は、26.3 の world/level/block に宣言が 1 つも無い。この 2 つは、宣言が無いことが一致しただけである。
   SV (canSurvive。戻り値は真偽) を宣言するのは 64 クラスで、表の SV の 64 行と一致する。
 - PL は 3 つのフック (onPlace・getStateForPlacement・setPlacedBy) をまとめた欄である。どれを持つかは欄からは分からない。setPlacedBy を持つ 17 クラスの一覧は 04 §4.13、playerWillDestroy を持つ 11 クラスの一覧は 04 §4.14 にある。
 - 欄は「そのクラスが自分で宣言するか」を示す。親が宣言したフックは、親の行にだけ出る。
