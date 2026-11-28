@@ -99,7 +99,7 @@ entityInside の入口は tickedGameTime を書かず、待ちも減らさない
 
 | 経路 | 条件 | 出す位置 | 典拠 |
 |---|---|---|---|
-| BlockEntity#setChanged | BlockEntity が覚えている状態が空気でない | その位置 | 26.3 BlockEntity#setChanged |
+| BlockEntity#setChanged | BlockEntity が覚えている状態が空気でない。プレイヤーがアイテムで BE を持つブロックを置いた時も、書き込みの後に 1 回呼ばれる (→ 04 §4.13 の手順 9) | その位置 | 26.3 BlockEntity#setChanged・BlockItem#updateBlockEntityComponents |
 | Level#setBlock のフラグ 1 | **新しい**状態がアナログ出力を持つ | 書いた位置 | 26.3 Level#setBlock |
 | 撤去フック (affectNeighborsAfterRemoval) | 種類が変わり、フラグ 1 かピストンの移動。Containers#updateNeighboursAfterDestroy などを呼ぶブロックだけ (§4.14) | 消えた位置 | 26.3 LevelChunk#setBlockState・Containers |
 | コマンドの後処理 | strict でない /setblock・/fill・/clone。種類が変われば撤去フックも呼び、新しい状態がアナログ出力を持てば CU | 書いた位置 | 26.3 ServerLevel#updateNeighboursOnBlockSet (→ 04 §4.11) |
