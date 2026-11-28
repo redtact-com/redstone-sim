@@ -79,7 +79,7 @@ describe('検索の当たり方 (24 問・#434)', () => {
   it('索引は全部の節を持ち、節の記録と同じ並び', () => {
     expect(build.search.ids).toEqual(build.records.map(r => r.id))
     expect(build.search.pages).toEqual(build.records.map(r => r.page))
-    expect(engine.size).toBe(1385)
+    expect(engine.size).toBe(1391)
     // 結果のページは実在する (ページ + 節へ飛べる)
     const pages = new Set(build.manifest.pages.map(p => p.id))
     expect(build.search.pages.filter(p => !pages.has(p))).toEqual([])

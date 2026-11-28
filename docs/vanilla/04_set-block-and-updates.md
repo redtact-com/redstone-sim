@@ -42,6 +42,10 @@ Rust エンジンの「更新の配り方」の土台になる資料である。
 | BlockEntity | setChanged・preRemoveSideEffects の既定 |
 | Containers | updateNeighboursAfterDestroy |
 | BlockInput / SetBlockCommand | place と /setblock の更新の出し方 (実機ハーネスに効く所だけ) |
+| BlockItem / BlockPlaceContext / UseOnContext | プレイヤーの設置の手順 (§4.13)。useOn・place・getPlacementState・canPlace・placeBlock、置く先のマスの決め方 |
+| StandingAndWallBlockItem / DoubleHighBlockItem | BlockItem の手順を変える所だけ (§4.13) |
+| ServerPlayerGameMode | useItemOn の設置へ進む所、handleBlockBreakAction・destroyBlock・tick の破壊の手順 (§4.14) |
+| Block (設置と破壊のフック) | getStateForPlacement・setPlacedBy・playerWillDestroy・destroy・playerDestroy の既定と、上書きするクラスの一覧 |
 | RedstoneWireBlock / PistonBaseBlock | updateIndirectNeighbourShapes の上書きと呼び出し (参照だけ) |
 
 タスクの指示にあった Level の markAndNotifyBlock と blockUpdated は 26.3 に無い。
@@ -654,6 +658,246 @@ SU は残り回数を 1 減らして実行する [26.3 読解: InstantNeighborUp
 似た動きをするのが LevelAccessor#neighborShapeChanged の既定で、Level でない LevelAccessor (ワールド生成用の WorldGenRegion など) で SU をその場で実行する。
 回路のシミュレーションには関係しない。
 
+### 4.13 プレイヤーの設置の手順 (BlockItem)
+
+プレイヤーがブロックのアイテムを持って右クリックした時の、26.3 の手順を 1 か所にまとめる。
+素子ごとの中身 (置いた時の状態・設置フック・setPlacedBy) は各メモにあり、ここは骨格だけを書く。
+入る位相は区間 A である (→ 01 §4.10)。
+
+[26.3 読解: ServerPlayerGameMode#useItemOn, ItemStack#useOn, BlockItem#useOn・#place・#getPlacementState・#canPlace・#mustSurvive・#placeBlock・#updatePlacementContext, BlockPlaceContext のコンストラクタ・#getClickedPos・#canPlace, BlockBehaviour#canBeReplaced (設置版)・#canSurvive の既定, CollisionGetter#isUnobstructed, EntityGetter#isUnobstructed, Block#getStateForPlacement の既定・#setPlacedBy の既定]
+
+**入口 (BlockItem#place に着くまで)**
+
+1. 押したブロックの「使う」が先である。順は 09 §2.2 のとおりで、押したブロックが行動を消費したら、設置は起きない。
+   例: ブロックを手に持ってレバーを押すと、レバーが倒れるだけで何も置かれない。しゃがんで何かを持っていれば、この段を飛ばす。
+2. 手が空でなく、アイテムがクールダウン中でなければ、ItemStack#useOn へ進む。
+   建築の権限が無いプレイヤー (アドベンチャー) は、アイテムの「置ける相手」の指定に合わなければ、ここで PASS になり置かれない。
+3. BlockItem#useOn が、押した位置・面・プレイヤーから BlockPlaceContext を作り、BlockItem#place を呼ぶ。
+   設置が行動を消費しなかった時だけ、アイテムのほかの使い道 (食べるなど) へ進む。
+
+**置く先のマス** (BlockPlaceContext)
+
+- 押したブロックが置き換え可能なら、**押したマスそのもの**に置く。そうでなければ、**押した面の先の隣**に置く。
+- 「置き換え可能」は BlockBehaviour#canBeReplaced の設置版で決まる。既定は「replaceable の印を持つ (30 種。→ 05 §4.7.1)」かつ
+  「手が空か、手のアイテムがそのブロック自身のアイテムでない」である。
+  重ね置きをするブロックはこれを上書きする (網羅表 A の RP の欄: ハーフブロック・雪の層・ろうそく・ナマコ・カメの卵・ツタ・面に付く物・花の絨毯・落ち葉・足場ほか)。
+  面に付く物 (MultifaceBlock) は印を見ない。手のアイテムが自分のアイテムでなければ置き換えられる。だから印を持たない sculk_vein も、ほかのアイテムで置き換えられる [26.3 読解: MultifaceBlock#canBeReplaced]。
+- 押したマスが置き換え可能かは、文脈を作った時に 1 回だけ読む。
+
+**BlockItem#place の手順**
+
+| 順 | すること | 偽・無しの時 |
+|---|---|---|
+| 1 | 置くブロックが、世界の有効な機能に入っているかを見る | FAIL |
+| 2 | BlockPlaceContext#canPlace: 押したマスが置き換え可能か、そうでなければ置く先のマスが置き換え可能か | FAIL |
+| 3 | BlockItem#updatePlacementContext: 文脈を差し替える。既定はそのまま返す (足場のアイテムなどが上書きする) | FAIL |
+| 4 | Block#getStateForPlacement で**置く状態**を決める。世界にはまだ何も書いていない。既定は、そのブロックの既定の状態 | 「無し」なら FAIL |
+| 5 | BlockItem#canPlace: 置く状態の canSurvive を、置く先のマスで呼ぶ (BlockItem#mustSurvive が真の時。既定は真) | FAIL |
+| 6 | 同じ BlockItem#canPlace の続き: 置く状態の当たり判定の形が、置く先でエンティティと重ならないか | FAIL |
+| 7 | BlockItem#placeBlock: 置く状態を**フラグ 11** (1 + 2 + 8) で Level#setBlock する (§4.1) | 偽なら FAIL |
+| 8 | 置く先のマスの状態を**読み直す** | — |
+| 9 | 読み直した状態のブロックが、置く状態のブロックと同じ種類の時だけ: アイテムの状態の指定を当てる (変われば**フラグ 2** で書く) → BE のデータを入れる → BE があれば成分を当てて BlockEntity#setChanged を呼ぶ (**CU** が出る) → **Block#setPlacedBy** を、読み直した状態で呼ぶ | 種類が違えば、この段を丸ごと飛ばす |
+| 10 | 設置の音を出し、GameEvent の block_place を「プレイヤー・読み直した状態」で出す (→ 10 §4.12) | — |
+| 11 | アイテムを 1 つ減らし、SUCCESS を返す。クリエイティブでは減らない (ItemStack#consume が減らさず、呼び手の ServerPlayerGameMode#useItemOn も個数を戻す) | — |
+
+- 確かめの順は「置き換え可能 (2) → 置く状態 (4) → 支え (5) → 当たり判定 (6) → 書き込み (7) → 読み直し (8) → setPlacedBy (9) → GameEvent (10)」である。
+- 手順 4 の置く状態は、手順 7 でそのまま書かれる。周りに合わせて直す段 (Block#updateFromNeighbourShapes。/setblock が通る。§4.11) は**通らない**。
+  周りを見て決めるブロックは、自分の getStateForPlacement の中で見る (ダスト: → 06 §4.4。ランプ: → 11 §4.1。リピーターのロック: → 07 §4.13)。
+- 手順 5 の支えは、置く先のマスの**今の世界**で見る。置く前なので、置く先には古いブロック (空気や草) がある。
+  canSurvive を上書きしないブロックは既定の「常に真」を使うので、どこにでも置ける (石・ランプなど。→ 00 §4.3)。
+- 手順 6 は、形が空のブロック (ダスト・レバー・トーチ・ボタンなど、当たり判定の無い物) では常に通る。
+  形があるブロック (石・ランプなど) は、建築を妨げるエンティティ (生き物・トロッコ・ボート・着火した TNT・落下ブロック・防具立てほか) の箱と重なると置けない。アイテムのエンティティは妨げない。
+  エンティティを持たないエンジンでは、この段は常に通る。
+- 手順 9 の「アイテムの状態の指定」と「BE のデータ」は、コマンドなどで成分を付けたアイテムだけが持つ。普通のアイテムでは、この 2 つは何もしない。
+- 手順 9 の BlockEntity#setChanged は、成分が無くても呼ばれる。**BE を持つブロックを手で置くと、書き込みの後・setPlacedBy の前に CU が 1 回出る** (→ §4.8。14 §2.4)。
+  コンパレーター・ホッパー・チェスト・ディスペンサー・ドロッパー・日照センサーなどが当たる。アナログ出力を持つ容器では、手順 7 の CU に続く 2 回目になる。
+  コンパレーターはアナログ出力を持たないので、これが置いた時のただ 1 つの CU である (→ 07 §4.13)。/setblock はこの段を通らない。3 素子と石は BE を持たないので出ない。
+  [26.3 読解: BlockItem#updateBlockEntityComponents, BlockEntity#setChanged]
+
+**手順 7 の書き込みの中で起きること** (フラグ 11。§4.1・§4.2 の順のまま)
+
+1. チャンクが状態を差し替える。
+2. 古いブロックの撤去フック (種類が変わり、フラグ 1 があるので呼ばれる。§4.2)。
+3. 置いたブロックの設置フック (onPlace)。
+4. Level#setBlock に戻る。置く先の状態が「置こうとした状態」と同じ時だけ、次を出す。
+   1. フラグ 1 の NC 6 件。送り元は**古いブロック** (§5.4)。
+   2. 置いたブロックがアナログ出力を持てば CU。
+   3. SU (古い状態の間接 → 6 方向 → 新しい状態の間接)。渡るフラグは 11 から 1 を落とした 10。
+- フラグの 8 はクライアントの再描画の印で、サーバーの順には効かない (§3.1)。
+- 設置フックの連鎖の中で置く先の状態が変わると (受電した所に置いたダストの power など)、手順 4 の NC と SU は出ない (§4.1 の手順 5。ダストの例は 06 §4.14 の落とし穴)。
+
+**書き込みが偽を返した時** (手順 7)
+
+- BlockItem#place は FAIL を返して終わる。手順 8〜11 は 1 つも走らない。setPlacedBy も、音も、GameEvent も、アイテムの消費も無い。
+- プレイヤーの設置で偽になるのは、事実上は**範囲の外**だけである (デバッグワールドを除く)。この時は通知が 1 つも出ず、世界は何も変わらない。
+  - パケットの受け口が高さで断るのは、**押したブロック**が範囲の外の時だけである (→ 01 §4.10)。置く先は見ない。
+  - だから、最上段のブロックの上面や最下段の下面を押した設置は、ここまで進む。範囲の外のマスは void_air (置き換え可能) と読まれるので、手順 2〜6 は通る。
+    手順 7 の書き込みが範囲の外で偽になり、FAIL で終わる。受け口はその後で、建築の高さの通知を出す (上面なら上限、下面なら下限)。高さの上限より上に置こうとするたびに通る道である。
+  - エンジンでは「範囲の外には置かない」として持てば足りる。
+- 一般の Level#setBlock は、範囲の外・デバッグワールドのほか、チャンクの書き込みが「無し」を返した時に偽を返す (§4.1 の手順 4)。「無し」は §4.2 の手順 1・3・8 から来る。
+  手順 1 (空気だけのセクションへ空気を書く) と手順 3 (同一の状態) では、世界は何も変わらない。手順 8 (撤去フックの後で、その座標が新しいブロックでなくなった) では、撤去フックがもう世界を変えている。
+  プレイヤーの設置では、手順 1 と 3 は起きない (置く状態は空気でなく、置き換え可能なマスに別の種類を置く)。手順 8 も起きない (置き換え可能なブロックのクラスは撤去フックを上書きしない)。
+- 書き込みが真を返した後で置いたブロックが変わった・消えた場合 (TNT が設置フックで着火して空気になるなど) は、偽ではない。
+  手順 8 の読み直しで種類が違うと分かり、手順 9 だけを飛ばして、手順 10・11 は走る (→ 11 §4.7)。
+
+**空気でない置き換え可能なマスに置く時** (草・水・雪の層など)
+
+- 古いブロックは、手順 7 の 1 回の書き込みで**上書きされるだけ**である。破壊の手順 (§4.14) は通らない。
+  Block#playerWillDestroy も Block#destroy も呼ばれず、落とし物も、破壊のレベルイベントも、block_destroy の GameEvent も出ない。
+- 撤去フック (affectNeighborsAfterRemoval) は、書き込みの中で古いブロックの物が呼ばれる (フラグ 1 があるため。§4.2)。
+  ただし replaceable の 30 種のクラスと sculk_vein のクラスは、どれもこのフックを上書きしていない。既定の空の処理なので、何も起きない。
+- NC の送り元は古いブロック (草なら草、水なら水) である。空気に置いた時は空気である。
+  送り元を見て分岐する受け手 (レールの分岐: → 15 §5.5) では、この違いが効きうる。
+- 支え (手順 5) と置く状態 (手順 4) は、古いブロックがまだある世界で決まる。
+  例: 水の中に置くと、水を含めるブロックは waterlogged を真にして置く (各ブロックの getStateForPlacement)。
+- 2 マスの草 (tall_grass など) の片方に置くと、残った片方は、置いたブロックからの SU で支えを失って消える (→ 05 付録 C)。
+  残った片方は Level#destroyBlock で消える (§4.6 の Block#updateOrDestroy → §4.10 の Level#destroyBlock)。だからその位置では、破壊のレベルイベント・落とし物の処理・壊した者の無い block_destroy が出る。置いた側のマスでは出ない。
+- 縦切りの表 (置き換え可能は空気だけ) では、この段落の違いは出ない。
+
+**BlockItem の子クラスが変える所** [26.3 読解: StandingAndWallBlockItem#getPlacementState・#canPlace, DoubleHighBlockItem#placeBlock]
+
+| アイテムのクラス | 使うブロック | 変える所 |
+|---|---|---|
+| BlockItem (そのまま) | ダスト・レバー・ランプ・石・リピーター・コンパレーター・紐 (tripwire) ほか | 無し。上の手順どおり |
+| StandingAndWallBlockItem | トーチ・レッドストーントーチ・看板・旗など、床 (か天井) 用と壁用のブロックが別の物 | 手順 4〜6 を差し替える。壁用のブロックの置く状態は、初めに 1 回だけ作る (壁用のブロックが、自分で横の向きを近い順に試して、支えのある最初の向きを選ぶ)。そのうえで候補の順 (BlockPlaceContext#getNearestLookingDirections。→ 09 §4.1) に進み、床用の向きなら床用の置く状態を、横の向きなら (どの横でも) その同じ壁用の状態を試し、canSurvive が真の最初の物を使う。床用の逆の向き (トーチなら上) は試さない。だから、横の向きが下より先に来れば、どこかの横に支えがある限り壁に付く。例: 南を向いて浅く見下ろし (順は南・下・西…)、置く先の南隣に支えが無く、西隣と真下が頑丈な時は、南の番で西の壁に付いた壁用の状態 (facing = east) が通る。床置きにはならない。レッドストーントーチも同じである |
+| DoubleHighBlockItem | ドア・2 マスの花や草・小さなドリップリーフ | 手順 7 の前に、置く先の真上へ空気 (水の中なら水) をフラグ 27 で書く。上半分は setPlacedBy が置く (→ 11 §4.3) |
+
+足場・吊り看板・ゲームマスター用のブロックのアイテムにも上書きがあるが、回路には効かないので読んでいない。
+
+**setPlacedBy を上書きするクラス** (world/level/block の全クラスを数えた。Block のほかに 17 個。Block の既定は空)
+
+| クラス | すること | 細部 |
+|---|---|---|
+| DiodeBlock (リピーター・コンパレーター) | 点くべきなら、遅延 1 gt の予約を積む | 07 §4.13 |
+| PistonBaseBlock | サーバー側で、伸び縮みの確認をする (PistonBaseBlock#checkIfExtend) | 13 §4.2 |
+| TripWireHookBlock | 接続の状態を計算し直す | 09 §4.4.2 |
+| CrafterBlock | TRIGGERED が真なら、遅延 4 gt の予約を積む | 12 §4.13 |
+| DoorBlock | 真上に上半分を置く | 11 §4.3 |
+| JukeboxBlock | BE のデータに円盤があれば has_record を真にして書く (フラグ 2) | 09 §4.10 |
+| WitherSkullBlock・WitherWallSkullBlock | ウィザーの形を照合する | 17 付録 A.1 |
+| CommandBlock・StructureBlock・SignBlock・AbstractBedBlock・DoublePlantBlock・PitcherCropBlock・SmallDripleafBlock・MossyCarpetBlock・DriedGhastBlock | 相方のマスを置く・BE の初期化など | 回路の外 (ここでは読んでいない) |
+
+- **レバー・ダスト・ランプ・石は、setPlacedBy を持たない**。LeverBlock とその親 (FaceAttachedHorizontalDirectionalBlock・HorizontalDirectionalBlock)、RedstoneWireBlock、RedstoneLampBlock のどれも上書きせず、Block の既定 (空) が呼ばれる。
+- 3 素子が設置で持つ物は次のとおりである。
+
+| ブロック | 置く状態 (getStateForPlacement) | 設置フック (onPlace) | setPlacedBy |
+|---|---|---|---|
+| ダスト | 周りから 4 方向を決める。power は 0 (06 §4.4) | 電力の更新と周りへの NC (06 §4.14) | 無し |
+| レバー | face と facing を見ている向きから決める。powered は偽 (09 §4.1) | 無し | 無し |
+| ランプ | lit を、置く先の受電で決める (11 §4.1) | 無し | 無し |
+| 石 | 既定の状態 (状態は 1 つ) | 無し | 無し |
+
+- setPlacedBy は、アイテムで置く流れ (BlockItem#place) が書き込みの後に呼ぶ。/setblock・/fill・構造物の読み込み・ピストンの着地は呼ばない。
+
+### 4.14 プレイヤーの破壊の手順 (ServerPlayerGameMode#destroyBlock)
+
+プレイヤーがブロックを壊す時の、26.3 の手順を 1 か所にまとめる。入る位相は区間 A である。
+サバイバルで完了のパケットが早すぎた破壊だけは、後追いで L12 に入る (→ 01 §4.10)。
+
+[26.3 読解: ServerPlayerGameMode#handleBlockBreakAction・#destroyAndAck・#destroyBlock・#tick, Item#canDestroyBlock, Player#blockActionRestricted, Block#playerWillDestroy・#destroy・#playerDestroy, Level#removeBlock, TripWireBlock#playerWillDestroy, TntBlock#playerWillDestroy, DoorBlock#playerWillDestroy, DoublePlantBlock#playerWillDestroy, PistonHeadBlock#playerWillDestroy, AbstractBedBlock#playerWillDestroy, DecoratedPotBlock#playerWillDestroy, ShulkerBoxBlock#playerWillDestroy, BeehiveBlock#playerWillDestroy・#playerDestroy, MovingPistonBlock#destroy, IceBlock#playerDestroy, TurtleEggBlock#playerDestroy, EmptyFluid#createLegacyBlock]
+
+**入口 (ServerPlayerGameMode#handleBlockBreakAction)**
+
+操作距離 + 1.0 以内で、高さの上限以下であることを先に見る。掘り始めでは、スポーン保護と操作の可否も見る。
+
+| 場合 | すること |
+|---|---|
+| クリエイティブ (即破壊) | 掘り始めのパケットで、すぐ #destroyBlock へ進む。Block#attack は呼ばない。**対象が空気かどうかも見ない** |
+| サバイバルの掘り始め | 対象が空気でなければ Block#attack を呼び (→ 09 付録 A.3)、掘る進みを求める。進みが 1.0 以上なら、その場で #destroyBlock へ進む。そうでなければ、掘っている途中として覚えるだけである |
+| サバイバルの掘り終わり | 覚えた位置と同じで、対象が空気でなく、進みが 0.7 以上なら #destroyBlock へ進む。足りなければ、後追い (#tick が毎 tick 進みを足し、1.0 に達したら #destroyBlock) に回す |
+
+掘っている途中は、ひびの表示が進むだけで、世界の状態は変わらない。回路に効くのは Block#attack を持つブロックだけである (レッドストーン鉱石・音符ブロックほか)。
+
+**ServerPlayerGameMode#destroyBlock の手順**
+
+| 順 | すること | 偽の時 |
+|---|---|---|
+| 1 | 対象の状態を読む | — |
+| 2 | 利き手のアイテムが壊してよいと言うかを見る (Item#canDestroyBlock。クリエイティブで剣などを持っていると偽) | 偽を返して終わる |
+| 3 | 対象の BE を控える (落とし物に使う) | — |
+| 4 | ゲームマスター用のブロックで、権限が無ければ断る | 偽 |
+| 5 | Player#blockActionRestricted (観戦者、壊せる道具の指定に合わないアドベンチャー) | 偽 |
+| 6 | **Block#playerWillDestroy** を、手順 1 の状態で呼ぶ。戻りを「壊した状態」として後の段へ渡す | — |
+| 7 | **Level#removeBlock** を「ピストンで動いた = 偽」で呼ぶ。流体のブロック (普通は空気) を**フラグ 3** で書く (§4.10) | 書けなければ、手順 8 と 11 を飛ばす |
+| 8 | 書けた時だけ **Block#destroy** を、壊した状態で呼ぶ | — |
+| 9 | 落とし物を出さないプレイヤー (クリエイティブ) は、ここで真を返して終わる | — |
+| 10 | 道具が合うかを見て、アイテムの「掘った」処理 (耐久の消費) を呼ぶ | — |
+| 11 | 書けていて道具が合う時だけ **Block#playerDestroy** を呼ぶ (統計・空腹・落とし物) | — |
+
+- 順は「playerWillDestroy (6) → 書き込み (7) → destroy (8) → 落とし物 (11)」である。
+- 書き込みは Level#removeBlock で、Level#destroyBlock ではない。だから Level#destroyBlock が出すレベルイベント 2001 と block_destroy は、この経路では書き込みの側からは出ない。
+  代わりに、既定の Block#playerWillDestroy が、撤去の**前**に破壊のパーティクルと block_destroy の GameEvent (プレイヤー・元の状態) を出す (→ 10 §4.12)。
+- 手順 7 の書き込みの中身は、普通のフラグ 3 の書き込みと同じである (§4.1・§4.2): 状態の差し替え → 壊したブロックの撤去フック → (空気の設置フックは無い) → NC 6 件 (送り元は**壊したブロック**) → SU。
+- Block#destroy を上書きするのは MovingPistonBlock だけである (背後の伸びたピストン本体を removeBlock する。→ 13 §4.13)。Block の既定は空である。
+- 既定の Block#playerDestroy は落とし物を出すだけで、ブロックを書かない。上書きするのは 4 クラスである (BeehiveBlock・DoublePlantBlock・IceBlock・TurtleEggBlock)。
+  ブロックを書くのは IceBlock と TurtleEggBlock である (下の「違い」)。BeehiveBlock は (サバイバルで、シルクタッチでなければ) 蜂を出して CU を出すが、ブロックは書かない。DoublePlantBlock は、既定の処理に空気の状態を渡すだけである (落とし物は playerWillDestroy で済んでいる)。
+
+**playerWillDestroy を上書きするクラス** (world/level/block の全クラスを数えた。Block のほかに 11 個)
+
+| クラス | 撤去の前にすること | 細部 |
+|---|---|---|
+| TripWireBlock (紐) | 利き手がハサミなら、disarmed を真にして**フラグ 260** で書き、shear の GameEvent を出す | 09 §4.4.1 |
+| TntBlock | サーバー側で、即破壊のプレイヤーでなく、unstable が真なら着火する | 11 §4.7 |
+| DoorBlock・DoublePlantBlock | 落とし物を出さない壊し方 (クリエイティブ。ドアは道具が合わない時も) で**上半分**を壊した時、先に下半分を空気 (水の中なら水) に**フラグ 35** (1 + 2 + 32) で書く。2 マスの植物は、落とし物を出す時はここで出す | 11 §4.3 |
+| PistonHeadBlock | 落とし物を出さないプレイヤーなら、合う本体を Level#destroyBlock (落とし物なし) で先に壊す | 13 §4.12 |
+| BaseFireBlock | 消火の音のレベルイベントを出すだけ | — |
+| AbstractBedBlock | 落とし物を出さないプレイヤー (クリエイティブ) が足の側を壊した時、先に頭の側を空気に**フラグ 35** で書き、レベルイベント 2001 を出す | 回路の外 (00) |
+| DecoratedPotBlock | 利き手が壺を割る道具 (タグ breaks_decorated_pots) で、割れ防止のエンチャントが無ければ、cracked を真にして**フラグ 260** で書く (NC なし・SU あり)。モードでなく持ち物で決まる | — |
+| ShulkerBoxBlock・BeehiveBlock | 落とし物を出さないプレイヤーでも、中身があれば (箱は中身、巣は蜂か蜜)、中身を持ったアイテムのエンティティをここで出す。ブロックは書かない | 17 |
+| CreakingHeartBlock | ブロックは書かない。守り手がいれば、撤去の前に CU を 1 回出す (モードに依らない)。経験値はクリエイティブでは出ない | 14 §4.10 |
+
+どれも最後に既定の処理 (パーティクルと block_destroy) を呼ぶ。
+
+**レバー・ダスト・ランプ・石で、回路に効く処理があるか**
+
+| ブロック | playerWillDestroy | 書き込みの中の撤去フック (affectNeighborsAfterRemoval) | destroy・playerDestroy |
+|---|---|---|---|
+| レバー | 既定 (GameEvent だけ) | powered が真の時だけ、自分 6 → 支え 6 の NC (09 §4.1) | 既定 |
+| ダスト | 既定 | 周りへの NC・電力の更新・隣のダストの周りの更新 (06 §4.15) | 既定 |
+| ランプ | 既定 | 無し (上書きしない) | 既定 |
+| 石 | 既定 | 無し | 既定 |
+
+- 3 素子と石では、ブロックの書き込みは**手順 7 の 1 回だけ**である。回路に効くのは、その中の撤去フックと、フラグ 3 の NC・SU である。
+  サバイバルでは、3 素子と石も落とし物のアイテムを出す (石は合う道具の時)。エンティティを持たないエンジンでは無視できる (下の「違い」)。
+- 壊したブロック自身のフックは、予約 tick を積まない。NC・SU を受けた周りが積む予約 (入ったレバーを壊した時の、隣の点いたランプの消灯の 4 gt など) は、普通どおり積まれる。
+  壊したマスに残っていた予約 (ランプの消灯の 4 gt など) は消されず、発火した時にブロックが違えば捨てられる (→ 02)。
+- GameEvent (block_destroy) はスカルクセンサーに届く。スカルクを持たないエンジンでは無視してよい。
+
+**クリエイティブとサバイバルの違い**
+
+- **書き込みは同じ**である。どちらも手順 6 → 7 → 8 を通り、空気をフラグ 3 で書く。違いは、入口 (即か、掘る時間が要るか。空気を見るか)・Block#attack を呼ぶか・手順 2 (クリエイティブで剣・トライデント・メイスを持つと断るので、書き込み自体が起きない)・手順 9 より後 (落とし物) である。
+- 盤面に差が出るのは、プレイヤーの種類を見るフックを持つブロックだけである。
+  - TntBlock: unstable の TNT は、サバイバルで壊すと着火する。クリエイティブでは着火しない。
+  - DoorBlock・DoublePlantBlock・PistonHeadBlock・AbstractBedBlock: クリエイティブでは、相方のマスを先に書く 1 手が入る (ベッドは、足を壊すと頭をフラグ 35 で先に書く)。
+  - IceBlock: サバイバルで、氷を溶かさないエンチャントの無い道具で壊すと、Block#playerDestroy が同じマスに水を置く (真下が流体か、溶ける下地のタグの時。水が蒸発する次元では空気のまま)。クリエイティブでは手順 9 で終わるので、空気のままである。
+  - BeehiveBlock (bee_nest も): サバイバルでシルクタッチの無い道具で壊した時だけ、Block#playerDestroy が撤去の後に CU を出す。巣は撤去フックを持たないので、クリエイティブでは CU が 1 つも出ない。導体越しに巣を読むコンパレーターは、古い値のまま残る。
+  - TurtleEggBlock: サバイバルで壊すと、Block#playerDestroy が、卵が 2 個以上なら 1 個減らした状態を同じマスに**フラグ 2** で書き戻す (NC なし・SU あり)。卵は 1 個減って残る。クリエイティブでは全部消える。
+- 落とし物のアイテムのエンティティは、感圧板・ホッパーに効きうる (→ 17)。
+  - 既定の落とし物 (Block#playerDestroy) は、サバイバルでだけ出る。
+  - ShulkerBoxBlock (中身があれば) と BeehiveBlock (蜂か蜜があり、落とし物のゲームルールが真なら) は、クリエイティブでも playerWillDestroy でアイテムのエンティティを出す。撤去の前である。
+  - コンテナの中身・書見台の本・焚き火の上の物は、手順 7 の書き込みの中で落ちる (§4.2 の手順 6.1)。モードに依らない。シュルカーボックスは除く (中身は落ちず、箱のアイテムに入る)。
+- レバー・ダスト・ランプ・石では、**ブロックの書き込みは、クリエイティブもサバイバルも手順 7 の 1 回で同じ**である。
+  壊せた時に違うのは落とし物だけで (クリエイティブで剣などを持つと、手順 2 で断られて壊せない)、サバイバルでは 3 素子と石もアイテムを出す (レバー・ダスト・ランプはいつも。石は合う道具の時)。エンティティを持たないエンジンでは無視できる。
+
+**空気を壊そうとした時**
+
+空気は 3 種ある (air・cave_air・void_air。→ 05 §4.7.6)。入口が見るのは 3 種に共通の印で、Level#removeBlock が書くのはいつも air である。だから air とほかの 2 種で結果が分かれる。
+
+- サバイバル: 掘り始めも掘り終わりも後追いも、対象が空気 (3 種のどれでも) なら #destroyBlock へ進まない。何も起きない。
+- クリエイティブで **air** を壊す: 入口が空気を見ないので、#destroyBlock が走る。手順 6 の既定の Block#playerWillDestroy が、空気を「元の状態」として block_destroy を出す。
+  手順 7 の Level#removeBlock は、air に air を書くので偽を返し (§4.2 の手順 1 か 3)、通知は 1 つも出ない。手順 8 も飛ぶ。
+  つまり**盤面は変わらず、NC も SU も予約も出ない**。出るのは GameEvent とパーティクルだけである。
+- クリエイティブで **cave_air** (か、範囲の内に置いた void_air) を壊す: 書くのは air で、今の状態と同一でない。だから air をフラグ 3 で書く**普通の撤去**になる。
+  撤去フックは既定の空で、NC 6 件 (送り元は cave_air) と SU 6 方向が出て、Block#destroy も呼ばれる。そのマスを向いた (切れている) オブザーバーは、SU で発火を予約する。
+  ただし、そのマスのセクションが空気の印のブロックだけなら、書き込みは「無し」になり (§4.2 の手順 1)、何も起きない。
+  cave_air は、クリエイティブとサバイバルで結果が分かれるブロックである。
+- この block_destroy には、スカルクセンサーが、ほかの block_destroy と同じ条件で反応する。影響の状態が空気でも捨てない。
+  受け手が見るのは、振動を持っているか・種類と周波数・出所 (観戦者か、しゃがみで消える種類か、振動を消すエンティティか)・影響の状態が振動を消すタグか・自分の位置か・相・遮りである
+  [26.3 読解: Block#playerWillDestroy, GameEventDispatcher#post, VibrationSystem.Listener#handleGameEvent, VibrationSystem.User#isValidVibration, SculkSensorBlockEntity の canReceiveVibration]。
+  クライアントが空気を壊すパケットを送る場面があるかは、サーバーのコードからは決まらない。
+- エンジンでは「air を壊しても何も起きない」として持てばよい (GameEvent を持たない間)。エンジンが air しか持たない間は、これで足りる。cave_air を持つ時は、上の違いを入れる。
+  水源などの流体のブロックも、書くブロックが今と同じになるので何も起きない (§4.10)。
+
 ---
 
 ## 5. 端の場合と落とし穴
@@ -981,6 +1225,67 @@ tick のフェーズごとにまとめて回す形にしない。1 つの予約 
 | 配置 | 専用サーバーで max-chained-neighbor-updates を小さい値 (例 20) にし、ダストの線をレバーで点ける |
 | 観測 | どのダストまで電力が変わるか。ログの「最初に捨てた座標」。カウントが「Multi は 1 件・SU は 1 方向 1 件」で合うか |
 
+### プレイヤーの設置と破壊を撮る手段 (P10・P11 と、06 §8 の P4・P5、07 §8 の P-9、08 §8 の P-15、11 §8 の P6、15 §5.5 が使う)
+
+今の fixture は、盤面を無更新で置き、入力は use と /setblock などのコマンドで入れる。**プレイヤーの設置 (§4.13) と破壊 (§4.14) を通る入力は、どちらのハーネスにも無い**。
+/setblock は経路が違い (§4.11)、孤立したダストが点になる (→ 06 §4.14.1) ので、代わりにならない。
+作れるかと、要る物を書く。作るのは別の issue にする (ここではハーネスを変えない)。
+
+**26.3 のオラクル (tools/gt-oracle) なら作れる**。今の use が、もう同じ入口を通っているからである。
+
+- 今の use は、世界に入れない偽の ServerPlayer を 1 人作り、空の手で ServerPlayerGameMode#useItemOn を呼ぶ (tools/gt-oracle/java/gtoracle/Inputs.java)。
+  当たりは対象ブロックの中心・上の面に固定である。
+- ブロックのアイテムを利き手に持たせて同じ呼び出しをすれば、§4.13 の入口から手順 11 までを、実機のコードのまま通る。
+  パケットの受け口 (距離・高さ・スポーン保護の確かめ。→ 01 §4.10) は通らないが、世界への作用はその先にある。
+- 破壊は ServerPlayerGameMode#destroyBlock が公開のメソッドなので、偽プレイヤーから直に呼べる。§4.14 の手順 1〜11 をそのまま通る。
+  入口の表 (掘る時間・Block#attack) は通らない。
+- 入力を入れる位置は use と同じ (テスト関数の毎 tick の呼び出しの中) なので、tick の規約はそのまま使える。
+- GameTestHelper の置く・壊すの手助け (#placeAt・#placeBlock・#destroyBlock) は使わない。どれも §4.13・§4.14 と経路が違うからである。
+  #placeAt は ItemStack#useOn を直に呼ぶので、§4.13 の入口を飛ばす (座標もテストの原点から測る)。#placeBlock はプレイヤーの無い文脈で置くので、水平の向きがいつも北になる。#destroyBlock は Level#destroyBlock を呼ぶので、§4.14 の Level#removeBlock の経路でない。
+
+要る物:
+
+| 物 | 中身 |
+|---|---|
+| 入力の種類 (fixture の形式) | 置く: 押すブロックの位置・押す面・当たりの点 (既定は押す面の中心)・持つアイテム・見ている向き (yaw と pitch)・しゃがむか。壊す: 位置とモード (クリエイティブかサバイバル)。今の形式に無いので足す (fixture の型の packages/sim/src/fixture-driver.ts・tools/mc-harness/README.md の入力の表・tools/gt-oracle の計画の検査・写す側の to-fixture.ts)。TS の実行器は、知らない action を「使う」として扱う。place・break をそう扱わないよう、置き場を分けるか、知らない action で止める |
+| 偽プレイヤーの手 | 置くたびに、利き手にアイテムを持たせる。サバイバルの偽プレイヤーは置くと 1 つ減るので、毎回入れ直すか、クリエイティブの偽プレイヤーにする。置いた後 (次の use の前) に利き手を空にし、しゃがみを戻す。または、置く・壊す用の偽プレイヤーを use 用と別に持つ。手に物が残ると、後の use で、押したブロックが行動を消費しない時 (ランプ・石・線の形のダストなど) に、その物が黙って置かれる |
+| 偽プレイヤーの向き | 置く前に、体の yaw (Entity#setYRot)・頭の yaw (LivingEntity#setYHeadRot)・pitch (Entity#setXRot) を同じ値で入れる。レバー・リピーター・オブザーバー・ピストンなどの置く状態は、見ている向きで決まる (→ 09 §4.1)。体の yaw だけでは、頭の向きを読む置く状態 (オブザーバー・ピストン・ディスペンサーの向き、レバーとトーチの候補の順) に効かない。偽プレイヤーは tick されないので、頭が体にそろわないからである。ServerPlayer#teleportTo は接続を使うので使わない。今の use は向きを入れていない |
+| 当たり (面と位置) | 押す面を入力から取る。今は上の面に固定である。置く先のマスは「押したブロックの面の先」なので (§4.13)、床の上に置くなら床のブロックの上の面を押す。当たりの点も入力から取る (既定は押す面の中心。今はブロックの中心)。トラップドア・ドア・ハーフブロック・階段は、点で置く状態が変わる |
+| しゃがみ | 押すブロックが「使う」に反応する物 (レバー・リピーター・十字か点のダストほか) の時は、しゃがませて §4.13 の入口の 1 を飛ばす。石の床を押すなら要らない |
+| 壊す側のモード | サバイバルの偽プレイヤーは、落とし物のアイテムを世界に出す。3 素子と石の盤面だけを撮るなら、クリエイティブの偽プレイヤーで壊す (書き込みは同じ。§4.14)。クリエイティブで作った偽プレイヤーは、落とし物を出さず、置いてもアイテムが減らない [26.3 読解: GameTestHelper#makeMockServerPlayer, GameType#updatePlayerAbilities, Player#preventsBlockDrops・#hasInfiniteMaterials]。モードで盤面が違うブロックと、クリエイティブでもアイテムを出すブロック (中身のあるシュルカーボックス・コンテナほか) は §4.14 の「違い」にある。それらを撮る時は、入力のモードで偽プレイヤーを選ぶ。サバイバルでは、空気に #destroyBlock を呼ばない (実機の入口が空気で止めるため。呼ぶと、実機では出ない block_destroy が出る) |
+| 結果の記録 | 置く: 戻りの種類 (Success・Fail・Pass) と、置いた先のマス・書き込みの直後に読み直した状態 (§4.13 の手順 8。置けなかった時は無し) を記録する。戻りの種類だけでは、押したブロックの「使う」が行動を消費した時と区別できない。断られる設置 (支えが無い・置き換え可能でない) は Fail が正しいので、失敗にしない。壊す: 戻りの真偽を記録する |
+| 初めの盤面 | 今のまま (無更新で置いて settle)。P10 では床だけを初めの盤面にし、素子は全部入力で置く |
+| 比べる相手 | TS のエンジン (packages/sim) には、置く・壊すの入力が無い。この fixture は、Rust のエンジンの適合の試験 (redstone-engine の conformance) だけが読む。Rust の置く入力は、置く先のマスと状態を受ける形である (押した面と向きから状態を決める形は持たない)。だから、上の記録の「置いた先のマス」と「読み直した状態」の 2 つで写す。今の比べる道具 (compare.ts。1.21.1 の expect と比べる) には掛けられない |
+
+偽プレイヤーは世界に入っていない。設置の当たり判定 (§4.13 の手順 6) は世界のエンティティの一覧だけを見るので、偽プレイヤー自身は邪魔をしない。向きは、体と頭の 2 つを入れれば (上の表)、入れた値がそのまま読まれる [26.3 読解: EntityGetter#isUnobstructed, Direction#orderedByNearest, LivingEntity#getViewYRot, Entity#getDirection, Player#aiStep]。
+
+確かめていない所 (作る時に見る):
+
+- 利き手にアイテムを入れる操作が、世界に入っていない偽プレイヤーでそのまま効くか。
+- GameEvent (block_place・block_destroy) とレベルイベントが、世界に入っていない偽プレイヤーを出所にして例外を出さないか。今の use (レバーは出所なし) では通っていない道である。
+
+**1.21.1 のハーネス (tools/mc-harness) では、すすめない**。fabric-carpet の偽プレイヤーは世界に入った本物のプレイヤーなので、アイテムを持たせて右クリックさせれば設置はできる。
+ただし、立ち位置・視線・届く距離を定義ごとに合わせる必要があり、狙いを外すと黙って空振りする (tools/mc-harness/README.md の罠の表)。基準の版も 26.3 ではない。
+Rust のエンジンの正解は 26.3 で撮るので、オラクルの側に足すのがよい。
+
+### P10. player-place-order (置く順に依らないこと)
+
+| 項目 | 内容 |
+|---|---|
+| 目的 | プレイヤーの設置で組んだ盤面が、置く順に依らず同じ blockstate になることを確かめる (redstone-engine の「置く」入力が前提にする性質)。あわせて、置いたダストの形が /setblock と違うこと (孤立したダストが十字になる。06 §4.4・§4.14.1) を確かめる |
+| 配置 | 1 層の石の床。その上に、ダスト・床置きのレバー (切れ)・ランプを、プレイヤーの設置で置く。同じ最後の配置を、置く順を変えた 2 本以上の fixture にする |
+| 観測 | 全部を置き終えた tick の盤面が、どの順でも同じ文字列か。置く途中の各 tick の盤面 (隣を置いた時に、先に置いたダストの形が直線・角へ変わるか) |
+| 前提 | 全部切れ・1 層・点のダストを作らない (ダストを右クリックしない)。受電する配置や 2 層にすると、06 §4.14 の落とし穴 (置いた瞬間に給電されるダスト) が絡むので、別のプローブ (06 §8 の P4) にする |
+
+### P11. player-break (破壊の経路)
+
+| 項目 | 内容 |
+|---|---|
+| 目的 | プレイヤーの破壊が「空気をフラグ 3 で書く 1 回」と同じ盤面になること (§4.14)。入ったレバーを壊すと、撤去フックの NC で周りが切れること (09 §4.1) |
+| 配置 | 石の床の上に、入ったレバー → ダスト → ランプ。レバーを壊す列、途中のダストを壊す列、ランプを壊す列 |
+| 観測 | 壊した tick の盤面 (ダストの power と形・ランプは 4 gt 後に消える)。P10 と組にして、「壊す → 同じ物を置く」で元の盤面に戻るか |
+| 追加 | クリエイティブの偽プレイヤーで空気 (air) のマスを壊し、盤面が変わらないこと。隣にスカルクセンサーを置けば、block_destroy に反応すること (§4.14 の読解の確かめ) も見られる |
+
 ---
 
 ## 9. 既存資料との食い違い
@@ -1096,5 +1401,17 @@ tick のフェーズごとにまとめて回す形にしない。1 つの予約 
 - 26.3 ObserverBlock#updateShape (SU の受け手の例)
 - 26.3 RedstoneTorchBlock#onPlace・#affectNeighborsAfterRemoval (版差の例)
 - 26.3 CopperChestBlock#shouldChangedStateKeepBlockEntity・CopperGolemStatueBlock#shouldChangedStateKeepBlockEntity
+- 26.3 ServerPlayerGameMode#useItemOn・#handleBlockBreakAction・#destroyAndAck・#destroyBlock・#tick
+- 26.3 ItemStack#useOn・Item#canDestroyBlock・Player#blockActionRestricted
+- 26.3 BlockItem#useOn・#place・#getPlacementState・#canPlace・#mustSurvive・#placeBlock・#updatePlacementContext
+- 26.3 BlockPlaceContext (コンストラクタ・#getClickedPos・#canPlace・#getNearestLookingDirections)・UseOnContext#getHorizontalDirection
+- 26.3 StandingAndWallBlockItem#getPlacementState・DoubleHighBlockItem#placeBlock
+- 26.3 BlockBehaviour#canBeReplaced (設置版)・#canSurvive の既定、CollisionGetter#isUnobstructed・EntityGetter#isUnobstructed
+- 26.3 Block#getStateForPlacement・#setPlacedBy・#playerWillDestroy・#destroy・#playerDestroy の既定
+- 26.3 setPlacedBy を上書きする 17 クラスと、playerWillDestroy を上書きする 11 クラスの宣言 (world/level/block の全クラスを検索)。中身を読んだのは DiodeBlock・PistonBaseBlock・TripWireHookBlock・CrafterBlock・DoorBlock・JukeboxBlock と、TripWireBlock・TntBlock・DoorBlock・DoublePlantBlock・PistonHeadBlock・BaseFireBlock
+- 26.3 MovingPistonBlock#destroy・DoublePlantBlock#preventDropFromBottomPart。playerDestroy を上書きする 4 クラス (BeehiveBlock・DoublePlantBlock・IceBlock・TurtleEggBlock。world/level/block の全クラスを検索) と TurtleEggBlock#decreaseEggs
+- 26.3 AbstractBedBlock#playerWillDestroy・DecoratedPotBlock#playerWillDestroy・ShulkerBoxBlock#playerWillDestroy・BeehiveBlock#playerWillDestroy・#playerDestroy・CreakingHeartBlock#playerWillDestroy、ShulkerBoxBlockEntity と CampfireBlockEntity の preRemoveSideEffects、EmptyFluid#createLegacyBlock、MultifaceBlock#canBeReplaced、BlockItem#updateBlockEntityComponents、ItemStack#consume
+- 26.3 GameEventDispatcher#post・VibrationSystem.Listener#handleGameEvent・VibrationSystem.User#isValidVibration・SculkSensorBlockEntity の canReceiveVibration (§4.14 の空気の block_destroy)
+- 26.3 GameTestHelper#makeMockServerPlayer・#placeAt・#placeBlock・#destroyBlock、GameType#updatePlayerAbilities、Player#preventsBlockDrops・#hasInfiniteMaterials、EntityGetter#isUnobstructed、LivingEntity#setYHeadRot (§8 の撮る手段)
 - 1.21.1 Level#setBlock・LevelChunk#setBlockState・BlockBehaviour#onRemove・ServerLevel#blockUpdated・NeighborUpdater・CollectingNeighborUpdater・SetBlockCommand・BlockInput#place (版差の確認)
 - 26.2・26.4-pre-1 の同名クラス (差分の確認)

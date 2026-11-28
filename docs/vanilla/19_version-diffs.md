@@ -407,7 +407,7 @@ spec-drift.sh と同じ正規化 (改行コード・行末の空白・空行を�
 | ジュークボックス | — | プレイリスト。PLAYLIST_MODE を NC (フラグ 2 で書く) と SU で見直す。円盤が無くても ticker | JukeboxBlock・JukeboxBlockEntity | → 09・14 |
 | ディスペンサー・ドロッパー | 振る舞いの表 | アイテムの部品 DISPENSE_BEHAVIOR の列。ドロッパーの空打ちが BLOCK_ACTIVATE を出す。火打石の失敗 | DispenserBlock#dispenseFrom | → 12 §6.1 |
 | 書見台のページ | 0 ページで −1 になりうる | 0 に収める | LecternBlockEntity | 出力は変わらない (→ 09・14) |
-| Mth の sin と cos | 切り捨て | 0.5 を足す。負の角度を対称に扱う | Mth | 日照センサーの境目 [要実機] (→ 18 §6.3) |
+| Mth の sin と cos | 切り捨て | 0.5 を足す。負の角度を対称に扱う | Mth | 日照センサーの境目 [要実機] (→ 18 §6.3)。置く向きの候補の順 (ちょうどの角度。レバー・トーチ・ピストン・オブザーバー・ディスペンサー。→ 09 §4.1) |
 | パケット処理中の例外 | ログを出して続ける (切断しない)。原因がメモリ不足のときだけサーバーが止まる | ログと記録のあと、プレイヤーを切断して続ける。ServerPacketListener は無くなった | ServerCommonPacketListenerImpl#onPacketError・PacketProcessor | → 18 §6.5 |
 | 火打石・ファイヤーチャージで TNT を点ける | 着火の音だけ | アイテムの使用音も鳴らす。音程に主乱数を使う (火打石は nextFloat を 1 回、ファイヤーチャージは 2 回) | TntBlock#useItemOn・FlintAndSteelItem#playSound・FireChargeItem#playSound | 主乱数の列がずれる (→ 11・18) |
 | デバッグワールド | 各所で分岐 | 起動時に凍結。分岐が消えた | Level・ServerLevel・LevelChunk・SetBlockCommand | 普通の世界には効かない |

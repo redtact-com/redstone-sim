@@ -112,7 +112,7 @@ Rust (WASM) で同じ挙動のエンジンを組むための土台にする。�
 | [01_tick-loop.md](01_tick-loop.md) | サーバーの 1 tick の流れ (区間 A〜C・B1〜B5)、ServerLevel#tick の相 L0〜L15、/tick の freeze・step・sprint、ランダム tick、BlockEntity 相、プレイヤーの操作が入る位相 |
 | [02_scheduled-ticks.md](02_scheduled-ticks.md) | 予約 tick (LevelTicks) の並び (時刻・優先度・予約順)、先勝ちの重複抑止、1 tick 65536 件の上限、保存形式、scheduleTick を呼ぶ全ブロックの表 |
 | [03_block-events.md](03_block-events.md) | ブロックイベントのキュー (積む・回す・照合する)、捨てられる・延びる条件、全イベントの表 |
-| [04_set-block-and-updates.md](04_set-block-and-updates.md) | setBlock のフラグの全ビット、NC・SU・CU の配り方と順 (CollectingNeighborUpdater)、形状更新の深さ 512、連鎖の上限 1,000,000、Orientation、/setblock の経路 |
+| [04_set-block-and-updates.md](04_set-block-and-updates.md) | setBlock のフラグの全ビット、NC・SU・CU の配り方と順 (CollectingNeighborUpdater)、形状更新の深さ 512、連鎖の上限 1,000,000、Orientation、/setblock の経路、プレイヤーの設置と破壊の手順 |
 | [05_signals-and-block-properties.md](05_signals-and-block-properties.md) | 信号モデル (強/弱・導体・準接続)、信号源の全表、導体と押し反応の全ブロックの表、状態表の作り方。付録に F1 (接続と形) と F3 (支え) |
 | [06_redstone-wire.md](06_redstone-wire.md) | ダストの接続・形状・電力、既定の評価器 (HashSet の反復順を含む) と実験の評価器、設置・除去・右クリック |
 | [07_diodes.md](07_diodes.md) | リピーターとコンパレーター (BlockEntity を含む)。入力の計算、ロック、予約の優先度、前方の更新 |
@@ -190,7 +190,7 @@ CI の衛生テスト (tools/ip-hygiene.test.ts) が、Java の呼び出し文�
 4. **比べる**。spec-drift.sh を --check 26.4 で実行し、DRIFT の行のクラスを読む。CI (.github/workflows/spec-drift.yml) は週次で最新の release と比べ、差があれば issue を起票する。
 5. **担当クラスを比べる**。指紋は監視クラスしか見ないので、各メモの §1.1 のクラスを 26.3 と 26.4 で diff -u する。import・codec・定数の書き換えなどの機械的な差を落としてから読む (19 §1.3 の手順)。まず 19 §6.3 (26.3 → 26.4-pre-1) の各行を、正式版で読み直す。
 6. **メモを直す**。挙動に効く差を、各メモの §6 に [版差 26.4] として書く。19 は §1.1 (版の表)・§6 (区間の差)・§6.6 (fixture の有効性)・§7 (切り替え点の表) を直す。
-7. **網羅表を直す**。26.4 のデコンパイルで同じ 34 個のフックを走査し直し、増えたクラスと消えたクラスを 00 に足す。フック名だけで拾えないクラスの補い方は 00 の O-3 にある。26.4-pre-1 で増えたクラスは 00 §7 に挙げてある。
+7. **網羅表を直す**。26.4 のデコンパイルで同じ 34 個のフックを走査し直し、増えたクラスと消えたクラスを 00 に足す。注釈 (@Nullable) つきの宣言も拾う。拾うと増える 7 クラスは、もう表 C にある (00 §4.3)。フック名だけで拾えないクラスの補い方は 00 の O-3 にある。26.4-pre-1 で増えたクラスは 00 §7 に挙げてある。
 8. **基準を上げるかを決める**。上げるなら、全メモの [26.3 読解] を 26.4 で読み直し、fixture を 26.4 で撮り直し (docs/research/18)、spec-drift.sh の --update 26.4 を同じ変更に入れる (19 §7 の 8)。
 9. **衛生を確かめる**。tools/ip-hygiene.test.ts を通す。
 

@@ -139,7 +139,8 @@ LivingEntity#aiStep) で起きる。モブ・アイテム・矢はエンティ�
 
 取り付け方向: FaceAttachedHorizontalDirectionalBlock#getConnectedDirection は
 床 → 上、天井 → 下、壁 → facing を返す。支えはその逆向きの隣。
-床置きの facing は置いた人の向き、壁は facing の逆側に支えがある。
+床置きと天井付けの facing は、置いた人が見ている水平の向きと**同じ**である (逆ではない)。壁は facing の逆側に支えがある。
+置いた時の powered は常に偽である。決め方の全部は §4.1 の「置いた時の状態」に書く。
 [26.3 読解: FaceAttachedHorizontalDirectionalBlock#getConnectedDirection / #getStateForPlacement]
 
 ### 3.2 BlockEntity に持つ値
@@ -292,6 +293,78 @@ Level#setBlock が出す [26.3 読解: LevelChunk#setBlockState / Level#setBlock
 3. 自分 6 の PP。
 ピストンに壊されたときは、押し終わりにまとめてこのフックが呼ばれる (引数の「ピストン移動」は偽で渡るので updateNeighbours が走る。
 [26.3 読解: PistonBaseBlock#moveBlocks] → 13)。
+
+**置いた時の状態** [26.3 読解: FaceAttachedHorizontalDirectionalBlock#getStateForPlacement・#canSurvive・#canAttach, BlockPlaceContext#getNearestLookingDirections, UseOnContext#getHorizontalDirection, Direction#orderedByNearest・#fromYRot, Entity#getDirection, Mth#sin・#cos, LeverBlock のコンストラクタ]
+
+プレイヤーがレバーを置く時の状態は、親の FaceAttachedHorizontalDirectionalBlock#getStateForPlacement が決める。LeverBlock は上書きしない。ボタンも同じ親を使う。
+設置の流れの全体 (どの段で呼ばれるか) は → 04 §4.13。
+
+1. 候補の向きを 6 つ、決まった順に並べる (下の「候補の順」)。
+2. 順に 1 つずつ、その向きを「支えのある側」として状態を作る。
+   - 向きが下: face = floor。向きが上: face = ceiling。どちらも facing = **置いた人が見ている水平の向き**。
+   - 向きが水平 (北・東・南・西): face = wall、facing = **その向きの逆** (支えから離れる向き)。
+   - ほかのプロパティは既定の状態のままである。**powered は偽**。
+3. 作った状態の canSurvive を、置く先のマスで呼ぶ。真なら、その状態を返して終わる。
+4. 偽なら次の候補へ進む。**6 つとも偽なら「無し」を返し、レバーは置かれない** (04 §4.13 の手順 4 で FAIL)。
+
+- **powered はいつも偽**である。getStateForPlacement は受電を読まない。支えが強充電されていても、隣に信号源があっても、切れたレバーが置かれる。
+  レバーは設置フックも setPlacedBy も持たず、NC にも反応しないので、置いた後に自分で入ることも無い。入るのは「使う」と起動型の爆発だけである。
+- 見ている水平の向き (Entity#getDirection → Direction#fromYRot) は、yaw を 90 で割って 0.5 を足し、切り捨てた値の下位 2 ビットで決まる。
+  0 = 南・1 = 西・2 = 北・3 = 東。yaw が −45 以上 45 未満なら南、45 以上 135 未満なら西である。
+  UseOnContext#getHorizontalDirection は、プレイヤーが無ければ北を返す。
+  素の BlockPlaceContext は、候補の順 (Direction#orderedByNearest) がプレイヤーを読む。だからプレイヤーが無いと、そこで止まってレバーを置けない。
+  候補の順を自分で持つ文脈 (GameTestHelper#placeBlock が作る物) では、プレイヤーが無くても置ける。その時、床と天井の facing は北になる (→ 04 §8)。
+- **yaw は 2 つある**。facing が読むのは体の向き (yRot。Entity#getDirection)、候補の順が読むのは頭の向き (yHeadRot。LivingEntity#getViewYRot) と pitch (xRot) である。
+  移動のパケットが書くのは yRot と xRot だけで、頭の向きは Player#aiStep が毎 tick 体にそろえる。だから普通は同じ値だが、同じ区間 A の中で向きを変えてすぐ置くと、facing は新しい向き、候補の順は前の tick の頭の向きで決まる。
+  [26.3 読解: LivingEntity#getViewYRot, Entity#getViewYRot・#getDirection, Player#aiStep]
+- 床置きのレバーを、南を向いて置くと facing = south になる。リピーターなど「向きの逆」を使うブロック (→ 07 §4.13) とは逆なので注意する。
+- 支えの判定 (#canSurvive → #canAttach) は、取り付け先のマスの、こちらを向いた面が頑丈 (FULL) かである。床置きなら真下のブロックの上面を見る。
+
+候補の順 (BlockPlaceContext#getNearestLookingDirections):
+
+1. まず、見ている向きに近い順に 6 方向を並べる (Direction#orderedByNearest)。読むのは頭の yaw と pitch である。
+   - 角度を単精度のラジアンに直し、yaw は符号を逆にする。sin・cos は Mth#sin・#cos の表を引いた単精度の値である (→ 18 §4.8)。数学の値ではない。
+   - 向きの符号は 3 軸を別々に決める。東西は、符号を逆にした yaw の sin が 0 より大きければ東、そうでなければ西。
+     南北は、同じ角の cos が 0 より大きければ南、そうでなければ北。上下は、pitch の sin が 0 より小さければ上、そうでなければ下。
+   - 水平の 2 つの先後は、|sin(yaw)| と |cos(yaw)| で比べる。前者が大きい時だけ x が先で、同じ値なら z が先である。ここでは cos(pitch) を掛けない。
+   - y の位置は、水平の 2 つの値に cos(pitch) を掛けた物と |sin(pitch)| を比べて決める。
+     |sin(pitch)| が先の水平より大きければ、y が 1 番目になる。そうでなく、後の水平が |sin(pitch)| より大きければ、y は 3 番目になる。どちらでもなければ 2 番目である。
+   - 後ろの 3 つは、前の 3 つの逆向きを逆順に並べた物である (4 番目 = 3 番目の逆、6 番目 = 1 番目の逆)。
+2. 押したブロックが置き換え可能でなければ (普通の設置)、**「押した面の逆向き」を先頭へ移す**。ほかの 5 つの順は変えない。
+   押したブロックが置き換え可能 (草など) で、そのマスに置く時は、1 の順のままである。
+
+ちょうどの角度での 1 の答え (前の 3 つ。26.3 の式と表を別に計算した値)。表の値が数学の値からずれるので、境目の答えは式を読んだだけでは決まらない:
+
+| pitch ＼ yaw | 0 | 45 | 90 | 135 | ±180 | −135 | −90 | −45 |
+|---|---|---|---|---|---|---|---|---|
+| 0 | 南・下・西 | 西・南・下 | 西・下・北 | 北・西・下 | 北・東・下 | 北・東・下 | 東・南・下 | 南・東・下 |
+| 30 | 南・下・西 | 西・南・下 | 西・下・北 | 北・西・下 | 北・下・東 | 北・東・下 | 東・下・南 | 南・東・下 |
+| 45 | 南・下・西 | 下・西・南 | 西・下・北 | 下・北・西 | 北・下・東 | 下・北・東 | 東・下・南 | 下・南・東 |
+| 60 と 90 | 下・南・西 | 下・西・南 | 下・西・北 | 下・北・西 | 下・北・東 | 下・北・東 | 下・東・南 | 下・南・東 |
+| −30 | 南・上・西 | 西・南・上 | 西・上・北 | 北・西・上 | 北・上・東 | 北・東・上 | 東・上・南 | 南・東・上 |
+| −45 と −90 | 上・南・西 | 上・西・南 | 上・西・北 | 上・北・西 | 上・北・東 | 上・北・東 | 上・東・南 | 上・南・東 |
+
+- 表の sin(180°) と cos(90°) は 0 でなく、ごく小さい正の値 (約 1.2e-16) である。だから yaw ±180 では x が東に、yaw −90 では z が南になる。yaw 90 の cos は表の 0 番を引くので 0 で、z は北になる。
+- 45° の斜めも対称でない。yaw 45 は x (西) が先で、yaw −45・135・−135 は z が先である。pitch 45 では水平が先に残り (斜めの yaw では下が先)、pitch −45 では上が先になる。
+- 真上・真下 (pitch ±90) でも、水平の符号と先後は yaw で決まる。cos(pitch) を掛ける前の値で比べるからである。
+- この順の先頭の 1 つだけを使うブロック (ピストン・オブザーバー・ディスペンサーの置く向き。BlockPlaceContext#getNearestLookingDirection) にも、同じ表が効く。
+- [版差 26.4-pre-1] Mth#sin・#cos が変わり (添字を四捨五入に近づけ、表の 0°・90°・180°・270° を正確な値に直す。→ 18 §6.3)、ちょうどの角度の答えが変わる。Direction#orderedByNearest の式は同じである。
+  例 (前の 3 つ): yaw 180・pitch 0 は北・下・西。yaw −90・pitch 0 は東・下・北。yaw 45・pitch 0 は南・西・下。yaw 0・pitch −45 は南・上・西。yaw 45・pitch 90 は下・南・西。
+
+押した面ごとの結果 (押したブロックが置き換え可能でない時):
+
+| 押した面 | 最初の候補 | 置かれる状態 (支えが頑丈な時) |
+|---|---|---|
+| ブロックの上面 | 下 | face = floor、facing = 見ている水平の向き |
+| ブロックの下面 | 上 | face = ceiling、facing = 見ている水平の向き |
+| ブロックの横の面 (例: 北の面) | その面の逆 (南) | face = wall、facing = 押した面の向き (北) |
+
+- 最初の候補は、押したブロックが支えになるので、普通は通る。通らないのは、押したブロックのその面が頑丈でない時である (面の頑丈さは → 05 §4.7.4)。
+- その時は、**残りの 5 つの向きを見ている向きに近い順に試す**。つまり、置く先のマスの別の隣に頑丈な面があれば、そちらに付く。
+  例: 下付きのハーフブロックの上面を押し、置く先の北隣に石がある。下が通らないので、視線に近い順に試し、北の番で face = wall・facing = south が通る。
+- 置き換え可能なマスを直に押した時 (草を押してそこに置く) は、押した面を使わない。視線に一番近い向きから順に試す。
+  |sin(pitch)| が、先に来る水平の値に cos(pitch) を掛けた物より大きい時は、下が先頭になるので、真下が頑丈なら床置きになる。
+  目安は、yaw が東西南北の正面なら 45° より深く、斜め 45° なら約 35.3° より深く見下ろす時である。それより浅い時は、候補の順で先に来る水平の向きの隣を先に試す。
 
 **取り付け**: FaceAttachedHorizontalDirectionalBlock#canSurvive は支えの面が sturdy か。
 #updateShape は支えの向きからの PP で生存を確かめ、だめなら空気にする
@@ -948,6 +1021,7 @@ pressure-plate-wood・pressure-plate-stone・target-conduct・lever-wire-lamp �
 - 26.3 PressurePlateBlock#getSignalStrength / #getSignalForState / #setSignalForState
 - 26.3 WeightedPressurePlateBlock#getSignalStrength / #getPressedTime
 - 26.3 BlockSetType (各定数) / Blocks (ボタン・感圧板・紐・フック・避雷針などの登録)
+- 26.3 FaceAttachedHorizontalDirectionalBlock#getStateForPlacement・#canSurvive・#canAttach、BlockPlaceContext#getNearestLookingDirections、UseOnContext#getHorizontalDirection、Direction#orderedByNearest・#fromYRot、Entity#getDirection・#getViewYRot、LivingEntity#getViewYRot、Player#aiStep、Mth#sin・#cos、GameTestHelper#placeBlock (プレイヤーの無い文脈) — レバーとボタンの置いた時の状態 (§4.1)。候補の順のちょうどの角度の表は、この式と表を別に計算した値
 - 26.3 TripWireBlock#entityInside / #tick / #checkPressed / #updateSource / #onPlace / #affectNeighborsAfterRemoval / #playerWillDestroy / #updateShape / #getShape / #getEntityInsideCollisionShape / #shouldConnectTo
 - 26.3 TripWireHookBlock#calculateState / #tick / #setPlacedBy / #emitState / #notifyNeighbors / #onRemoved / #affectNeighborsAfterRemoval / #ownSignal / #getDirectSignal / #canSurvive / #updateShape
 - 26.3 TrappedChestBlock#ownSignal / #getDirectSignal / #isSignalSource、TrappedChestBlockEntity#signalOpenCount

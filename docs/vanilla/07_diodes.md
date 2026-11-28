@@ -537,7 +537,7 @@ updateNeighborsInFront が呼ばれる契機の一覧:
 
 [26.3 読解: DiodeBlock#getStateForPlacement, RepeaterBlock#getStateForPlacement, DiodeBlock#onPlace, #setPlacedBy, LevelChunk#setBlockState]
 
-プレイヤーがアイテムで置く場合の順 (BlockItem の流れは → 09_manual-inputs.md / 04_set-block-and-updates.md):
+プレイヤーがアイテムで置く場合の順 (BlockItem の流れの全体は → 04_set-block-and-updates.md §4.13):
 
 1. 置く状態を決める。FACING はプレイヤーの水平の向きの逆。リピーターは、その場で isLocked を読んで LOCKED を決める。POWERED は false。足場が無い (canSurvive が偽) なら置けない [26.3 読解: BlockItem#canPlace]。
 2. flag 11 (1 + 2 + 8) で書く [26.3 読解: BlockItem#placeBlock]。
@@ -545,11 +545,13 @@ updateNeighborsInFront が呼ばれる契機の一覧:
    2. コンパレーターなら BlockEntity を作る (値 0)。
    3. flag 1 の分: P の 6 近傍へ近隣更新 (送り元は古いブロック)。
    4. 形状更新。
-3. setPlacedBy: **shouldTurnOn が真なら、遅延 1 gt・優先度 0 で予約する**。ロックは見ない。
-4. 1 gt 後の tick で、リピーターは ON になる (ロック中なら何もしない)。コンパレーターは refreshOutputState で出力を決める。
+3. コンパレーターなら、ここで CU が 1 回出る。BlockItem が BE の成分を当てた後で BlockEntity#setChanged を呼ぶためで、成分の無い普通のアイテムでも出る (→ 04 §4.13 の手順 9)。
+   コンパレーターはアナログ出力を持たないので、手順 2 の書き込みでは CU が出ない。これが置いた時のただ 1 つの CU になる。リピーターは BE を持たないので出ない。
+4. setPlacedBy: **shouldTurnOn が真なら、遅延 1 gt・優先度 0 で予約する**。ロックは見ない。
+5. 1 gt 後の tick で、リピーターは ON になる (ロック中なら何もしない)。コンパレーターは refreshOutputState で出力を決める。
 
-- 手順 3 は「アイテムで置いたとき」(BlockItem#place が書き込みのあとに呼ぶ) だけ通る。/setblock・/fill・構造物の読み込み・ピストンは通らない。
-- 手順 3 の予約も重複排除 (§4.9) の対象である。手順 2 の連鎖の中でこのダイオードが近隣更新を受けて先に予約を積んでいれば (遅延は delay × 2 gt)、1 gt の予約は捨てられる。普通の配置では手順 2 の間に自分へ近隣更新は返らないので、1 gt の予約が残る。
+- 手順 3・4 は「アイテムで置いたとき」(BlockItem#place が書き込みのあとに呼ぶ) だけ通る。/setblock・/fill・構造物の読み込み・ピストンは通らない。
+- 手順 4 の予約も重複排除 (§4.9) の対象である。手順 2 の連鎖の中でこのダイオードが近隣更新を受けて先に予約を積んでいれば (遅延は delay × 2 gt)、1 gt の予約は捨てられる。普通の配置では手順 2 の間に自分へ近隣更新は返らないので、1 gt の予約が残る。
 - /setblock (strict でないとき) の経路は → 04_set-block-and-updates.md §4.11。ダイオードに効く事実だけ書く [26.3 読解: SetBlockCommand, BlockInput#place, ServerLevel#updateNeighboursOnBlockSet]。
   1. 置く状態を周りの形状に合わせる。リピーターは、ここで LOCKED が側面から決まる (コマンドで locked を明示すればそちらが勝つ)。真下が足場でなく空気になった場合は、元の状態に戻して置く (足場なしでも置ける)。
   2. flag 258 (2 + 256) で書く。onPlace → 前方更新 → 形状更新。
@@ -928,7 +930,7 @@ vanilla と同じ単位で切ると、差分を追いやすい。
 ### P-9 設置時の 1 gt 予約 (§4.13)
 
 - 目的: プレイヤーの設置だけが 1 gt の予約を積むこと。
-- 配置: 入力がすでに ON の位置へ、(a) 偽プレイヤーがリピーター (delay 4) を置く、(b) /setblock で置く。
+- 配置: 入力がすでに ON の位置へ、(a) 偽プレイヤーがリピーター (delay 4) を置く、(b) /setblock で置く。(a) はプレイヤーの設置を撮る入力が要る (→ 04 §8 の「プレイヤーの設置と破壊を撮る手段」)。
 - 観測: POWERED が true になる gt。
 - 期待の要点: (a) 設置の 1 gt 後 (delay に関係なく)。(b) 近隣更新が来るまで OFF のまま。来たら delay × 2 gt 後。
 
