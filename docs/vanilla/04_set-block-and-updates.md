@@ -732,7 +732,7 @@ SU は残り回数を 1 減らして実行する [26.3 読解: InstantNeighborUp
 - プレイヤーの設置で偽になるのは、事実上は**範囲の外**だけである (デバッグワールドを除く)。この時は通知が 1 つも出ず、世界は何も変わらない。
   - パケットの受け口が高さで断るのは、**押したブロック**が範囲の外の時だけである (→ 01 §4.10)。置く先は見ない。
   - だから、最上段のブロックの上面や最下段の下面を押した設置は、ここまで進む。範囲の外のマスは void_air (置き換え可能) と読まれるので、手順 2〜6 は通る。
-    手順 7 の書き込みが範囲の外で偽になり、FAIL で終わる。受け口はその後で、建築の上限の通知を出す。高さの上限より上に置こうとするたびに通る道である。
+    手順 7 の書き込みが範囲の外で偽になり、FAIL で終わる。受け口はその後で、建築の高さの通知を出す (上面なら上限、下面なら下限)。高さの上限より上に置こうとするたびに通る道である。
   - エンジンでは「範囲の外には置かない」として持てば足りる。
 - 一般の Level#setBlock は、範囲の外・デバッグワールドのほか、チャンクの書き込みが「無し」を返した時に偽を返す (§4.1 の手順 4)。「無し」は §4.2 の手順 1・3・8 から来る。
   手順 1 (空気だけのセクションへ空気を書く) と手順 3 (同一の状態) では、世界は何も変わらない。手順 8 (撤去フックの後で、その座標が新しいブロックでなくなった) では、撤去フックがもう世界を変えている。
@@ -751,7 +751,7 @@ SU は残り回数を 1 減らして実行する [26.3 読解: InstantNeighborUp
 - 支え (手順 5) と置く状態 (手順 4) は、古いブロックがまだある世界で決まる。
   例: 水の中に置くと、水を含めるブロックは waterlogged を真にして置く (各ブロックの getStateForPlacement)。
 - 2 マスの草 (tall_grass など) の片方に置くと、残った片方は、置いたブロックからの SU で支えを失って消える (→ 05 付録 C)。
-  残った片方は Level#destroyBlock で消える (§4.5)。だからその位置では、破壊のレベルイベント・落とし物の処理・壊した者の無い block_destroy が出る。置いた側のマスでは出ない。
+  残った片方は Level#destroyBlock で消える (§4.6 の Block#updateOrDestroy → §4.10 の Level#destroyBlock)。だからその位置では、破壊のレベルイベント・落とし物の処理・壊した者の無い block_destroy が出る。置いた側のマスでは出ない。
 - 縦切りの表 (置き換え可能は空気だけ) では、この段落の違いは出ない。
 
 **BlockItem の子クラスが変える所** [26.3 読解: StandingAndWallBlockItem#getPlacementState・#canPlace, DoubleHighBlockItem#placeBlock]
@@ -844,7 +844,7 @@ SU は残り回数を 1 減らして実行する [26.3 読解: InstantNeighborUp
 | AbstractBedBlock | 落とし物を出さないプレイヤー (クリエイティブ) が足の側を壊した時、先に頭の側を空気に**フラグ 35** で書き、レベルイベント 2001 を出す | 回路の外 (00) |
 | DecoratedPotBlock | 利き手が壺を割る道具 (タグ breaks_decorated_pots) で、割れ防止のエンチャントが無ければ、cracked を真にして**フラグ 260** で書く (NC なし・SU あり)。モードでなく持ち物で決まる | — |
 | ShulkerBoxBlock・BeehiveBlock | 落とし物を出さないプレイヤーでも、中身があれば (箱は中身、巣は蜂か蜜)、中身を持ったアイテムのエンティティをここで出す。ブロックは書かない | 17 |
-| CreakingHeartBlock | ここでは読んでいない | 回路の外 |
+| CreakingHeartBlock | ブロックは書かない。守り手がいれば、撤去の前に CU を 1 回出す (モードに依らない)。経験値はクリエイティブでは出ない | 14 §4.10 |
 
 どれも最後に既定の処理 (パーティクルと block_destroy) を呼ぶ。
 
@@ -870,13 +870,14 @@ SU は残り回数を 1 減らして実行する [26.3 読解: InstantNeighborUp
   - TntBlock: unstable の TNT は、サバイバルで壊すと着火する。クリエイティブでは着火しない。
   - DoorBlock・DoublePlantBlock・PistonHeadBlock・AbstractBedBlock: クリエイティブでは、相方のマスを先に書く 1 手が入る (ベッドは、足を壊すと頭をフラグ 35 で先に書く)。
   - IceBlock: サバイバルで、氷を溶かさないエンチャントの無い道具で壊すと、Block#playerDestroy が同じマスに水を置く (真下が流体か、溶ける下地のタグの時。水が蒸発する次元では空気のまま)。クリエイティブでは手順 9 で終わるので、空気のままである。
+  - BeehiveBlock (bee_nest も): サバイバルでシルクタッチの無い道具で壊した時だけ、Block#playerDestroy が撤去の後に CU を出す。巣は撤去フックを持たないので、クリエイティブでは CU が 1 つも出ない。導体越しに巣を読むコンパレーターは、古い値のまま残る。
   - TurtleEggBlock: サバイバルで壊すと、Block#playerDestroy が、卵が 2 個以上なら 1 個減らした状態を同じマスに**フラグ 2** で書き戻す (NC なし・SU あり)。卵は 1 個減って残る。クリエイティブでは全部消える。
 - 落とし物のアイテムのエンティティは、感圧板・ホッパーに効きうる (→ 17)。
   - 既定の落とし物 (Block#playerDestroy) は、サバイバルでだけ出る。
   - ShulkerBoxBlock (中身があれば) と BeehiveBlock (蜂か蜜があり、落とし物のゲームルールが真なら) は、クリエイティブでも playerWillDestroy でアイテムのエンティティを出す。撤去の前である。
-  - コンテナの中身と書見台の本は、手順 7 の書き込みの中で落ちる (§4.2 の手順 6.1)。モードに依らない。
+  - コンテナの中身・書見台の本・焚き火の上の物は、手順 7 の書き込みの中で落ちる (§4.2 の手順 6.1)。モードに依らない。シュルカーボックスは除く (中身は落ちず、箱のアイテムに入る)。
 - レバー・ダスト・ランプ・石では、**ブロックの書き込みは、クリエイティブもサバイバルも手順 7 の 1 回で同じ**である。
-  違うのは落とし物だけで、サバイバルでは 3 素子と石もアイテムを出す (レバー・ダスト・ランプはいつも。石は合う道具の時)。エンティティを持たないエンジンでは無視できる。
+  壊せた時に違うのは落とし物だけで (クリエイティブで剣などを持つと、手順 2 で断られて壊せない)、サバイバルでは 3 素子と石もアイテムを出す (レバー・ダスト・ランプはいつも。石は合う道具の時)。エンティティを持たないエンジンでは無視できる。
 
 **空気を壊そうとした時**
 
@@ -887,11 +888,11 @@ SU は残り回数を 1 減らして実行する [26.3 読解: InstantNeighborUp
   手順 7 の Level#removeBlock は、air に air を書くので偽を返し (§4.2 の手順 1 か 3)、通知は 1 つも出ない。手順 8 も飛ぶ。
   つまり**盤面は変わらず、NC も SU も予約も出ない**。出るのは GameEvent とパーティクルだけである。
 - クリエイティブで **cave_air** (か、範囲の内に置いた void_air) を壊す: 書くのは air で、今の状態と同一でない。だから air をフラグ 3 で書く**普通の撤去**になる。
-  撤去フックは既定の空で、NC 6 件 (送り元は cave_air) と SU 6 方向が出て、Block#destroy も呼ばれる。隣のオブザーバーは SU で発火を予約する。
+  撤去フックは既定の空で、NC 6 件 (送り元は cave_air) と SU 6 方向が出て、Block#destroy も呼ばれる。そのマスを向いた (切れている) オブザーバーは、SU で発火を予約する。
   ただし、そのマスのセクションが空気の印のブロックだけなら、書き込みは「無し」になり (§4.2 の手順 1)、何も起きない。
   cave_air は、クリエイティブとサバイバルで結果が分かれるブロックである。
 - この block_destroy には、スカルクセンサーが、ほかの block_destroy と同じ条件で反応する。影響の状態が空気でも捨てない。
-  受け手が見るのは、振動を持っているか・種類・出所 (観戦者か、しゃがみで消える種類か)・影響の状態が振動を消すタグか・自分の位置か・相・遮りだけである
+  受け手が見るのは、振動を持っているか・種類と周波数・出所 (観戦者か、しゃがみで消える種類か、振動を消すエンティティか)・影響の状態が振動を消すタグか・自分の位置か・相・遮りである
   [26.3 読解: Block#playerWillDestroy, GameEventDispatcher#post, VibrationSystem.Listener#handleGameEvent, VibrationSystem.User#isValidVibration, SculkSensorBlockEntity の canReceiveVibration]。
   クライアントが空気を壊すパケットを送る場面があるかは、サーバーのコードからは決まらない。
 - エンジンでは「air を壊しても何も起きない」として持てばよい (GameEvent を持たない間)。エンジンが air しか持たない間は、これで足りる。cave_air を持つ時は、上の違いを入れる。
@@ -1409,7 +1410,7 @@ Rust のエンジンの正解は 26.3 で撮るので、オラクルの側に足
 - 26.3 Block#getStateForPlacement・#setPlacedBy・#playerWillDestroy・#destroy・#playerDestroy の既定
 - 26.3 setPlacedBy を上書きする 17 クラスと、playerWillDestroy を上書きする 11 クラスの宣言 (world/level/block の全クラスを検索)。中身を読んだのは DiodeBlock・PistonBaseBlock・TripWireHookBlock・CrafterBlock・DoorBlock・JukeboxBlock と、TripWireBlock・TntBlock・DoorBlock・DoublePlantBlock・PistonHeadBlock・BaseFireBlock
 - 26.3 MovingPistonBlock#destroy・DoublePlantBlock#preventDropFromBottomPart。playerDestroy を上書きする 4 クラス (BeehiveBlock・DoublePlantBlock・IceBlock・TurtleEggBlock。world/level/block の全クラスを検索) と TurtleEggBlock#decreaseEggs
-- 26.3 AbstractBedBlock#playerWillDestroy・DecoratedPotBlock#playerWillDestroy・ShulkerBoxBlock#playerWillDestroy・BeehiveBlock#playerWillDestroy、EmptyFluid#createLegacyBlock、MultifaceBlock#canBeReplaced、BlockItem#updateBlockEntityComponents、ItemStack#consume
+- 26.3 AbstractBedBlock#playerWillDestroy・DecoratedPotBlock#playerWillDestroy・ShulkerBoxBlock#playerWillDestroy・BeehiveBlock#playerWillDestroy・#playerDestroy・CreakingHeartBlock#playerWillDestroy、ShulkerBoxBlockEntity と CampfireBlockEntity の preRemoveSideEffects、EmptyFluid#createLegacyBlock、MultifaceBlock#canBeReplaced、BlockItem#updateBlockEntityComponents、ItemStack#consume
 - 26.3 GameEventDispatcher#post・VibrationSystem.Listener#handleGameEvent・VibrationSystem.User#isValidVibration・SculkSensorBlockEntity の canReceiveVibration (§4.14 の空気の block_destroy)
 - 26.3 GameTestHelper#makeMockServerPlayer・#placeAt・#placeBlock・#destroyBlock、GameType#updatePlayerAbilities、Player#preventsBlockDrops・#hasInfiniteMaterials、EntityGetter#isUnobstructed、LivingEntity#setYHeadRot (§8 の撮る手段)
 - 1.21.1 Level#setBlock・LevelChunk#setBlockState・BlockBehaviour#onRemove・ServerLevel#blockUpdated・NeighborUpdater・CollectingNeighborUpdater・SetBlockCommand・BlockInput#place (版差の確認)
